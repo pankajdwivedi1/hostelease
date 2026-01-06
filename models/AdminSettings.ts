@@ -40,3 +40,4 @@ const AdminSettings: Model<IAdminSettings> =
 export default AdminSettings;
 
 
+

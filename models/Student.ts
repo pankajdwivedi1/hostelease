@@ -10,6 +10,11 @@ export interface IStudent {
   roomNumber: string;
   profilePicture?: string;
   studentStatus?: "in" | "out";
+  fatherName?: string;
+  fatherNumber?: string;
+  motherName?: string;
+  motherNumber?: string;
+  homePinCode?: string;
   lastCheckInLocation?: {
     lat: number;
     lng: number;
@@ -52,6 +57,26 @@ const StudentSchema = new Schema<IStudent>(
       required: true,
     },
     profilePicture: {
+      type: String,
+      required: false,
+    },
+    fatherName: {
+      type: String,
+      required: false,
+    },
+    fatherNumber: {
+      type: String,
+      required: false,
+    },
+    motherName: {
+      type: String,
+      required: false,
+    },
+    motherNumber: {
+      type: String,
+      required: false,
+    },
+    homePinCode: {
       type: String,
       required: false,
     },

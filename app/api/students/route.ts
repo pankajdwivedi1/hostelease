@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture } = body;
+    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, homePinCode } = body;
 
     if (!firebaseUID || !name || !email || !phoneNumber || !hostelName || !roomNumber) {
       return NextResponse.json(
@@ -27,6 +27,11 @@ export async function POST(request: NextRequest) {
         roomNumber,
         profilePicture: profilePicture || "",
         studentStatus: "in",
+        fatherName: fatherName || "",
+        fatherNumber: fatherNumber || "",
+        motherName: motherName || "",
+        motherNumber: motherNumber || "",
+        homePinCode: homePinCode || "",
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );

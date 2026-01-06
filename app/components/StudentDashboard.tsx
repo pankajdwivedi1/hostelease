@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 
 interface Permission {
   _id: string;
@@ -25,6 +26,7 @@ interface StudentProfile {
 }
 
 export default function StudentDashboard() {
+  const router = useRouter();
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [fromTime, setFromTime] = useState("");
@@ -36,6 +38,18 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      localStorage.removeItem("userType");
+      localStorage.removeItem("firebaseUID");
+      router.push("/login");
+    } catch (error) {
+      console.error("Error signing out:", error);
+      alert("Failed to sign out. Please try again.");
+    }
+  };
 
   useEffect(() => {
     let permissionInterval: NodeJS.Timeout | null = null;
@@ -405,6 +419,13 @@ export default function StudentDashboard() {
                     📍 Location
                   </button>
                   <button
+                    onClick={handleLogout}
+                    className="px-4 py-2 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm font-medium hover:bg-filler transition-colors"
+                    title="Logout"
+                  >
+                    Logout
+                  </button>
+                  <button
                     onClick={() => setShowProfile(true)}
                     className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                   >
@@ -544,18 +565,26 @@ export default function StudentDashboard() {
             </>
           ) : (
             <>
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setShowProfile(false)}
-                  className="w-10 h-10 rounded-full border border-solid border-[#9CA3AF] bg-white text-foreground flex items-center justify-center transition-colors hover:bg-filler flex-shrink-0"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                <div>
-                  <h1 className="text-base font-semibold text-foreground">Profile</h1>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setShowProfile(false)}
+                    className="w-10 h-10 rounded-full border border-solid border-[#9CA3AF] bg-white text-foreground flex items-center justify-center transition-colors hover:bg-filler flex-shrink-0"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <div>
+                    <h1 className="text-base font-semibold text-foreground">Profile</h1>
+                  </div>
                 </div>
+                <button
+                  onClick={handleLogout}
+                  className="px-4 py-2 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm font-medium hover:bg-filler transition-colors"
+                >
+                  Logout
+                </button>
               </div>
 
               <div className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-4 md:p-6">

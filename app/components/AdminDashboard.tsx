@@ -40,6 +40,11 @@ interface StudentDetails {
   hostelName: string;
   roomNumber: string;
   profilePicture?: string;
+  fatherName?: string;
+  fatherNumber?: string;
+  motherName?: string;
+  motherNumber?: string;
+  homePinCode?: string;
   permissions: SimplePermission[];
 }
 
@@ -54,6 +59,11 @@ export default function AdminDashboard() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const handleLogout = () => {
+    localStorage.removeItem("userType");
+    router.push("/login");
+  };
 
   useEffect(() => {
     if (showAllStudents) {
@@ -127,6 +137,11 @@ export default function AdminDashboard() {
         hostelName: student.hostelName,
         roomNumber: student.roomNumber,
         profilePicture: student.profilePicture,
+        fatherName: student.fatherName,
+        fatherNumber: student.fatherNumber,
+        motherName: student.motherName,
+        motherNumber: student.motherNumber,
+        homePinCode: student.homePinCode,
         permissions: studentPermissions.map((p): SimplePermission => ({
           id: p._id,
           fromTime: p.fromTime,
@@ -235,12 +250,20 @@ export default function AdminDashboard() {
                   <h1 className="text-base font-semibold text-foreground">Admin Dashboard</h1>
                   <p className="mt-1 md:mt-2 text-sm text-secondary">{students.length} Students</p>
                 </div>
-                <button
-                  onClick={() => setShowAllStudents(true)}
-                  className="px-4 md:px-6 py-2 md:py-2.5 rounded-lg bg-foreground text-background font-medium transition-colors hover:bg-[#383838] text-sm whitespace-nowrap"
-                >
-                  All Students
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowAllStudents(true)}
+                    className="px-4 md:px-6 py-2 md:py-2.5 rounded-lg bg-foreground text-background font-medium transition-colors hover:bg-[#383838] text-sm whitespace-nowrap"
+                  >
+                    All Students
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="px-4 py-2 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm font-medium hover:bg-filler transition-colors"
+                  >
+                    Logout
+                  </button>
+                </div>
               </div>
 
               <div className="flex gap-2 md:gap-3 flex-wrap">
@@ -415,19 +438,27 @@ export default function AdminDashboard() {
             </>
           ) : (
             <>
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setShowAllStudents(false)}
-                  className="w-10 h-10 rounded-full border border-solid border-[#9CA3AF] bg-white text-foreground flex items-center justify-center transition-colors hover:bg-filler flex-shrink-0"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                <div>
-                  <h1 className="text-base font-semibold text-foreground">All Students</h1>
-                  <p className="mt-1 md:mt-2 text-sm text-secondary">View and search all students</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setShowAllStudents(false)}
+                    className="w-10 h-10 rounded-full border border-solid border-[#9CA3AF] bg-white text-foreground flex items-center justify-center transition-colors hover:bg-filler flex-shrink-0"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <div>
+                    <h1 className="text-base font-semibold text-foreground">All Students</h1>
+                    <p className="mt-1 md:mt-2 text-sm text-secondary">View and search all students</p>
+                  </div>
                 </div>
+                <button
+                  onClick={handleLogout}
+                  className="px-4 py-2 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm font-medium hover:bg-filler transition-colors"
+                >
+                  Logout
+                </button>
               </div>
 
               <div className="space-y-4">
@@ -520,6 +551,11 @@ export default function AdminDashboard() {
                             hostelName: student.hostelName,
                             roomNumber: student.roomNumber,
                             profilePicture: student.profilePicture,
+                            fatherName: student.fatherName,
+                            fatherNumber: student.fatherNumber,
+                            motherName: student.motherName,
+                            motherNumber: student.motherNumber,
+                            homePinCode: student.homePinCode,
                             permissions: studentPermissions.map((p): SimplePermission => ({
                               id: p._id,
                               fromTime: p.fromTime,
@@ -615,6 +651,36 @@ export default function AdminDashboard() {
                         <p className="text-secondary">Room Number</p>
                         <p className="text-foreground font-medium">{selectedStudent.roomNumber}</p>
                       </div>
+                      {selectedStudent.fatherName && (
+                        <div>
+                          <p className="text-secondary">Father's Name</p>
+                          <p className="text-foreground font-medium">{selectedStudent.fatherName}</p>
+                        </div>
+                      )}
+                      {selectedStudent.fatherNumber && (
+                        <div>
+                          <p className="text-secondary">Father's Number</p>
+                          <p className="text-foreground font-medium">{selectedStudent.fatherNumber}</p>
+                        </div>
+                      )}
+                      {selectedStudent.motherName && (
+                        <div>
+                          <p className="text-secondary">Mother's Name</p>
+                          <p className="text-foreground font-medium">{selectedStudent.motherName}</p>
+                        </div>
+                      )}
+                      {selectedStudent.motherNumber && (
+                        <div>
+                          <p className="text-secondary">Mother's Number</p>
+                          <p className="text-foreground font-medium">{selectedStudent.motherNumber}</p>
+                        </div>
+                      )}
+                      {selectedStudent.homePinCode && (
+                        <div>
+                          <p className="text-secondary">Home Pin Code</p>
+                          <p className="text-foreground font-medium">{selectedStudent.homePinCode}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

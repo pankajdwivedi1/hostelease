@@ -12,6 +12,11 @@ export default function OnboardingPage() {
     phoneNumber: "",
     hostelName: "",
     roomNumber: "",
+    fatherName: "",
+    fatherNumber: "",
+    motherName: "",
+    motherNumber: "",
+    homePinCode: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -48,6 +53,26 @@ export default function OnboardingPage() {
       newErrors.roomNumber = "Room number is required";
     }
 
+    if (!formData.fatherName.trim()) {
+      newErrors.fatherName = "Father's name is required";
+    }
+
+    if (!formData.fatherNumber.trim()) {
+      newErrors.fatherNumber = "Father's number is required";
+    }
+
+    if (!formData.motherName.trim()) {
+      newErrors.motherName = "Mother's name is required";
+    }
+
+    if (!formData.motherNumber.trim()) {
+      newErrors.motherNumber = "Mother's number is required";
+    }
+
+    if (!formData.homePinCode.trim()) {
+      newErrors.homePinCode = "Home pin code is required";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -71,6 +96,11 @@ export default function OnboardingPage() {
           hostelName: formData.hostelName,
           roomNumber: formData.roomNumber,
           profilePicture: user.photoURL || "",
+          fatherName: formData.fatherName,
+          fatherNumber: formData.fatherNumber,
+          motherName: formData.motherName,
+          motherNumber: formData.motherNumber,
+          homePinCode: formData.homePinCode,
         }),
       });
 
@@ -180,6 +210,101 @@ export default function OnboardingPage() {
               />
               {errors.roomNumber && (
                 <p className="mt-1 text-sm text-red-600">{errors.roomNumber}</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="fatherName" className="block text-sm font-medium text-foreground mb-2">
+                Father's Name
+              </label>
+              <input
+                type="text"
+                id="fatherName"
+                value={formData.fatherName}
+                onChange={(e) => handleChange("fatherName", e.target.value)}
+                placeholder="Enter father's name"
+                className={`w-full h-12 px-4 rounded-lg border border-solid ${
+                  errors.fatherName ? "border-red-500" : "border-[#9CA3AF]"
+                } bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground`}
+              />
+              {errors.fatherName && (
+                <p className="mt-1 text-sm text-red-600">{errors.fatherName}</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="fatherNumber" className="block text-sm font-medium text-foreground mb-2">
+                Father's Phone Number
+              </label>
+              <input
+                type="tel"
+                id="fatherNumber"
+                value={formData.fatherNumber}
+                onChange={(e) => handleChange("fatherNumber", e.target.value)}
+                placeholder="Enter father's phone number"
+                className={`w-full h-12 px-4 rounded-lg border border-solid ${
+                  errors.fatherNumber ? "border-red-500" : "border-[#9CA3AF]"
+                } bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground`}
+              />
+              {errors.fatherNumber && (
+                <p className="mt-1 text-sm text-red-600">{errors.fatherNumber}</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="motherName" className="block text-sm font-medium text-foreground mb-2">
+                Mother's Name
+              </label>
+              <input
+                type="text"
+                id="motherName"
+                value={formData.motherName}
+                onChange={(e) => handleChange("motherName", e.target.value)}
+                placeholder="Enter mother's name"
+                className={`w-full h-12 px-4 rounded-lg border border-solid ${
+                  errors.motherName ? "border-red-500" : "border-[#9CA3AF]"
+                } bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground`}
+              />
+              {errors.motherName && (
+                <p className="mt-1 text-sm text-red-600">{errors.motherName}</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="motherNumber" className="block text-sm font-medium text-foreground mb-2">
+                Mother's Phone Number
+              </label>
+              <input
+                type="tel"
+                id="motherNumber"
+                value={formData.motherNumber}
+                onChange={(e) => handleChange("motherNumber", e.target.value)}
+                placeholder="Enter mother's phone number"
+                className={`w-full h-12 px-4 rounded-lg border border-solid ${
+                  errors.motherNumber ? "border-red-500" : "border-[#9CA3AF]"
+                } bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground`}
+              />
+              {errors.motherNumber && (
+                <p className="mt-1 text-sm text-red-600">{errors.motherNumber}</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="homePinCode" className="block text-sm font-medium text-foreground mb-2">
+                Home Pin Code
+              </label>
+              <input
+                type="text"
+                id="homePinCode"
+                value={formData.homePinCode}
+                onChange={(e) => handleChange("homePinCode", e.target.value)}
+                placeholder="Enter home pin code"
+                className={`w-full h-12 px-4 rounded-lg border border-solid ${
+                  errors.homePinCode ? "border-red-500" : "border-[#9CA3AF]"
+                } bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground`}
+              />
+              {errors.homePinCode && (
+                <p className="mt-1 text-sm text-red-600">{errors.homePinCode}</p>
               )}
             </div>
 
