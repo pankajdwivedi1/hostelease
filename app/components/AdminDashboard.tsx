@@ -16,11 +16,10 @@ interface Permission {
     profilePicture?: string;
     studentStatus?: "in" | "out";
   };
-  fromTime: string;
-  toTime: string;
+  fromDateTime: string | Date;
+  toDateTime: string | Date;
   reason: string;
   status: "pending" | "allowed" | "rejected";
-  date: string;
 }
 
 interface SimplePermission {
