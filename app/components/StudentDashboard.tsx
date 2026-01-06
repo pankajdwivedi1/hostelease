@@ -7,11 +7,10 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 
 interface Permission {
   _id: string;
-  fromTime: string;
-  toTime: string;
+  fromDateTime: string | Date;
+  toDateTime: string | Date;
   reason: string;
   status: "pending" | "allowed" | "rejected";
-  date: string;
 }
 
 interface StudentProfile {
@@ -29,10 +28,9 @@ export default function StudentDashboard() {
   const router = useRouter();
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [fromTime, setFromTime] = useState("");
-  const [toTime, setToTime] = useState("");
+  const [fromDateTime, setFromDateTime] = useState("");
+  const [toDateTime, setToDateTime] = useState("");
   const [reason, setReason] = useState("");
-  const [date, setDate] = useState("");
   const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,7 +121,7 @@ export default function StudentDashboard() {
   }, []);
 
   const handleRequestPermission = async () => {
-    if (!fromTime || !toTime || !reason || !date || !studentProfile) return;
+    if (!fromDateTime || !toDateTime || !reason || !studentProfile) return;
 
     try {
       setSubmitting(true);
@@ -134,10 +132,9 @@ export default function StudentDashboard() {
         },
         body: JSON.stringify({
           studentId: studentProfile._id,
-          fromTime,
-          toTime,
+          fromDateTime,
+          toDateTime,
           reason,
-          date,
         }),
       });
 
@@ -151,10 +148,9 @@ export default function StudentDashboard() {
         setPermissions([data.permission, ...permissions]);
       }
 
-      setFromTime("");
-      setToTime("");
+      setFromDateTime("");
+      setToDateTime("");
       setReason("");
-      setDate("");
       setShowRequestForm(false);
     } catch (error: any) {
       console.error("Error creating permission:", error);
@@ -170,52 +166,14 @@ export default function StudentDashboard() {
     try {
       setCheckingIn(true);
 
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const { latitude, longitude, accuracy } = pos.coords;
-            const accuracyInMeters = Math.round(accuracy);
-            console.log("Current Location - Lat:", latitude, "Lng:", longitude, "Accuracy:", accuracyInMeters, "meters");
-            
-            // Reject if accuracy is too poor (more than 100 meters)
-            if (accuracy > 100) {
-              console.warn("Location accuracy is poor:", accuracyInMeters, "meters. Retrying...");
-              reject(new Error(`Location accuracy too poor: ${accuracyInMeters} meters. Please try again in an open area.`));
-              return;
-            }
-            
-            resolve(pos);
-          },
-          (err) => {
-            console.error("Geolocation error:", err);
-            reject(err);
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 20000,
-            maximumAge: 0,
-          }
-        );
-      });
-
-      const { latitude: lat, longitude: lng, accuracy } = position.coords;
-      const accuracyInMeters = Math.round(accuracy);
-      
-      console.log("Sending check-in with coordinates:");
-      console.log("  Latitude:", lat);
-      console.log("  Longitude:", lng);
-      console.log("  Accuracy:", accuracyInMeters, "meters");
-
-      const response = await fetch("/api/students/checkin", {
-        method: "POST",
+      const response = await fetch("/api/students/status", {
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           studentId: studentProfile._id,
-          lat,
-          lng,
-          accuracy,
+          status: "in",
         }),
       });
 
@@ -228,24 +186,14 @@ export default function StudentDashboard() {
       if (data.student) {
         const studentData = {
           ...data.student,
-          studentStatus: data.student.studentStatus || "in"
+          studentStatus: "in"
         };
         setStudentProfile(studentData);
-        alert(`Successfully checked in! (Accuracy: ${accuracyInMeters} meters)`);
+        alert("Successfully checked in!");
       }
     } catch (error: any) {
       console.error("Error checking in:", error);
-      if (error.message.includes("accuracy too poor")) {
-        alert(error.message);
-      } else if (error.code === 3 || error.message.includes("Timeout")) {
-        alert("Location request timed out. Please try again in an open area with clear sky view.");
-      } else if (error.message.includes("not inside")) {
-        alert("You are not inside the hostel. Please move closer to the hostel location.");
-      } else if (error.message.includes("denied") || error.message.includes("permission") || error.code === 1) {
-        alert("Location permission denied. Please enable location access to check in.");
-      } else {
-        alert(error.message || "Failed to check in. Please try again.");
-      }
+      alert(error.message || "Failed to check in. Please try again.");
     } finally {
       setCheckingIn(false);
     }
@@ -463,34 +411,23 @@ export default function StudentDashboard() {
                 <div className="p-6 rounded-lg border border-solid border-[#9CA3AF] bg-filler space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-2">
-                      Date
+                      From Date & Time
                     </label>
                     <input
-                      type="date"
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
+                      type="datetime-local"
+                      value={fromDateTime}
+                      onChange={(e) => setFromDateTime(e.target.value)}
                       className="w-full h-12 px-4 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground focus:outline-none focus:border-foreground"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-2">
-                      From Time
+                      To Date & Time
                     </label>
                     <input
-                      type="time"
-                      value={fromTime}
-                      onChange={(e) => setFromTime(e.target.value)}
-                      className="w-full h-12 px-4 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground focus:outline-none focus:border-foreground"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      To Time
-                    </label>
-                    <input
-                      type="time"
-                      value={toTime}
-                      onChange={(e) => setToTime(e.target.value)}
+                      type="datetime-local"
+                      value={toDateTime}
+                      onChange={(e) => setToDateTime(e.target.value)}
                       className="w-full h-12 px-4 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground focus:outline-none focus:border-foreground"
                     />
                   </div>
@@ -517,10 +454,9 @@ export default function StudentDashboard() {
                     <button
                       onClick={() => {
                         setShowRequestForm(false);
-                        setFromTime("");
-                        setToTime("");
+                        setFromDateTime("");
+                        setToDateTime("");
                         setReason("");
-                        setDate("");
                       }}
                       className="flex-1 h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
                     >
@@ -543,9 +479,11 @@ export default function StudentDashboard() {
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <p className="text-sm text-secondary">Date: {new Date(permission.date).toLocaleDateString()}</p>
+                            <p className="text-sm text-secondary">
+                              From: {new Date(permission.fromDateTime).toLocaleString()}
+                            </p>
                             <p className="text-base font-medium text-foreground mt-0.5 md:mt-1">
-                              {permission.fromTime} - {permission.toTime}
+                              To: {new Date(permission.toDateTime).toLocaleString()}
                             </p>
                           </div>
                           <span

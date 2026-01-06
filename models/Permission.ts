@@ -3,11 +3,10 @@ import mongoose, { Schema, Model, Types } from "mongoose";
 export interface IPermission {
   _id?: string;
   studentId: Types.ObjectId;
-  fromTime: string;
-  toTime: string;
+  fromDateTime: Date;
+  toDateTime: Date;
   reason: string;
   status: "pending" | "allowed" | "rejected";
-  date: Date;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -20,13 +19,15 @@ const PermissionSchema = new Schema<IPermission>(
       required: true,
       index: true,
     },
-    fromTime: {
-      type: String,
+    fromDateTime: {
+      type: Date,
       required: true,
+      index: true,
     },
-    toTime: {
-      type: String,
+    toDateTime: {
+      type: Date,
       required: true,
+      index: true,
     },
     reason: {
       type: String,
@@ -36,11 +37,6 @@ const PermissionSchema = new Schema<IPermission>(
       type: String,
       enum: ["pending", "allowed", "rejected"],
       default: "pending",
-      index: true,
-    },
-    date: {
-      type: Date,
-      required: true,
       index: true,
     },
   },

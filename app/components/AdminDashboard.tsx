@@ -25,11 +25,10 @@ interface Permission {
 
 interface SimplePermission {
   id: string;
-  fromTime: string;
-  toTime: string;
+  fromDateTime: string | Date;
+  toDateTime: string | Date;
   reason: string;
   status: "pending" | "allowed" | "rejected";
-  date: string;
 }
 
 interface StudentDetails {
@@ -142,14 +141,13 @@ export default function AdminDashboard() {
         motherName: student.motherName,
         motherNumber: student.motherNumber,
         homePinCode: student.homePinCode,
-        permissions: studentPermissions.map((p): SimplePermission => ({
-          id: p._id,
-          fromTime: p.fromTime,
-          toTime: p.toTime,
-          reason: p.reason,
-          status: p.status,
-          date: p.date,
-        })),
+                            permissions: studentPermissions.map((p): SimplePermission => ({
+                              id: p._id,
+                              fromDateTime: p.fromDateTime,
+                              toDateTime: p.toDateTime,
+                              reason: p.reason,
+                              status: p.status,
+                            })),
       });
     }
   };
@@ -383,9 +381,9 @@ export default function AdminDashboard() {
                                   {student.name}
                                 </p>
                                 <div className="flex items-center gap-1.5 md:gap-2 mt-0.5 md:mt-1 text-sm text-secondary">
-                                  <span>{new Date(permission.date).toLocaleDateString()}</span>
+                                  <span>{new Date(permission.fromDateTime).toLocaleString()}</span>
                                   <span>•</span>
-                                  <span>{permission.fromTime} - {permission.toTime}</span>
+                                  <span>to {new Date(permission.toDateTime).toLocaleString()}</span>
                                 </div>
                                 <p className="text-sm text-foreground mt-1.5 md:mt-2">
                                   {permission.reason}
@@ -558,11 +556,10 @@ export default function AdminDashboard() {
                             homePinCode: student.homePinCode,
                             permissions: studentPermissions.map((p): SimplePermission => ({
                               id: p._id,
-                              fromTime: p.fromTime,
-                              toTime: p.toTime,
+                              fromDateTime: p.fromDateTime,
+                              toDateTime: p.toDateTime,
                               reason: p.reason,
                               status: p.status,
-                              date: p.date,
                             })),
                           });
                           setShowAllStudents(false);
@@ -701,9 +698,9 @@ export default function AdminDashboard() {
                             <div className="flex items-center justify-between">
                               <div className="flex-1">
                                 <div className="flex items-center gap-1.5 md:gap-2 text-sm text-secondary mb-1">
-                                  <span>{permission.date}</span>
+                                  <span>{new Date(permission.fromDateTime).toLocaleString()}</span>
                                   <span>•</span>
-                                  <span>{permission.fromTime} - {permission.toTime}</span>
+                                  <span>to {new Date(permission.toDateTime).toLocaleString()}</span>
                                 </div>
                                 <p className="text-sm text-foreground">
                                   {permission.reason}

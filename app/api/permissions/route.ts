@@ -8,11 +8,22 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { studentId, fromTime, toTime, reason, date } = body;
+    const { studentId, fromDateTime, toDateTime, reason } = body;
 
-    if (!studentId || !fromTime || !toTime || !reason || !date) {
+    if (!studentId || !fromDateTime || !toDateTime || !reason) {
       return NextResponse.json(
         { error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+
+    // Validate that toDateTime is after fromDateTime
+    const fromDate = new Date(fromDateTime);
+    const toDate = new Date(toDateTime);
+    
+    if (toDate <= fromDate) {
+      return NextResponse.json(
+        { error: "End date and time must be after start date and time" },
         { status: 400 }
       );
     }
@@ -24,10 +35,9 @@ export async function POST(request: NextRequest) {
 
     const permission = await Permission.create({
       studentId,
-      fromTime,
-      toTime,
+      fromDateTime: new Date(fromDateTime),
+      toDateTime: new Date(toDateTime),
       reason,
-      date: new Date(date),
       status: "pending",
     });
 
