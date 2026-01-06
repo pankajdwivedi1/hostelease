@@ -115,9 +115,10 @@ export default function AdminDashboard() {
   const handleProfileClick = (studentId: string) => {
     const student = students.find((s) => s._id === studentId);
     if (student) {
-      const studentPermissions = permissions.filter((p) => 
-        typeof p.studentId === "object" ? p.studentId._id === studentId : p.studentId === studentId
-      );
+      const studentPermissions = permissions.filter((p) => {
+        if (!p.studentId) return false;
+        return typeof p.studentId === "object" ? p.studentId._id === studentId : p.studentId === studentId;
+      });
       setSelectedStudent({
         id: student._id,
         name: student.name,
@@ -503,9 +504,10 @@ export default function AdminDashboard() {
                     <p className="text-secondary text-center py-8">No students found</p>
                   ) : (
                     filteredStudents.map((student) => {
-                      const studentPermissions = permissions.filter((p) => 
-                        typeof p.studentId === "object" ? p.studentId._id === student._id : p.studentId === student._id
-                      );
+                      const studentPermissions = permissions.filter((p) => {
+                        if (!p.studentId) return false;
+                        return typeof p.studentId === "object" ? p.studentId._id === student._id : p.studentId === student._id;
+                      });
                       return (
                       <button
                         key={student._id}
