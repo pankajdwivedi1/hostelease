@@ -9,6 +9,9 @@ export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminLoading, setAdminLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
     try {
@@ -39,10 +42,45 @@ export default function LoginPage() {
     }
   };
 
-  const handleAdminLogin = () => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("userType", "admin");
-      router.push("/");
+  const handleAdminLogin = async () => {
+    if (!showAdminPassword) {
+      setShowAdminPassword(true);
+      return;
+    }
+
+    if (!adminPassword.trim()) {
+      setError("Please enter the admin password");
+      return;
+    }
+
+    try {
+      setAdminLoading(true);
+      setError("");
+
+      const response = await fetch("/api/admin/auth", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ password: adminPassword }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Invalid password");
+      }
+
+      if (data.success) {
+        localStorage.setItem("userType", "admin");
+        router.push("/");
+      }
+    } catch (error: any) {
+      console.error("Admin login error:", error);
+      setError(error.message || "Invalid password. Please try again.");
+      setAdminPassword("");
+    } finally {
+      setAdminLoading(false);
     }
   };
 
@@ -50,6 +88,11 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-white">
       <main className="w-full max-w-md px-6">
         <div className="flex flex-col items-center space-y-6">
+          <img
+            src="/logo.jpeg"
+            alt="Hostelease Logo"
+            className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover"
+          />
           <h1 className="text-base font-semibold text-foreground">Hostelease</h1>
           
           <div className="w-full space-y-4">
@@ -84,12 +127,58 @@ export default function LoginPage() {
               {loading ? "Signing in..." : "Login with Google"}
             </button>
 
-            <button
-              onClick={handleAdminLogin}
-              className="w-full h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
-            >
-              Login as Admin
-            </button>
+            {showAdminPassword ? (
+              <div className="space-y-3">
+                <div>
+                  <label htmlFor="adminPassword" className="block text-sm font-medium text-foreground mb-2">
+                    Admin Password
+                  </label>
+                  <input
+                    type="password"
+                    id="adminPassword"
+                    value={adminPassword}
+                    onChange={(e) => {
+                      setAdminPassword(e.target.value);
+                      setError("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleAdminLogin();
+                      }
+                    }}
+                    placeholder="Enter admin password"
+                    className="w-full h-12 px-4 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
+                    autoFocus
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setShowAdminPassword(false);
+                      setAdminPassword("");
+                      setError("");
+                    }}
+                    className="flex-1 h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAdminLogin}
+                    disabled={adminLoading}
+                    className="flex-1 h-12 rounded-lg bg-foreground text-background font-medium transition-colors hover:bg-[#383838] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {adminLoading ? "Verifying..." : "Login"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={handleAdminLogin}
+                className="w-full h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
+              >
+                Login as Admin
+              </button>
+            )}
           </div>
         </div>
       </main>
