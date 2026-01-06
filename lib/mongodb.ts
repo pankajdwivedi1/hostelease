@@ -10,10 +10,10 @@ if (MONGO_URL.includes("<db_password>")) {
   throw new Error("Please replace <db_password> in MONGO_URL with your actual MongoDB password, or set MONGO_PASSWORD in .env.local");
 }
 
-let cached = global.mongoose;
+let cached = (global as any).mongoose;
 
 if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null };
+  cached = (global as any).mongoose = { conn: null, promise: null };
 }
 
 async function connectDB() {
