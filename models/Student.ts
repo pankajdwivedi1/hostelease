@@ -15,6 +15,8 @@ export interface IStudent {
   motherName?: string;
   motherNumber?: string;
   homePinCode?: string;
+  erpInformation?: string;
+  joiningDate?: Date;
   lastCheckInLocation?: {
     lat: number;
     lng: number;
@@ -78,6 +80,14 @@ const StudentSchema = new Schema<IStudent>(
     },
     homePinCode: {
       type: String,
+      required: false,
+    },
+    erpInformation: {
+      type: String,
+      required: false,
+    },
+    joiningDate: {
+      type: Date,
       required: false,
     },
     studentStatus: {

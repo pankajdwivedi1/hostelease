@@ -10,7 +10,9 @@ export default function OnboardingPage() {
   const [formData, setFormData] = useState({
     name: "",
     phoneNumber: "",
+    erpInformation: "",
     hostelName: "",
+    joiningDate: "",
     roomNumber: "",
     fatherName: "",
     fatherNumber: "",
@@ -70,7 +72,7 @@ export default function OnboardingPage() {
     }
 
     if (!formData.homePinCode.trim()) {
-      newErrors.homePinCode = "Home pin code is required";
+      newErrors.homePinCode = "Permanent address with pincode is required";
     }
 
     setErrors(newErrors);
@@ -88,12 +90,14 @@ export default function OnboardingPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
+          body: JSON.stringify({
           firebaseUID: user.uid,
           name: formData.name,
           email: user.email || "",
           phoneNumber: formData.phoneNumber,
+          erpInformation: formData.erpInformation,
           hostelName: formData.hostelName,
+          joiningDate: formData.joiningDate,
           roomNumber: formData.roomNumber,
           profilePicture: user.photoURL || "",
           fatherName: formData.fatherName,
@@ -176,22 +180,64 @@ export default function OnboardingPage() {
             </div>
 
             <div>
-              <label htmlFor="hostelName" className="block text-sm font-medium text-foreground mb-2">
-                Hostel Name
+              <label htmlFor="erpInformation" className="block text-sm font-medium text-foreground mb-2">
+                Enter your erp information
               </label>
               <input
                 type="text"
-                id="hostelName"
-                value={formData.hostelName}
-                onChange={(e) => handleChange("hostelName", e.target.value)}
-                placeholder="e.g., Boys Hostel A, Girls Hostel B"
+                id="erpInformation"
+                value={formData.erpInformation}
+                onChange={(e) => handleChange("erpInformation", e.target.value)}
+                placeholder="Enter your ERP information"
                 className={`w-full h-12 px-4 rounded-lg border border-solid ${
-                  errors.hostelName ? "border-red-500" : "border-[#9CA3AF]"
+                  errors.erpInformation ? "border-red-500" : "border-[#9CA3AF]"
                 } bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground`}
               />
-              {errors.hostelName && (
-                <p className="mt-1 text-sm text-red-600">{errors.hostelName}</p>
+              {errors.erpInformation && (
+                <p className="mt-1 text-sm text-red-600">{errors.erpInformation}</p>
               )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="hostelName" className="block text-sm font-medium text-foreground mb-2">
+                  Hostel Name
+                </label>
+                <select
+                  id="hostelName"
+                  value={formData.hostelName}
+                  onChange={(e) => handleChange("hostelName", e.target.value)}
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${
+                    errors.hostelName ? "border-red-500" : "border-[#9CA3AF]"
+                  } bg-white text-foreground focus:outline-none focus:border-foreground`}
+                >
+                  <option value="">Select hostel</option>
+                  <option value="Gangotri Hostel">Gangotri Hostel</option>
+                  <option value="Gaytri Hostel">Gaytri Hostel</option>
+                  <option value="Boys Hostel">Boys Hostel</option>
+                </select>
+                {errors.hostelName && (
+                  <p className="mt-1 text-sm text-red-600">{errors.hostelName}</p>
+                )}
+              </div>
+              <div>
+                <label htmlFor="joiningDate" className="block text-sm font-medium text-foreground mb-2">
+                  Enter joining date on hostal
+                </label>
+                <input
+                  type="date"
+                  id="joiningDate"
+                  value={formData.joiningDate}
+                  onChange={(e) => handleChange("joiningDate", e.target.value)}
+                  placeholder="e.g. 01-01-2000"
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${
+                    errors.joiningDate ? "border-red-500" : "border-[#9CA3AF]"
+                  } bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground`}
+                />
+                {errors.joiningDate && (
+                  <p className="mt-1 text-sm text-red-600">{errors.joiningDate}</p>
+                )}
+              </div>
             </div>
 
             <div>
@@ -291,14 +337,14 @@ export default function OnboardingPage() {
 
             <div>
               <label htmlFor="homePinCode" className="block text-sm font-medium text-foreground mb-2">
-                Home Pin Code
+                Parmanent address with pincode
               </label>
               <input
                 type="text"
                 id="homePinCode"
                 value={formData.homePinCode}
                 onChange={(e) => handleChange("homePinCode", e.target.value)}
-                placeholder="Enter home pin code"
+                placeholder="Enter permanent address with pincode"
                 className={`w-full h-12 px-4 rounded-lg border border-solid ${
                   errors.homePinCode ? "border-red-500" : "border-[#9CA3AF]"
                 } bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground`}
