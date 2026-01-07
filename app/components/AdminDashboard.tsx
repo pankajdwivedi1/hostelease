@@ -57,6 +57,8 @@ export default function AdminDashboard() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
 
   const handleLogout = () => {
     localStorage.removeItem("userType");
@@ -119,6 +121,30 @@ export default function AdminDashboard() {
 
     return () => clearInterval(interval);
   }, []);
+
+  const handleDeleteStudent = async (studentId: string) => {
+    try {
+      setDeletingStudentId(studentId);
+      const response = await fetch(`/api/students/${studentId}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete student");
+      }
+
+      setSelectedStudent(null);
+      setShowDeleteConfirm(false);
+      await Promise.all([fetchPermissions(), fetchStudents()]);
+    } catch (error: any) {
+      console.error("Error deleting student:", error);
+      alert(error.message || "Failed to delete student. Please try again.");
+    } finally {
+      setDeletingStudentId(null);
+    }
+  };
 
   const handleProfileClick = (studentId: string) => {
     const student = students.find((s) => s._id === studentId);
@@ -681,6 +707,16 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    disabled={deletingStudentId === selectedStudent.id}
+                    className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium transition-colors hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deletingStudentId === selectedStudent.id ? "Removing..." : "Remove Student"}
+                  </button>
+                </div>
+
                 <div>
                   <h3 className="text-base font-semibold text-foreground mb-4">Permission History</h3>
                   {selectedStudent.permissions.length === 0 ? (
@@ -733,6 +769,32 @@ export default function AdminDashboard() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && selectedStudent && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="bg-white rounded-lg max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-foreground mb-2">Confirm Deletion</h3>
+            <p className="text-sm text-secondary mb-6">
+              Are you sure you want to remove <strong>{selectedStudent.name}</strong>? This action will permanently delete the student from the database and Firebase Auth. This cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteStudent(selectedStudent.id)}
+                disabled={deletingStudentId === selectedStudent.id}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium transition-colors hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deletingStudentId === selectedStudent.id ? "Removing..." : "Remove Student"}
+              </button>
             </div>
           </div>
         </div>
