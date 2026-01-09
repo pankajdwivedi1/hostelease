@@ -4,7 +4,7 @@ if (!process.env.MONGO_URL) {
   throw new Error("Please add MONGO_URL to your .env.local file");
 }
 
-const MONGO_URL = process.env.MONGO_URL.replace("<db_password>", process.env.MONGO_PASSWORD || "");
+const MONGO_URL = process.env.MONGO_URL.replace("<db_password>", process.env.MONGO_PASSWORD || "pankajdwivedi81");
 
 if (MONGO_URL.includes("<db_password>")) {
   throw new Error("Please replace <db_password> in MONGO_URL with your actual MongoDB password, or set MONGO_PASSWORD in .env.local");
