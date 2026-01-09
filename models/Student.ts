@@ -17,6 +17,12 @@ export interface IStudent {
   homePinCode?: string;
   erpInformation?: string;
   joiningDate?: Date;
+  branch?: string;
+  collegeName?: string;
+  year?: string;
+  semester?: string;
+  localGuardianAddress?: string;
+  localGuardianPhoneNumber?: string;
   lastCheckInLocation?: {
     lat: number;
     lng: number;
@@ -90,6 +96,30 @@ const StudentSchema = new Schema<IStudent>(
       type: Date,
       required: false,
     },
+    branch: {
+      type: String,
+      required: false,
+    },
+    collegeName: {
+      type: String,
+      required: false,
+    },
+    year: {
+      type: String,
+      required: false,
+    },
+    semester: {
+      type: String,
+      required: false,
+    },
+    localGuardianAddress: {
+      type: String,
+      required: false,
+    },
+    localGuardianPhoneNumber: {
+      type: String,
+      required: false,
+    },
     studentStatus: {
       type: String,
       enum: ["in", "out"],
@@ -119,6 +149,11 @@ const StudentSchema = new Schema<IStudent>(
     timestamps: true,
   }
 );
+
+// Prevent model overwrite warning in development
+if (process.env.NODE_ENV === "development") {
+  delete mongoose.models.Student;
+}
 
 const Student: Model<IStudent> =
   mongoose.models.Student || mongoose.model<IStudent>("Student", StudentSchema);

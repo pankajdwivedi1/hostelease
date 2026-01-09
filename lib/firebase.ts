@@ -13,13 +13,13 @@ import { getAnalytics } from "firebase/analytics";
 // };
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAjDz5gK92Bw-KJJRRSklL_1KrjjhMxQgk",
-  authDomain: "hostelease-81056.firebaseapp.com",
-  projectId: "hostelease-81056",
-  storageBucket: "hostelease-81056.firebasestorage.app",
-  messagingSenderId: "729813273338",
-  appId: "1:729813273338:web:a751f3b8f57c27aeefd743",
-  measurementId: "G-9PG8NMN3KN"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
 const app = initializeApp(firebaseConfig);

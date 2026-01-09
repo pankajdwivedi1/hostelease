@@ -1,13 +1,13 @@
 import mongoose from "mongoose";
 
-if (!process.env.MONGO_URL) {
-  throw new Error("Please add MONGO_URL to your .env.local file");
+if (!process.env.MONGODB_URL) {
+  throw new Error("Please add MONGODB_URL to your .env.local file");
 }
 
-const MONGO_URL = process.env.MONGO_URL;
+const MONGO_URL = process.env.MONGODB_URL;
 
 if (MONGO_URL.includes("<db_password>")) {
-  throw new Error("Please replace <db_password> in MONGO_URL with your actual MongoDB password, or set MONGO_PASSWORD in .env.local");
+  throw new Error("Please replace <db_password> in MONGODB_URL with your actual MongoDB password, or set MONGO_PASSWORD in .env.local");
 }
 
 let cached = (global as any).mongoose;

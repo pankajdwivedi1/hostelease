@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, homePinCode, erpInformation, joiningDate } = body;
+    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, homePinCode, erpInformation, joiningDate, branch, collegeName, year, semester, localGuardianAddress, localGuardianPhoneNumber } = body;
 
     if (!firebaseUID || !name || !email || !phoneNumber || !hostelName || !roomNumber) {
       return NextResponse.json(
@@ -34,6 +34,12 @@ export async function POST(request: NextRequest) {
         homePinCode: homePinCode || "",
         erpInformation: erpInformation || "",
         joiningDate: joiningDate ? new Date(joiningDate) : undefined,
+        branch: branch || "",
+        collegeName: collegeName || "",
+        year: year || "",
+        semester: semester || "",
+        localGuardianAddress: localGuardianAddress || "",
+        localGuardianPhoneNumber: localGuardianPhoneNumber || "",
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
@@ -61,12 +67,12 @@ export async function GET(request: NextRequest) {
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
-      
+
       if (!student.studentStatus) {
         await Student.findByIdAndUpdate(student._id, { studentStatus: "in" });
         student.studentStatus = "in";
       }
-      
+
       return NextResponse.json({ student }, { status: 200 });
     }
 
@@ -75,12 +81,12 @@ export async function GET(request: NextRequest) {
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
-      
+
       if (!student.studentStatus) {
         await Student.findByIdAndUpdate(student._id, { studentStatus: "in" });
         student.studentStatus = "in";
       }
-      
+
       return NextResponse.json({ student }, { status: 200 });
     }
 

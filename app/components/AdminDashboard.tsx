@@ -43,6 +43,14 @@ interface StudentDetails {
   motherName?: string;
   motherNumber?: string;
   homePinCode?: string;
+  erpInformation?: string;
+  joiningDate?: string;
+  branch?: string;
+  collegeName?: string;
+  year?: string;
+  semester?: string;
+  localGuardianAddress?: string;
+  localGuardianPhoneNumber?: string;
   permissions: SimplePermission[];
 }
 
@@ -53,7 +61,7 @@ export default function AdminDashboard() {
   const [selectedStudent, setSelectedStudent] = useState<StudentDetails | null>(null);
   const [showAllStudents, setShowAllStudents] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [hostelFilter, setHostelFilter] = useState<"all" | "A" | "B" | "C" | "D">("all");
+  const [hostelFilter, setHostelFilter] = useState<"all" | "Gaytri Hostal" | "Gangotri Hostal" | "Boys Hostal">("all");
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -166,13 +174,21 @@ export default function AdminDashboard() {
         motherName: student.motherName,
         motherNumber: student.motherNumber,
         homePinCode: student.homePinCode,
-                            permissions: studentPermissions.map((p): SimplePermission => ({
-                              id: p._id,
-                              fromDateTime: p.fromDateTime,
-                              toDateTime: p.toDateTime,
-                              reason: p.reason,
-                              status: p.status,
-                            })),
+        erpInformation: student.erpInformation,
+        joiningDate: student.joiningDate,
+        branch: student.branch,
+        collegeName: student.collegeName,
+        year: student.year,
+        semester: student.semester,
+        localGuardianAddress: student.localGuardianAddress,
+        localGuardianPhoneNumber: student.localGuardianPhoneNumber,
+        permissions: studentPermissions.map((p): SimplePermission => ({
+          id: p._id,
+          fromDateTime: p.fromDateTime,
+          toDateTime: p.toDateTime,
+          reason: p.reason,
+          status: p.status,
+        })),
       });
     }
   };
@@ -229,28 +245,27 @@ export default function AdminDashboard() {
   const filteredPermissions = permissions.filter((p) => {
     const matchesStatus = filter === "all" || p.status === filter;
     if (!matchesStatus) return false;
-    
+
     if (statusFilter === "all") return true;
-    
+
     const student = typeof p.studentId === "object" ? p.studentId : null;
     if (!student) return false;
-    
+
     return student.studentStatus === statusFilter;
   });
 
-  const getHostelLetter = (hostelName: string): "A" | "B" | "C" | "D" | null => {
+  const getHostelCategory = (hostelName: string): "Gaytri Hostal" | "Gangotri Hostal" | "Boys Hostal" | null => {
     const name = hostelName.toLowerCase();
-    if (name.includes("hostel a") || name.includes("a")) return "A";
-    if (name.includes("hostel b") || name.includes("b")) return "B";
-    if (name.includes("hostel c") || name.includes("c")) return "C";
-    if (name.includes("hostel d") || name.includes("d")) return "D";
+    if (name.includes("gaytri") || name.includes("hostel a") || name.includes("a")) return "Gaytri Hostal";
+    if (name.includes("gangotri") || name.includes("hostel b") || name.includes("b")) return "Gangotri Hostal";
+    if (name.includes("boys") || name.includes("hostel c") || name.includes("c") || name.includes("hostel d") || name.includes("d")) return "Boys Hostal";
     return null;
   };
 
   const filteredStudents = students.filter((student) => {
     const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         student.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesHostel = hostelFilter === "all" || getHostelLetter(student.hostelName) === hostelFilter;
+      student.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesHostel = hostelFilter === "all" || getHostelCategory(student.hostelName) === hostelFilter;
     return matchesSearch && matchesHostel;
   });
 
@@ -292,41 +307,37 @@ export default function AdminDashboard() {
               <div className="flex gap-2 md:gap-3 flex-wrap">
                 <button
                   onClick={() => setFilter("all")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${
-                    filter === "all"
-                      ? "bg-foreground text-background"
-                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                  }`}
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "all"
+                    ? "bg-foreground text-background"
+                    : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                    }`}
                 >
                   All
                 </button>
                 <button
                   onClick={() => setFilter("pending")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${
-                    filter === "pending"
-                      ? "bg-foreground text-background"
-                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                  }`}
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "pending"
+                    ? "bg-foreground text-background"
+                    : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                    }`}
                 >
                   Pending
                 </button>
                 <button
                   onClick={() => setFilter("allowed")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${
-                    filter === "allowed"
-                      ? "bg-foreground text-background"
-                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                  }`}
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "allowed"
+                    ? "bg-foreground text-background"
+                    : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                    }`}
                 >
                   Accepted
                 </button>
                 <button
                   onClick={() => setFilter("rejected")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${
-                    filter === "rejected"
-                      ? "bg-foreground text-background"
-                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                  }`}
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "rejected"
+                    ? "bg-foreground text-background"
+                    : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                    }`}
                 >
                   Rejected
                 </button>
@@ -335,31 +346,28 @@ export default function AdminDashboard() {
               <div className="flex gap-2 md:gap-3 flex-wrap">
                 <button
                   onClick={() => setStatusFilter("all")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${
-                    statusFilter === "all"
-                      ? "bg-foreground text-background"
-                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                  }`}
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "all"
+                    ? "bg-foreground text-background"
+                    : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                    }`}
                 >
                   All Students
                 </button>
                 <button
                   onClick={() => setStatusFilter("in")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${
-                    statusFilter === "in"
-                      ? "bg-foreground text-background"
-                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                  }`}
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "in"
+                    ? "bg-foreground text-background"
+                    : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                    }`}
                 >
                   In
                 </button>
                 <button
                   onClick={() => setStatusFilter("out")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${
-                    statusFilter === "out"
-                      ? "bg-foreground text-background"
-                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                  }`}
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "out"
+                    ? "bg-foreground text-background"
+                    : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                    }`}
                 >
                   Out
                 </button>
@@ -374,7 +382,7 @@ export default function AdminDashboard() {
                     if (!student) {
                       return null;
                     }
-                    
+
                     const initials = getInitials(student.name);
                     const showStatus = permission.status === "allowed" || permission.status === "rejected";
                     const profilePic = student.profilePicture && student.profilePicture.trim() !== "" && student.profilePicture !== "undefined";
@@ -418,11 +426,10 @@ export default function AdminDashboard() {
                                 {showStatus && (
                                   <Badge
                                     variant={permission.status === "allowed" ? "default" : "destructive"}
-                                    className={`text-xs px-2 md:px-2.5 py-0.5 whitespace-nowrap ${
-                                      permission.status === "allowed"
-                                        ? "bg-green-100 text-green-800 border-green-200"
-                                        : "bg-red-100 text-red-800 border-red-200"
-                                    }`}
+                                    className={`text-xs px-2 md:px-2.5 py-0.5 whitespace-nowrap ${permission.status === "allowed"
+                                      ? "bg-green-100 text-green-800 border-green-200"
+                                      : "bg-red-100 text-red-800 border-red-200"
+                                      }`}
                                   >
                                     {permission.status === "allowed" ? "Accepted" : "Rejected"}
                                   </Badge>
@@ -503,53 +510,39 @@ export default function AdminDashboard() {
                 <div className="flex gap-2 md:gap-3 flex-wrap">
                   <button
                     onClick={() => setHostelFilter("all")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${
-                      hostelFilter === "all"
-                        ? "bg-foreground text-background"
-                        : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                    }`}
+                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${hostelFilter === "all"
+                      ? "bg-foreground text-background"
+                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                      }`}
                   >
                     All
                   </button>
                   <button
-                    onClick={() => setHostelFilter("A")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${
-                      hostelFilter === "A"
-                        ? "bg-foreground text-background"
-                        : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                    }`}
+                    onClick={() => setHostelFilter("Gaytri Hostal")}
+                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${hostelFilter === "Gaytri Hostal"
+                      ? "bg-foreground text-background"
+                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                      }`}
                   >
-                    Hostel A
+                    Gaytri Hostal
                   </button>
                   <button
-                    onClick={() => setHostelFilter("B")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${
-                      hostelFilter === "B"
-                        ? "bg-foreground text-background"
-                        : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                    }`}
+                    onClick={() => setHostelFilter("Gangotri Hostal")}
+                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${hostelFilter === "Gangotri Hostal"
+                      ? "bg-foreground text-background"
+                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                      }`}
                   >
-                    Hostel B
+                    Gangotri Hostal
                   </button>
                   <button
-                    onClick={() => setHostelFilter("C")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${
-                      hostelFilter === "C"
-                        ? "bg-foreground text-background"
-                        : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                    }`}
+                    onClick={() => setHostelFilter("Boys Hostal")}
+                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${hostelFilter === "Boys Hostal"
+                      ? "bg-foreground text-background"
+                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                      }`}
                   >
-                    Hostel C
-                  </button>
-                  <button
-                    onClick={() => setHostelFilter("D")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${
-                      hostelFilter === "D"
-                        ? "bg-foreground text-background"
-                        : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                    }`}
-                  >
-                    Hostel D
+                    Boys Hostal
                   </button>
                 </div>
 
@@ -563,59 +556,67 @@ export default function AdminDashboard() {
                         return typeof p.studentId === "object" ? p.studentId._id === student._id : p.studentId === student._id;
                       });
                       return (
-                      <button
-                        key={student._id}
-                        onClick={() => {
-                          setSelectedStudent({
-                            id: student._id,
-                            name: student.name,
-                            email: student.email,
-                            phoneNumber: student.phoneNumber,
-                            hostelName: student.hostelName,
-                            roomNumber: student.roomNumber,
-                            profilePicture: student.profilePicture,
-                            fatherName: student.fatherName,
-                            fatherNumber: student.fatherNumber,
-                            motherName: student.motherName,
-                            motherNumber: student.motherNumber,
-                            homePinCode: student.homePinCode,
-                            permissions: studentPermissions.map((p): SimplePermission => ({
-                              id: p._id,
-                              fromDateTime: p.fromDateTime,
-                              toDateTime: p.toDateTime,
-                              reason: p.reason,
-                              status: p.status,
-                            })),
-                          });
-                          setShowAllStudents(false);
-                        }}
-                        className="w-full text-left rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4 hover:bg-[#E8E8E6] transition-colors"
-                      >
-                        <div className="flex items-center gap-3 md:gap-4">
-                          <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0">
-                            {student.profilePicture ? (
-                              <img
-                                src={student.profilePicture}
-                                alt={student.name}
-                                className="w-full h-full rounded-full object-cover"
-                              />
-                            ) : (
-                              getInitials(student.name)
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-base font-semibold text-foreground">{student.name}</p>
-                            <p className="text-sm text-secondary mt-0.5">{student.email}</p>
-                            <div className="flex items-center gap-3 md:gap-4 mt-2 text-sm text-secondary">
-                              <span>{student.hostelName}</span>
-                              <span>•</span>
-                              <span>Room {student.roomNumber}</span>
-                              <span>•</span>
-                              <span>{student.phoneNumber}</span>
+                        <button
+                          key={student._id}
+                          onClick={() => {
+                            setSelectedStudent({
+                              id: student._id,
+                              name: student.name,
+                              email: student.email,
+                              phoneNumber: student.phoneNumber,
+                              hostelName: student.hostelName,
+                              roomNumber: student.roomNumber,
+                              profilePicture: student.profilePicture,
+                              fatherName: student.fatherName,
+                              fatherNumber: student.fatherNumber,
+                              motherName: student.motherName,
+                              motherNumber: student.motherNumber,
+                              homePinCode: student.homePinCode,
+                              erpInformation: student.erpInformation,
+                              joiningDate: student.joiningDate,
+                              branch: student.branch,
+                              collegeName: student.collegeName,
+                              year: student.year,
+                              semester: student.semester,
+                              localGuardianAddress: student.localGuardianAddress,
+                              localGuardianPhoneNumber: student.localGuardianPhoneNumber,
+                              permissions: studentPermissions.map((p): SimplePermission => ({
+                                id: p._id,
+                                fromDateTime: p.fromDateTime,
+                                toDateTime: p.toDateTime,
+                                reason: p.reason,
+                                status: p.status,
+                              })),
+                            });
+                            setShowAllStudents(false);
+                          }}
+                          className="w-full text-left rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4 hover:bg-[#E8E8E6] transition-colors"
+                        >
+                          <div className="flex items-center gap-3 md:gap-4">
+                            <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0">
+                              {student.profilePicture ? (
+                                <img
+                                  src={student.profilePicture}
+                                  alt={student.name}
+                                  className="w-full h-full rounded-full object-cover"
+                                />
+                              ) : (
+                                getInitials(student.name)
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-base font-semibold text-foreground">{student.name}</p>
+                              <p className="text-sm text-secondary mt-0.5">{student.email}</p>
+                              <div className="flex items-center gap-3 md:gap-4 mt-2 text-sm text-secondary">
+                                <span>{getHostelCategory(student.hostelName) || student.hostelName}</span>
+                                <span>•</span>
+                                <span>Room {student.roomNumber}</span>
+                                <span>•</span>
+                                <span>{student.phoneNumber}</span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </button>
+                        </button>
                       );
                     })
                   )}
@@ -643,7 +644,7 @@ export default function AdminDashboard() {
               </div>
 
               <div className="space-y-6">
-                <div className="flex items-start gap-4">
+                <div className="flex flex-col items-center gap-3 md:gap-4">
                   <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-lg md:text-xl flex-shrink-0">
                     {selectedStudent.profilePicture ? (
                       <img
@@ -655,119 +656,166 @@ export default function AdminDashboard() {
                       getInitials(selectedStudent.name)
                     )}
                   </div>
-                  <div className="flex-1 space-y-2">
-                    <div>
-                      <p className="text-base font-semibold text-foreground">{selectedStudent.name}</p>
-                      <p className="text-sm text-secondary">{selectedStudent.email}</p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 text-sm">
-                      <div>
-                        <p className="text-secondary">Phone Number</p>
-                        <p className="text-foreground font-medium">{selectedStudent.phoneNumber}</p>
-                      </div>
-                      <div>
-                        <p className="text-secondary">Hostel Name</p>
-                        <p className="text-foreground font-medium">{selectedStudent.hostelName}</p>
-                      </div>
-                      <div>
-                        <p className="text-secondary">Room Number</p>
-                        <p className="text-foreground font-medium">{selectedStudent.roomNumber}</p>
-                      </div>
-                      {selectedStudent.fatherName && (
-                        <div>
-                          <p className="text-secondary">Father's Name</p>
-                          <p className="text-foreground font-medium">{selectedStudent.fatherName}</p>
-                        </div>
-                      )}
-                      {selectedStudent.fatherNumber && (
-                        <div>
-                          <p className="text-secondary">Father's Number</p>
-                          <p className="text-foreground font-medium">{selectedStudent.fatherNumber}</p>
-                        </div>
-                      )}
-                      {selectedStudent.motherName && (
-                        <div>
-                          <p className="text-secondary">Mother's Name</p>
-                          <p className="text-foreground font-medium">{selectedStudent.motherName}</p>
-                        </div>
-                      )}
-                      {selectedStudent.motherNumber && (
-                        <div>
-                          <p className="text-secondary">Mother's Number</p>
-                          <p className="text-foreground font-medium">{selectedStudent.motherNumber}</p>
-                        </div>
-                      )}
-                      {selectedStudent.homePinCode && (
-                        <div>
-                          <p className="text-secondary">Home Pin Code</p>
-                          <p className="text-foreground font-medium">{selectedStudent.homePinCode}</p>
-                        </div>
-                      )}
-                    </div>
+                  <div className="text-center space-y-1">
+                    <p className="text-base font-semibold text-foreground">{selectedStudent.name}</p>
+                    <p className="text-sm text-secondary">{selectedStudent.email}</p>
                   </div>
                 </div>
-
-                <div className="flex justify-end">
-                  <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    disabled={deletingStudentId === selectedStudent.id}
-                    className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium transition-colors hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {deletingStudentId === selectedStudent.id ? "Removing..." : "Remove Student"}
-                  </button>
-                </div>
-
-                <div>
-                  <h3 className="text-base font-semibold text-foreground mb-4">Permission History</h3>
-                  {selectedStudent.permissions.length === 0 ? (
-                    <p className="text-secondary">No permissions found</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {selectedStudent.permissions.map((permission) => {
-                        const showStatus = permission.status === "allowed" || permission.status === "rejected";
-                        return (
-                          <div
-                            key={permission.id}
-                            className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-1.5 md:gap-2 text-sm text-secondary mb-1">
-                                  <span>{new Date(permission.fromDateTime).toLocaleString()}</span>
-                                  <span>•</span>
-                                  <span>to {new Date(permission.toDateTime).toLocaleString()}</span>
-                                </div>
-                                <p className="text-sm text-foreground">
-                                  {permission.reason}
-                                </p>
-                              </div>
-                              {showStatus && (
-                                <Badge
-                                  variant={permission.status === "allowed" ? "default" : "destructive"}
-                                  className={`text-xs px-2 md:px-2.5 py-0.5 whitespace-nowrap ml-3 ${
-                                    permission.status === "allowed"
-                                      ? "bg-green-100 text-green-800 border-green-200"
-                                      : "bg-red-100 text-red-800 border-red-200"
-                                  }`}
-                                >
-                                  {permission.status === "allowed" ? "Accepted" : "Rejected"}
-                                </Badge>
-                              )}
-                              {permission.status === "pending" && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-xs px-2 md:px-2.5 py-0.5 whitespace-nowrap ml-3 bg-yellow-100 text-yellow-800 border-yellow-200"
-                                >
-                                  Pending
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
+                    <div>
+                      <p className="text-secondary">Phone Number</p>
+                      <p className="text-foreground font-medium">{selectedStudent.phoneNumber}</p>
                     </div>
-                  )}
+                    <div>
+                      <p className="text-secondary">Hostel Name</p>
+                      <p className="text-foreground font-medium">{getHostelCategory(selectedStudent.hostelName) || selectedStudent.hostelName}</p>
+                    </div>
+                    <div>
+                      <p className="text-secondary">Room Number</p>
+                      <p className="text-foreground font-medium">{selectedStudent.roomNumber}</p>
+                    </div>
+                    {selectedStudent.fatherName && (
+                      <div>
+                        <p className="text-secondary">Father's Name</p>
+                        <p className="text-foreground font-medium">{selectedStudent.fatherName}</p>
+                      </div>
+                    )}
+                    {selectedStudent.fatherNumber && (
+                      <div>
+                        <p className="text-secondary">Father's Number</p>
+                        <p className="text-foreground font-medium">{selectedStudent.fatherNumber}</p>
+                      </div>
+                    )}
+                    {selectedStudent.motherName && (
+                      <div>
+                        <p className="text-secondary">Mother's Name</p>
+                        <p className="text-foreground font-medium">{selectedStudent.motherName}</p>
+                      </div>
+                    )}
+                    {selectedStudent.motherNumber && (
+                      <div>
+                        <p className="text-secondary">Mother's Number</p>
+                        <p className="text-foreground font-medium">{selectedStudent.motherNumber}</p>
+                      </div>
+                    )}
+                    {selectedStudent.homePinCode && (
+                      <div>
+                        <p className="text-secondary">Home Pin Code</p>
+                        <p className="text-foreground font-medium">{selectedStudent.homePinCode}</p>
+                      </div>
+                    )}
+                    {selectedStudent.erpInformation && (
+                      <div>
+                        <p className="text-secondary">ERP Information</p>
+                        <p className="text-foreground font-medium">{selectedStudent.erpInformation}</p>
+                      </div>
+                    )}
+                    {selectedStudent.joiningDate && (
+                      <div>
+                        <p className="text-secondary">Joining Date</p>
+                        <p className="text-foreground font-medium">{new Date(selectedStudent.joiningDate).toLocaleDateString()}</p>
+                      </div>
+                    )}
+                    {selectedStudent.branch && (
+                      <div>
+                        <p className="text-secondary">Branch</p>
+                        <p className="text-foreground font-medium">{selectedStudent.branch}</p>
+                      </div>
+                    )}
+                    {selectedStudent.collegeName && (
+                      <div>
+                        <p className="text-secondary">College Name</p>
+                        <p className="text-foreground font-medium">{selectedStudent.collegeName}</p>
+                      </div>
+                    )}
+                    {selectedStudent.year && (
+                      <div>
+                        <p className="text-secondary">Year</p>
+                        <p className="text-foreground font-medium">{selectedStudent.year}</p>
+                      </div>
+                    )}
+                    {selectedStudent.semester && (
+                      <div>
+                        <p className="text-secondary">Semester</p>
+                        <p className="text-foreground font-medium">{selectedStudent.semester}</p>
+                      </div>
+                    )}
+                    {selectedStudent.localGuardianAddress && (
+                      <div>
+                        <p className="text-secondary">Local Guardian Address</p>
+                        <p className="text-foreground font-medium">{selectedStudent.localGuardianAddress}</p>
+                      </div>
+                    )}
+                    {selectedStudent.localGuardianPhoneNumber && (
+                      <div>
+                        <p className="text-secondary">Local Guardian Phone</p>
+                        <p className="text-foreground font-medium">{selectedStudent.localGuardianPhoneNumber}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={deletingStudentId === selectedStudent.id}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium transition-colors hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {deletingStudentId === selectedStudent.id ? "Removing..." : "Remove Student"}
+                </button>
+              </div>
+
+              <div>
+                <h3 className="text-base font-semibold text-foreground mb-4">Permission History</h3>
+                {selectedStudent.permissions.length === 0 ? (
+                  <p className="text-secondary">No permissions found</p>
+                ) : (
+                  <div className="space-y-3">
+                    {selectedStudent.permissions.map((permission) => {
+                      const showStatus = permission.status === "allowed" || permission.status === "rejected";
+                      return (
+                        <div
+                          key={permission.id}
+                          className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-1.5 md:gap-2 text-sm text-secondary mb-1">
+                                <span>{new Date(permission.fromDateTime).toLocaleString()}</span>
+                                <span>•</span>
+                                <span>to {new Date(permission.toDateTime).toLocaleString()}</span>
+                              </div>
+                              <p className="text-sm text-foreground">
+                                {permission.reason}
+                              </p>
+                            </div>
+                            {showStatus && (
+                              <Badge
+                                variant={permission.status === "allowed" ? "default" : "destructive"}
+                                className={`text-xs px-2 md:px-2.5 py-0.5 whitespace-nowrap ml-3 ${permission.status === "allowed"
+                                  ? "bg-green-100 text-green-800 border-green-200"
+                                  : "bg-red-100 text-red-800 border-red-200"
+                                  }`}
+                              >
+                                {permission.status === "allowed" ? "Accepted" : "Rejected"}
+                              </Badge>
+                            )}
+                            {permission.status === "pending" && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs px-2 md:px-2.5 py-0.5 whitespace-nowrap ml-3 bg-yellow-100 text-yellow-800 border-yellow-200"
+                              >
+                                Pending
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>

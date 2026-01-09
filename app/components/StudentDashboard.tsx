@@ -22,6 +22,19 @@ interface StudentProfile {
   roomNumber: string;
   profilePicture?: string;
   studentStatus?: "in" | "out";
+  fatherName?: string;
+  fatherNumber?: string;
+  motherName?: string;
+  motherNumber?: string;
+  homePinCode?: string;
+  erpInformation?: string;
+  joiningDate?: string;
+  branch?: string;
+  collegeName?: string;
+  year?: string;
+  semester?: string;
+  localGuardianAddress?: string;
+  localGuardianPhoneNumber?: string;
 }
 
 export default function StudentDashboard() {
@@ -57,7 +70,7 @@ export default function StudentDashboard() {
         try {
           const response = await fetch(`/api/students?firebaseUID=${user.uid}`);
           const data = await response.json();
-          
+
           if (data.student) {
             const studentData = {
               ...data.student,
@@ -65,9 +78,9 @@ export default function StudentDashboard() {
             };
             setStudentProfile(studentData);
             setLoading(false);
-            
+
             const studentId = data.student._id;
-            
+
             const fetchStudentProfile = async () => {
               try {
                 const response = await fetch(`/api/students?firebaseUID=${user.uid}`);
@@ -88,7 +101,7 @@ export default function StudentDashboard() {
               try {
                 const permResponse = await fetch(`/api/permissions?studentId=${studentId}`);
                 const permData = await permResponse.json();
-                
+
                 if (permData.permissions) {
                   setPermissions(permData.permissions);
                   await fetchStudentProfile();
@@ -228,7 +241,7 @@ export default function StudentDashboard() {
     }
 
     console.log("Getting accurate location...");
-    
+
     let watchId: number | null = null;
     let bestAccuracy = Infinity;
     let bestPosition: GeolocationPosition | null = null;
@@ -238,7 +251,7 @@ export default function StudentDashboard() {
     const completeLocation = (position: GeolocationPosition | null, reason: string) => {
       if (isCompleted) return;
       isCompleted = true;
-      
+
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
@@ -292,7 +305,7 @@ export default function StudentDashboard() {
         attempts++;
         const { latitude, longitude, accuracy, altitude, heading, speed } = position.coords;
         const accuracyInMeters = Math.round(accuracy);
-        
+
         console.log(`Attempt ${attempts}:`);
         console.log(`  Latitude: ${latitude}`);
         console.log(`  Longitude: ${longitude}`);
@@ -300,13 +313,13 @@ export default function StudentDashboard() {
         if (altitude !== null) console.log(`  Altitude: ${altitude} meters`);
         if (heading !== null) console.log(`  Heading: ${heading}°`);
         if (speed !== null) console.log(`  Speed: ${speed} m/s`);
-        
+
         if (accuracy < bestAccuracy) {
           bestAccuracy = accuracy;
           bestPosition = position;
           console.log(`  ✓ New best accuracy: ${accuracyInMeters} meters`);
         }
-        
+
         if (accuracy <= 20) {
           completeLocation(bestPosition, "reached 20m accuracy");
         }
@@ -517,45 +530,131 @@ export default function StudentDashboard() {
                     <h1 className="text-base font-semibold text-foreground">Profile</h1>
                   </div>
                 </div>
-                <button
-                  onClick={handleLogout}
-                  className="px-4 py-2 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm font-medium hover:bg-filler transition-colors"
-                >
-                  Logout
-                </button>
-              </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => router.push("/onboarding")}
+                    className="px-4 py-2 rounded-lg bg-foreground text-background text-sm font-medium hover:bg-[#383838] transition-colors"
+                  >
+                    Edit Profile
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="px-4 py-2 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm font-medium hover:bg-filler transition-colors"
+                  >
+                    Logout
+                  </button>
+                </div>
 
-              <div className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-4 md:p-6">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0">
-                      {studentProfile.profilePicture ? (
-                        <img
-                          src={studentProfile.profilePicture}
-                          alt={studentProfile.name}
-                          className="w-full h-full rounded-full object-cover"
-                        />
-                      ) : (
-                        getInitials(studentProfile.name)
+                <div className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-4 md:p-6">
+                  <div className="space-y-4">
+                    <div className="flex flex-col items-center gap-3 md:gap-4">
+                      <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0">
+                        {studentProfile.profilePicture ? (
+                          <img
+                            src={studentProfile.profilePicture}
+                            alt={studentProfile.name}
+                            className="w-full h-full rounded-full object-cover"
+                          />
+                        ) : (
+                          getInitials(studentProfile.name)
+                        )}
+                      </div>
+                      <div className="text-center space-y-1">
+                        <p className="text-base font-semibold text-foreground">{studentProfile.name}</p>
+                        <p className="text-sm text-secondary">{studentProfile.email}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Phone Number</p>
+                        <p className="text-foreground font-medium">{studentProfile.phoneNumber}</p>
+                      </div>
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Hostel Name</p>
+                        <p className="text-foreground font-medium">{studentProfile.hostelName}</p>
+                      </div>
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Room Number</p>
+                        <p className="text-foreground font-medium">{studentProfile.roomNumber}</p>
+                      </div>
+                      {studentProfile.erpInformation && (
+                        <div className="flex flex-col">
+                          <p className="text-secondary mb-1">ERP Information</p>
+                          <p className="text-foreground font-medium">{studentProfile.erpInformation}</p>
+                        </div>
                       )}
-                    </div>
-                    <div>
-                      <p className="text-base font-semibold text-foreground">{studentProfile.name}</p>
-                      <p className="text-sm text-secondary mt-1">{studentProfile.email}</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div className="flex flex-col">
-                      <p className="text-secondary mb-1">Phone Number</p>
-                      <p className="text-foreground font-medium">{studentProfile.phoneNumber}</p>
-                    </div>
-                    <div className="flex flex-col">
-                      <p className="text-secondary mb-1">Hostel Name</p>
-                      <p className="text-foreground font-medium">{studentProfile.hostelName}</p>
-                    </div>
-                    <div className="flex flex-col">
-                      <p className="text-secondary mb-1">Room Number</p>
-                      <p className="text-foreground font-medium">{studentProfile.roomNumber}</p>
+                      {studentProfile.joiningDate && (
+                        <div className="flex flex-col">
+                          <p className="text-secondary mb-1">Joining Date</p>
+                          <p className="text-foreground font-medium">{new Date(studentProfile.joiningDate).toLocaleDateString()}</p>
+                        </div>
+                      )}
+                      {studentProfile.branch && (
+                        <div className="flex flex-col">
+                          <p className="text-secondary mb-1">Branch</p>
+                          <p className="text-foreground font-medium">{studentProfile.branch}</p>
+                        </div>
+                      )}
+                      {studentProfile.collegeName && (
+                        <div className="flex flex-col">
+                          <p className="text-secondary mb-1">College Name</p>
+                          <p className="text-foreground font-medium">{studentProfile.collegeName}</p>
+                        </div>
+                      )}
+                      {studentProfile.year && (
+                        <div className="flex flex-col">
+                          <p className="text-secondary mb-1">Year</p>
+                          <p className="text-foreground font-medium">{studentProfile.year}</p>
+                        </div>
+                      )}
+                      {studentProfile.semester && (
+                        <div className="flex flex-col">
+                          <p className="text-secondary mb-1">Semester</p>
+                          <p className="text-foreground font-medium">{studentProfile.semester}</p>
+                        </div>
+                      )}
+                      {studentProfile.fatherName && (
+                        <div className="flex flex-col">
+                          <p className="text-secondary mb-1">Father's Name</p>
+                          <p className="text-foreground font-medium">{studentProfile.fatherName}</p>
+                        </div>
+                      )}
+                      {studentProfile.fatherNumber && (
+                        <div className="flex flex-col">
+                          <p className="text-secondary mb-1">Father's Number</p>
+                          <p className="text-foreground font-medium">{studentProfile.fatherNumber}</p>
+                        </div>
+                      )}
+                      {studentProfile.motherName && (
+                        <div className="flex flex-col">
+                          <p className="text-secondary mb-1">Mother's Name</p>
+                          <p className="text-foreground font-medium">{studentProfile.motherName}</p>
+                        </div>
+                      )}
+                      {studentProfile.motherNumber && (
+                        <div className="flex flex-col">
+                          <p className="text-secondary mb-1">Mother's Number</p>
+                          <p className="text-foreground font-medium">{studentProfile.motherNumber}</p>
+                        </div>
+                      )}
+                      {studentProfile.homePinCode && (
+                        <div className="flex flex-col">
+                          <p className="text-secondary mb-1">Home Pin Code</p>
+                          <p className="text-foreground font-medium">{studentProfile.homePinCode}</p>
+                        </div>
+                      )}
+                      {studentProfile.localGuardianAddress && (
+                        <div className="flex flex-col">
+                          <p className="text-secondary mb-1">Local Guardian Address</p>
+                          <p className="text-foreground font-medium">{studentProfile.localGuardianAddress}</p>
+                        </div>
+                      )}
+                      {studentProfile.localGuardianPhoneNumber && (
+                        <div className="flex flex-col">
+                          <p className="text-secondary mb-1">Local Guardian Phone</p>
+                          <p className="text-foreground font-medium">{studentProfile.localGuardianPhoneNumber}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
