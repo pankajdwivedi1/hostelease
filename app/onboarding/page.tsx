@@ -268,7 +268,7 @@ export default function OnboardingPage() {
             {/* Camera Section */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-foreground">
-                Profile Photo (Passport Size)
+                Edit Profile Photo (Passport Size)
               </label>
 
               {!isCameraOpen && !capturedImage && (
@@ -536,14 +536,14 @@ export default function OnboardingPage() {
 
             <div>
               <label htmlFor="fatherName" className="block text-sm font-medium text-foreground mb-2">
-                Father's Name
+                Father&apos;s Name
               </label>
               <input
                 type="text"
                 id="fatherName"
                 value={formData.fatherName}
                 onChange={(e) => handleChange("fatherName", e.target.value)}
-                placeholder="Enter father's name"
+                placeholder="Enter father&apos;s name"
                 className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.fatherName ? "border-red-500" : "border-[#9CA3AF]"
                   } bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground`}
               />
@@ -554,14 +554,14 @@ export default function OnboardingPage() {
 
             <div>
               <label htmlFor="fatherNumber" className="block text-sm font-medium text-foreground mb-2">
-                Father's Phone Number
+                Father&apos;s Phone Number
               </label>
               <input
                 type="tel"
                 id="fatherNumber"
                 value={formData.fatherNumber}
                 onChange={(e) => handleChange("fatherNumber", e.target.value)}
-                placeholder="Enter father's phone number"
+                placeholder="Enter father&apos;s phone number"
                 className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.fatherNumber ? "border-red-500" : "border-[#9CA3AF]"
                   } bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground`}
               />
@@ -572,14 +572,14 @@ export default function OnboardingPage() {
 
             <div>
               <label htmlFor="motherName" className="block text-sm font-medium text-foreground mb-2">
-                Mother's Name
+                Mother&apos;s Name
               </label>
               <input
                 type="text"
                 id="motherName"
                 value={formData.motherName}
                 onChange={(e) => handleChange("motherName", e.target.value)}
-                placeholder="Enter mother's name"
+                placeholder="Enter mother&apos;s name"
                 className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.motherName ? "border-red-500" : "border-[#9CA3AF]"
                   } bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground`}
               />
@@ -590,14 +590,14 @@ export default function OnboardingPage() {
 
             <div>
               <label htmlFor="motherNumber" className="block text-sm font-medium text-foreground mb-2">
-                Mother's Phone Number
+                Mother&apos;s Phone Number
               </label>
               <input
                 type="tel"
                 id="motherNumber"
                 value={formData.motherNumber}
                 onChange={(e) => handleChange("motherNumber", e.target.value)}
-                placeholder="Enter mother's phone number"
+                placeholder="Enter mother&apos;s phone number"
                 className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.motherNumber ? "border-red-500" : "border-[#9CA3AF]"
                   } bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground`}
               />

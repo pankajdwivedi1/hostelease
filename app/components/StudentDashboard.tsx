@@ -615,25 +615,25 @@ export default function StudentDashboard() {
                       )}
                       {studentProfile.fatherName && (
                         <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Father's Name</p>
+                          <p className="text-secondary mb-1">Father&apos;s Name</p>
                           <p className="text-foreground font-medium">{studentProfile.fatherName}</p>
                         </div>
                       )}
                       {studentProfile.fatherNumber && (
                         <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Father's Number</p>
+                          <p className="text-secondary mb-1">Father&apos;s Number</p>
                           <p className="text-foreground font-medium">{studentProfile.fatherNumber}</p>
                         </div>
                       )}
                       {studentProfile.motherName && (
                         <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Mother's Name</p>
+                          <p className="text-secondary mb-1">Mother&apos;s Name</p>
                           <p className="text-foreground font-medium">{studentProfile.motherName}</p>
                         </div>
                       )}
                       {studentProfile.motherNumber && (
                         <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Mother's Number</p>
+                          <p className="text-secondary mb-1">Mother&apos;s Number</p>
                           <p className="text-foreground font-medium">{studentProfile.motherNumber}</p>
                         </div>
                       )}
