@@ -25,7 +25,7 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
     },
     radius: {
       type: Number,
-      default: 100, // 100 meters
+      default: 200, // 200 meters
     },
   },
   {

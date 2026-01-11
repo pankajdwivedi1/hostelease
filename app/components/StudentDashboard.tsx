@@ -49,6 +49,27 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [isAtHostel, setIsAtHostel] = useState(false);
+  const [isLocationChecking, setIsLocationChecking] = useState(false);
+
+  const HOSTEL_LAT = 23.2483348;
+  const HOSTEL_LNG = 77.5026058;
+  const ALLOWED_RADIUS = 200; // meters
+
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = lat1 * Math.PI / 180; // Convert latitude 1 to radians
+    const φ2 = lat2 * Math.PI / 180; // Convert latitude 2 to radians
+    const Δφ = (lat2 - lat1) * Math.PI / 180; // Difference in latitude
+    const Δλ = (lon2 - lon1) * Math.PI / 180; // Difference in longitude
+
+    const a =
+      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distance in meters
+  };
 
   const handleLogout = async () => {
     try {
@@ -240,6 +261,7 @@ export default function StudentDashboard() {
       return;
     }
 
+    setIsLocationChecking(true);
     console.log("Getting accurate location...");
 
     let watchId: number | null = null;
@@ -251,6 +273,7 @@ export default function StudentDashboard() {
     const completeLocation = (position: GeolocationPosition | null, reason: string) => {
       if (isCompleted) return;
       isCompleted = true;
+      setIsLocationChecking(false);
 
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
@@ -259,43 +282,67 @@ export default function StudentDashboard() {
 
       if (position) {
         const finalAccuracy = Math.round(position.coords.accuracy);
+
+        // Log coordinates before calculation
+        console.log(`\n=== COORDINATE CHECK ===`);
+        console.log(`Student Location: Lat=${position.coords.latitude}, Lng=${position.coords.longitude}`);
+        console.log(`Hostel Location: Lat=${HOSTEL_LAT}, Lng=${HOSTEL_LNG}`);
+
+        const distance = calculateDistance(
+          position.coords.latitude,
+          position.coords.longitude,
+          HOSTEL_LAT,
+          HOSTEL_LNG
+        );
+
         console.log(`\n=== FINAL LOCATION (${reason}) ===`);
         console.log(`Latitude: ${position.coords.latitude}`);
         console.log(`Longitude: ${position.coords.longitude}`);
         console.log(`Accuracy: ${finalAccuracy} meters`);
-        console.log(`Attempts: ${attempts}`);
-        alert(`Location logged!\nLat: ${position.coords.latitude}\nLng: ${position.coords.longitude}\nAccuracy: ${finalAccuracy} meters`);
+        console.log(`Distance from hostel: ${Math.round(distance)} meters`);
+
+        if (distance <= ALLOWED_RADIUS) {
+          setIsAtHostel(true);
+          alert(`Location verified! You are ${Math.round(distance)}m from the hostel. Permission button is now active.`);
+        } else {
+          setIsAtHostel(false);
+          alert(`Verification failed! You are ${Math.round(distance)}m away from the hostel. You must be within 200m to request permission.`);
+        }
       } else {
         console.log("Falling back to getCurrentPosition...");
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             const { latitude, longitude, accuracy } = pos.coords;
-            const accuracyInMeters = Math.round(accuracy);
-            console.log("\n=== FALLBACK LOCATION ===");
-            console.log(`Latitude: ${latitude}`);
-            console.log(`Longitude: ${longitude}`);
-            console.log(`Accuracy: ${accuracyInMeters} meters`);
-            alert(`Location logged (fallback)!\nLat: ${latitude}\nLng: ${longitude}\nAccuracy: ${accuracyInMeters} meters`);
+            const distance = calculateDistance(latitude, longitude, HOSTEL_LAT, HOSTEL_LNG);
+
+            if (distance <= ALLOWED_RADIUS) {
+              setIsAtHostel(true);
+              alert(`Location verified (fallback)! You are ${Math.round(distance)}m from the hostel.`);
+            } else {
+              setIsAtHostel(false);
+              alert(`Verification failed! You are ${Math.round(distance)}m from the hostel.`);
+            }
           },
           (err) => {
-            console.error("Fallback geolocation error:", err);
-            let errorMsg = "Could not get location. ";
+            console.error("Fallback geolocation error:", err.code, err.message);
+            setIsLocationChecking(false);
+
+            let errorMessage = "Could not get location. ";
             if (err.code === 1) {
-              errorMsg += "Permission denied. Please enable location access.";
+              errorMessage += "Please enable location permission in your browser settings.";
+              if (!window.location.protocol.includes('https') && !window.location.hostname.includes('localhost')) {
+                errorMessage += " Note: Your browser may require HTTPS for location access.";
+              }
             } else if (err.code === 2) {
-              errorMsg += "Position unavailable. Please check your GPS.";
+              errorMessage += "Location unavailable. Please enable GPS/location services on your device.";
             } else if (err.code === 3) {
-              errorMsg += "Request timeout. Please try again in an open area.";
+              errorMessage += "Location request timed out. Please try again.";
             } else {
-              errorMsg += err.message;
+              errorMessage += "Please ensure GPS is on and permission is granted.";
             }
-            alert(errorMsg);
+            alert(errorMessage);
           },
-          {
-            enableHighAccuracy: true,
-            timeout: 15000,
-            maximumAge: 0,
-          }
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
       }
     };
@@ -303,21 +350,11 @@ export default function StudentDashboard() {
     watchId = navigator.geolocation.watchPosition(
       (position) => {
         attempts++;
-        const { latitude, longitude, accuracy, altitude, heading, speed } = position.coords;
-        const accuracyInMeters = Math.round(accuracy);
-
-        console.log(`Attempt ${attempts}:`);
-        console.log(`  Latitude: ${latitude}`);
-        console.log(`  Longitude: ${longitude}`);
-        console.log(`  Accuracy: ${accuracyInMeters} meters`);
-        if (altitude !== null) console.log(`  Altitude: ${altitude} meters`);
-        if (heading !== null) console.log(`  Heading: ${heading}°`);
-        if (speed !== null) console.log(`  Speed: ${speed} m/s`);
+        const { accuracy } = position.coords;
 
         if (accuracy < bestAccuracy) {
           bestAccuracy = accuracy;
           bestPosition = position;
-          console.log(`  ✓ New best accuracy: ${accuracyInMeters} meters`);
         }
 
         if (accuracy <= 20) {
@@ -325,16 +362,38 @@ export default function StudentDashboard() {
         }
       },
       (error) => {
-        console.error("WatchPosition error:", error);
-        if (!isCompleted) {
-          completeLocation(bestPosition, "error occurred");
-        }
+        console.error("WatchPosition error:", error.code, error.message);
+
+        // Try getCurrentPosition as immediate fallback
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            if (!isCompleted) {
+              bestPosition = position;
+              completeLocation(bestPosition, "fallback to getCurrentPosition");
+            }
+          },
+          (fallbackError) => {
+            console.error("Fallback geolocation error:", fallbackError.code, fallbackError.message);
+            setIsLocationChecking(false);
+
+            let errorMessage = "Could not get location. ";
+            if (fallbackError.code === 1) {
+              errorMessage += "Please enable location permission in your browser settings. ";
+              if (!window.location.protocol.includes('https') && !window.location.hostname.includes('localhost')) {
+                errorMessage += "Note: Location access requires HTTPS for security.";
+              }
+            } else if (fallbackError.code === 2) {
+              errorMessage += "Location unavailable. Please check your GPS/location services.";
+            } else if (fallbackError.code === 3) {
+              errorMessage += "Location request timed out. Please try again.";
+            }
+
+            alert(errorMessage);
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 30000,
-        maximumAge: 0,
-      }
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
     );
 
     setTimeout(() => {
@@ -374,10 +433,21 @@ export default function StudentDashboard() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={getAccurateLocation}
-                    className="px-3 py-2 rounded-lg bg-foreground text-background text-xs font-medium hover:bg-[#383838] transition-colors"
+                    disabled={isLocationChecking}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${isAtHostel
+                      ? "bg-green-600 text-white"
+                      : "bg-foreground text-background hover:bg-[#383838]"
+                      } ${isLocationChecking ? "opacity-75 cursor-not-allowed" : ""}`}
                     title="Get accurate location"
                   >
-                    📍 Location
+                    {isLocationChecking ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                        Verifying...
+                      </>
+                    ) : (
+                      <>📍 {isAtHostel ? "Verified" : "Location"}</>
+                    )}
                   </button>
                   <button
                     onClick={handleLogout}
@@ -414,9 +484,13 @@ export default function StudentDashboard() {
               ) : (
                 <button
                   onClick={() => setShowRequestForm(!showRequestForm)}
-                  className="w-full h-12 rounded-lg bg-foreground text-background font-medium transition-colors hover:bg-[#383838]"
+                  disabled={!isAtHostel}
+                  className={`w-full h-12 rounded-lg font-medium transition-colors ${isAtHostel
+                    ? "bg-foreground text-background hover:bg-[#383838]"
+                    : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                    }`}
                 >
-                  Request Permission
+                  {isAtHostel ? "Request Permission" : "Verify Location to Request Permission"}
                 </button>
               )}
 

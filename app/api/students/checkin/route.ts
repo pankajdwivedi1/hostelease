@@ -43,7 +43,8 @@ export async function POST(request: NextRequest) {
     if (!adminSettings) {
       // Create default settings if none exist
       adminSettings = await AdminSettings.create({
-        radius: 100,
+        hostelLocation: { lat: 23.2483348, lng: 77.5026058 },
+        radius: 200,
       });
     }
 
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
       adminSettings.hostelLocation.lng
     );
 
-    const radius = adminSettings.radius || 100;
+    const radius = adminSettings.radius || 200;
 
     if (distance > radius) {
       return NextResponse.json(

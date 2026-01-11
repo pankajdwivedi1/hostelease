@@ -9,7 +9,8 @@ export async function GET(request: NextRequest) {
     let settings = await AdminSettings.findOne();
     if (!settings) {
       settings = await AdminSettings.create({
-        radius: 100,
+        hostelLocation: { lat: 23.2483348, lng: 77.5026058 },
+        radius: 200,
       });
     }
 
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     if (!settings) {
       settings = await AdminSettings.create({
         hostelLocation: { lat, lng },
-        radius: radius || 100,
+        radius: radius || 200,
       });
     } else {
       settings.hostelLocation = { lat, lng };
