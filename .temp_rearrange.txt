@@ -1,0 +1,5 @@
+Rearranging fields:
+1. College Name, Hostel Name (row 1)
+2. Hostel joining date, Year (row 2)
+3. Semester, Branch (row 3)
+4. Select section, Room Number (row 4)

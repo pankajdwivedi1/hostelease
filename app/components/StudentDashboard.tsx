@@ -590,148 +590,147 @@ export default function StudentDashboard() {
             </>
           ) : (
             <>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={() => setShowProfile(false)}
-                    className="w-10 h-10 rounded-full border border-solid border-[#9CA3AF] bg-white text-foreground flex items-center justify-center transition-colors hover:bg-filler flex-shrink-0"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
-                  <div>
-                    <h1 className="text-base font-semibold text-foreground">Profile</h1>
-                  </div>
+              <div className="flex items-center gap-4 mb-6">
+                <button
+                  onClick={() => setShowProfile(false)}
+                  className="w-10 h-10 rounded-full border border-solid border-[#9CA3AF] bg-white text-foreground flex items-center justify-center transition-colors hover:bg-filler flex-shrink-0"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <div>
+                  <h1 className="text-base font-semibold text-foreground">Profile</h1>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => router.push("/onboarding")}
-                    className="px-4 py-2 rounded-lg bg-foreground text-background text-sm font-medium hover:bg-[#383838] transition-colors"
-                  >
-                    Edit Profile
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    className="px-4 py-2 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm font-medium hover:bg-filler transition-colors"
-                  >
-                    Logout
-                  </button>
-                </div>
+              </div>
 
-                <div className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-4 md:p-6">
-                  <div className="space-y-4">
-                    <div className="flex flex-col items-center gap-3 md:gap-4">
-                      <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0">
-                        {studentProfile.profilePicture ? (
-                          <img
-                            src={studentProfile.profilePicture}
-                            alt={studentProfile.name}
-                            className="w-full h-full rounded-full object-cover"
-                          />
-                        ) : (
-                          getInitials(studentProfile.name)
-                        )}
-                      </div>
-                      <div className="text-center space-y-1">
-                        <p className="text-base font-semibold text-foreground">{studentProfile.name}</p>
-                        <p className="text-sm text-secondary">{studentProfile.email}</p>
-                      </div>
+              <div className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-4 md:p-6">
+                <div className="space-y-4">
+                  <div className="flex flex-col items-center gap-3 md:gap-4">
+                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0">
+                      {studentProfile.profilePicture ? (
+                        <img
+                          src={studentProfile.profilePicture}
+                          alt={studentProfile.name}
+                          className="w-full h-full rounded-full object-cover"
+                        />
+                      ) : (
+                        getInitials(studentProfile.name)
+                      )}
                     </div>
-                    <div className="grid grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Phone Number</p>
-                        <p className="text-foreground font-medium">{studentProfile.phoneNumber}</p>
-                      </div>
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Hostel Name</p>
-                        <p className="text-foreground font-medium">{studentProfile.hostelName}</p>
-                      </div>
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Room Number</p>
-                        <p className="text-foreground font-medium">{studentProfile.roomNumber}</p>
-                      </div>
-                      {studentProfile.erpInformation && (
-                        <div className="flex flex-col">
-                          <p className="text-secondary mb-1">ERP Information</p>
-                          <p className="text-foreground font-medium">{studentProfile.erpInformation}</p>
-                        </div>
-                      )}
-                      {studentProfile.joiningDate && (
-                        <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Joining Date</p>
-                          <p className="text-foreground font-medium">{new Date(studentProfile.joiningDate).toLocaleDateString()}</p>
-                        </div>
-                      )}
-                      {studentProfile.branch && (
-                        <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Branch</p>
-                          <p className="text-foreground font-medium">{studentProfile.branch}</p>
-                        </div>
-                      )}
-                      {studentProfile.collegeName && (
-                        <div className="flex flex-col">
-                          <p className="text-secondary mb-1">College Name</p>
-                          <p className="text-foreground font-medium">{studentProfile.collegeName}</p>
-                        </div>
-                      )}
-                      {studentProfile.year && (
-                        <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Year</p>
-                          <p className="text-foreground font-medium">{studentProfile.year}</p>
-                        </div>
-                      )}
-                      {studentProfile.semester && (
-                        <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Semester</p>
-                          <p className="text-foreground font-medium">{studentProfile.semester}</p>
-                        </div>
-                      )}
-                      {studentProfile.fatherName && (
-                        <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Father&apos;s Name</p>
-                          <p className="text-foreground font-medium">{studentProfile.fatherName}</p>
-                        </div>
-                      )}
-                      {studentProfile.fatherNumber && (
-                        <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Father&apos;s Number</p>
-                          <p className="text-foreground font-medium">{studentProfile.fatherNumber}</p>
-                        </div>
-                      )}
-                      {studentProfile.motherName && (
-                        <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Mother&apos;s Name</p>
-                          <p className="text-foreground font-medium">{studentProfile.motherName}</p>
-                        </div>
-                      )}
-                      {studentProfile.motherNumber && (
-                        <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Mother&apos;s Number</p>
-                          <p className="text-foreground font-medium">{studentProfile.motherNumber}</p>
-                        </div>
-                      )}
-                      {studentProfile.homePinCode && (
-                        <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Home Pin Code</p>
-                          <p className="text-foreground font-medium">{studentProfile.homePinCode}</p>
-                        </div>
-                      )}
-                      {studentProfile.localGuardianAddress && (
-                        <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Local Guardian Address</p>
-                          <p className="text-foreground font-medium">{studentProfile.localGuardianAddress}</p>
-                        </div>
-                      )}
-                      {studentProfile.localGuardianPhoneNumber && (
-                        <div className="flex flex-col">
-                          <p className="text-secondary mb-1">Local Guardian Phone</p>
-                          <p className="text-foreground font-medium">{studentProfile.localGuardianPhoneNumber}</p>
-                        </div>
-                      )}
+                    <div className="text-center space-y-1">
+                      <p className="text-base font-semibold text-foreground">{studentProfile.name}</p>
+                      <p className="text-sm text-secondary">{studentProfile.email}</p>
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
+                    <div className="flex flex-col">
+                      <p className="text-secondary mb-1">Phone Number</p>
+                      <p className="text-foreground font-medium">{studentProfile.phoneNumber}</p>
+                    </div>
+                    <div className="flex flex-col">
+                      <p className="text-secondary mb-1">Hostel Name</p>
+                      <p className="text-foreground font-medium">{studentProfile.hostelName}</p>
+                    </div>
+                    <div className="flex flex-col">
+                      <p className="text-secondary mb-1">Room Number</p>
+                      <p className="text-foreground font-medium">{studentProfile.roomNumber}</p>
+                    </div>
+                    {studentProfile.erpInformation && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">ERP Information</p>
+                        <p className="text-foreground font-medium">{studentProfile.erpInformation}</p>
+                      </div>
+                    )}
+                    {studentProfile.joiningDate && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Joining Date</p>
+                        <p className="text-foreground font-medium">{new Date(studentProfile.joiningDate).toLocaleDateString()}</p>
+                      </div>
+                    )}
+                    {studentProfile.branch && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Branch</p>
+                        <p className="text-foreground font-medium">{studentProfile.branch}</p>
+                      </div>
+                    )}
+                    {studentProfile.collegeName && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">College Name</p>
+                        <p className="text-foreground font-medium">{studentProfile.collegeName}</p>
+                      </div>
+                    )}
+                    {studentProfile.year && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Year</p>
+                        <p className="text-foreground font-medium">{studentProfile.year}</p>
+                      </div>
+                    )}
+                    {studentProfile.semester && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Semester</p>
+                        <p className="text-foreground font-medium">{studentProfile.semester}</p>
+                      </div>
+                    )}
+                    {studentProfile.fatherName && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Father&apos;s Name</p>
+                        <p className="text-foreground font-medium">{studentProfile.fatherName}</p>
+                      </div>
+                    )}
+                    {studentProfile.fatherNumber && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Father&apos;s Number</p>
+                        <p className="text-foreground font-medium">{studentProfile.fatherNumber}</p>
+                      </div>
+                    )}
+                    {studentProfile.motherName && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Mother&apos;s Name</p>
+                        <p className="text-foreground font-medium">{studentProfile.motherName}</p>
+                      </div>
+                    )}
+                    {studentProfile.motherNumber && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Mother&apos;s Number</p>
+                        <p className="text-foreground font-medium">{studentProfile.motherNumber}</p>
+                      </div>
+                    )}
+                    {studentProfile.homePinCode && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Home Pin Code</p>
+                        <p className="text-foreground font-medium">{studentProfile.homePinCode}</p>
+                      </div>
+                    )}
+                    {studentProfile.localGuardianAddress && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Local Guardian Address</p>
+                        <p className="text-foreground font-medium">{studentProfile.localGuardianAddress}</p>
+                      </div>
+                    )}
+                    {studentProfile.localGuardianPhoneNumber && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Local Guardian Phone</p>
+                        <p className="text-foreground font-medium">{studentProfile.localGuardianPhoneNumber}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
+              </div>
+
+              <div className="flex gap-2 mt-6">
+                <button
+                  onClick={() => router.push("/onboarding")}
+                  className="flex-1 px-4 py-3 rounded-lg bg-foreground text-background text-sm font-medium hover:bg-[#383838] transition-colors"
+                >
+                  Edit Profile
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="flex-1 px-4 py-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm font-medium hover:bg-filler transition-colors"
+                >
+                  Logout
+                </button>
               </div>
             </>
           )}

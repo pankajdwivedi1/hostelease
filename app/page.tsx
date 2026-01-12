@@ -24,12 +24,24 @@ export default function Dashboard() {
         return;
       }
 
+      if (storedUserType === "warden") {
+        setUserType("warden");
+        setLoading(false);
+        return;
+      }
+
+      if (storedUserType === "developer") {
+        setUserType("developer");
+        setLoading(false);
+        return;
+      }
+
       if (storedUserType === "student") {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
           if (user) {
             const response = await fetch(`/api/students?firebaseUID=${user.uid}`);
             const data = await response.json();
-            
+
             if (data.student) {
               setUserType("student");
             } else {
@@ -67,8 +79,12 @@ export default function Dashboard() {
     <>
       {userType === "student" ? (
         <StudentDashboard />
+      ) : userType === "warden" ? (
+        <AdminDashboard title="Warden Dashboard" />
+      ) : userType === "developer" ? (
+        <AdminDashboard title="Developer Dashboard" showRemoveButton={true} />
       ) : (
-        <AdminDashboard />
+        <AdminDashboard title="Admin Dashboard" />
       )}
     </>
   );

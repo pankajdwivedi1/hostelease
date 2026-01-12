@@ -54,7 +54,7 @@ interface StudentDetails {
   permissions: SimplePermission[];
 }
 
-export default function AdminDashboard() {
+export default function AdminDashboard({ title = "Admin Dashboard", showRemoveButton = false }: { title?: string; showRemoveButton?: boolean }) {
   const router = useRouter();
   const [filter, setFilter] = useState<"all" | "allowed" | "rejected" | "pending">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "in" | "out">("all");
@@ -62,6 +62,9 @@ export default function AdminDashboard() {
   const [showAllStudents, setShowAllStudents] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [hostelFilter, setHostelFilter] = useState<"all" | "Gaytri Hostal" | "Gangotri Hostal" | "Boys Hostal">("all");
+  const [collegeFilter, setCollegeFilter] = useState<string>("all");
+  const [semesterFilter, setSemesterFilter] = useState<string>("all");
+  const [branchFilter, setBranchFilter] = useState<string>("all");
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -266,7 +269,10 @@ export default function AdminDashboard() {
     const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       student.email.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesHostel = hostelFilter === "all" || getHostelCategory(student.hostelName) === hostelFilter;
-    return matchesSearch && matchesHostel;
+    const matchesCollege = collegeFilter === "all" || student.collegeName === collegeFilter;
+    const matchesSemester = semesterFilter === "all" || student.semester === semesterFilter;
+    const matchesBranch = branchFilter === "all" || student.branch === branchFilter;
+    return matchesSearch && matchesHostel && matchesCollege && matchesSemester && matchesBranch;
   });
 
   if (loading) {
@@ -285,7 +291,7 @@ export default function AdminDashboard() {
             <>
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-base font-semibold text-foreground">Admin Dashboard</h1>
+                  <h1 className="text-base font-semibold text-foreground">{title}</h1>
                   <p className="mt-1 md:mt-2 text-sm text-secondary">{students.length} Students</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -546,6 +552,66 @@ export default function AdminDashboard() {
                   </button>
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-secondary mb-1.5">College Name</label>
+                    <select
+                      value={collegeFilter}
+                      onChange={(e) => setCollegeFilter(e.target.value)}
+                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground"
+                    >
+                      <option value="all">All Colleges</option>
+                      <option value="OIST">OIST</option>
+                      <option value="OCT">OCT</option>
+                      <option value="OCP">OCP</option>
+                      <option value="OPM">OPM</option>
+                      <option value="OIPR">OIPR</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-secondary mb-1.5">Semester</label>
+                    <select
+                      value={semesterFilter}
+                      onChange={(e) => setSemesterFilter(e.target.value)}
+                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground"
+                    >
+                      <option value="all">All Semesters</option>
+                      <option value="1st Sem">1st Sem</option>
+                      <option value="2nd Sem">2nd Sem</option>
+                      <option value="3rd Sem">3rd Sem</option>
+                      <option value="4th Sem">4th Sem</option>
+                      <option value="5th Sem">5th Sem</option>
+                      <option value="6th Sem">6th Sem</option>
+                      <option value="7th Sem">7th Sem</option>
+                      <option value="8th Sem">8th Sem</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-secondary mb-1.5">Branch</label>
+                    <select
+                      value={branchFilter}
+                      onChange={(e) => setBranchFilter(e.target.value)}
+                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground"
+                    >
+                      <option value="all">All Branches</option>
+                      <option value="CS">CS</option>
+                      <option value="AIML">AIML</option>
+                      <option value="DS">DS</option>
+                      <option value="ME">ME</option>
+                      <option value="CE">CE</option>
+                      <option value="EC">EC</option>
+                      <option value="IT">IT</option>
+                      <option value="EX">EX</option>
+                      <option value="MCA">MCA</option>
+                      <option value="B PHARMA">B PHARMA</option>
+                      <option value="MBA">MBA</option>
+                      <option value="CSBS">CSBS</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="space-y-3">
                   {filteredStudents.length === 0 ? (
                     <p className="text-secondary text-center py-8">No students found</p>
@@ -661,111 +727,114 @@ export default function AdminDashboard() {
                     <p className="text-sm text-secondary">{selectedStudent.email}</p>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
+                <div className="space-y-4">
+                  <div className="space-y-5 text-base">
                     <div>
-                      <p className="text-secondary">Phone Number</p>
-                      <p className="text-foreground font-medium">{selectedStudent.phoneNumber}</p>
+                      <p className="text-secondary text-sm mb-1.5">Phone Number</p>
+                      <p className="text-foreground font-medium break-words">{selectedStudent.phoneNumber}</p>
                     </div>
                     <div>
-                      <p className="text-secondary">Hostel Name</p>
-                      <p className="text-foreground font-medium">{getHostelCategory(selectedStudent.hostelName) || selectedStudent.hostelName}</p>
+                      <p className="text-secondary text-sm mb-1.5">Hostel Name</p>
+                      <p className="text-foreground font-medium break-words">{getHostelCategory(selectedStudent.hostelName) || selectedStudent.hostelName}</p>
                     </div>
                     <div>
-                      <p className="text-secondary">Room Number</p>
-                      <p className="text-foreground font-medium">{selectedStudent.roomNumber}</p>
+                      <p className="text-secondary text-sm mb-1.5">Room Number</p>
+                      <p className="text-foreground font-medium break-words">{selectedStudent.roomNumber}</p>
                     </div>
                     {selectedStudent.fatherName && (
                       <div>
-                        <p className="text-secondary">Father's Name</p>
-                        <p className="text-foreground font-medium">{selectedStudent.fatherName}</p>
+                        <p className="text-secondary text-sm mb-1.5">Father's Name</p>
+                        <p className="text-foreground font-medium break-words">{selectedStudent.fatherName}</p>
                       </div>
                     )}
                     {selectedStudent.fatherNumber && (
                       <div>
-                        <p className="text-secondary">Father's Number</p>
-                        <p className="text-foreground font-medium">{selectedStudent.fatherNumber}</p>
+                        <p className="text-secondary text-sm mb-1.5">Father's Number</p>
+                        <p className="text-foreground font-medium break-words">{selectedStudent.fatherNumber}</p>
                       </div>
                     )}
                     {selectedStudent.motherName && (
                       <div>
-                        <p className="text-secondary">Mother's Name</p>
-                        <p className="text-foreground font-medium">{selectedStudent.motherName}</p>
+                        <p className="text-secondary text-sm mb-1.5">Mother's Name</p>
+                        <p className="text-foreground font-medium break-words">{selectedStudent.motherName}</p>
                       </div>
                     )}
                     {selectedStudent.motherNumber && (
                       <div>
-                        <p className="text-secondary">Mother's Number</p>
-                        <p className="text-foreground font-medium">{selectedStudent.motherNumber}</p>
+                        <p className="text-secondary text-sm mb-1.5">Mother's Number</p>
+                        <p className="text-foreground font-medium break-words">{selectedStudent.motherNumber}</p>
                       </div>
                     )}
                     {selectedStudent.homePinCode && (
                       <div>
-                        <p className="text-secondary">Home Pin Code</p>
-                        <p className="text-foreground font-medium">{selectedStudent.homePinCode}</p>
+                        <p className="text-secondary text-sm mb-1.5">Home Pin Code</p>
+                        <p className="text-foreground font-medium break-words">{selectedStudent.homePinCode}</p>
                       </div>
                     )}
                     {selectedStudent.erpInformation && (
                       <div>
-                        <p className="text-secondary">ERP Information</p>
-                        <p className="text-foreground font-medium">{selectedStudent.erpInformation}</p>
+                        <p className="text-secondary text-sm mb-1.5">ERP Information</p>
+                        <p className="text-foreground font-medium break-words">{selectedStudent.erpInformation}</p>
                       </div>
                     )}
                     {selectedStudent.joiningDate && (
                       <div>
-                        <p className="text-secondary">Joining Date</p>
-                        <p className="text-foreground font-medium">{new Date(selectedStudent.joiningDate).toLocaleDateString()}</p>
+                        <p className="text-secondary text-sm mb-1.5">Joining Date</p>
+                        <p className="text-foreground font-medium break-words">{new Date(selectedStudent.joiningDate).toLocaleDateString()}</p>
                       </div>
                     )}
                     {selectedStudent.branch && (
                       <div>
-                        <p className="text-secondary">Branch</p>
-                        <p className="text-foreground font-medium">{selectedStudent.branch}</p>
+                        <p className="text-secondary text-sm mb-1.5">Branch</p>
+                        <p className="text-foreground font-medium break-words">{selectedStudent.branch}</p>
                       </div>
                     )}
                     {selectedStudent.collegeName && (
                       <div>
-                        <p className="text-secondary">College Name</p>
-                        <p className="text-foreground font-medium">{selectedStudent.collegeName}</p>
+                        <p className="text-secondary text-sm mb-1.5">College Name</p>
+                        <p className="text-foreground font-medium break-words">{selectedStudent.collegeName}</p>
                       </div>
                     )}
                     {selectedStudent.year && (
                       <div>
-                        <p className="text-secondary">Year</p>
-                        <p className="text-foreground font-medium">{selectedStudent.year}</p>
+                        <p className="text-secondary text-sm mb-1.5">Year</p>
+                        <p className="text-foreground font-medium break-words">{selectedStudent.year}</p>
                       </div>
                     )}
                     {selectedStudent.semester && (
                       <div>
-                        <p className="text-secondary">Semester</p>
-                        <p className="text-foreground font-medium">{selectedStudent.semester}</p>
+                        <p className="text-secondary text-sm mb-1.5">Semester</p>
+                        <p className="text-foreground font-medium break-words">{selectedStudent.semester}</p>
                       </div>
                     )}
                     {selectedStudent.localGuardianAddress && (
                       <div>
-                        <p className="text-secondary">Local Guardian Address</p>
-                        <p className="text-foreground font-medium">{selectedStudent.localGuardianAddress}</p>
+                        <p className="text-secondary text-sm mb-1.5">Local Guardian Address</p>
+                        <p className="text-foreground font-medium break-words">{selectedStudent.localGuardianAddress}</p>
                       </div>
                     )}
                     {selectedStudent.localGuardianPhoneNumber && (
                       <div>
-                        <p className="text-secondary">Local Guardian Phone</p>
-                        <p className="text-foreground font-medium">{selectedStudent.localGuardianPhoneNumber}</p>
+                        <p className="text-secondary text-sm mb-1.5">Local Guardian Phone</p>
+                        <p className="text-foreground font-medium break-words">{selectedStudent.localGuardianPhoneNumber}</p>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className="flex justify-end">
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  disabled={deletingStudentId === selectedStudent.id}
-                  className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium transition-colors hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {deletingStudentId === selectedStudent.id ? "Removing..." : "Remove Student"}
-                </button>
-              </div>
+
+              {showRemoveButton && (
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    disabled={deletingStudentId === selectedStudent.id}
+                    className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium transition-colors hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deletingStudentId === selectedStudent.id ? "Removing..." : "Remove Student"}
+                  </button>
+                </div>
+              )}
 
               <div>
                 <h3 className="text-base font-semibold text-foreground mb-4">Permission History</h3>

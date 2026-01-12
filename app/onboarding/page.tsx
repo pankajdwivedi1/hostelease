@@ -30,6 +30,7 @@ export default function OnboardingPage() {
     collegeName: "",
     year: "",
     semester: "",
+    section: "",
     localGuardianAddress: "",
     localGuardianPhoneNumber: "",
   });
@@ -61,6 +62,7 @@ export default function OnboardingPage() {
               collegeName: data.student.collegeName || "",
               year: data.student.year || "",
               semester: data.student.semester || "",
+              section: data.student.section || "",
               localGuardianAddress: data.student.localGuardianAddress || "",
               localGuardianPhoneNumber: data.student.localGuardianPhoneNumber || "",
             });
@@ -90,8 +92,16 @@ export default function OnboardingPage() {
       newErrors.phoneNumber = "Phone number is required";
     }
 
+    if (!formData.erpInformation.trim()) {
+      newErrors.erpInformation = "ERP ID is required";
+    }
+
     if (!formData.hostelName.trim()) {
       newErrors.hostelName = "Hostel name is required";
+    }
+
+    if (!formData.joiningDate.trim()) {
+      newErrors.joiningDate = "Hostel joining date is required";
     }
 
     if (!formData.roomNumber.trim()) {
@@ -134,12 +144,20 @@ export default function OnboardingPage() {
       newErrors.semester = "Semester is required";
     }
 
+    if (!formData.section) {
+      newErrors.section = "Section is required";
+    }
+
     if (!formData.localGuardianAddress.trim()) {
       newErrors.localGuardianAddress = "Local guardian address is required";
     }
 
     if (!formData.localGuardianPhoneNumber.trim()) {
       newErrors.localGuardianPhoneNumber = "Local guardian phone number is required";
+    }
+
+    if (!capturedImage) {
+      newErrors.profilePicture = "Profile picture is required. Please capture your photo.";
     }
 
     setErrors(newErrors);
@@ -176,6 +194,7 @@ export default function OnboardingPage() {
           collegeName: formData.collegeName,
           year: formData.year,
           semester: formData.semester,
+          section: formData.section,
           localGuardianAddress: formData.localGuardianAddress,
           localGuardianPhoneNumber: formData.localGuardianPhoneNumber,
         }),
@@ -199,6 +218,12 @@ export default function OnboardingPage() {
 
   const startCamera = async () => {
     try {
+      // Check if navigator and mediaDevices are available
+      if (!navigator || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Camera access is not supported in your browser. Please use a modern browser like Chrome, Firefox, or Edge.");
+        return;
+      }
+
       setIsCameraOpen(true);
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       if (videoRef.current) {
@@ -206,7 +231,7 @@ export default function OnboardingPage() {
       }
     } catch (err) {
       console.error("Error accessing camera:", err);
-      alert("Could not access camera. Please allow camera permissions.");
+      alert("Could not access camera. Please allow camera permissions and ensure you're using HTTPS.");
       setIsCameraOpen(false);
     }
   };
@@ -334,6 +359,9 @@ export default function OnboardingPage() {
                 </div>
               )}
               <canvas ref={canvasRef} className="hidden" />
+              {errors.profilePicture && (
+                <p className="mt-1 text-sm text-red-600">{errors.profilePicture}</p>
+              )}
             </div>
 
             <div>
@@ -374,7 +402,7 @@ export default function OnboardingPage() {
 
             <div>
               <label htmlFor="erpInformation" className="block text-sm font-medium text-foreground mb-2">
-                Enter your erp information
+                Enter your ERP ID
               </label>
               <input
                 type="text"
@@ -392,6 +420,26 @@ export default function OnboardingPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
+                <label htmlFor="collegeName" className="block text-sm font-medium text-foreground mb-2">
+                  College Name
+                </label>
+                <select
+                  id="collegeName"
+                  value={formData.collegeName}
+                  onChange={(e) => handleChange("collegeName", e.target.value)}
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.collegeName ? "border-red-500" : "border-[#9CA3AF]"
+                    } bg-white text-foreground focus:outline-none focus:border-foreground`}
+                >
+                  <option value="">Select College</option>
+                  {["OIST", "OCT", "OCP", "OPM", "OIPR"].map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+                {errors.collegeName && (
+                  <p className="mt-1 text-sm text-red-600">{errors.collegeName}</p>
+                )}
+              </div>
+              <div>
                 <label htmlFor="hostelName" className="block text-sm font-medium text-foreground mb-2">
                   Hostel Name
                 </label>
@@ -406,14 +454,18 @@ export default function OnboardingPage() {
                   <option value="Gangotri Hostel">Gangotri Hostel</option>
                   <option value="Gaytri Hostel">Gaytri Hostel</option>
                   <option value="Boys Hostel">Boys Hostel</option>
+                  <option value="Guest House Boys Hostel">Guest House Boys Hostel</option>
                 </select>
                 {errors.hostelName && (
                   <p className="mt-1 text-sm text-red-600">{errors.hostelName}</p>
                 )}
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="joiningDate" className="block text-sm font-medium text-foreground mb-2">
-                  Enter joining date on hostal
+                  Hostel joining date
                 </label>
                 <input
                   type="date"
@@ -428,52 +480,6 @@ export default function OnboardingPage() {
                   <p className="mt-1 text-sm text-red-600">{errors.joiningDate}</p>
                 )}
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="branch" className="block text-sm font-medium text-foreground mb-2">
-                  Branch
-                </label>
-                <select
-                  id="branch"
-                  value={formData.branch}
-                  onChange={(e) => handleChange("branch", e.target.value)}
-                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.branch ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground focus:outline-none focus:border-foreground`}
-                >
-                  <option value="">Select Branch</option>
-                  {["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "MBA", "CSBS"].map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-                {errors.branch && (
-                  <p className="mt-1 text-sm text-red-600">{errors.branch}</p>
-                )}
-              </div>
-              <div>
-                <label htmlFor="collegeName" className="block text-sm font-medium text-foreground mb-2">
-                  College Name
-                </label>
-                <select
-                  id="collegeName"
-                  value={formData.collegeName}
-                  onChange={(e) => handleChange("collegeName", e.target.value)}
-                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.collegeName ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground focus:outline-none focus:border-foreground`}
-                >
-                  <option value="">Select College</option>
-                  {["OIST", "OCT", "OCP", "OPM"].map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-                {errors.collegeName && (
-                  <p className="mt-1 text-sm text-red-600">{errors.collegeName}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="year" className="block text-sm font-medium text-foreground mb-2">
                   Year
@@ -494,6 +500,9 @@ export default function OnboardingPage() {
                   <p className="mt-1 text-sm text-red-600">{errors.year}</p>
                 )}
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="semester" className="block text-sm font-medium text-foreground mb-2">
                   Semester
@@ -514,24 +523,66 @@ export default function OnboardingPage() {
                   <p className="mt-1 text-sm text-red-600">{errors.semester}</p>
                 )}
               </div>
+              <div>
+                <label htmlFor="branch" className="block text-sm font-medium text-foreground mb-2">
+                  Branch
+                </label>
+                <select
+                  id="branch"
+                  value={formData.branch}
+                  onChange={(e) => handleChange("branch", e.target.value)}
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.branch ? "border-red-500" : "border-[#9CA3AF]"
+                    } bg-white text-foreground focus:outline-none focus:border-foreground`}
+                >
+                  <option value="">Select Branch</option>
+                  {["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "MBA", "CSBS"].map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+                {errors.branch && (
+                  <p className="mt-1 text-sm text-red-600">{errors.branch}</p>
+                )}
+              </div>
             </div>
 
-            <div>
-              <label htmlFor="roomNumber" className="block text-sm font-medium text-foreground mb-2">
-                Room Number
-              </label>
-              <input
-                type="text"
-                id="roomNumber"
-                value={formData.roomNumber}
-                onChange={(e) => handleChange("roomNumber", e.target.value)}
-                placeholder="Enter your room number"
-                className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.roomNumber ? "border-red-500" : "border-[#9CA3AF]"
-                  } bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground`}
-              />
-              {errors.roomNumber && (
-                <p className="mt-1 text-sm text-red-600">{errors.roomNumber}</p>
-              )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="section" className="block text-sm font-medium text-foreground mb-2">
+                  Select section
+                </label>
+                <select
+                  id="section"
+                  value={formData.section}
+                  onChange={(e) => handleChange("section", e.target.value)}
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.section ? "border-red-500" : "border-[#9CA3AF]"
+                    } bg-white text-foreground focus:outline-none focus:border-foreground`}
+                >
+                  <option value="">Select Section</option>
+                  {["NIL", "A", "B", "C", "D", "E", "F"].map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+                {errors.section && (
+                  <p className="mt-1 text-sm text-red-600">{errors.section}</p>
+                )}
+              </div>
+              <div>
+                <label htmlFor="roomNumber" className="block text-sm font-medium text-foreground mb-2">
+                  Room Number
+                </label>
+                <input
+                  type="text"
+                  id="roomNumber"
+                  value={formData.roomNumber}
+                  onChange={(e) => handleChange("roomNumber", e.target.value)}
+                  placeholder="Enter your room number"
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.roomNumber ? "border-red-500" : "border-[#9CA3AF]"
+                    } bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground`}
+                />
+                {errors.roomNumber && (
+                  <p className="mt-1 text-sm text-red-600">{errors.roomNumber}</p>
+                )}
+              </div>
             </div>
 
             <div>
@@ -663,9 +714,9 @@ export default function OnboardingPage() {
               </div>
             </div>
 
-            {errors.submit && (
-              <div className="p-3 rounded-lg bg-red-100 text-red-800 text-sm">
-                {errors.submit}
+            {Object.keys(errors).length > 0 && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+                <p className="text-sm text-red-800">⚠️ Please fill all required fields:</p>
               </div>
             )}
             <button

@@ -12,6 +12,12 @@ export default function LoginPage() {
   const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [adminPassword, setAdminPassword] = useState("");
   const [adminLoading, setAdminLoading] = useState(false);
+  const [showWardenPassword, setShowWardenPassword] = useState(false);
+  const [wardenPassword, setWardenPassword] = useState("");
+  const [wardenLoading, setWardenLoading] = useState(false);
+  const [showDeveloperPassword, setShowDeveloperPassword] = useState(false);
+  const [developerPassword, setDeveloperPassword] = useState("");
+  const [developerLoading, setDeveloperLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
     try {
@@ -84,6 +90,86 @@ export default function LoginPage() {
     }
   };
 
+  const handleWardenLogin = async () => {
+    if (!showWardenPassword) {
+      setShowWardenPassword(true);
+      return;
+    }
+
+    if (!wardenPassword.trim()) {
+      setError("Please enter the warden password");
+      return;
+    }
+
+    try {
+      setWardenLoading(true);
+      setError("");
+
+      const response = await fetch("/api/warden/auth", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ password: wardenPassword }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Invalid password");
+      }
+
+      if (data.success) {
+        localStorage.setItem("userType", "warden");
+        router.push("/");
+      }
+    } catch (error: any) {
+      console.error("Warden login error:", error);
+      setError(error.message || "Invalid password. Please try again.");
+      setWardenPassword("");
+    } finally {
+      setWardenLoading(false);
+    }
+  };
+
+  const handleDeveloperLogin = async () => {
+    if (!showDeveloperPassword) {
+      setShowDeveloperPassword(true);
+      return;
+    }
+
+    try {
+      setDeveloperLoading(true);
+      setError("");
+
+      const response = await fetch("/api/developer/auth", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ password: developerPassword }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Invalid password");
+      }
+
+      if (data.success) {
+        localStorage.setItem("userType", "developer");
+        router.push("/");
+      }
+    } catch (error: any) {
+      console.error("Developer login error:", error);
+      setError(error.message || "Invalid password. Please try again.");
+      setDeveloperPassword("");
+    } finally {
+      setDeveloperLoading(false);
+    }
+  };
+
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-white">
       <main className="w-full max-w-md px-6">
@@ -91,7 +177,9 @@ export default function LoginPage() {
           <img
             src="/logo.jpeg"
             alt="Hostelease Logo"
-            className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover"
+            onClick={() => setShowDeveloperPassword(!showDeveloperPassword)}
+            className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover cursor-pointer hover:opacity-80 transition-opacity"
+            title="Click for developer login"
           />
           <h1 className="text-base font-semibold text-foreground">Hostelease</h1>
 
@@ -131,7 +219,7 @@ export default function LoginPage() {
               <div className="space-y-3">
                 <div>
                   <label htmlFor="adminPassword" className="block text-sm font-medium text-foreground mb-2">
-                    Admin Password
+                    Hostal Dean Password
                   </label>
                   <input
                     type="password"
@@ -146,7 +234,7 @@ export default function LoginPage() {
                         handleAdminLogin();
                       }
                     }}
-                    placeholder="Enter admin password"
+                    placeholder="Enter hostal dean password"
                     className="w-full h-12 px-4 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
                     autoFocus
                   />
@@ -176,10 +264,111 @@ export default function LoginPage() {
                 onClick={handleAdminLogin}
                 className="w-full h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
               >
-                Login as Admin
+                Login as Hostal Dean
+              </button>
+            )}
+
+            {showWardenPassword ? (
+              <div className="space-y-3">
+                <div>
+                  <label htmlFor="wardenPassword" className="block text-sm font-medium text-foreground mb-2">
+                    Warden Password
+                  </label>
+                  <input
+                    type="password"
+                    id="wardenPassword"
+                    value={wardenPassword}
+                    onChange={(e) => {
+                      setWardenPassword(e.target.value);
+                      setError("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleWardenLogin();
+                      }
+                    }}
+                    placeholder="Enter warden password"
+                    className="w-full h-12 px-4 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
+                    autoFocus
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setShowWardenPassword(false);
+                      setWardenPassword("");
+                      setError("");
+                    }}
+                    className="flex-1 h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleWardenLogin}
+                    disabled={wardenLoading}
+                    className="flex-1 h-12 rounded-lg bg-foreground text-background font-medium transition-colors hover:bg-[#383838] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {wardenLoading ? "Verifying..." : "Login"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={handleWardenLogin}
+                className="w-full h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
+              >
+                Login as warden
               </button>
             )}
           </div>
+
+          {showDeveloperPassword && (
+            <div className="w-full p-6 rounded-lg border border-solid border-[#9CA3AF] bg-filler">
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="developerPassword" className="block text-sm font-medium text-foreground mb-2">
+                    Developer Password
+                  </label>
+                  <input
+                    type="password"
+                    id="developerPassword"
+                    value={developerPassword}
+                    onChange={(e) => {
+                      setDeveloperPassword(e.target.value);
+                      setError("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleDeveloperLogin();
+                      }
+                    }}
+                    placeholder="Enter developer password"
+                    className="w-full h-12 px-4 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
+                    autoFocus
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setShowDeveloperPassword(false);
+                      setDeveloperPassword("");
+                      setError("");
+                    }}
+                    className="flex-1 h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeveloperLogin}
+                    disabled={developerLoading}
+                    className="flex-1 h-12 rounded-lg bg-foreground text-background font-medium transition-colors hover:bg-[#383838] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {developerLoading ? "Verifying..." : "Login"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
