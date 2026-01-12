@@ -164,6 +164,17 @@ export default function OnboardingPage() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleBack = async () => {
+    try {
+      const { signOut } = await import("firebase/auth");
+      await signOut(auth);
+      router.push("/login");
+    } catch (error) {
+      console.error("Error signing out:", error);
+      router.push("/login");
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm() || !user) return;
@@ -284,9 +295,20 @@ export default function OnboardingPage() {
     <div className="min-h-screen bg-white flex items-center justify-center p-4">
       <main className="w-full max-w-md">
         <div className="space-y-6">
-          <div className="text-center">
-            <h1 className="text-base font-semibold text-foreground">Welcome to Hostelease</h1>
-            <p className="mt-2 text-sm text-secondary">Please fill in your details to get started</p>
+          <div className="relative flex flex-col items-center">
+            <button
+              onClick={handleBack}
+              className="absolute left-0 top-0 text-secondary hover:text-foreground transition-colors flex items-center gap-1 text-sm font-medium h-6"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              <span>Back</span>
+            </button>
+            <div className="text-center pt-8 sm:pt-0">
+              <h1 className="text-base font-semibold text-foreground">Welcome to Hostelease</h1>
+              <p className="mt-2 text-sm text-secondary">Please fill in your details to get started</p>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -719,13 +741,22 @@ export default function OnboardingPage() {
                 <p className="text-sm text-red-800">⚠️ Please fill all required fields:</p>
               </div>
             )}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full h-12 rounded-lg bg-foreground text-background font-medium transition-colors hover:bg-[#383838] mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? "Saving..." : "Save your details"}
-            </button>
+            <div className="flex gap-4 mt-6">
+              <button
+                type="button"
+                onClick={handleBack}
+                className="flex-1 h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-[2] h-12 rounded-lg bg-foreground text-background font-medium transition-colors hover:bg-[#383838] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? "Saving..." : "Save your details"}
+              </button>
+            </div>
           </form>
         </div>
       </main>
