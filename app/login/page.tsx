@@ -376,7 +376,7 @@ export default function LoginPage() {
                   &copy; 2026 Hostelease Cloud Infostructure
                 </p>
                 <p className="text-[11px] font-medium tracking-wide text-slate-600 uppercase">
-                  Developed by (Dr. Pankaj Prasad Dwivedi)
+                  Developed by Dr. Pankaj Prasad Dwivedi
                 </p>
               </div>
               <div className="flex gap-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">

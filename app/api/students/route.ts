@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, homePinCode, erpInformation, joiningDate, branch, collegeName, year, semester, localGuardianAddress, localGuardianPhoneNumber } = body;
+    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, homePinCode, homeState, erpInformation, joiningDate, branch, collegeName, year, semester, section, localGuardianAddress, localGuardianPhoneNumber } = body;
 
     if (!firebaseUID || !name || !email || !phoneNumber || !hostelName || !roomNumber) {
       return NextResponse.json(
@@ -32,12 +32,14 @@ export async function POST(request: NextRequest) {
         motherName: motherName || "",
         motherNumber: motherNumber || "",
         homePinCode: homePinCode || "",
+        homeState: homeState || "",
         erpInformation: erpInformation || "",
         joiningDate: joiningDate ? new Date(joiningDate) : undefined,
         branch: branch || "",
         collegeName: collegeName || "",
         year: year || "",
         semester: semester || "",
+        section: section || "",
         localGuardianAddress: localGuardianAddress || "",
         localGuardianPhoneNumber: localGuardianPhoneNumber || "",
       },

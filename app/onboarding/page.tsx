@@ -26,6 +26,7 @@ export default function OnboardingPage() {
     motherName: "",
     motherNumber: "",
     homePinCode: "",
+    homeState: "",
     branch: "",
     collegeName: "",
     year: "",
@@ -58,6 +59,7 @@ export default function OnboardingPage() {
               motherName: data.student.motherName || "",
               motherNumber: data.student.motherNumber || "",
               homePinCode: data.student.homePinCode || "",
+              homeState: data.student.homeState || "",
               branch: data.student.branch || "",
               collegeName: data.student.collegeName || "",
               year: data.student.year || "",
@@ -126,6 +128,10 @@ export default function OnboardingPage() {
 
     if (!formData.homePinCode.trim()) {
       newErrors.homePinCode = "Permanent address with pincode is required";
+    }
+
+    if (!formData.homeState) {
+      newErrors.homeState = "State is required";
     }
 
     if (!formData.branch) {
@@ -201,6 +207,7 @@ export default function OnboardingPage() {
           motherName: formData.motherName,
           motherNumber: formData.motherNumber,
           homePinCode: formData.homePinCode,
+          homeState: formData.homeState,
           branch: formData.branch,
           collegeName: formData.collegeName,
           year: formData.year,
@@ -694,6 +701,30 @@ export default function OnboardingPage() {
               />
               {errors.homePinCode && (
                 <p className="mt-1 text-sm text-red-600">{errors.homePinCode}</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="homeState" className="block text-sm font-medium text-foreground mb-2">
+                State
+              </label>
+              <select
+                id="homeState"
+                value={formData.homeState}
+                onChange={(e) => handleChange("homeState", e.target.value)}
+                className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.homeState ? "border-red-500" : "border-[#9CA3AF]"
+                  } bg-white text-foreground focus:outline-none focus:border-foreground`}
+              >
+                <option value="">Select State</option>
+                {[
+                  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
+                  "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", "Lakshadweep", "Delhi", "Puducherry", "Ladakh", "Jammu and Kashmir"
+                ].sort().map((state) => (
+                  <option key={state} value={state}>{state}</option>
+                ))}
+              </select>
+              {errors.homeState && (
+                <p className="mt-1 text-sm text-red-600">{errors.homeState}</p>
               )}
             </div>
 

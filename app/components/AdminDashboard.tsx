@@ -51,6 +51,8 @@ interface StudentDetails {
   semester?: string;
   localGuardianAddress?: string;
   localGuardianPhoneNumber?: string;
+  section?: string;
+  homeState?: string;
   permissions: SimplePermission[];
 }
 
@@ -61,7 +63,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [selectedStudent, setSelectedStudent] = useState<StudentDetails | null>(null);
   const [showAllStudents, setShowAllStudents] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [hostelFilter, setHostelFilter] = useState<"all" | "Gaytri Hostal" | "Gangotri Hostal" | "Boys Hostal">("all");
+  const [hostelFilter, setHostelFilter] = useState<"all" | "Gaytri Hostal" | "Gangotri Hostal" | "Boys Hostal" | "Guest House Boys Hostel">("all");
   const [collegeFilter, setCollegeFilter] = useState<string>("all");
   const [semesterFilter, setSemesterFilter] = useState<string>("all");
   const [branchFilter, setBranchFilter] = useState<string>("all");
@@ -183,6 +185,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         collegeName: student.collegeName,
         year: student.year,
         semester: student.semester,
+        section: student.section,
+        homeState: student.homeState,
         localGuardianAddress: student.localGuardianAddress,
         localGuardianPhoneNumber: student.localGuardianPhoneNumber,
         permissions: studentPermissions.map((p): SimplePermission => ({
@@ -257,10 +261,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     return student.studentStatus === statusFilter;
   });
 
-  const getHostelCategory = (hostelName: string): "Gaytri Hostal" | "Gangotri Hostal" | "Boys Hostal" | null => {
+  const getHostelCategory = (hostelName: string): "Gaytri Hostal" | "Gangotri Hostal" | "Boys Hostal" | "Guest House Boys Hostel" | null => {
     const name = hostelName.toLowerCase();
     if (name.includes("gaytri") || name.includes("hostel a") || name.includes("a")) return "Gaytri Hostal";
     if (name.includes("gangotri") || name.includes("hostel b") || name.includes("b")) return "Gangotri Hostal";
+    if (name.includes("guest") || name.includes("guess")) return "Guest House Boys Hostel";
     if (name.includes("boys") || name.includes("hostel c") || name.includes("c") || name.includes("hostel d") || name.includes("d")) return "Boys Hostal";
     return null;
   };
@@ -514,42 +519,31 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
 
                 <div className="flex gap-2 md:gap-3 flex-wrap">
-                  <button
-                    onClick={() => setHostelFilter("all")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${hostelFilter === "all"
-                      ? "bg-foreground text-background"
-                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                      }`}
-                  >
-                    All
-                  </button>
-                  <button
-                    onClick={() => setHostelFilter("Gaytri Hostal")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${hostelFilter === "Gaytri Hostal"
-                      ? "bg-foreground text-background"
-                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                      }`}
-                  >
-                    Gaytri Hostal
-                  </button>
-                  <button
-                    onClick={() => setHostelFilter("Gangotri Hostal")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${hostelFilter === "Gangotri Hostal"
-                      ? "bg-foreground text-background"
-                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                      }`}
-                  >
-                    Gangotri Hostal
-                  </button>
-                  <button
-                    onClick={() => setHostelFilter("Boys Hostal")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${hostelFilter === "Boys Hostal"
-                      ? "bg-foreground text-background"
-                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                      }`}
-                  >
-                    Boys Hostal
-                  </button>
+                  {[
+                    { id: "all", label: "All" },
+                    { id: "Gaytri Hostal", label: "Gaytri Hostal" },
+                    { id: "Gangotri Hostal", label: "Gangotri Hostal" },
+                    { id: "Boys Hostal", label: "Boys Hostal" },
+                    { id: "Guest House Boys Hostel", label: "Guest House Boys Hostel" }
+                  ].map((h) => {
+                    const count = h.id === "all"
+                      ? students.length
+                      : students.filter(s => getHostelCategory(s.hostelName) === h.id).length;
+
+                    return (
+                      <button
+                        key={h.id}
+                        onClick={() => setHostelFilter(h.id as any)}
+                        className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-1 ${hostelFilter === h.id
+                          ? "bg-foreground text-background"
+                          : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                          }`}
+                      >
+                        <span>{h.label}</span>
+                        <span className="text-xs font-bold">{count}</span>
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -644,6 +638,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               collegeName: student.collegeName,
                               year: student.year,
                               semester: student.semester,
+                              section: student.section,
+                              homeState: student.homeState,
                               localGuardianAddress: student.localGuardianAddress,
                               localGuardianPhoneNumber: student.localGuardianPhoneNumber,
                               permissions: studentPermissions.map((p): SimplePermission => ({
@@ -767,8 +763,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     )}
                     {selectedStudent.homePinCode && (
                       <div>
-                        <p className="text-secondary text-sm mb-1.5">Home Pin Code</p>
+                        <p className="text-secondary text-sm mb-1.5">Permanent Address</p>
                         <p className="text-foreground font-medium break-words">{selectedStudent.homePinCode}</p>
+                      </div>
+                    )}
+                    {selectedStudent.homeState && (
+                      <div>
+                        <p className="text-secondary text-sm mb-1.5">State</p>
+                        <p className="text-foreground font-medium break-words">{selectedStudent.homeState}</p>
                       </div>
                     )}
                     {selectedStudent.erpInformation && (
@@ -805,6 +807,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <div>
                         <p className="text-secondary text-sm mb-1.5">Semester</p>
                         <p className="text-foreground font-medium break-words">{selectedStudent.semester}</p>
+                      </div>
+                    )}
+                    {selectedStudent.section && (
+                      <div>
+                        <p className="text-secondary text-sm mb-1.5">Section</p>
+                        <p className="text-foreground font-medium break-words">{selectedStudent.section}</p>
                       </div>
                     )}
                     {selectedStudent.localGuardianAddress && (

@@ -33,8 +33,10 @@ interface StudentProfile {
   collegeName?: string;
   year?: string;
   semester?: string;
-  localGuardianAddress?: string;
   localGuardianPhoneNumber?: string;
+  localGuardianAddress?: string;
+  section?: string;
+  homeState?: string;
 }
 
 export default function StudentDashboard() {
@@ -672,6 +674,12 @@ export default function StudentDashboard() {
                         <p className="text-foreground font-medium">{studentProfile.semester}</p>
                       </div>
                     )}
+                    {studentProfile.section && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">Section</p>
+                        <p className="text-foreground font-medium">{studentProfile.section}</p>
+                      </div>
+                    )}
                     {studentProfile.fatherName && (
                       <div className="flex flex-col">
                         <p className="text-secondary mb-1">Father&apos;s Name</p>
@@ -698,8 +706,14 @@ export default function StudentDashboard() {
                     )}
                     {studentProfile.homePinCode && (
                       <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Home Pin Code</p>
+                        <p className="text-secondary mb-1">Permanent Address</p>
                         <p className="text-foreground font-medium">{studentProfile.homePinCode}</p>
+                      </div>
+                    )}
+                    {studentProfile.homeState && (
+                      <div className="flex flex-col">
+                        <p className="text-secondary mb-1">State</p>
+                        <p className="text-foreground font-medium">{studentProfile.homeState}</p>
                       </div>
                     )}
                     {studentProfile.localGuardianAddress && (

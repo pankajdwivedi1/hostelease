@@ -15,6 +15,7 @@ export interface IStudent {
   motherName?: string;
   motherNumber?: string;
   homePinCode?: string;
+  homeState?: string;
   erpInformation?: string;
   joiningDate?: Date;
   branch?: string;
@@ -23,6 +24,7 @@ export interface IStudent {
   semester?: string;
   localGuardianAddress?: string;
   localGuardianPhoneNumber?: string;
+  section?: string;
   lastCheckInLocation?: {
     lat: number;
     lng: number;
@@ -88,6 +90,10 @@ const StudentSchema = new Schema<IStudent>(
       type: String,
       required: false,
     },
+    homeState: {
+      type: String,
+      required: false,
+    },
     erpInformation: {
       type: String,
       required: false,
@@ -117,6 +123,10 @@ const StudentSchema = new Schema<IStudent>(
       required: false,
     },
     localGuardianPhoneNumber: {
+      type: String,
+      required: false,
+    },
+    section: {
       type: String,
       required: false,
     },
