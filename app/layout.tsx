@@ -8,9 +8,34 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Hostelease",
-  description: "Hostelease - Your hosting solution",
+  title: "Hostelease - Hostel Management",
+  description: "Hostel Management System Reimagined - Manage permissions, students, and hostel operations seamlessly",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Hostelease",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512x512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
 };
+
+export function generateViewport() {
+  return {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+    themeColor: "#2563eb",
+  };
+}
 
 export default function RootLayout({
   children,

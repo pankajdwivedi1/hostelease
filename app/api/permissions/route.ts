@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     // Validate that toDateTime is after fromDateTime
     const fromDate = new Date(fromDateTime);
     const toDate = new Date(toDateTime);
-    
+
     if (toDate <= fromDate) {
       return NextResponse.json(
         { error: "End date and time must be after start date and time" },
@@ -86,25 +86,40 @@ export async function PATCH(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { permissionId, status } = body;
+    const { permissionId, status, wardenStatus, deanStatus } = body;
 
-    if (!permissionId || !status) {
+    if (!permissionId) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
       );
     }
 
-    if (!["pending", "allowed", "rejected"].includes(status)) {
-      return NextResponse.json(
-        { error: "Invalid status" },
-        { status: 400 }
-      );
+    const currentPermission = await Permission.findById(permissionId);
+    if (!currentPermission) {
+      return NextResponse.json({ error: "Permission not found" }, { status: 404 });
+    }
+
+    let update: any = {};
+    if (status) update.status = status;
+    if (wardenStatus) update.wardenStatus = wardenStatus;
+    if (deanStatus) update.deanStatus = deanStatus;
+
+    // Logic for final status
+    const finalWardenStatus = wardenStatus || currentPermission.wardenStatus;
+    const finalDeanStatus = deanStatus || currentPermission.deanStatus;
+
+    if (finalDeanStatus === "allowed" || (finalWardenStatus === "allowed" && finalDeanStatus === "allowed")) {
+      update.status = "allowed";
+    } else if (finalWardenStatus === "rejected" || finalDeanStatus === "rejected") {
+      update.status = "rejected";
+    } else {
+      update.status = "pending";
     }
 
     const permission = await Permission.findByIdAndUpdate(
       permissionId,
-      { status },
+      update,
       { new: true }
     ).populate("studentId", "name email phoneNumber hostelName roomNumber profilePicture studentStatus");
 
@@ -112,10 +127,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Permission not found" }, { status: 404 });
     }
 
+    const finalStatus = permission.status;
+
     // If permission is allowed, set student studentStatus to "out"
-    if (status === "allowed" && permission.studentId) {
+    if (finalStatus === "allowed" && permission.studentId) {
       let studentId: string;
-      
+
       if (typeof permission.studentId === "object" && permission.studentId._id) {
         studentId = permission.studentId._id.toString();
       } else if (typeof permission.studentId === "string") {
@@ -123,28 +140,28 @@ export async function PATCH(request: NextRequest) {
       } else {
         studentId = permission.studentId.toString();
       }
-      
+
       const updatedStudent = await Student.findByIdAndUpdate(
-        studentId, 
+        studentId,
         { studentStatus: "out" },
         { new: true }
       );
-      
+
       if (!updatedStudent) {
         console.error(`Failed to update student studentStatus for studentId: ${studentId}`);
       } else {
         console.log(`Student ${studentId} studentStatus updated to "out"`);
       }
     }
-    
+
     // If permission is rejected, set student studentStatus to "in" (they're back)
-    if (status === "rejected" && permission.studentId) {
-      const studentId = typeof permission.studentId === "object" 
-        ? permission.studentId._id 
+    if (finalStatus === "rejected" && permission.studentId) {
+      const studentId = typeof permission.studentId === "object"
+        ? permission.studentId._id
         : permission.studentId;
-      
+
       await Student.findByIdAndUpdate(
-        studentId, 
+        studentId,
         { studentStatus: "in" },
         { new: true }
       );

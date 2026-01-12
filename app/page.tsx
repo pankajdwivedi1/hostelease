@@ -84,7 +84,7 @@ export default function Dashboard() {
       ) : userType === "developer" ? (
         <AdminDashboard title="Developer Dashboard" showRemoveButton={true} />
       ) : (
-        <AdminDashboard title="Admin Dashboard" />
+        <AdminDashboard title="Dean Dashboard" />
       )}
     </>
   );

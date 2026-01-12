@@ -11,6 +11,8 @@ interface Permission {
   toDateTime: string | Date;
   reason: string;
   status: "pending" | "allowed" | "rejected";
+  wardenStatus: "pending" | "allowed" | "rejected";
+  deanStatus: "pending" | "allowed" | "rejected";
 }
 
 interface StudentProfile {
@@ -127,7 +129,6 @@ export default function StudentDashboard() {
 
                 if (permData.permissions) {
                   setPermissions(permData.permissions);
-                  await fetchStudentProfile();
                 }
               } catch (error) {
                 console.error("Error fetching permissions:", error);
@@ -137,7 +138,7 @@ export default function StudentDashboard() {
             fetchPermissions();
             permissionInterval = setInterval(() => {
               fetchPermissions();
-            }, 2000);
+            }, 8000); // Optimized from 2000ms to 8000ms
           }
         } catch (error) {
           console.error("Error fetching student data:", error);
@@ -438,7 +439,7 @@ export default function StudentDashboard() {
                     disabled={isLocationChecking}
                     className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${isAtHostel
                       ? "bg-green-600 text-white"
-                      : "bg-foreground text-background hover:bg-[#383838]"
+                      : "bg-blue-600 text-background hover:bg-blue-700"
                       } ${isLocationChecking ? "opacity-75 cursor-not-allowed" : ""}`}
                     title="Get accurate location"
                   >
@@ -460,7 +461,7 @@ export default function StudentDashboard() {
                   </button>
                   <button
                     onClick={() => setShowProfile(true)}
-                    className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                    className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-blue-600 text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                   >
                     {studentProfile?.profilePicture ? (
                       <img
@@ -479,7 +480,7 @@ export default function StudentDashboard() {
                 <button
                   onClick={handleCheckIn}
                   disabled={checkingIn}
-                  className="w-full h-12 rounded-lg bg-foreground text-background font-medium transition-colors hover:bg-[#383838] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full h-12 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {checkingIn ? "Checking in..." : "I'm In"}
                 </button>
@@ -488,7 +489,7 @@ export default function StudentDashboard() {
                   onClick={() => setShowRequestForm(!showRequestForm)}
                   disabled={!isAtHostel}
                   className={`w-full h-12 rounded-lg font-medium transition-colors ${isAtHostel
-                    ? "bg-foreground text-background hover:bg-[#383838]"
+                    ? "bg-blue-600 text-background hover:bg-blue-700"
                     : "bg-gray-200 text-gray-500 cursor-not-allowed"
                     }`}
                 >
@@ -536,7 +537,7 @@ export default function StudentDashboard() {
                     <button
                       onClick={handleRequestPermission}
                       disabled={submitting}
-                      className="flex-1 h-12 rounded-lg bg-foreground text-background font-medium transition-colors hover:bg-[#383838] disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex-1 h-12 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {submitting ? "Submitting..." : "Submit Request"}
                     </button>
@@ -575,15 +576,19 @@ export default function StudentDashboard() {
                               To: {new Date(permission.toDateTime).toLocaleString()}
                             </p>
                           </div>
-                          <span
-                            className={`px-2 md:px-3 py-0.5 md:py-1 rounded-full text-xs font-medium ${getStatusColor(
-                              permission.status
-                            )}`}
-                          >
-                            {permission.status.charAt(0).toUpperCase() + permission.status.slice(1)}
-                          </span>
                         </div>
                         <p className="text-sm text-foreground mt-1.5 md:mt-2">Reason: {permission.reason}</p>
+
+                        <div className="flex items-center gap-6 mt-3 pt-3 border-t border-gray-100">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${permission.wardenStatus === "allowed" ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" : permission.wardenStatus === "rejected" ? "bg-red-500" : "bg-gray-300"}`} />
+                            <span className="text-[10px] uppercase font-bold text-secondary text-center leading-tight">Approved by<br />Warden</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${permission.deanStatus === "allowed" ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" : permission.deanStatus === "rejected" ? "bg-red-500" : "bg-gray-300"}`} />
+                            <span className="text-[10px] uppercase font-bold text-secondary text-center leading-tight">Approved by<br />Dean</span>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>

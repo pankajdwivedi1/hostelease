@@ -194,7 +194,7 @@ export default function LoginPage() {
 
       <main className="relative z-10 w-full max-w-lg px-6">
         <div className={`transition-all duration-1000 transform ${mounted ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0'}`}>
-          <div className="flex flex-col items-center space-y-10">
+          <div className="flex flex-col items-center space-y-6">
 
             {/* Logo and Title */}
             <div className="flex flex-col items-center space-y-4 text-center">
@@ -370,7 +370,7 @@ export default function LoginPage() {
             </div>
 
             {/* Footer */}
-            <div className="flex flex-col items-center space-y-4 pt-8" style={{ fontFamily: 'Cambria, Georgia, serif' }}>
+            <div className="flex flex-col items-center space-y-4 pt-4" style={{ fontFamily: 'Cambria, Georgia, serif' }}>
               <div className="flex flex-col items-center space-y-1">
                 <p className="text-[12px] font-bold tracking-wider text-slate-900 uppercase">
                   &copy; 2026 Hostelease Cloud Infostructure

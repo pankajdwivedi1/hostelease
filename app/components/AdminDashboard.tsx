@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import * as XLSX from "xlsx";
 
 interface Permission {
   _id: string;
@@ -20,6 +21,8 @@ interface Permission {
   toDateTime: string | Date;
   reason: string;
   status: "pending" | "allowed" | "rejected";
+  wardenStatus: "pending" | "allowed" | "rejected";
+  deanStatus: "pending" | "allowed" | "rejected";
 }
 
 interface SimplePermission {
@@ -28,6 +31,8 @@ interface SimplePermission {
   toDateTime: string | Date;
   reason: string;
   status: "pending" | "allowed" | "rejected";
+  wardenStatus: "pending" | "allowed" | "rejected";
+  deanStatus: "pending" | "allowed" | "rejected";
 }
 
 interface StudentDetails {
@@ -73,9 +78,84 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
 
+  const [userType, setUserType] = useState<string | null>(null);
+
+  useEffect(() => {
+    setUserType(localStorage.getItem("userType"));
+  }, []);
+
   const handleLogout = () => {
     localStorage.removeItem("userType");
     router.push("/login");
+  };
+
+  const exportToExcel = () => {
+    try {
+      // Prepare data for export - excluding profilePicture field
+      const exportData = students.map(student => ({
+        "Name": student.name || "",
+        "Email": student.email || "",
+        "Phone Number": student.phoneNumber || "",
+        "Hostel Name": student.hostelName || "",
+        "Room Number": student.roomNumber || "",
+        "Father Name": student.fatherName || "",
+        "Father Number": student.fatherNumber || "",
+        "Mother Name": student.motherName || "",
+        "Mother Number": student.motherNumber || "",
+        "College Name": student.collegeName || "",
+        "Branch": student.branch || "",
+        "Semester": student.semester || "",
+        "Year": student.year || "",
+        "Section": student.section || "",
+        "ERP Information": student.erpInformation || "",
+        "Home State": student.homeState || "",
+        "Home Pin Code": student.homePinCode || "",
+        "Local Guardian Address": student.localGuardianAddress || "",
+        "Local Guardian Phone": student.localGuardianPhoneNumber || "",
+        "Joining Date": student.joiningDate ? new Date(student.joiningDate).toLocaleDateString() : "",
+        "Student Status": student.studentStatus || "",
+      }));
+
+      // Create worksheet
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+      // Set column widths
+      const columnWidths = [
+        { wch: 25 }, // Name
+        { wch: 30 }, // Email
+        { wch: 15 }, // Phone Number
+        { wch: 20 }, // Hostel Name
+        { wch: 12 }, // Room Number
+        { wch: 25 }, // Father Name
+        { wch: 15 }, // Father Number
+        { wch: 25 }, // Mother Name
+        { wch: 15 }, // Mother Number
+        { wch: 20 }, // College Name
+        { wch: 10 }, // Branch
+        { wch: 10 }, // Semester
+        { wch: 8 },  // Year
+        { wch: 10 }, // Section
+        { wch: 20 }, // ERP Information
+        { wch: 15 }, // Home State
+        { wch: 12 }, // Home Pin Code
+        { wch: 30 }, // Local Guardian Address
+        { wch: 15 }, // Local Guardian Phone
+        { wch: 15 }, // Joining Date
+        { wch: 12 }, // Student Status
+      ];
+      worksheet['!cols'] = columnWidths;
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Students Data");
+
+      // Generate Excel file and download
+      const timestamp = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(workbook, `Hostelease_Students_Data_${timestamp}.xlsx`);
+    } catch (error) {
+      console.error("Error exporting to Excel:", error);
+      alert("Failed to export data. Please try again.");
+    }
   };
 
   useEffect(() => {
@@ -130,7 +210,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
     const interval = setInterval(() => {
       fetchPermissions();
-    }, 3000);
+    }, 10000);
 
     return () => clearInterval(interval);
   }, []);
@@ -195,6 +275,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           toDateTime: p.toDateTime,
           reason: p.reason,
           status: p.status,
+          wardenStatus: p.wardenStatus,
+          deanStatus: p.deanStatus,
         })),
       });
     }
@@ -202,10 +284,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const handleStatusChange = async (id: string, newStatus: "allowed" | "rejected") => {
     try {
+      const userType = localStorage.getItem("userType");
+      const updateData: any = { permissionId: id };
+
+      if (userType === "warden") {
+        updateData.wardenStatus = newStatus;
+      } else if (userType === "admin" || userType === "developer") {
+        updateData.deanStatus = newStatus;
+      } else {
+        updateData.status = newStatus;
+      }
+
       // Optimistically update the UI
       setPermissions((prevPermissions) =>
         prevPermissions.map((perm) =>
-          perm._id === id ? { ...perm, status: newStatus } : perm
+          perm._id === id ? {
+            ...perm,
+            status: userType === "admin" || userType === "developer" ? newStatus : perm.status,
+            wardenStatus: userType === "warden" ? newStatus : perm.wardenStatus,
+            deanStatus: (userType === "admin" || userType === "developer") ? newStatus : perm.deanStatus,
+          } : perm
         )
       );
 
@@ -214,10 +312,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          permissionId: id,
-          status: newStatus,
-        }),
+        body: JSON.stringify(updateData),
       });
 
       const data = await response.json();
@@ -302,7 +397,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowAllStudents(true)}
-                    className="px-4 md:px-6 py-2 md:py-2.5 rounded-lg bg-foreground text-background font-medium transition-colors hover:bg-[#383838] text-sm whitespace-nowrap"
+                    className="px-4 md:px-6 py-2 md:py-2.5 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 text-sm whitespace-nowrap"
                   >
                     All Students
                   </button>
@@ -319,7 +414,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <button
                   onClick={() => setFilter("all")}
                   className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "all"
-                    ? "bg-foreground text-background"
+                    ? "bg-blue-600 text-background"
                     : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                     }`}
                 >
@@ -328,7 +423,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <button
                   onClick={() => setFilter("pending")}
                   className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "pending"
-                    ? "bg-foreground text-background"
+                    ? "bg-blue-600 text-background"
                     : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                     }`}
                 >
@@ -337,7 +432,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <button
                   onClick={() => setFilter("allowed")}
                   className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "allowed"
-                    ? "bg-foreground text-background"
+                    ? "bg-blue-600 text-background"
                     : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                     }`}
                 >
@@ -346,7 +441,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <button
                   onClick={() => setFilter("rejected")}
                   className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "rejected"
-                    ? "bg-foreground text-background"
+                    ? "bg-blue-600 text-background"
                     : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                     }`}
                 >
@@ -354,11 +449,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </button>
               </div>
 
-              <div className="flex gap-2 md:gap-3 flex-wrap">
+              <div className="flex gap-2 md:gap-3 flex-wrap items-center">
                 <button
                   onClick={() => setStatusFilter("all")}
                   className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "all"
-                    ? "bg-foreground text-background"
+                    ? "bg-blue-600 text-background"
                     : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                     }`}
                 >
@@ -367,7 +462,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <button
                   onClick={() => setStatusFilter("in")}
                   className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "in"
-                    ? "bg-foreground text-background"
+                    ? "bg-blue-600 text-background"
                     : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                     }`}
                 >
@@ -376,12 +471,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <button
                   onClick={() => setStatusFilter("out")}
                   className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "out"
-                    ? "bg-foreground text-background"
+                    ? "bg-blue-600 text-background"
                     : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                     }`}
                 >
                   Out
                 </button>
+                {showRemoveButton && (
+                  <button
+                    onClick={exportToExcel}
+                    className="px-3 md:px-4 py-1.5 md:py-2 rounded-lg bg-green-600 text-white font-medium transition-colors hover:bg-green-700 text-sm whitespace-nowrap flex items-center gap-1.5"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Export Excel
+                  </button>
+                )}
               </div>
 
               <div className="space-y-3">
@@ -403,71 +509,123 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         key={permission._id}
                         className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4"
                       >
-                        <div className="flex items-center gap-3 md:gap-4">
-                          <button
-                            onClick={() => handleProfileClick(student._id)}
-                            className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity overflow-hidden"
-                          >
-                            {profilePic ? (
-                              <img
-                                src={student.profilePicture}
-                                alt={student.name}
-                                className="w-full h-full rounded-full object-cover"
-                              />
-                            ) : (
-                              initials
-                            )}
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2 md:gap-4">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-foreground">
-                                  {student.name}
-                                </p>
-                                <div className="flex items-center gap-1.5 md:gap-2 mt-0.5 md:mt-1 text-sm text-secondary">
-                                  <span>{new Date(permission.fromDateTime).toLocaleString()}</span>
-                                  <span>•</span>
-                                  <span>to {new Date(permission.toDateTime).toLocaleString()}</span>
-                                </div>
-                                <p className="text-sm text-foreground mt-1.5 md:mt-2">
-                                  {permission.reason}
-                                </p>
+                        {/* Main content wrapper */}
+                        <div className="flex flex-col gap-3">
+                          {/* Student Info Section */}
+                          <div className="flex items-start gap-3 md:gap-4">
+                            <button
+                              onClick={() => handleProfileClick(student._id)}
+                              className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity overflow-hidden"
+                            >
+                              {profilePic ? (
+                                <img
+                                  src={student.profilePicture}
+                                  alt={student.name}
+                                  className="w-full h-full rounded-full object-cover"
+                                />
+                              ) : (
+                                initials
+                              )}
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm md:text-base font-semibold text-foreground">
+                                {student.name}
+                              </p>
+                              <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-2 mt-0.5 md:mt-1 text-xs md:text-sm text-secondary">
+                                <span>{new Date(permission.fromDateTime).toLocaleString()}</span>
+                                <span className="hidden md:inline">•</span>
+                                <span>to {new Date(permission.toDateTime).toLocaleString()}</span>
                               </div>
-                              <div className="flex items-center gap-2 md:gap-3">
-                                {showStatus && (
-                                  <Badge
-                                    variant={permission.status === "allowed" ? "default" : "destructive"}
-                                    className={`text-xs px-2 md:px-2.5 py-0.5 whitespace-nowrap ${permission.status === "allowed"
-                                      ? "bg-green-100 text-green-800 border-green-200"
-                                      : "bg-red-100 text-red-800 border-red-200"
-                                      }`}
-                                  >
-                                    {permission.status === "allowed" ? "Accepted" : "Rejected"}
-                                  </Badge>
-                                )}
-                                {permission.status === "pending" && (
-                                  <div className="flex items-center gap-1.5 md:gap-2">
-                                    <button
-                                      onClick={() => handleStatusChange(permission._id, "allowed")}
-                                      className="w-7 h-7 md:w-8 md:h-8 rounded-full border border-solid border-[#9CA3AF] bg-white text-foreground flex items-center justify-center transition-colors hover:bg-filler"
-                                      title="Allow"
-                                    >
-                                      <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                      </svg>
-                                    </button>
-                                    <button
-                                      onClick={() => handleStatusChange(permission._id, "rejected")}
-                                      className="w-7 h-7 md:w-8 md:h-8 rounded-full border border-solid border-[#9CA3AF] bg-white text-foreground flex items-center justify-center transition-colors hover:bg-filler"
-                                      title="Reject"
-                                    >
-                                      <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                )}
+                              <p className="text-sm text-foreground mt-1.5 md:mt-2">
+                                {permission.reason}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Approval Section - Stacked on mobile, horizontal on desktop */}
+                          <div className="flex items-center justify-around md:justify-end md:gap-8 pt-2 border-t border-gray-200 md:border-0 md:pt-0">
+                            {/* Warden Approval Block */}
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-[11px] md:text-[13px] font-medium text-foreground whitespace-nowrap">Warden approval</span>
+                              <div className="flex items-center gap-1.5 md:gap-2">
+                                <button
+                                  onClick={() => userType === "warden" && handleStatusChange(permission._id, "allowed")}
+                                  disabled={userType !== "warden" || permission.deanStatus !== "pending"}
+                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed"
+                                    ? "border-green-300 bg-green-50 text-gray-500 shadow-sm"
+                                    : "border-gray-200 text-gray-400 hover:border-green-300"
+                                    } ${userType !== "warden" ? "cursor-default" : "cursor-pointer"}`}
+                                >
+                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => userType === "warden" && handleStatusChange(permission._id, "rejected")}
+                                  disabled={userType !== "warden" || permission.deanStatus !== "pending"}
+                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected"
+                                    ? "border-red-500 bg-red-50 text-red-600 shadow-sm"
+                                    : "border-gray-200 text-gray-400 hover:border-red-300"
+                                    } ${userType !== "warden" ? "cursor-default" : "cursor-pointer"}`}
+                                >
+                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
                               </div>
+                              {/* Warden Status Label */}
+                              {permission.wardenStatus === "rejected" && (
+                                <span className="text-[10px] md:text-xs font-medium text-red-600 bg-red-50 px-1.5 md:px-2 py-0.5 rounded">
+                                  Rejected
+                                </span>
+                              )}
+                              {permission.wardenStatus === "allowed" && (
+                                <span className="text-[10px] md:text-xs font-medium text-green-600 bg-green-50 px-1.5 md:px-2 py-0.5 rounded">
+                                  Accepted
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Dean Approval Block */}
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-[11px] md:text-[13px] font-medium text-foreground whitespace-nowrap">Dean approval</span>
+                              <div className="flex items-center gap-1.5 md:gap-2">
+                                <button
+                                  onClick={() => (userType === "admin" || userType === "developer") && handleStatusChange(permission._id, "allowed")}
+                                  disabled={userType !== "admin" && userType !== "developer"}
+                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "allowed"
+                                    ? "border-green-600 bg-green-500 text-white shadow-md scale-105"
+                                    : "border-gray-200 text-gray-400 hover:border-green-300"
+                                    } ${userType !== "admin" && userType !== "developer" ? "cursor-default" : "cursor-pointer"}`}
+                                >
+                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => (userType === "admin" || userType === "developer") && handleStatusChange(permission._id, "rejected")}
+                                  disabled={userType !== "admin" && userType !== "developer"}
+                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "rejected"
+                                    ? "border-red-500 bg-red-50 text-red-600 shadow-sm"
+                                    : "border-gray-200 text-gray-400 hover:border-red-300"
+                                    } ${userType !== "admin" && userType !== "developer" ? "cursor-default" : "cursor-pointer"}`}
+                                >
+                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                              {/* Dean Status Label */}
+                              {permission.deanStatus === "rejected" && (
+                                <span className="text-[10px] md:text-xs font-medium text-red-600 bg-red-50 px-1.5 md:px-2 py-0.5 rounded">
+                                  Rejected
+                                </span>
+                              )}
+                              {permission.deanStatus === "allowed" && (
+                                <span className="text-[10px] md:text-xs font-medium text-green-600 bg-green-50 px-1.5 md:px-2 py-0.5 rounded">
+                                  Accepted
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -516,34 +674,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
                   />
-                </div>
-
-                <div className="flex gap-2 md:gap-3 flex-wrap">
-                  {[
-                    { id: "all", label: "All" },
-                    { id: "Gaytri Hostal", label: "Gaytri Hostal" },
-                    { id: "Gangotri Hostal", label: "Gangotri Hostal" },
-                    { id: "Boys Hostal", label: "Boys Hostal" },
-                    { id: "Guest House Boys Hostel", label: "Guest House Boys Hostel" }
-                  ].map((h) => {
-                    const count = h.id === "all"
-                      ? students.length
-                      : students.filter(s => getHostelCategory(s.hostelName) === h.id).length;
-
-                    return (
-                      <button
-                        key={h.id}
-                        onClick={() => setHostelFilter(h.id as any)}
-                        className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-1 ${hostelFilter === h.id
-                          ? "bg-foreground text-background"
-                          : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                          }`}
-                      >
-                        <span>{h.label}</span>
-                        <span className="text-xs font-bold">{count}</span>
-                      </button>
-                    );
-                  })}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -606,6 +736,34 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
                 </div>
 
+                <div className="flex gap-2 md:gap-3 flex-wrap">
+                  {[
+                    { id: "all", label: "All" },
+                    { id: "Gaytri Hostal", label: "Gaytri Hostal" },
+                    { id: "Gangotri Hostal", label: "Gangotri Hostal" },
+                    { id: "Boys Hostal", label: "Boys Hostal" },
+                    { id: "Guest House Boys Hostel", label: "Guest House Boys Hostel" }
+                  ].map((h) => {
+                    const count = h.id === "all"
+                      ? students.length
+                      : students.filter(s => getHostelCategory(s.hostelName) === h.id).length;
+
+                    return (
+                      <button
+                        key={h.id}
+                        onClick={() => setHostelFilter(h.id as any)}
+                        className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-1 ${hostelFilter === h.id
+                          ? "bg-blue-600 text-background"
+                          : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                          }`}
+                      >
+                        <span>{h.label}</span>
+                        <span className="text-xs font-bold">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <div className="space-y-3">
                   {filteredStudents.length === 0 ? (
                     <p className="text-secondary text-center py-8">No students found</p>
@@ -648,6 +806,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 toDateTime: p.toDateTime,
                                 reason: p.reason,
                                 status: p.status,
+                                wardenStatus: p.wardenStatus,
+                                deanStatus: p.deanStatus,
                               })),
                             });
                             setShowAllStudents(false);
