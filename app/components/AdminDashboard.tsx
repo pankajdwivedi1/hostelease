@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import * as XLSX from "xlsx";
@@ -60,8 +60,17 @@ interface StudentDetails {
   localGuardianPhoneNumber?: string;
   section?: string;
   homeState?: string;
+  studentStatus?: "in" | "out";
   permissions: SimplePermission[];
 }
+
+// Cache constants
+const CACHE_KEYS = {
+  STUDENTS: 'hostelease_students_cache',
+  HOSTELS: 'hostelease_hostels_cache',
+  TIMESTAMP: 'hostelease_cache_timestamp'
+};
+const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
 export default function AdminDashboard({ title = "Admin Dashboard", showRemoveButton = false }: { title?: string; showRemoveButton?: boolean }) {
   const router = useRouter();
@@ -80,25 +89,57 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [semesterFilter, setSemesterFilter] = useState<string>("all");
   const [branchFilter, setBranchFilter] = useState<string>("all");
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
+  const [studentsLoading, setStudentsLoading] = useState(true);
 
-  const fetchHostels = async () => {
+  const fetchHostels = async (forceRefresh = false) => {
     try {
+      if (!forceRefresh) {
+        const cached = sessionStorage.getItem(CACHE_KEYS.HOSTELS);
+        if (cached) {
+          setHostels(JSON.parse(cached));
+          // Don't return here if we want to background update, but usually hostels don't change often.
+          // Let's return to save bandwidth as requested.
+          return;
+        }
+      }
+
       const response = await fetch("/api/hostels", { cache: "no-store" });
       const data = await response.json();
       if (data.hostels) {
         setHostels(data.hostels);
+        try {
+          sessionStorage.setItem(CACHE_KEYS.HOSTELS, JSON.stringify(data.hostels));
+        } catch (e) {
+          console.warn("Failed to cache hostels");
+        }
       }
     } catch (error) {
       console.error("Error fetching hostels:", error);
     }
   };
 
-  const fetchStudents = async () => {
+  const fetchStudents = async (forceRefresh = false) => {
     try {
-      const response = await fetch("/api/students", { cache: "no-store" });
+      if (!forceRefresh) {
+        const cached = sessionStorage.getItem(CACHE_KEYS.STUDENTS);
+        const timestamp = sessionStorage.getItem(CACHE_KEYS.TIMESTAMP);
+
+        if (cached && timestamp) {
+          const age = Date.now() - parseInt(timestamp);
+          if (age < CACHE_DURATION) {
+            setStudents(JSON.parse(cached));
+            setStudentsLoading(false);
+            return;
+          }
+        }
+      }
+
+      setStudentsLoading(true);
+      // ⚡ OPTIMIZED: Fetch lightweight data (no big images) to save bandwidth
+      const response = await fetch("/api/students?light=true", { cache: "no-store" });
       const data = await response.json();
       if (data.students) {
-        setStudents(data.students.map((s: any) => ({
+        const formattedStudents = data.students.map((s: any) => ({
           id: s._id,
           name: s.name,
           email: s.email,
@@ -121,17 +162,29 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           localGuardianAddress: s.localGuardianAddress,
           localGuardianPhoneNumber: s.localGuardianPhoneNumber,
           homeState: s.homeState,
+          studentStatus: s.studentStatus || "in",
           permissions: []
-        })));
+        }));
+        setStudents(formattedStudents);
+
+        try {
+          sessionStorage.setItem(CACHE_KEYS.STUDENTS, JSON.stringify(formattedStudents));
+          sessionStorage.setItem(CACHE_KEYS.TIMESTAMP, Date.now().toString());
+        } catch (e) {
+          console.warn("Failed to cache students", e);
+        }
       }
     } catch (error) {
       console.error("Error fetching students:", error);
+    } finally {
+      setStudentsLoading(false);
     }
   };
 
   const fetchPermissions = async () => {
     try {
-      const response = await fetch("/api/permissions", { cache: "no-store" });
+      // ⚡ OPTIMIZED: Fetch light permissions data (no images) to save massive bandwidth
+      const response = await fetch("/api/permissions?light=true", { cache: "no-store" });
       const data = await response.json();
       if (data.permissions) {
         setPermissions(data.permissions);
@@ -142,10 +195,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   useEffect(() => {
-    const loadData = async () => {
+    const loadData = () => {
       setLoading(true);
-      await Promise.all([fetchPermissions(), fetchStudents(), fetchHostels()]);
-      setLoading(false);
+
+      // ⚡ OPTIMIZED: Run all fetches independently
+      // Permissions (Critical for UI list): Manage loading state
+      fetchPermissions().finally(() => setLoading(false));
+
+      // Hostels: Updates filters when ready (safe to render without)
+      fetchHostels();
+
+      // Students: Background update
+      fetchStudents();
     };
 
     loadData();
@@ -184,7 +245,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       setSelectedStudent(null);
       setShowDeleteConfirm(false);
-      await Promise.all([fetchPermissions(), fetchStudents()]);
+      setSelectedStudent(null);
+      setShowDeleteConfirm(false);
+      await Promise.all([fetchPermissions(), fetchStudents(true)]);
     } catch (error: any) {
       console.error("Error deleting student:", error);
       alert(error.message || "Failed to delete student. Please try again.");
@@ -231,6 +294,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             perm._id === id ? data.permission : perm
           )
         );
+        // Refresh students to update their in/out status in the directory
+        fetchStudents(true);
       } else {
         fetchPermissions();
       }
@@ -277,8 +342,80 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     return null;
   };
 
-  const handleProfileClick = (studentId: string) => {
-    const student = students.find((s) => s.id === studentId);
+  const handleProfileClick = async (studentId: string) => {
+    let student = students.find((s) => s.id === studentId);
+
+    // If student doesn't have profile picture (light mode), fetch full details
+    if (student && !student.profilePicture) {
+      try {
+        // Fetch full student details on demand using email
+        const res = await fetch(`/api/students?email=${student.email}`);
+        const data = await res.json();
+        if (data.student) {
+          // Merge full details
+          student = {
+            ...student,
+            profilePicture: data.student.profilePicture,
+            // Update any other fields if needed
+            fatherName: data.student.fatherName,
+            fatherNumber: data.student.fatherNumber,
+            motherName: data.student.motherName,
+            motherNumber: data.student.motherNumber,
+            homePinCode: data.student.homePinCode,
+            erpInformation: data.student.erpInformation,
+            joiningDate: data.student.joiningDate,
+            localGuardianAddress: data.student.localGuardianAddress,
+            localGuardianPhoneNumber: data.student.localGuardianPhoneNumber,
+            homeState: data.student.homeState,
+            studentStatus: data.student.studentStatus || "in",
+          };
+
+          // Optionally update the main list cache with this new detail so subsequent clicks are fast?
+          // That might complicate the cache size again. Let's just keep it in selectedStudent for now.
+        }
+      } catch (e) {
+        console.error("Failed to fetch full student details", e);
+      }
+    }
+
+    // Fallback: Use partial data from permissions if full student list isn't loaded yet
+    if (!student) {
+      const permissionWithStudent = permissions.find(p =>
+        typeof p.studentId === 'object' && p.studentId._id === studentId
+      );
+
+      if (permissionWithStudent && typeof permissionWithStudent.studentId === 'object') {
+        const s = permissionWithStudent.studentId;
+        student = {
+          id: s._id,
+          name: s.name,
+          email: s.email,
+          phoneNumber: s.phoneNumber,
+          hostelName: s.hostelName,
+          roomNumber: s.roomNumber,
+          profilePicture: s.profilePicture,
+          permissions: [],
+          // Default empty strings for fields not present in permission population
+          fatherName: "",
+          fatherNumber: "",
+          motherName: "",
+          motherNumber: "",
+          homePinCode: "",
+          erpInformation: "",
+          joiningDate: "",
+          branch: "",
+          collegeName: "",
+          year: "",
+          semester: "",
+          section: "",
+          localGuardianAddress: "",
+          localGuardianPhoneNumber: "",
+          homeState: "",
+          studentStatus: s.studentStatus || "in",
+        };
+      }
+    }
+
     if (student) {
       const studentPermissions = permissions.filter((p) => {
         if (!p.studentId) return false;
@@ -299,37 +436,56 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const filteredPermissions = permissions.filter((p) => {
-    const matchesStatus = filter === "all" || p.status === filter;
-    if (!matchesStatus) return false;
-    if (statusFilter === "all") return true;
-    const student = typeof p.studentId === "object" ? p.studentId : null;
-    if (!student) return false;
-    return student.studentStatus === statusFilter;
-  });
+  const filteredPermissions = useMemo(() => {
+    return permissions.filter((p) => {
+      const matchesStatus = filter === "all" || p.status === filter;
+      if (!matchesStatus) return false;
+      if (statusFilter === "all") return true;
+      const student = typeof p.studentId === "object" ? p.studentId : null;
+      if (!student) return false;
+      return student.studentStatus === statusFilter;
+    });
+  }, [permissions, filter, statusFilter]);
 
-  const filteredStudents = students.filter((student) => {
-    const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.email.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredStudents = useMemo(() => {
+    return students.filter((student) => {
+      const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchQuery.toLowerCase());
 
-    let matchesHostel = hostelFilter === "all";
-    if (!matchesHostel) {
-      matchesHostel = (getHostelCategory(student.hostelName) || student.hostelName) === hostelFilter;
-    }
+      let matchesHostel = hostelFilter === "all";
+      if (!matchesHostel) {
+        matchesHostel = (getHostelCategory(student.hostelName) || student.hostelName) === hostelFilter;
+      }
 
-    const matchesCollege = collegeFilter === "all" || student.collegeName === collegeFilter;
-    const matchesSemester = semesterFilter === "all" || student.semester === semesterFilter;
-    const matchesBranch = branchFilter === "all" || student.branch === branchFilter;
-    return matchesSearch && matchesHostel && matchesCollege && matchesSemester && matchesBranch;
-  });
+      const matchesCollege = collegeFilter === "all" || student.collegeName === collegeFilter;
+      const matchesSemester = semesterFilter === "all" || student.semester === semesterFilter;
+      const matchesBranch = branchFilter === "all" || student.branch === branchFilter;
+      const matchesStatus = statusFilter === "all" || student.studentStatus === statusFilter;
+      return matchesSearch && matchesHostel && matchesCollege && matchesSemester && matchesBranch && matchesStatus;
+    });
+  }, [students, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter, statusFilter]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <p className="text-sm text-secondary">Loading...</p>
-      </div>
-    );
-  }
+  // Optimized counts for status buttons
+  const statusCounts = useMemo(() => {
+    const baseList = students.filter(student => {
+      const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchQuery.toLowerCase());
+      let matchesHostel = hostelFilter === "all";
+      if (!matchesHostel) matchesHostel = (getHostelCategory(student.hostelName) || student.hostelName) === hostelFilter;
+      const matchesCollege = collegeFilter === "all" || student.collegeName === collegeFilter;
+      const matchesSemester = semesterFilter === "all" || student.semester === semesterFilter;
+      const matchesBranch = branchFilter === "all" || student.branch === branchFilter;
+      return matchesSearch && matchesHostel && matchesCollege && matchesSemester && matchesBranch;
+    });
+
+    return {
+      all: baseList.length,
+      in: baseList.filter(s => s.studentStatus === 'in').length,
+      out: baseList.filter(s => s.studentStatus === 'out').length
+    };
+  }, [students, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter]);
+
+
 
   const userType = typeof window !== "undefined" ? sessionStorage.getItem("userType") : null;
 
@@ -342,7 +498,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-base font-semibold text-foreground">{title}</h1>
-                  <p className="mt-1 md:mt-2 text-sm text-secondary">{students.length} Students</p>
+                  <div className="flex items-center gap-2 mt-1 md:mt-2">
+                    {studentsLoading ? (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></span>
+                    ) : (
+                      <p className="text-sm text-secondary">{students.length} Students</p>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -388,7 +550,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               </div>
 
               <div className="space-y-3">
-                {filteredPermissions.length === 0 ? (
+                {loading ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
+                    <p className="text-secondary text-sm">Loading permissions...</p>
+                  </div>
+                ) : filteredPermissions.length === 0 ? (
                   <p className="text-secondary">No permissions found</p>
                 ) : (
                   filteredPermissions.map((permission) => {
@@ -602,7 +769,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       }`}
                   >
                     <span>All</span>
-                    <span className="text-xs font-bold">{students.length}</span>
+                    <span className="text-xs font-bold">{studentsLoading ? "..." : students.length}</span>
                   </button>
                   {hostels.map((h) => {
                     const count = students.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === h.name).length;
@@ -626,37 +793,46 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <div className="flex gap-2 md:gap-3 flex-wrap items-center">
                   <button
                     onClick={() => setStatusFilter("all")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-1 ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
-                    All Students
+                    <span>All Students</span>
+                    <span className="text-xs font-bold">{studentsLoading ? "..." : statusCounts.all}</span>
                   </button>
                   <button
                     onClick={() => setStatusFilter("in")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-1 ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
-                    In
+                    <span>In</span>
+                    <span className="text-xs font-bold">{studentsLoading ? "..." : statusCounts.in}</span>
                   </button>
                   <button
                     onClick={() => setStatusFilter("out")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "out" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-1 ${statusFilter === "out" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
-                    Out
+                    <span>Out</span>
+                    <span className="text-xs font-bold">{studentsLoading ? "..." : statusCounts.out}</span>
                   </button>
                   {showRemoveButton && (
                     <button
                       onClick={exportToExcel}
-                      className="px-3 md:px-4 py-1.5 md:py-2 rounded-lg bg-green-600 text-white font-medium transition-colors hover:bg-green-700 text-sm whitespace-nowrap flex items-center gap-1.5"
+                      disabled={studentsLoading}
+                      className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg bg-green-600 text-white font-medium transition-colors hover:bg-green-700 text-sm whitespace-nowrap flex items-center gap-1.5 ${studentsLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
-                      Export Excel
+                      {studentsLoading ? "Loading..." : "Export Excel"}
                     </button>
                   )}
                 </div>
 
                 <div className="space-y-3">
-                  {filteredStudents.length === 0 ? (
+                  {studentsLoading ? (
+                    <div className="flex flex-col items-center justify-center py-12 gap-3">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
+                      <p className="text-secondary text-sm">Loading student directory...</p>
+                    </div>
+                  ) : filteredStudents.length === 0 ? (
                     <p className="text-secondary text-center py-8">No students found</p>
                   ) : (
                     filteredStudents.map((student) => {
@@ -679,7 +855,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-base font-semibold text-foreground">{student.name}</p>
+                              <div className="flex items-center justify-between">
+                                <p className="text-base font-semibold text-foreground">{student.name}</p>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${student.studentStatus === 'out' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}`}>
+                                  {student.studentStatus || 'in'}
+                                </span>
+                              </div>
                               <p className="text-sm text-secondary mt-0.5">{student.email}</p>
                               <div className="flex items-center gap-3 md:gap-4 mt-2 text-sm text-secondary">
                                 <span>{getHostelCategory(student.hostelName) || student.hostelName}</span>
@@ -730,8 +911,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       getInitials(selectedStudent.name)
                     )}
                   </div>
-                  <div className="text-center space-y-1">
-                    <p className="text-base font-semibold text-foreground">{selectedStudent.name}</p>
+                  <div className="text-center space-y-2">
+                    <div className="flex flex-col items-center gap-1">
+                      <p className="text-base font-semibold text-foreground">{selectedStudent.name}</p>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${selectedStudent.studentStatus === 'out' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}`}>
+                        {selectedStudent.studentStatus || 'in'}
+                      </span>
+                    </div>
                     <p className="text-sm text-secondary">{selectedStudent.email}</p>
                   </div>
                 </div>

@@ -67,8 +67,13 @@ export async function GET(request: NextRequest) {
       query.status = status;
     }
 
+    const light = searchParams.get("light") === "true";
+    const studentFields = light
+      ? "name email phoneNumber hostelName roomNumber studentStatus"
+      : "name email phoneNumber hostelName roomNumber profilePicture studentStatus";
+
     const permissions = await Permission.find(query)
-      .populate("studentId", "name email phoneNumber hostelName roomNumber profilePicture studentStatus")
+      .populate("studentId", studentFields)
       .sort({ createdAt: -1 });
 
     return NextResponse.json({ permissions }, { status: 200 });

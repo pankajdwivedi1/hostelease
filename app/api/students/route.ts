@@ -104,6 +104,8 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search");
     const hostelName = searchParams.get("hostelName");
 
+    const light = searchParams.get("light") === "true"; // ⚡ OPTIMIZATION: Exclude heavy fields
+
     let query: any = {};
     if (search) {
       query.$or = [
@@ -115,7 +117,14 @@ export async function GET(request: NextRequest) {
       query.hostelName = { $regex: hostelName, $options: "i" };
     }
 
-    const students = await Student.find(query).sort({ name: 1 });
+    let studentsQuery = Student.find(query).sort({ name: 1 });
+
+    if (light) {
+      // ⚡ Exclude profilePicture (base64 is heavy) to save bandwidth
+      studentsQuery = studentsQuery.select("-profilePicture");
+    }
+
+    const students = await studentsQuery;
     return NextResponse.json({ students }, { status: 200 });
   } catch (error: any) {
     console.error("Error fetching students:", error);

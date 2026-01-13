@@ -143,7 +143,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         // ⚡ STEP 3: Load permissions asynchronously in background
         const fetchPermissions = async () => {
           try {
-            const permResponse = await fetch(`/api/permissions?studentId=${studentId}`);
+            const permResponse = await fetch(`/api/permissions?studentId=${studentId}&light=true`);
             const permData = await permResponse.json();
 
             if (permData.permissions && isMounted) {
@@ -637,8 +637,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                                   </div>
                                 </div>
                                 <div className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${permission.status === 'allowed' ? 'bg-green-100 text-green-700' :
-                                    permission.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                                      'bg-yellow-100 text-yellow-700'
+                                  permission.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                    'bg-yellow-100 text-yellow-700'
                                   }`}>
                                   {permission.status}
                                 </div>
@@ -697,8 +697,13 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                         getInitials(studentProfile.name)
                       )}
                     </div>
-                    <div className="text-center space-y-1">
-                      <p className="text-base font-semibold text-foreground">{studentProfile.name}</p>
+                    <div className="text-center space-y-2">
+                      <div className="flex flex-col items-center gap-1">
+                        <p className="text-base font-semibold text-foreground">{studentProfile.name}</p>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${studentProfile.studentStatus === 'out' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}`}>
+                          {studentProfile.studentStatus || 'in'}
+                        </span>
+                      </div>
                       <p className="text-sm text-secondary">{studentProfile.email}</p>
                     </div>
                   </div>
