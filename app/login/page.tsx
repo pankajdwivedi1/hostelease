@@ -33,25 +33,29 @@ export default function LoginPage() {
       const user = result.user;
 
       if (user) {
-        const response = await fetch(`/api/students?firebaseUID=${user.uid}`);
+        // ⚡ OPTIMIZED: Only check if student exists, don't load full profile
+        // Profile data will be loaded asynchronously after redirect
+        const response = await fetch(`/api/students?firebaseUID=${user.uid}&minimal=true`);
         const data = await response.json();
 
+        // Store session data and redirect immediately
+        localStorage.setItem("userType", "student");
+        localStorage.setItem("firebaseUID", user.uid);
+
         if (data.student) {
-          localStorage.setItem("userType", "student");
-          localStorage.setItem("firebaseUID", user.uid);
+          // User exists - go to dashboard (profile loads there)
           router.push("/");
         } else {
-          localStorage.setItem("userType", "student");
-          localStorage.setItem("firebaseUID", user.uid);
+          // New user - go to onboarding
           router.push("/onboarding");
         }
       }
     } catch (error: any) {
       console.error("Login error:", error);
       setError(error.message || "Failed to sign in with Google");
-    } finally {
       setLoading(false);
     }
+    // Note: Don't setLoading(false) on success - let the redirect handle it
   };
 
   const handleAdminLogin = async () => {

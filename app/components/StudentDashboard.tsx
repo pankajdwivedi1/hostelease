@@ -93,35 +93,39 @@ export default function StudentDashboard() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
-          const response = await fetch(`/api/students?firebaseUID=${user.uid}`);
-          const data = await response.json();
+          // ⚡ STEP 1: Load MINIMAL data first for instant dashboard display
+          const minimalResponse = await fetch(`/api/students?firebaseUID=${user.uid}&minimal=true`);
+          const minimalData = await minimalResponse.json();
 
-          if (data.student) {
-            const studentData = {
-              ...data.student,
-              studentStatus: data.student.studentStatus || "in"
+          if (minimalData.student) {
+            // Set minimal student data immediately
+            const minimalStudentData = {
+              ...minimalData.student,
+              studentStatus: minimalData.student.studentStatus || "in"
             };
-            setStudentProfile(studentData);
-            setLoading(false);
+            setStudentProfile(minimalStudentData);
+            setLoading(false); // ⚡ CRITICAL: Show dashboard immediately with minimal data
 
-            const studentId = data.student._id;
+            const studentId = minimalData.student._id;
 
-            const fetchStudentProfile = async () => {
+            // ⚡ STEP 2: Load FULL profile data asynchronously in background
+            const loadFullProfile = async () => {
               try {
-                const response = await fetch(`/api/students?firebaseUID=${user.uid}`);
-                const data = await response.json();
-                if (data.student) {
-                  const studentData = {
-                    ...data.student,
-                    studentStatus: data.student.studentStatus || "in"
+                const fullResponse = await fetch(`/api/students?firebaseUID=${user.uid}`);
+                const fullData = await fullResponse.json();
+                if (fullData.student) {
+                  const fullStudentData = {
+                    ...fullData.student,
+                    studentStatus: fullData.student.studentStatus || "in"
                   };
-                  setStudentProfile(studentData);
+                  setStudentProfile(fullStudentData); // Update with full data
                 }
               } catch (error) {
-                console.error("Error fetching student profile:", error);
+                console.error("Error loading full profile:", error);
               }
             };
 
+            // ⚡ STEP 3: Load permissions asynchronously in background
             const fetchPermissions = async () => {
               try {
                 const permResponse = await fetch(`/api/permissions?studentId=${studentId}`);
@@ -135,10 +139,16 @@ export default function StudentDashboard() {
               }
             };
 
+            // Start loading full data in background (non-blocking)
+            loadFullProfile();
             fetchPermissions();
+
+            // Refresh permissions periodically
             permissionInterval = setInterval(() => {
               fetchPermissions();
             }, 8000); // Optimized from 2000ms to 8000ms
+          } else {
+            setLoading(false);
           }
         } catch (error) {
           console.error("Error fetching student data:", error);

@@ -13,6 +13,8 @@ export default function OnboardingPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
+  const [hostelsLoading, setHostelsLoading] = useState(true);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -38,6 +40,28 @@ export default function OnboardingPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
+
+  // Fetch hostels from API
+  useEffect(() => {
+    const fetchHostels = async () => {
+      try {
+        setHostelsLoading(true);
+        const response = await fetch("/api/hostels");
+        const data = await response.json();
+        if (response.ok && data.hostels) {
+          setHostels(data.hostels);
+        } else {
+          console.error("Failed to fetch hostels:", data.error);
+        }
+      } catch (error) {
+        console.error("Error fetching hostels:", error);
+      } finally {
+        setHostelsLoading(false);
+      }
+    };
+
+    fetchHostels();
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -476,14 +500,16 @@ export default function OnboardingPage() {
                   id="hostelName"
                   value={formData.hostelName}
                   onChange={(e) => handleChange("hostelName", e.target.value)}
+                  disabled={hostelsLoading}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.hostelName ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground focus:outline-none focus:border-foreground disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  <option value="">Select hostel</option>
-                  <option value="Gangotri Hostel">Gangotri Hostel</option>
-                  <option value="Gaytri Hostel">Gaytri Hostel</option>
-                  <option value="Boys Hostel">Boys Hostel</option>
-                  <option value="Guest House Boys Hostel">Guest House Boys Hostel</option>
+                  <option value="">{hostelsLoading ? "Loading hostels..." : "Select hostel"}</option>
+                  {hostels.map((hostel) => (
+                    <option key={hostel._id} value={hostel.name}>
+                      {hostel.name}
+                    </option>
+                  ))}
                 </select>
                 {errors.hostelName && (
                   <p className="mt-1 text-sm text-red-600">{errors.hostelName}</p>

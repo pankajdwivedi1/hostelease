@@ -63,9 +63,17 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const firebaseUID = searchParams.get("firebaseUID");
     const email = searchParams.get("email");
+    const minimal = searchParams.get("minimal") === "true"; // ⚡ OPTIMIZATION: Support minimal data fetch
 
     if (firebaseUID) {
-      const student = await Student.findOne({ firebaseUID });
+      // ⚡ OPTIMIZATION: For login, only select minimal fields to speed up response
+      let student;
+      if (minimal) {
+        student = await Student.findOne({ firebaseUID }).select("_id firebaseUID name email studentStatus hostelName");
+      } else {
+        student = await Student.findOne({ firebaseUID });
+      }
+
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }

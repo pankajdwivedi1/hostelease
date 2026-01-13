@@ -39,18 +39,20 @@ export default function Dashboard() {
       if (storedUserType === "student") {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
           if (user) {
-            const response = await fetch(`/api/students?firebaseUID=${user.uid}`);
+            // ⚡ OPTIMIZED: Use minimal=true to only check if student exists (fastest)
+            const response = await fetch(`/api/students?firebaseUID=${user.uid}&minimal=true`);
             const data = await response.json();
 
             if (data.student) {
               setUserType("student");
+              setLoading(false); // ⚡ Set loading false immediately, StudentDashboard will load its own data
             } else {
               router.push("/onboarding");
             }
           } else {
             router.push("/login");
+            setLoading(false);
           }
-          setLoading(false);
         });
 
         return () => unsubscribe();

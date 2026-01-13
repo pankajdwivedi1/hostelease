@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import * as XLSX from "xlsx";
+import { auth } from "@/lib/firebase";
+import { signOut } from "firebase/auth";
 
 interface Permission {
   _id: string;
@@ -65,119 +67,71 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const router = useRouter();
   const [filter, setFilter] = useState<"all" | "allowed" | "rejected" | "pending">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "in" | "out">("all");
+  const [students, setStudents] = useState<StudentDetails[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState<StudentDetails | null>(null);
   const [showAllStudents, setShowAllStudents] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [hostelFilter, setHostelFilter] = useState<"all" | "Gaytri Hostal" | "Gangotri Hostal" | "Boys Hostal" | "Guest House Boys Hostel">("all");
+  const [hostelFilter, setHostelFilter] = useState<string>("all");
   const [collegeFilter, setCollegeFilter] = useState<string>("all");
   const [semesterFilter, setSemesterFilter] = useState<string>("all");
   const [branchFilter, setBranchFilter] = useState<string>("all");
-  const [permissions, setPermissions] = useState<Permission[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
+  const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
 
-  const [userType, setUserType] = useState<string | null>(null);
-
-  useEffect(() => {
-    setUserType(localStorage.getItem("userType"));
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem("userType");
-    router.push("/login");
-  };
-
-  const exportToExcel = () => {
+  const fetchHostels = async () => {
     try {
-      // Prepare data for export - excluding profilePicture field
-      const exportData = students.map(student => ({
-        "Name": student.name || "",
-        "Email": student.email || "",
-        "Phone Number": student.phoneNumber || "",
-        "Hostel Name": student.hostelName || "",
-        "Room Number": student.roomNumber || "",
-        "Father Name": student.fatherName || "",
-        "Father Number": student.fatherNumber || "",
-        "Mother Name": student.motherName || "",
-        "Mother Number": student.motherNumber || "",
-        "College Name": student.collegeName || "",
-        "Branch": student.branch || "",
-        "Semester": student.semester || "",
-        "Year": student.year || "",
-        "Section": student.section || "",
-        "ERP Information": student.erpInformation || "",
-        "Home State": student.homeState || "",
-        "Home Pin Code": student.homePinCode || "",
-        "Local Guardian Address": student.localGuardianAddress || "",
-        "Local Guardian Phone": student.localGuardianPhoneNumber || "",
-        "Joining Date": student.joiningDate ? new Date(student.joiningDate).toLocaleDateString() : "",
-        "Student Status": student.studentStatus || "",
-      }));
-
-      // Create worksheet
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-
-      // Set column widths
-      const columnWidths = [
-        { wch: 25 }, // Name
-        { wch: 30 }, // Email
-        { wch: 15 }, // Phone Number
-        { wch: 20 }, // Hostel Name
-        { wch: 12 }, // Room Number
-        { wch: 25 }, // Father Name
-        { wch: 15 }, // Father Number
-        { wch: 25 }, // Mother Name
-        { wch: 15 }, // Mother Number
-        { wch: 20 }, // College Name
-        { wch: 10 }, // Branch
-        { wch: 10 }, // Semester
-        { wch: 8 },  // Year
-        { wch: 10 }, // Section
-        { wch: 20 }, // ERP Information
-        { wch: 15 }, // Home State
-        { wch: 12 }, // Home Pin Code
-        { wch: 30 }, // Local Guardian Address
-        { wch: 15 }, // Local Guardian Phone
-        { wch: 15 }, // Joining Date
-        { wch: 12 }, // Student Status
-      ];
-      worksheet['!cols'] = columnWidths;
-
-      // Create workbook
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Students Data");
-
-      // Generate Excel file and download
-      const timestamp = new Date().toISOString().split('T')[0];
-      XLSX.writeFile(workbook, `Hostelease_Students_Data_${timestamp}.xlsx`);
+      const response = await fetch("/api/hostels", { cache: "no-store" });
+      const data = await response.json();
+      if (data.hostels) {
+        setHostels(data.hostels);
+      }
     } catch (error) {
-      console.error("Error exporting to Excel:", error);
-      alert("Failed to export data. Please try again.");
+      console.error("Error fetching hostels:", error);
     }
   };
 
-  useEffect(() => {
-    if (showAllStudents) {
-      window.history.pushState({ page: "all-students" }, "", "");
-    }
-  }, [showAllStudents]);
-
-  useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
-      if (showAllStudents) {
-        setShowAllStudents(false);
+  const fetchStudents = async () => {
+    try {
+      const response = await fetch("/api/students", { cache: "no-store" });
+      const data = await response.json();
+      if (data.students) {
+        setStudents(data.students.map((s: any) => ({
+          id: s._id,
+          name: s.name,
+          email: s.email,
+          phoneNumber: s.phoneNumber,
+          hostelName: s.hostelName,
+          roomNumber: s.roomNumber,
+          profilePicture: s.profilePicture,
+          fatherName: s.fatherName,
+          fatherNumber: s.fatherNumber,
+          motherName: s.motherName,
+          motherNumber: s.motherNumber,
+          homePinCode: s.homePinCode,
+          erpInformation: s.erpInformation,
+          joiningDate: s.joiningDate,
+          branch: s.branch,
+          collegeName: s.collegeName,
+          year: s.year,
+          semester: s.semester,
+          section: s.section,
+          localGuardianAddress: s.localGuardianAddress,
+          localGuardianPhoneNumber: s.localGuardianPhoneNumber,
+          homeState: s.homeState,
+          permissions: []
+        })));
       }
-    };
-
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [showAllStudents]);
+    } catch (error) {
+      console.error("Error fetching students:", error);
+    }
+  };
 
   const fetchPermissions = async () => {
     try {
-      const response = await fetch("/api/permissions");
+      const response = await fetch("/api/permissions", { cache: "no-store" });
       const data = await response.json();
       if (data.permissions) {
         setPermissions(data.permissions);
@@ -187,22 +141,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const fetchStudents = async () => {
-    try {
-      const response = await fetch("/api/students");
-      const data = await response.json();
-      if (data.students) {
-        setStudents(data.students);
-      }
-    } catch (error) {
-      console.error("Error fetching students:", error);
-    }
-  };
-
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([fetchPermissions(), fetchStudents()]);
+      await Promise.all([fetchPermissions(), fetchStudents(), fetchHostels()]);
       setLoading(false);
     };
 
@@ -214,6 +156,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
     return () => clearInterval(interval);
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      localStorage.removeItem("userType");
+      localStorage.removeItem("firebaseUID");
+      router.push("/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+      router.push("/login");
+    }
+  };
 
   const handleDeleteStudent = async (studentId: string) => {
     try {
@@ -239,49 +193,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const handleProfileClick = (studentId: string) => {
-    const student = students.find((s) => s._id === studentId);
-    if (student) {
-      const studentPermissions = permissions.filter((p) => {
-        if (!p.studentId) return false;
-        return typeof p.studentId === "object" ? p.studentId._id === studentId : p.studentId === studentId;
-      });
-      setSelectedStudent({
-        id: student._id,
-        name: student.name,
-        email: student.email,
-        phoneNumber: student.phoneNumber,
-        hostelName: student.hostelName,
-        roomNumber: student.roomNumber,
-        profilePicture: student.profilePicture,
-        fatherName: student.fatherName,
-        fatherNumber: student.fatherNumber,
-        motherName: student.motherName,
-        motherNumber: student.motherNumber,
-        homePinCode: student.homePinCode,
-        erpInformation: student.erpInformation,
-        joiningDate: student.joiningDate,
-        branch: student.branch,
-        collegeName: student.collegeName,
-        year: student.year,
-        semester: student.semester,
-        section: student.section,
-        homeState: student.homeState,
-        localGuardianAddress: student.localGuardianAddress,
-        localGuardianPhoneNumber: student.localGuardianPhoneNumber,
-        permissions: studentPermissions.map((p): SimplePermission => ({
-          id: p._id,
-          fromDateTime: p.fromDateTime,
-          toDateTime: p.toDateTime,
-          reason: p.reason,
-          status: p.status,
-          wardenStatus: p.wardenStatus,
-          deanStatus: p.deanStatus,
-        })),
-      });
-    }
-  };
-
   const handleStatusChange = async (id: string, newStatus: "allowed" | "rejected") => {
     try {
       const userType = localStorage.getItem("userType");
@@ -295,7 +206,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         updateData.status = newStatus;
       }
 
-      // Optimistically update the UI
       setPermissions((prevPermissions) =>
         prevPermissions.map((perm) =>
           perm._id === id ? {
@@ -309,30 +219,42 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       const response = await fetch("/api/permissions", {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updateData),
       });
 
       const data = await response.json();
 
       if (response.ok && data.permission) {
-        // Update with the full permission data from server
         setPermissions((prevPermissions) =>
           prevPermissions.map((perm) =>
             perm._id === id ? data.permission : perm
           )
         );
       } else {
-        // Revert on error
         fetchPermissions();
       }
     } catch (error) {
       console.error("Error updating permission:", error);
-      // Revert on error
       fetchPermissions();
     }
+  };
+
+  const exportToExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(students.map(s => ({
+      Name: s.name,
+      Email: s.email,
+      Phone: s.phoneNumber,
+      Hostel: s.hostelName,
+      Room: s.roomNumber,
+      College: s.collegeName,
+      Branch: s.branch,
+      Year: s.year,
+      Semester: s.semester
+    })));
+    XLSX.utils.book_append_sheet(wb, ws, "Students");
+    XLSX.writeFile(wb, "students_data.xlsx");
   };
 
   const getInitials = (name: string) => {
@@ -344,31 +266,57 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       .slice(0, 2);
   };
 
+  const getHostelCategory = (hostelName: string): string | null => {
+    const name = hostelName.toLowerCase();
+    const exactMatch = hostels.find(h => h.name.toLowerCase() === name);
+    if (exactMatch) return exactMatch.name;
+    if (name.includes("gaytri") || name.includes("hostel a")) return "Gaytri Hostel";
+    if (name.includes("gangotri") || name.includes("hostel b")) return "Gangotri Hostel";
+    if (name.includes("guest") || name.includes("guess") || name.includes("hostel d")) return "Guest House Boys Hostel";
+    if (name.includes("boys") || name.includes("hostel c")) return "Boys Hostel";
+    return null;
+  };
+
+  const handleProfileClick = (studentId: string) => {
+    const student = students.find((s) => s.id === studentId);
+    if (student) {
+      const studentPermissions = permissions.filter((p) => {
+        if (!p.studentId) return false;
+        return typeof p.studentId === "object" ? p.studentId._id === studentId : p.studentId === studentId;
+      });
+      setSelectedStudent({
+        ...student,
+        permissions: studentPermissions.map((p): SimplePermission => ({
+          id: p._id,
+          fromDateTime: p.fromDateTime,
+          toDateTime: p.toDateTime,
+          reason: p.reason,
+          status: p.status,
+          wardenStatus: p.wardenStatus,
+          deanStatus: p.deanStatus,
+        })),
+      });
+    }
+  };
+
   const filteredPermissions = permissions.filter((p) => {
     const matchesStatus = filter === "all" || p.status === filter;
     if (!matchesStatus) return false;
-
     if (statusFilter === "all") return true;
-
     const student = typeof p.studentId === "object" ? p.studentId : null;
     if (!student) return false;
-
     return student.studentStatus === statusFilter;
   });
-
-  const getHostelCategory = (hostelName: string): "Gaytri Hostal" | "Gangotri Hostal" | "Boys Hostal" | "Guest House Boys Hostel" | null => {
-    const name = hostelName.toLowerCase();
-    if (name.includes("gaytri") || name.includes("hostel a") || name.includes("a")) return "Gaytri Hostal";
-    if (name.includes("gangotri") || name.includes("hostel b") || name.includes("b")) return "Gangotri Hostal";
-    if (name.includes("guest") || name.includes("guess")) return "Guest House Boys Hostel";
-    if (name.includes("boys") || name.includes("hostel c") || name.includes("c") || name.includes("hostel d") || name.includes("d")) return "Boys Hostal";
-    return null;
-  };
 
   const filteredStudents = students.filter((student) => {
     const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       student.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesHostel = hostelFilter === "all" || getHostelCategory(student.hostelName) === hostelFilter;
+
+    let matchesHostel = hostelFilter === "all";
+    if (!matchesHostel) {
+      matchesHostel = (getHostelCategory(student.hostelName) || student.hostelName) === hostelFilter;
+    }
+
     const matchesCollege = collegeFilter === "all" || student.collegeName === collegeFilter;
     const matchesSemester = semesterFilter === "all" || student.semester === semesterFilter;
     const matchesBranch = branchFilter === "all" || student.branch === branchFilter;
@@ -382,6 +330,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       </div>
     );
   }
+
+  const userType = typeof window !== "undefined" ? localStorage.getItem("userType") : null;
 
   return (
     <div className="min-h-screen bg-white">
@@ -413,81 +363,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               <div className="flex gap-2 md:gap-3 flex-wrap">
                 <button
                   onClick={() => setFilter("all")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "all"
-                    ? "bg-blue-600 text-background"
-                    : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                    }`}
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                 >
                   All
                 </button>
                 <button
                   onClick={() => setFilter("pending")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "pending"
-                    ? "bg-blue-600 text-background"
-                    : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                    }`}
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "pending" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                 >
                   Pending
                 </button>
                 <button
                   onClick={() => setFilter("allowed")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "allowed"
-                    ? "bg-blue-600 text-background"
-                    : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                    }`}
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "allowed" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                 >
                   Accepted
                 </button>
                 <button
                   onClick={() => setFilter("rejected")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "rejected"
-                    ? "bg-blue-600 text-background"
-                    : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                    }`}
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "rejected" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                 >
                   Rejected
                 </button>
-              </div>
-
-              <div className="flex gap-2 md:gap-3 flex-wrap items-center">
-                <button
-                  onClick={() => setStatusFilter("all")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "all"
-                    ? "bg-blue-600 text-background"
-                    : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                    }`}
-                >
-                  All Students
-                </button>
-                <button
-                  onClick={() => setStatusFilter("in")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "in"
-                    ? "bg-blue-600 text-background"
-                    : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                    }`}
-                >
-                  In
-                </button>
-                <button
-                  onClick={() => setStatusFilter("out")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "out"
-                    ? "bg-blue-600 text-background"
-                    : "bg-filler text-foreground hover:bg-[#E8E8E6]"
-                    }`}
-                >
-                  Out
-                </button>
-                {showRemoveButton && (
-                  <button
-                    onClick={exportToExcel}
-                    className="px-3 md:px-4 py-1.5 md:py-2 rounded-lg bg-green-600 text-white font-medium transition-colors hover:bg-green-700 text-sm whitespace-nowrap flex items-center gap-1.5"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Export Excel
-                  </button>
-                )}
               </div>
 
               <div className="space-y-3">
@@ -496,81 +393,53 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 ) : (
                   filteredPermissions.map((permission) => {
                     const student = typeof permission.studentId === "object" ? permission.studentId : null;
-                    if (!student) {
-                      return null;
-                    }
+                    if (!student) return null;
 
                     const initials = getInitials(student.name);
-                    const showStatus = permission.status === "allowed" || permission.status === "rejected";
                     const profilePic = student.profilePicture && student.profilePicture.trim() !== "" && student.profilePicture !== "undefined";
 
                     return (
-                      <div
-                        key={permission._id}
-                        className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4"
-                      >
-                        {/* Main content wrapper */}
+                      <div key={permission._id} className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4">
                         <div className="flex flex-col gap-3">
-                          {/* Student Info Section */}
                           <div className="flex items-start gap-3 md:gap-4">
                             <button
                               onClick={() => handleProfileClick(student._id)}
-                              className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity overflow-hidden"
+                              className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
                             >
                               {profilePic ? (
-                                <img
-                                  src={student.profilePicture}
-                                  alt={student.name}
-                                  className="w-full h-full rounded-full object-cover"
-                                />
+                                <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
                               ) : (
                                 initials
                               )}
                             </button>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm md:text-base font-semibold text-foreground">
-                                {student.name}
-                              </p>
+                              <p className="text-sm md:text-base font-semibold text-foreground">{student.name}</p>
                               <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-2 mt-0.5 md:mt-1 text-xs md:text-sm text-secondary">
                                 <span>{new Date(permission.fromDateTime).toLocaleString()}</span>
                                 <span className="hidden md:inline">•</span>
                                 <span>to {new Date(permission.toDateTime).toLocaleString()}</span>
                               </div>
-                              <p className="text-sm text-foreground mt-1.5 md:mt-2">
-                                {permission.reason}
-                              </p>
+                              <p className="text-sm text-foreground mt-1.5 md:mt-2">{permission.reason}</p>
                             </div>
                           </div>
 
-                          {/* Approval Section - Stacked on mobile, horizontal on desktop */}
                           <div className="flex items-center justify-around md:justify-end md:gap-8 pt-2 border-t border-gray-200 md:border-0 md:pt-0">
-                            {/* Warden Approval Block */}
                             <div className="flex flex-col items-center gap-1">
                               <span className="text-[11px] md:text-[13px] font-medium text-foreground whitespace-nowrap">Warden approval</span>
                               <div className="flex items-center gap-1.5 md:gap-2">
                                 <button
                                   onClick={() => userType === "warden" && handleStatusChange(permission._id, "allowed")}
                                   disabled={userType !== "warden" || permission.deanStatus !== "pending"}
-                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed"
-                                    ? "border-green-300 bg-green-50 text-gray-500 shadow-sm"
-                                    : "border-gray-200 text-gray-400 hover:border-green-300"
-                                    } ${userType !== "warden" ? "cursor-default" : "cursor-pointer"}`}
+                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${userType !== "warden" ? "cursor-default" : "cursor-pointer"}`}
                                 >
-                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                  </svg>
+                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                 </button>
                                 <button
                                   onClick={() => userType === "warden" && handleStatusChange(permission._id, "rejected")}
                                   disabled={userType !== "warden" || permission.deanStatus !== "pending"}
-                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected"
-                                    ? "border-red-500 bg-red-50 text-red-600 shadow-sm"
-                                    : "border-gray-200 text-gray-400 hover:border-red-300"
-                                    } ${userType !== "warden" ? "cursor-default" : "cursor-pointer"}`}
+                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${userType !== "warden" ? "cursor-default" : "cursor-pointer"}`}
                                 >
-                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
+                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                 </button>
                               </div>
                               {/* Warden Status Label */}
@@ -585,34 +454,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 </span>
                               )}
                             </div>
-
-                            {/* Dean Approval Block */}
                             <div className="flex flex-col items-center gap-1">
                               <span className="text-[11px] md:text-[13px] font-medium text-foreground whitespace-nowrap">Dean approval</span>
                               <div className="flex items-center gap-1.5 md:gap-2">
                                 <button
                                   onClick={() => (userType === "admin" || userType === "developer") && handleStatusChange(permission._id, "allowed")}
                                   disabled={userType !== "admin" && userType !== "developer"}
-                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "allowed"
-                                    ? "border-green-600 bg-green-500 text-white shadow-md scale-105"
-                                    : "border-gray-200 text-gray-400 hover:border-green-300"
-                                    } ${userType !== "admin" && userType !== "developer" ? "cursor-default" : "cursor-pointer"}`}
+                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300"} ${userType !== "admin" && userType !== "developer" ? "cursor-default" : "cursor-pointer"}`}
                                 >
-                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                  </svg>
+                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                 </button>
                                 <button
                                   onClick={() => (userType === "admin" || userType === "developer") && handleStatusChange(permission._id, "rejected")}
                                   disabled={userType !== "admin" && userType !== "developer"}
-                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "rejected"
-                                    ? "border-red-500 bg-red-50 text-red-600 shadow-sm"
-                                    : "border-gray-200 text-gray-400 hover:border-red-300"
-                                    } ${userType !== "admin" && userType !== "developer" ? "cursor-default" : "cursor-pointer"}`}
+                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${userType !== "admin" && userType !== "developer" ? "cursor-default" : "cursor-pointer"}`}
                                 >
-                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
+                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                 </button>
                               </div>
                               {/* Dean Status Label */}
@@ -737,31 +594,65 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
 
                 <div className="flex gap-2 md:gap-3 flex-wrap">
-                  {[
-                    { id: "all", label: "All" },
-                    { id: "Gaytri Hostal", label: "Gaytri Hostal" },
-                    { id: "Gangotri Hostal", label: "Gangotri Hostal" },
-                    { id: "Boys Hostal", label: "Boys Hostal" },
-                    { id: "Guest House Boys Hostel", label: "Guest House Boys Hostel" }
-                  ].map((h) => {
-                    const count = h.id === "all"
-                      ? students.length
-                      : students.filter(s => getHostelCategory(s.hostelName) === h.id).length;
+                  <button
+                    onClick={() => setHostelFilter("all")}
+                    className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-1 ${hostelFilter === "all"
+                      ? "bg-blue-600 text-background"
+                      : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                      }`}
+                  >
+                    <span>All</span>
+                    <span className="text-xs font-bold">{students.length}</span>
+                  </button>
+                  {hostels.map((h) => {
+                    const count = students.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === h.name).length;
 
                     return (
                       <button
-                        key={h.id}
-                        onClick={() => setHostelFilter(h.id as any)}
-                        className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-1 ${hostelFilter === h.id
+                        key={h._id || h.name}
+                        onClick={() => setHostelFilter(h.name)}
+                        className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-1 ${hostelFilter === h.name
                           ? "bg-blue-600 text-background"
                           : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                           }`}
                       >
-                        <span>{h.label}</span>
+                        <span>{h.name}</span>
                         <span className="text-xs font-bold">{count}</span>
                       </button>
                     );
                   })}
+                </div>
+
+                <div className="flex gap-2 md:gap-3 flex-wrap items-center">
+                  <button
+                    onClick={() => setStatusFilter("all")}
+                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                  >
+                    All Students
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter("in")}
+                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                  >
+                    In
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter("out")}
+                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === "out" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                  >
+                    Out
+                  </button>
+                  {showRemoveButton && (
+                    <button
+                      onClick={exportToExcel}
+                      className="px-3 md:px-4 py-1.5 md:py-2 rounded-lg bg-green-600 text-white font-medium transition-colors hover:bg-green-700 text-sm whitespace-nowrap flex items-center gap-1.5"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Export Excel
+                    </button>
+                  )}
                 </div>
 
                 <div className="space-y-3">
@@ -771,57 +662,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     filteredStudents.map((student) => {
                       const studentPermissions = permissions.filter((p) => {
                         if (!p.studentId) return false;
-                        return typeof p.studentId === "object" ? p.studentId._id === student._id : p.studentId === student._id;
+                        return typeof p.studentId === "object" ? p.studentId._id === student.id : p.studentId === student.id;
                       });
                       return (
                         <button
-                          key={student._id}
-                          onClick={() => {
-                            setSelectedStudent({
-                              id: student._id,
-                              name: student.name,
-                              email: student.email,
-                              phoneNumber: student.phoneNumber,
-                              hostelName: student.hostelName,
-                              roomNumber: student.roomNumber,
-                              profilePicture: student.profilePicture,
-                              fatherName: student.fatherName,
-                              fatherNumber: student.fatherNumber,
-                              motherName: student.motherName,
-                              motherNumber: student.motherNumber,
-                              homePinCode: student.homePinCode,
-                              erpInformation: student.erpInformation,
-                              joiningDate: student.joiningDate,
-                              branch: student.branch,
-                              collegeName: student.collegeName,
-                              year: student.year,
-                              semester: student.semester,
-                              section: student.section,
-                              homeState: student.homeState,
-                              localGuardianAddress: student.localGuardianAddress,
-                              localGuardianPhoneNumber: student.localGuardianPhoneNumber,
-                              permissions: studentPermissions.map((p): SimplePermission => ({
-                                id: p._id,
-                                fromDateTime: p.fromDateTime,
-                                toDateTime: p.toDateTime,
-                                reason: p.reason,
-                                status: p.status,
-                                wardenStatus: p.wardenStatus,
-                                deanStatus: p.deanStatus,
-                              })),
-                            });
-                            setShowAllStudents(false);
-                          }}
+                          key={student.id}
+                          onClick={() => handleProfileClick(student.id)}
                           className="w-full text-left rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4 hover:bg-[#E8E8E6] transition-colors"
                         >
                           <div className="flex items-center gap-3 md:gap-4">
                             <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0">
                               {student.profilePicture ? (
-                                <img
-                                  src={student.profilePicture}
-                                  alt={student.name}
-                                  className="w-full h-full rounded-full object-cover"
-                                />
+                                <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
                               ) : (
                                 getInitials(student.name)
                               )}
@@ -1083,8 +935,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             </div>
           </div>
         </div>
-      )}
+      )
+      }
     </div>
   );
 }
-
