@@ -41,16 +41,17 @@ interface StudentProfile {
   homeState?: string;
 }
 
-export default function StudentDashboard() {
+export default function StudentDashboard({ initialData }: { initialData?: any }) {
   const router = useRouter();
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [showPermissionsHistory, setShowPermissionsHistory] = useState(false);
   const [fromDateTime, setFromDateTime] = useState("");
   const [toDateTime, setToDateTime] = useState("");
   const [reason, setReason] = useState("");
-  const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null);
+  const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(initialData || null);
   const [permissions, setPermissions] = useState<Permission[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialData);
   const [submitting, setSubmitting] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
   const [isAtHostel, setIsAtHostel] = useState(false);
@@ -78,8 +79,8 @@ export default function StudentDashboard() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      localStorage.removeItem("userType");
-      localStorage.removeItem("firebaseUID");
+      sessionStorage.removeItem("userType");
+      sessionStorage.removeItem("firebaseUID");
       router.push("/login");
     } catch (error) {
       console.error("Error signing out:", error);
@@ -89,83 +90,99 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     let permissionInterval: NodeJS.Timeout | null = null;
+    let isMounted = true;
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
+    const loadData = async (user: any) => {
+      // If we have initialData, we skip the minimal fetch!
+      let currentStudent = initialData;
+
+      if (!currentStudent) {
         try {
-          // ⚡ STEP 1: Load MINIMAL data first for instant dashboard display
+          // ⚡ STEP 1: Load MINIMAL data first if not provided
           const minimalResponse = await fetch(`/api/students?firebaseUID=${user.uid}&minimal=true`);
           const minimalData = await minimalResponse.json();
-
           if (minimalData.student) {
-            // Set minimal student data immediately
-            const minimalStudentData = {
+            currentStudent = {
               ...minimalData.student,
               studentStatus: minimalData.student.studentStatus || "in"
             };
-            setStudentProfile(minimalStudentData);
-            setLoading(false); // ⚡ CRITICAL: Show dashboard immediately with minimal data
-
-            const studentId = minimalData.student._id;
-
-            // ⚡ STEP 2: Load FULL profile data asynchronously in background
-            const loadFullProfile = async () => {
-              try {
-                const fullResponse = await fetch(`/api/students?firebaseUID=${user.uid}`);
-                const fullData = await fullResponse.json();
-                if (fullData.student) {
-                  const fullStudentData = {
-                    ...fullData.student,
-                    studentStatus: fullData.student.studentStatus || "in"
-                  };
-                  setStudentProfile(fullStudentData); // Update with full data
-                }
-              } catch (error) {
-                console.error("Error loading full profile:", error);
-              }
-            };
-
-            // ⚡ STEP 3: Load permissions asynchronously in background
-            const fetchPermissions = async () => {
-              try {
-                const permResponse = await fetch(`/api/permissions?studentId=${studentId}`);
-                const permData = await permResponse.json();
-
-                if (permData.permissions) {
-                  setPermissions(permData.permissions);
-                }
-              } catch (error) {
-                console.error("Error fetching permissions:", error);
-              }
-            };
-
-            // Start loading full data in background (non-blocking)
-            loadFullProfile();
-            fetchPermissions();
-
-            // Refresh permissions periodically
-            permissionInterval = setInterval(() => {
-              fetchPermissions();
-            }, 8000); // Optimized from 2000ms to 8000ms
-          } else {
-            setLoading(false);
+            if (isMounted) {
+              setStudentProfile(currentStudent);
+              setLoading(false);
+            }
           }
         } catch (error) {
-          console.error("Error fetching student data:", error);
-          setLoading(false);
+          console.error("Error fetching minimal student data:", error);
         }
       } else {
+        // If initialData was provided, we're already loading=false (state init)
+        // But we might want to ensure we fetch permissions/full profile
+      }
+
+      if (currentStudent && isMounted) {
         setLoading(false);
+        const studentId = currentStudent._id;
+
+        // ⚡ STEP 2: Load FULL profile data asynchronously in background
+        const loadFullProfile = async () => {
+          try {
+            const fullResponse = await fetch(`/api/students?firebaseUID=${user.uid}`);
+            const fullData = await fullResponse.json();
+            if (fullData.student && isMounted) {
+              const fullStudentData = {
+                ...fullData.student,
+                studentStatus: fullData.student.studentStatus || "in"
+              };
+              setStudentProfile(fullStudentData);
+            }
+          } catch (error) {
+            console.error("Error loading full profile:", error);
+          }
+        };
+
+        // ⚡ STEP 3: Load permissions asynchronously in background
+        const fetchPermissions = async () => {
+          try {
+            const permResponse = await fetch(`/api/permissions?studentId=${studentId}`);
+            const permData = await permResponse.json();
+
+            if (permData.permissions && isMounted) {
+              setPermissions(permData.permissions);
+            }
+          } catch (error) {
+            console.error("Error fetching permissions:", error);
+          }
+        };
+
+        // Start loading full data in background (non-blocking)
+        loadFullProfile();
+        fetchPermissions();
+
+        // Refresh permissions periodically
+        permissionInterval = setInterval(() => {
+          fetchPermissions();
+        }, 8000);
+      } else if (!currentStudent && isMounted) {
+        setLoading(false);
+      }
+    };
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        loadData(user);
+      } else {
+        if (isMounted) setLoading(false);
       }
     });
 
     return () => {
+      isMounted = false;
       unsubscribe();
       if (permissionInterval) {
         clearInterval(permissionInterval);
       }
     };
-  }, []);
+  }, [initialData]);
 
   const handleRequestPermission = async () => {
     if (!fromDateTime || !toDateTime || !reason || !studentProfile) return;
@@ -179,8 +196,8 @@ export default function StudentDashboard() {
         },
         body: JSON.stringify({
           studentId: studentProfile._id,
-          fromDateTime,
-          toDateTime,
+          fromDateTime: new Date(fromDateTime).toISOString(),
+          toDateTime: new Date(toDateTime).toISOString(),
           reason,
         }),
       });
@@ -463,6 +480,13 @@ export default function StudentDashboard() {
                     )}
                   </button>
                   <button
+                    onClick={() => setShowPermissionsHistory(!showPermissionsHistory)}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${showPermissionsHistory ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"}`}
+                    title="View Permission History"
+                  >
+                    🕙 History
+                  </button>
+                  <button
                     onClick={handleLogout}
                     className="px-4 py-2 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm font-medium hover:bg-filler transition-colors"
                     title="Logout"
@@ -566,44 +590,82 @@ export default function StudentDashboard() {
                 </div>
               )}
 
-              <div className="space-y-4">
-                <h2 className="text-base font-semibold text-foreground">Permission History</h2>
-                {permissions.length === 0 ? (
-                  <p className="text-secondary text-sm">No permission requests yet</p>
-                ) : (
-                  <div className="space-y-3">
-                    {permissions.map((permission) => (
-                      <div
-                        key={permission._id}
-                        className="p-3 md:p-4 rounded-lg border border-solid border-[#9CA3AF] bg-filler"
+              {showPermissionsHistory && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+                  <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl flex flex-col">
+                    <div className="p-4 border-b flex items-center justify-between bg-gray-50">
+                      <h2 className="text-lg font-bold text-gray-900">Permission History</h2>
+                      <button
+                        onClick={() => setShowPermissionsHistory(false)}
+                        className="p-2 hover:bg-gray-200 rounded-full transition-colors"
                       >
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <p className="text-sm text-secondary">
-                              From: {new Date(permission.fromDateTime).toLocaleString()}
-                            </p>
-                            <p className="text-base font-medium text-foreground mt-0.5 md:mt-1">
-                              To: {new Date(permission.toDateTime).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                        <p className="text-sm text-foreground mt-1.5 md:mt-2">Reason: {permission.reason}</p>
+                        <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
 
-                        <div className="flex items-center gap-6 mt-3 pt-3 border-t border-gray-100">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${permission.wardenStatus === "allowed" ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" : permission.wardenStatus === "rejected" ? "bg-red-500" : "bg-gray-300"}`} />
-                            <span className="text-[10px] uppercase font-bold text-secondary text-center leading-tight">Approved by<br />Warden</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${permission.deanStatus === "allowed" ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" : permission.deanStatus === "rejected" ? "bg-red-500" : "bg-gray-300"}`} />
-                            <span className="text-[10px] uppercase font-bold text-secondary text-center leading-tight">Approved by<br />Dean</span>
-                          </div>
+                    <div className="overflow-y-auto p-4 space-y-3">
+                      {permissions.length === 0 ? (
+                        <div className="text-center py-10 text-gray-500">
+                          <p>No permission requests found.</p>
                         </div>
-                      </div>
-                    ))}
+                      ) : (
+                        permissions.map((permission) => (
+                          <div
+                            key={permission._id}
+                            className="p-4 rounded-xl border border-gray-100 bg-white shadow-sm hover:shadow-md transition-shadow"
+                          >
+                            <div className="flex flex-col gap-2">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <span className="font-medium text-gray-900">From:</span>
+                                    {new Date(permission.fromDateTime).toLocaleString("en-IN", {
+                                      timeZone: "Asia/Kolkata",
+                                      dateStyle: "medium",
+                                      timeStyle: "short",
+                                    })}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
+                                    <span className="font-medium text-gray-900">To:</span>
+                                    {new Date(permission.toDateTime).toLocaleString("en-IN", {
+                                      timeZone: "Asia/Kolkata",
+                                      dateStyle: "medium",
+                                      timeStyle: "short",
+                                    })}
+                                  </div>
+                                </div>
+                                <div className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${permission.status === 'allowed' ? 'bg-green-100 text-green-700' :
+                                    permission.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                      'bg-yellow-100 text-yellow-700'
+                                  }`}>
+                                  {permission.status}
+                                </div>
+                              </div>
+
+                              <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded-lg mt-2">
+                                <span className="font-semibold text-gray-900">Reason:</span> {permission.reason}
+                              </p>
+
+                              <div className="flex items-center gap-4 mt-2 pt-2 border-t border-gray-50">
+                                <div className="flex items-center gap-2">
+                                  <div className={`w-2 h-2 rounded-full ${permission.wardenStatus === "allowed" ? "bg-green-500" : permission.wardenStatus === "rejected" ? "bg-red-500" : "bg-gray-300"}`} />
+                                  <span className="text-xs text-gray-500">Warden</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className={`w-2 h-2 rounded-full ${permission.deanStatus === "allowed" ? "bg-green-500" : permission.deanStatus === "rejected" ? "bg-red-500" : "bg-gray-300"}`} />
+                                  <span className="text-xs text-gray-500">Dean</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -662,7 +724,7 @@ export default function StudentDashboard() {
                     {studentProfile.joiningDate && (
                       <div className="flex flex-col">
                         <p className="text-secondary mb-1">Joining Date</p>
-                        <p className="text-foreground font-medium">{new Date(studentProfile.joiningDate).toLocaleDateString()}</p>
+                        <p className="text-foreground font-medium">{new Date(studentProfile.joiningDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</p>
                       </div>
                     )}
                     {studentProfile.branch && (

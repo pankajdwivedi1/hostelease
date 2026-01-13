@@ -160,8 +160,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      localStorage.removeItem("userType");
-      localStorage.removeItem("firebaseUID");
+      sessionStorage.removeItem("userType");
+      sessionStorage.removeItem("firebaseUID");
       router.push("/login");
     } catch (error) {
       console.error("Logout error:", error);
@@ -195,7 +195,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const handleStatusChange = async (id: string, newStatus: "allowed" | "rejected") => {
     try {
-      const userType = localStorage.getItem("userType");
+      const userType = sessionStorage.getItem("userType");
       const updateData: any = { permissionId: id };
 
       if (userType === "warden") {
@@ -331,7 +331,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     );
   }
 
-  const userType = typeof window !== "undefined" ? localStorage.getItem("userType") : null;
+  const userType = typeof window !== "undefined" ? sessionStorage.getItem("userType") : null;
 
   return (
     <div className="min-h-screen bg-white">
@@ -415,9 +415,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             <div className="flex-1 min-w-0">
                               <p className="text-sm md:text-base font-semibold text-foreground">{student.name}</p>
                               <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-2 mt-0.5 md:mt-1 text-xs md:text-sm text-secondary">
-                                <span>{new Date(permission.fromDateTime).toLocaleString()}</span>
+                                <span>{new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
                                 <span className="hidden md:inline">•</span>
-                                <span>to {new Date(permission.toDateTime).toLocaleString()}</span>
+                                <span>to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
                               </div>
                               <p className="text-sm text-foreground mt-1.5 md:mt-2">{permission.reason}</p>
                             </div>
@@ -794,7 +794,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     {selectedStudent.joiningDate && (
                       <div>
                         <p className="text-secondary text-sm mb-1.5">Joining Date</p>
-                        <p className="text-foreground font-medium break-words">{new Date(selectedStudent.joiningDate).toLocaleDateString()}</p>
+                        <p className="text-foreground font-medium break-words">{new Date(selectedStudent.joiningDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</p>
                       </div>
                     )}
                     {selectedStudent.branch && (
@@ -872,9 +872,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <div className="flex items-center justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-1.5 md:gap-2 text-sm text-secondary mb-1">
-                                <span>{new Date(permission.fromDateTime).toLocaleString()}</span>
+                                <span>{new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
                                 <span>•</span>
-                                <span>to {new Date(permission.toDateTime).toLocaleString()}</span>
+                                <span>to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
                               </div>
                               <p className="text-sm text-foreground">
                                 {permission.reason}

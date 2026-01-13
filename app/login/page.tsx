@@ -39,8 +39,8 @@ export default function LoginPage() {
         const data = await response.json();
 
         // Store session data and redirect immediately
-        localStorage.setItem("userType", "student");
-        localStorage.setItem("firebaseUID", user.uid);
+        sessionStorage.setItem("userType", "student");
+        sessionStorage.setItem("firebaseUID", user.uid);
 
         if (data.student) {
           // User exists - go to dashboard (profile loads there)
@@ -91,7 +91,7 @@ export default function LoginPage() {
       }
 
       if (data.success) {
-        localStorage.setItem("userType", "admin");
+        sessionStorage.setItem("userType", "admin");
         router.push("/");
       }
     } catch (error: any) {
@@ -136,7 +136,7 @@ export default function LoginPage() {
       }
 
       if (data.success) {
-        localStorage.setItem("userType", "warden");
+        sessionStorage.setItem("userType", "warden");
         router.push("/");
       }
     } catch (error: any) {
@@ -176,7 +176,7 @@ export default function LoginPage() {
       }
 
       if (data.success) {
-        localStorage.setItem("userType", "developer");
+        sessionStorage.setItem("userType", "developer");
         router.push("/");
       }
     } catch (error: any) {

@@ -69,7 +69,8 @@ export async function GET(request: NextRequest) {
       // ⚡ OPTIMIZATION: For login, only select minimal fields to speed up response
       let student;
       if (minimal) {
-        student = await Student.findOne({ firebaseUID }).select("_id firebaseUID name email studentStatus hostelName");
+        // ⚡ OPTIMIZED: Ultra-minimal selection for fastest login flow
+        student = await Student.findOne({ firebaseUID }).select("_id firebaseUID name studentStatus");
       } else {
         student = await Student.findOne({ firebaseUID });
       }

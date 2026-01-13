@@ -9,6 +9,7 @@ import AdminDashboard from "./components/AdminDashboard";
 
 export default function Dashboard() {
   const [userType, setUserType] = useState<string | null>(null);
+  const [studentData, setStudentData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -16,7 +17,8 @@ export default function Dashboard() {
     const checkAuth = async () => {
       if (typeof window === "undefined") return;
 
-      const storedUserType = localStorage.getItem("userType");
+      // ⚡ CHANGED: Use sessionStorage instead of localStorage to allow independent tabs
+      const storedUserType = sessionStorage.getItem("userType");
 
       if (storedUserType === "admin") {
         setUserType("admin");
@@ -44,6 +46,7 @@ export default function Dashboard() {
             const data = await response.json();
 
             if (data.student) {
+              setStudentData(data.student);
               setUserType("student");
               setLoading(false); // ⚡ Set loading false immediately, StudentDashboard will load its own data
             } else {
@@ -80,7 +83,7 @@ export default function Dashboard() {
   return (
     <>
       {userType === "student" ? (
-        <StudentDashboard />
+        <StudentDashboard initialData={studentData} />
       ) : userType === "warden" ? (
         <AdminDashboard title="Warden Dashboard" />
       ) : userType === "developer" ? (
