@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 
 interface Permission {
   _id: string;
@@ -56,6 +57,9 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   const [checkingIn, setCheckingIn] = useState(false);
   const [isAtHostel, setIsAtHostel] = useState(false);
   const [isLocationChecking, setIsLocationChecking] = useState(false);
+  const [showSecurityChallenge, setShowSecurityChallenge] = useState(false);
+  const [verifyingSecurity, setVerifyingSecurity] = useState(false);
+  const [securityError, setSecurityError] = useState("");
 
   const HOSTEL_LAT = 23.2483348;
   const HOSTEL_LNG = 77.5026058;
@@ -108,6 +112,12 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             };
             if (isMounted) {
               setStudentProfile(currentStudent);
+
+              // Check if security challenge is needed
+              if (currentStudent.authenticators && currentStudent.authenticators.length > 0) {
+                setShowSecurityChallenge(true);
+              }
+
               setLoading(false);
             }
           }
@@ -433,6 +443,63 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     }, 15000);
   };
 
+  const handleSecurityChallenge = async () => {
+    if (!studentProfile) return;
+
+    if (!browserSupportsWebAuthn()) {
+      setSecurityError("WebAuthn is not supported in this browser. Please use HTTPS or localhost.");
+      return;
+    }
+
+    try {
+      setVerifyingSecurity(true);
+      setSecurityError("");
+
+      // 1. Get options
+      const optionsResponse = await fetch("/api/auth/webauthn/authenticate/options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ firebaseUID: sessionStorage.getItem("firebaseUID") }),
+      });
+      const options = await optionsResponse.json();
+
+      if (!optionsResponse.ok) throw new Error(options.error || "Failed to start security challenge");
+
+      // 2. Start authentication
+      const assertionResponse = await startAuthentication(options);
+
+      // 3. Verify
+      const verifyResponse = await fetch("/api/auth/webauthn/authenticate/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firebaseUID: sessionStorage.getItem("firebaseUID"),
+          assertionResponse,
+        }),
+      });
+      const verification = await verifyResponse.json();
+
+      if (verification.verified) {
+        setShowSecurityChallenge(false);
+      } else {
+        throw new Error("Security verification failed");
+      }
+    } catch (error: any) {
+      console.error("Security challenge error:", error);
+      const isNotSecure = typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost';
+
+      if (error.name === "NotAllowedError" && isNotSecure) {
+        setSecurityError("Verification blocked. Browsers require HTTPS or Localhost for biometric security. Testing over local IP is not supported by Chrome.");
+      } else if (error.name === "SecurityError") {
+        setSecurityError("Security Error: Biometrics require HTTPS. If you are testing over local IP, please use Localhost instead.");
+      } else {
+        setSecurityError(error.message || "Failed to verify identity. Please try again.");
+      }
+    } finally {
+      setVerifyingSecurity(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -451,6 +518,53 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
   return (
     <div className="min-h-screen bg-white">
+      {showSecurityChallenge && (
+        <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 mb-6">
+            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-foreground mb-2">Security Verification</h2>
+          <p className="text-secondary text-sm mb-4 max-w-xs">
+            Please verify your identity using biometric scan to access your dashboard.
+          </p>
+
+          {typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost' && (
+            <div className="mb-6 p-2 rounded bg-amber-50 border border-amber-100 text-[10px] text-amber-700 max-w-xs">
+              ⚠️ <b>Security Limitation:</b> Biometrics require <b>HTTPS</b>. Browsers disable this feature on local IP addresses (like {window.location.hostname}). Please test on <b>localhost</b> or via <b>tunnel (ngrok)</b>.
+            </div>
+          )}
+
+          {securityError && (
+            <div className="mb-6 p-3 rounded-lg bg-red-50 text-red-600 text-xs border border-red-100">
+              {securityError}
+            </div>
+          )}
+
+          <button
+            onClick={handleSecurityChallenge}
+            disabled={verifyingSecurity}
+            className="w-full max-w-xs h-12 bg-black text-white rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+          >
+            {verifyingSecurity ? "Verifying..." : "Verify Identity"}
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className="mt-4 text-sm text-secondary hover:text-foreground font-medium"
+          >
+            Sign Out
+          </button>
+
+          <button
+            onClick={() => setShowSecurityChallenge(false)}
+            className="mt-8 text-[10px] text-gray-300 hover:text-gray-400"
+          >
+            Debug: Skip Challenge (Development only)
+          </button>
+        </div>
+      )}
       <main className="w-full max-w-4xl mx-auto">
         <div className="p-4 md:p-6 space-y-4 md:space-y-6">
           {!showProfile ? (

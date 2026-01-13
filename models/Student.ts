@@ -1,6 +1,15 @@
 import mongoose, { Schema, Model } from "mongoose";
 
-export interface IStudent {
+export interface IAuthenticator {
+  credentialID: string;
+  credentialPublicKey: string;
+  counter: number;
+  credentialDeviceType: string;
+  credentialBackedUp: boolean;
+  transports?: string[];
+}
+
+export interface IStudentBase {
   _id?: string;
   firebaseUID: string;
   name: string;
@@ -31,9 +40,13 @@ export interface IStudent {
     accuracy: number;
     timestamp: Date;
   };
+  authenticators?: IAuthenticator[];
+  currentChallenge?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
+
+export type IStudent = IStudentBase;
 
 const StudentSchema = new Schema<IStudent>(
   {
@@ -154,6 +167,15 @@ const StudentSchema = new Schema<IStudent>(
         required: false,
       },
     },
+    authenticators: [{
+      credentialID: { type: String, required: true },
+      credentialPublicKey: { type: String, required: true },
+      counter: { type: Number, required: true },
+      credentialDeviceType: { type: String, required: true },
+      credentialBackedUp: { type: Boolean, required: true },
+      transports: [String],
+    }],
+    currentChallenge: { type: String, required: false },
   },
   {
     timestamps: true,
@@ -169,4 +191,3 @@ const Student: Model<IStudent> =
   mongoose.models.Student || mongoose.model<IStudent>("Student", StudentSchema);
 
 export default Student;
-
