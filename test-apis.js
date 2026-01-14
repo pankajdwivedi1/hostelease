@@ -90,15 +90,6 @@ async function runTests() {
     );
     devAuth.success ? passed++ : failed++;
 
-    // 2. Test Settings API
-    console.log(`\n${colors.blue}⚙️  Admin Settings API${colors.reset}\n`);
-
-    const settings = await testAPI(
-        'Get Admin Settings',
-        'GET',
-        '/api/admin/settings'
-    );
-    settings.success ? passed++ : failed++;
 
     // 3. Test Hostels API
     console.log(`\n${colors.blue}🏨 Hostel Management API${colors.reset}\n`);
@@ -148,12 +139,8 @@ async function runTests() {
         console.log(`${colors.yellow}⚠️  Some APIs need attention. Check the errors above.${colors.reset}\n`);
     }
 
-    // Additional Information
     console.log(`${colors.cyan}ℹ️  Additional Information:${colors.reset}`);
-    if (settings.success && settings.data?.settings) {
-        console.log(`   Hostel Location: ${settings.data.settings.hostelLocation?.lat}, ${settings.data.settings.hostelLocation?.lng}`);
-        console.log(`   Check-in Radius: ${settings.data.settings.radius || 200} meters`);
-    }
+
     if (hostels.success && hostels.data?.hostels) {
         console.log(`   Total Hostels: ${hostels.data.hostels.length}`);
     }

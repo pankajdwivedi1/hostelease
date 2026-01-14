@@ -4,7 +4,7 @@ Generated on: 2026-01-13
 
 ## 📋 API Overview
 
-Your hostelease application has **10 API endpoints** organized into the following categories:
+Your hostelease application has **8 API endpoints** organized into the following categories:
 
 ### 🔐 Authentication APIs (3)
 
@@ -47,38 +47,6 @@ Your hostelease application has **10 API endpoints** organized into the followin
   - Success: `{ "success": true }`
   - Error: `{ "error": "Invalid password" }` (401)
 
----
-
-### ⚙️ Admin Settings API (1)
-
-#### 4. **Admin Settings**
-- **Endpoints:**
-  - `GET /api/admin/settings` - Fetch hostel location and radius settings
-  - `POST /api/admin/settings` - Update hostel location and radius settings
-- **Purpose:** Manage hostel location coordinates and check-in radius
-- **Status:** ✅ **Working** - MongoDB dependent
-- **Default Values:**
-  - Location: `{ lat: 23.2483348, lng: 77.5026058 }`
-  - Radius: `200 meters`
-
-**GET Response:**
-```json
-{
-  "settings": {
-    "hostelLocation": { "lat": 23.2483348, "lng": 77.5026058 },
-    "radius": 200
-  }
-}
-```
-
-**POST Request Body:**
-```json
-{
-  "lat": 23.2483348,
-  "lng": 77.5026058,
-  "radius": 200
-}
-```
 
 ---
 
@@ -114,7 +82,7 @@ Your hostelease application has **10 API endpoints** organized into the followin
 
 ---
 
-### 👨‍🎓 Student Management APIs (4)
+### 👨‍🎓 Student Management APIs (3)
 
 #### 6. **Students - Main**
 - **Endpoints:**
@@ -156,30 +124,6 @@ Your hostelease application has **10 API endpoints** organized into the followin
 }
 ```
 
-#### 7. **Student Check-In**
-- **Endpoint:** `POST /api/students/checkin`
-- **Purpose:** Check student into hostel using geolocation
-- **Status:** ✅ **Working** - Uses Haversine formula for distance calculation
-- **Validation:** Student must be within the defined radius of hostel location
-- **Request Body:**
-  ```json
-  {
-    "studentId": "string",
-    "lat": 23.2483348,
-    "lng": 77.5026058,
-    "accuracy": 10
-  }
-  ```
-- **Response:**
-  ```json
-  {
-    "success": true,
-    "student": {...},
-    "distance": 50
-  }
-  ```
-- **Error Cases:**
-  - Student outside hostel radius: `{ "error": "You are not inside the hostel", "distance": 500, "radius": 200 }`
 
 #### 8. **Student Status Update**
 - **Endpoint:** `PATCH /api/students/status`
@@ -305,11 +249,6 @@ All 10 API endpoints have:
    curl -X POST http://localhost:3000/api/developer/auth -H "Content-Type: application/json" -d '{"password":"pankaj852"}'
    ```
 
-2. **Test Settings API:**
-   ```bash
-   # Get Settings
-   curl http://localhost:3000/api/admin/settings
-   ```
 
 3. **Test Hostels API:**
    ```bash
@@ -336,11 +275,10 @@ All 10 API endpoints have:
 | Category | Endpoint Count | Status | Notes |
 |----------|---------------|--------|-------|
 | Authentication | 3 | ✅ Working | Hardcoded passwords |
-| Admin Settings | 1 | ✅ Working | MongoDB required |
 | Hostel Management | 1 | ✅ Working | MongoDB required |
-| Student Management | 4 | ✅ Working | MongoDB + Firebase required |
+| Student Management | 3 | ✅ Working | MongoDB + Firebase required |
 | Permission Management | 1 | ✅ Working | MongoDB required, Complex logic |
-| **TOTAL** | **10** | **✅ All Working** | - |
+| **TOTAL** | **8** | **✅ All Working** | - |
 
 ---
 
