@@ -33,8 +33,8 @@ async function connectDB() {
       bufferCommands: false,
       serverSelectionTimeoutMS: 10000, // 10 seconds to select a server
       socketTimeoutMS: 45000, // 45 seconds for socket operations
-      maxPoolSize: 10, // Maximum number of connections in the pool
-      minPoolSize: 2, // Minimum number of connections in the pool
+      maxPoolSize: 100, // Increased for high concurrency
+      minPoolSize: 10, // Maintain a larger base pool
       maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
       connectTimeoutMS: 10000, // 10 seconds to establish initial connection
     };

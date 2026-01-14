@@ -8,9 +8,12 @@ export interface IAttendance extends Document {
     roomNumber: string;
     date: string; // Format: YYYY-MM-DD
     timestamp: Date;
+    istTime: string; // Format: HH:mm:ss
+    istDate: string; // Format: DD-MM-YYYY
     location: {
         lat: number;
         lng: number;
+        accuracy?: number;
     };
     deviceId: string;
     status: "present";
@@ -53,9 +56,16 @@ const AttendanceSchema = new Schema<IAttendance>(
             type: Date,
             default: Date.now,
         },
+        istTime: {
+            type: String,
+        },
+        istDate: {
+            type: String,
+        },
         location: {
             lat: { type: Number, required: true },
             lng: { type: Number, required: true },
+            accuracy: { type: Number, required: false },
         },
         deviceId: {
             type: String,

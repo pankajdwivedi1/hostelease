@@ -4,6 +4,11 @@ import Student from "@/models/Student";
 import Attendance from "@/models/Attendance";
 import AdminSettings from "@/models/AdminSettings";
 
+// Cache for AdminSettings to reduce DB load during peak times
+let cachedAdminSettings: any = null;
+let lastCacheUpdate = 0;
+const CACHE_DURATION = 60000; // 1 minute
+
 // Haversine formula to calculate distance between two coordinates
 function calculateDistance(
     lat1: number,
@@ -68,10 +73,39 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 3. Verify Location and Time
-        let adminSettings = await AdminSettings.findOne();
-        if (!adminSettings || !adminSettings.hostelLocation) {
-            return NextResponse.json({ error: "Hostel location not configured" }, { status: 400 });
+        // 3. Verify Location and Time (Optimized with short-term cache)
+        const nowMs = Date.now();
+        let adminSettings;
+
+        if (cachedAdminSettings && (nowMs - lastCacheUpdate < CACHE_DURATION)) {
+            adminSettings = cachedAdminSettings;
+        } else {
+            adminSettings = await AdminSettings.findOne().lean();
+            cachedAdminSettings = adminSettings;
+            lastCacheUpdate = nowMs;
+        }
+
+        // Use provided coordinates with their specific radii
+        const defaultLocations = [
+            { lat: 23.2483348, lng: 77.5026058, radius: 200, name: "Original Location" }, // Previous location
+            { lat: 23.2475529, lng: 77.5035134, radius: 100, name: "Loc 1" },
+            { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Loc 2" }
+        ];
+
+        const hostelLocations = (adminSettings?.hostelLocations && adminSettings.hostelLocations.length > 0)
+            ? adminSettings.hostelLocations
+            : defaultLocations;
+
+        // Check GPS Accuracy (New requirement)
+        const bodyAccuracy = body.accuracy; // We'll need to update frontend to pass this
+        if (bodyAccuracy !== undefined && bodyAccuracy > 50) {
+            return NextResponse.json(
+                {
+                    error: "Waiting for better GPS signal... (Accuracy too low)",
+                    accuracy: bodyAccuracy
+                },
+                { status: 400 }
+            );
         }
 
         // Check Time Window (IST)
@@ -79,8 +113,8 @@ export async function POST(request: NextRequest) {
         const istTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false }); // "HH:mm:ss"
         const istTime = istTimeStr.split(":").slice(0, 2).join(":"); // "HH:mm"
 
-        const startTime = adminSettings.attendanceStartTime || "21:00";
-        const endTime = adminSettings.attendanceEndTime || "22:30";
+        const startTime = adminSettings?.attendanceStartTime || "21:00";
+        const endTime = adminSettings?.attendanceEndTime || "22:30";
 
         if (istTime < startTime || istTime > endTime) {
             return NextResponse.json(
@@ -94,27 +128,40 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const distance = calculateDistance(
-            lat,
-            lng,
-            adminSettings.hostelLocation.lat,
-            adminSettings.hostelLocation.lng
-        );
+        // Check if student is within any of the allowed circles
+        let isInsideAny = false;
+        let closestInfo = { distance: Infinity, radius: 0 };
 
-        const radius = adminSettings.radius || 200;
+        for (const loc of hostelLocations) {
+            const dist = calculateDistance(lat, lng, loc.lat, loc.lng);
+            // Default to 100 if radius.radius is missing (though our schema now has it)
+            const allowedRadius = (loc as any).radius || 100;
 
-        if (distance > radius) {
+            if (dist <= allowedRadius) {
+                isInsideAny = true;
+                break;
+            }
+            if (dist < closestInfo.distance) {
+                closestInfo = { distance: dist, radius: allowedRadius };
+            }
+        }
+
+        if (!isInsideAny) {
             return NextResponse.json(
                 {
                     error: "You are not in campus",
-                    distance: Math.round(distance),
-                    radius,
+                    distance: Math.round(closestInfo.distance),
+                    radius: closestInfo.radius,
                 },
                 { status: 400 }
             );
         }
 
         // 4. Save Attendance
+        const nowIST = new Date();
+        const readableTime = nowIST.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
+        const readableDate = nowIST.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric" }).split('/').join('-');
+
         const newAttendance = await Attendance.create({
             studentId: student._id,
             firebaseUID: student.firebaseUID,
@@ -122,7 +169,9 @@ export async function POST(request: NextRequest) {
             hostelName: student.hostelName,
             roomNumber: student.roomNumber,
             date: today,
-            location: { lat, lng },
+            istTime: readableTime,
+            istDate: readableDate,
+            location: { lat, lng, accuracy: bodyAccuracy },
             deviceId: deviceId,
             status: "present"
         });
@@ -158,9 +207,18 @@ export async function GET(request: NextRequest) {
                 day: "2-digit",
             }).split('/').reverse().join('-');
 
-            const [attendance, adminSettings] = await Promise.all([
-                Attendance.findOne({ studentId, date: today }),
-                AdminSettings.findOne()
+            const nowMs = Date.now();
+            let adminSettings;
+            if (cachedAdminSettings && (nowMs - lastCacheUpdate < CACHE_DURATION)) {
+                adminSettings = cachedAdminSettings;
+            } else {
+                adminSettings = await AdminSettings.findOne().lean();
+                cachedAdminSettings = adminSettings;
+                lastCacheUpdate = nowMs;
+            }
+
+            const [attendance] = await Promise.all([
+                Attendance.findOne({ studentId, date: today })
             ]);
 
             return NextResponse.json({

@@ -73,9 +73,12 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     )[0];
   }, [permissions]);
 
-  const HOSTEL_LAT = 23.2483348;
-  const HOSTEL_LNG = 77.5026058;
-  const ALLOWED_RADIUS = 200; // meters
+  const HOSTEL_LOCATIONS = [
+    { lat: 23.2483348, lng: 77.5026058, radius: 200, name: "Original Location" },
+    { lat: 23.2475529, lng: 77.5035134, radius: 100, name: "Loc 1" },
+    { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Loc 2" }
+  ];
+  const ACCURACY_THRESHOLD = 50; // meters
 
   // Simple obfuscation for local storage
   const getStoredDeviceId = () => {
@@ -192,7 +195,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       await signOut(auth);
       sessionStorage.removeItem("userType");
       sessionStorage.removeItem("firebaseUID");
-      router.push("/login");
+      router.push("/login?logout=success");
     } catch (error) {
       console.error("Error signing out:", error);
       alert("Failed to sign out. Please try again.");
@@ -269,10 +272,10 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         loadFullProfile();
         fetchPermissions();
 
-        // Refresh permissions periodically
+        // Refresh permissions periodically (Optimized: 30s instead of 8s to reduce server load)
         permissionInterval = setInterval(() => {
           fetchPermissions();
-        }, 8000);
+        }, 30000);
       } else if (!currentStudent && isMounted) {
         setLoading(false);
       }
@@ -430,41 +433,75 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         // Log coordinates before calculation
         console.log(`\n=== COORDINATE CHECK ===`);
         console.log(`Student Location: Lat=${position.coords.latitude}, Lng=${position.coords.longitude}`);
-        console.log(`Hostel Location: Lat=${HOSTEL_LAT}, Lng=${HOSTEL_LNG}`);
+        console.log(`Accuracy: ${finalAccuracy} meters`);
 
-        const distance = calculateDistance(
-          position.coords.latitude,
-          position.coords.longitude,
-          HOSTEL_LAT,
-          HOSTEL_LNG
-        );
+        if (finalAccuracy > ACCURACY_THRESHOLD) {
+          setIsAtHostel(false);
+          alert(`Waiting for better GPS signal... (Current Accuracy: ${finalAccuracy}m). Please stay in an open area.`);
+          return;
+        }
+
+        // Check if student is within any of the allowed circles
+        let isInsideAny = false;
+        let closestInfo = { distance: Infinity, radius: 0 };
+
+        HOSTEL_LOCATIONS.forEach(loc => {
+          const dist = calculateDistance(
+            position.coords.latitude,
+            position.coords.longitude,
+            loc.lat,
+            loc.lng
+          );
+          if (dist <= loc.radius) {
+            isInsideAny = true;
+          }
+          if (dist < closestInfo.distance) {
+            closestInfo = { distance: dist, radius: loc.radius };
+          }
+        });
 
         console.log(`\n=== FINAL LOCATION (${reason}) ===`);
-        console.log(`Latitude: ${position.coords.latitude}`);
-        console.log(`Longitude: ${position.coords.longitude}`);
-        console.log(`Accuracy: ${finalAccuracy} meters`);
-        console.log(`Distance from hostel: ${Math.round(distance)} meters`);
+        console.log(`Min Distance: ${Math.round(closestInfo.distance)} meters (Required: ${closestInfo.radius}m)`);
 
-        if (distance <= ALLOWED_RADIUS) {
+        if (isInsideAny) {
           setIsAtHostel(true);
-          alert(`Location verified! You are ${Math.round(distance)}m from the hostel. Permission button is now active.`);
+          alert(`Location verified! Permission button is now active.`);
         } else {
           setIsAtHostel(false);
-          alert(`Verification failed! You are ${Math.round(distance)}m away from the hostel. You must be within 200m to request permission.`);
+          alert(`Verification failed! You are ${Math.round(closestInfo.distance)}m away. You must be within the restricted radius of the campus hostels.`);
         }
       } else {
         console.log("Falling back to getCurrentPosition...");
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             const { latitude, longitude, accuracy } = pos.coords;
-            const distance = calculateDistance(latitude, longitude, HOSTEL_LAT, HOSTEL_LNG);
+            const finalAccuracy = Math.round(accuracy);
 
-            if (distance <= ALLOWED_RADIUS) {
+            if (finalAccuracy > ACCURACY_THRESHOLD) {
+              setIsAtHostel(false);
+              alert(`Waiting for better GPS signal... (Current Accuracy: ${finalAccuracy}m).`);
+              return;
+            }
+
+            let isInsideAny = false;
+            let closestInfo = { distance: Infinity, radius: 0 };
+
+            HOSTEL_LOCATIONS.forEach(loc => {
+              const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
+              if (dist <= loc.radius) {
+                isInsideAny = true;
+              }
+              if (dist < closestInfo.distance) {
+                closestInfo = { distance: dist, radius: loc.radius };
+              }
+            });
+
+            if (isInsideAny) {
               setIsAtHostel(true);
-              alert(`Location verified (fallback)! You are ${Math.round(distance)}m from the hostel.`);
+              alert(`Location verified (fallback)!`);
             } else {
               setIsAtHostel(false);
-              alert(`Verification failed! You are ${Math.round(distance)}m from the hostel.`);
+              alert(`Verification failed! You are ${Math.round(closestInfo.distance)}m away from the nearest campus point.`);
             }
           },
           (err) => {
@@ -585,6 +622,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             studentId: studentProfile._id,
             lat: latitude,
             lng: longitude,
+            accuracy: position.coords.accuracy,
             deviceId: deviceId,
           }),
         });

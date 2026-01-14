@@ -242,10 +242,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       await signOut(auth);
       sessionStorage.removeItem("userType");
       sessionStorage.removeItem("firebaseUID");
-      router.push("/login");
+      router.push("/login?logout=success");
     } catch (error) {
       console.error("Logout error:", error);
-      router.push("/login");
+      router.push("/login?logout=success");
     }
   };
 
