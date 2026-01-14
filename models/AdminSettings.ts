@@ -7,6 +7,8 @@ export interface IAdminSettings {
     lng: number;
   };
   radius?: number; // in meters, default 100
+  attendanceStartTime?: string; // Format: HH:mm, default 18:00
+  attendanceEndTime?: string; // Format: HH:mm, default 21:00
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -26,6 +28,14 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
     radius: {
       type: Number,
       default: 200, // 200 meters
+    },
+    attendanceStartTime: {
+      type: String,
+      default: "21:00",
+    },
+    attendanceEndTime: {
+      type: String,
+      default: "22:30",
     },
   },
   {

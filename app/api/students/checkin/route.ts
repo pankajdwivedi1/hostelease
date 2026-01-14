@@ -29,12 +29,25 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { studentId, lat, lng, accuracy } = body;
+    const { studentId, lat, lng, accuracy, deviceId } = body;
 
     if (!studentId || lat === undefined || lng === undefined) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
+      );
+    }
+
+    const studentRecord = await Student.findById(studentId);
+    if (!studentRecord) {
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
+
+    // Verify deviceId if it exists in the record
+    if (studentRecord.deviceId && studentRecord.deviceId !== deviceId) {
+      return NextResponse.json(
+        { error: "This device is not registered for this student." },
+        { status: 403 }
       );
     }
 

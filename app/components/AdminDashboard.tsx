@@ -90,6 +90,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [branchFilter, setBranchFilter] = useState<string>("all");
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
   const [studentsLoading, setStudentsLoading] = useState(true);
+  const [attendanceSummary, setAttendanceSummary] = useState<Record<string, number>>({});
+  const [presentStudentIds, setPresentStudentIds] = useState<string[]>([]);
 
   const fetchHostels = async (forceRefresh = false) => {
     try {
@@ -194,6 +196,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
+  const fetchAttendanceSummary = async () => {
+    try {
+      const response = await fetch("/api/admin/attendance-summary");
+      const data = await response.json();
+      if (data.success) {
+        setAttendanceSummary(data.summary);
+        setPresentStudentIds(data.presentStudentIds);
+      }
+    } catch (error) {
+      console.error("Error fetching attendance summary:", error);
+    }
+  };
+
   useEffect(() => {
     const loadData = () => {
       setLoading(true);
@@ -211,9 +226,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
     loadData();
 
+    // ⚡ Fetch Attendance Summary
+    fetchAttendanceSummary();
+
     const interval = setInterval(() => {
       fetchPermissions();
-    }, 10000);
+      fetchAttendanceSummary();
+    }, 15000);
 
     return () => clearInterval(interval);
   }, []);
@@ -773,6 +792,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </button>
                   {hostels.map((h) => {
                     const count = students.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === h.name).length;
+                    const presentCount = attendanceSummary[h.name] || 0;
 
                     return (
                       <button
@@ -783,8 +803,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                           }`}
                       >
-                        <span>{h.name}</span>
-                        <span className="text-xs font-bold">{count}</span>
+                        <span className="font-bold">{h.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] opacity-75">T: {count}</span>
+                          <span className="text-[10px] text-green-500 font-bold bg-green-50 px-1 rounded">P: {presentCount}</span>
+                        </div>
                       </button>
                     );
                   })}
@@ -856,7 +879,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between">
-                                <p className="text-base font-semibold text-foreground">{student.name}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-base font-semibold text-foreground">{student.name}</p>
+                                  {presentStudentIds.includes(student.id) && (
+                                    <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 text-[9px] font-bold rounded-full border border-green-200 uppercase">
+                                      <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      Present
+                                    </span>
+                                  )}
+                                </div>
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${student.studentStatus === 'out' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}`}>
                                   {student.studentStatus || 'in'}
                                 </span>
@@ -914,9 +947,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   <div className="text-center space-y-2">
                     <div className="flex flex-col items-center gap-1">
                       <p className="text-base font-semibold text-foreground">{selectedStudent.name}</p>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${selectedStudent.studentStatus === 'out' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}`}>
-                        {selectedStudent.studentStatus || 'in'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${selectedStudent.studentStatus === 'out' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}`}>
+                          {selectedStudent.studentStatus || 'in'}
+                        </span>
+                        {presentStudentIds.includes(selectedStudent.id) && (
+                          <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded border border-green-200 uppercase">
+                            Attendance Saved
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <p className="text-sm text-secondary">{selectedStudent.email}</p>
                   </div>

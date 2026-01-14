@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 
 interface Permission {
   _id: string;
@@ -40,6 +39,7 @@ interface StudentProfile {
   localGuardianAddress?: string;
   section?: string;
   homeState?: string;
+  deviceId?: string;
 }
 
 export default function StudentDashboard({ initialData }: { initialData?: any }) {
@@ -47,6 +47,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showPermissionsHistory, setShowPermissionsHistory] = useState(false);
+  const [showDeviceRegistration, setShowDeviceRegistration] = useState(false);
   const [fromDateTime, setFromDateTime] = useState("");
   const [toDateTime, setToDateTime] = useState("");
   const [reason, setReason] = useState("");
@@ -57,13 +58,104 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   const [checkingIn, setCheckingIn] = useState(false);
   const [isAtHostel, setIsAtHostel] = useState(false);
   const [isLocationChecking, setIsLocationChecking] = useState(false);
-  const [showSecurityChallenge, setShowSecurityChallenge] = useState(false);
-  const [verifyingSecurity, setVerifyingSecurity] = useState(false);
-  const [securityError, setSecurityError] = useState("");
+  const [isRegisteringDevice, setIsRegisteringDevice] = useState(false);
+  const [isAttendanceMarked, setIsAttendanceMarked] = useState(false);
+  const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
+  const [attendanceWindow, setAttendanceWindow] = useState({ start: "21:00", end: "22:30" });
+  const [attendanceError, setAttendanceError] = useState<string | null>(null);
 
   const HOSTEL_LAT = 23.2483348;
   const HOSTEL_LNG = 77.5026058;
   const ALLOWED_RADIUS = 200; // meters
+
+  // Simple obfuscation for local storage
+  const getStoredDeviceId = () => {
+    try {
+      const stored = localStorage.getItem("device_id_token");
+      if (!stored) return null;
+      return atob(stored);
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const storeDeviceId = (id: string) => {
+    localStorage.setItem("device_id_token", btoa(id));
+  };
+
+  const handleRegisterDevice = async () => {
+    if (!studentProfile) return;
+
+    try {
+      setIsRegisteringDevice(true);
+
+      // Fallback UUID generator if crypto.randomUUID is not available
+      const generateUUID = () => {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+          return crypto.randomUUID();
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+          const r = Math.random() * 16 | 0;
+          const v = c === 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
+      };
+
+      const newDeviceId = generateUUID();
+
+      const response = await fetch("/api/students/register-device", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          studentId: studentProfile._id,
+          deviceId: newDeviceId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to register device");
+      }
+
+      storeDeviceId(newDeviceId);
+      setStudentProfile({ ...studentProfile, deviceId: newDeviceId });
+      setShowDeviceRegistration(false);
+      alert("Device registered successfully! You can now use all features.");
+    } catch (error: any) {
+      console.error("Error registering device:", error);
+      alert(error.message || "Failed to register device. Please try again.");
+    } finally {
+      setIsRegisteringDevice(false);
+    }
+  };
+
+  useEffect(() => {
+    if (studentProfile && !loading) {
+      const storedId = getStoredDeviceId();
+      // If no ID in localStorage, OR if DB has an ID but it doesn't match localStorage
+      if (!storedId || (studentProfile.deviceId && studentProfile.deviceId !== storedId)) {
+        setShowDeviceRegistration(true);
+      }
+
+      // Check attendance status
+      const checkAttendance = async () => {
+        try {
+          const res = await fetch(`/api/students/attendance?studentId=${studentProfile._id}`);
+          const data = await res.json();
+          if (data.marked) setIsAttendanceMarked(true);
+          if (data.startTime && data.endTime) {
+            setAttendanceWindow({ start: data.startTime, end: data.endTime });
+          }
+        } catch (e) {
+          console.error("Error checking attendance status:", e);
+        }
+      };
+      checkAttendance();
+    }
+  }, [studentProfile, loading]);
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371e3; // Earth's radius in meters
@@ -112,12 +204,6 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             };
             if (isMounted) {
               setStudentProfile(currentStudent);
-
-              // Check if security challenge is needed
-              if (currentStudent.authenticators && currentStudent.authenticators.length > 0) {
-                setShowSecurityChallenge(true);
-              }
-
               setLoading(false);
             }
           }
@@ -209,6 +295,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
           fromDateTime: new Date(fromDateTime).toISOString(),
           toDateTime: new Date(toDateTime).toISOString(),
           reason,
+          deviceId: getStoredDeviceId(),
         }),
       });
 
@@ -239,6 +326,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
     try {
       setCheckingIn(true);
+      const deviceId = getStoredDeviceId();
 
       const response = await fetch("/api/students/status", {
         method: "PATCH",
@@ -248,6 +336,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         body: JSON.stringify({
           studentId: studentProfile._id,
           status: "in",
+          deviceId: deviceId,
         }),
       });
 
@@ -443,62 +532,71 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     }, 15000);
   };
 
-  const handleSecurityChallenge = async () => {
+  const handleMarkAttendance = async () => {
     if (!studentProfile) return;
 
-    if (!browserSupportsWebAuthn()) {
-      setSecurityError("WebAuthn is not supported in this browser. Please use HTTPS or localhost.");
+    // Clear previous error
+    setAttendanceError(null);
+
+    // 1. Time Verification (Client-side check for immediate feedback)
+    const now = new Date();
+    const istTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false });
+    const istTime = istTimeStr.split(":").slice(0, 2).join(":"); // "HH:mm"
+
+    if (istTime < attendanceWindow.start || istTime > attendanceWindow.end) {
+      setAttendanceError("This function will be activated between 9:00 PM to 10:30PM");
+      return;
+    }
+
+    if (!isAtHostel) {
+      alert("Please verify your location first.");
       return;
     }
 
     try {
-      setVerifyingSecurity(true);
-      setSecurityError("");
+      setIsMarkingAttendance(true);
+      const deviceId = getStoredDeviceId();
 
-      // 1. Get options
-      const optionsResponse = await fetch("/api/auth/webauthn/authenticate/options", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firebaseUID: sessionStorage.getItem("firebaseUID") }),
-      });
-      const options = await optionsResponse.json();
+      // Get current position for the request
+      navigator.geolocation.getCurrentPosition(async (position) => {
+        const { latitude, longitude } = position.coords;
 
-      if (!optionsResponse.ok) throw new Error(options.error || "Failed to start security challenge");
+        const response = await fetch("/api/students/attendance", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            studentId: studentProfile._id,
+            lat: latitude,
+            lng: longitude,
+            deviceId: deviceId,
+          }),
+        });
 
-      // 2. Start authentication
-      const assertionResponse = await startAuthentication(options);
+        const data = await response.json();
 
-      // 3. Verify
-      const verifyResponse = await fetch("/api/auth/webauthn/authenticate/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firebaseUID: sessionStorage.getItem("firebaseUID"),
-          assertionResponse,
-        }),
-      });
-      const verification = await verifyResponse.json();
+        if (response.ok) {
+          setIsAttendanceMarked(true);
+          alert(data.message || "Attendance marked successfully!");
+        } else {
+          alert(data.error || "Failed to mark attendance");
+        }
+        setIsMarkingAttendance(false);
+      }, (error) => {
+        console.error("Location error:", error);
+        alert("Failed to get location for attendance.");
+        setIsMarkingAttendance(false);
+      }, { enableHighAccuracy: true });
 
-      if (verification.verified) {
-        setShowSecurityChallenge(false);
-      } else {
-        throw new Error("Security verification failed");
-      }
     } catch (error: any) {
-      console.error("Security challenge error:", error);
-      const isNotSecure = typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost';
-
-      if (error.name === "NotAllowedError" && isNotSecure) {
-        setSecurityError("Verification blocked. Browsers require HTTPS or Localhost for biometric security. Testing over local IP is not supported by Chrome.");
-      } else if (error.name === "SecurityError") {
-        setSecurityError("Security Error: Biometrics require HTTPS. If you are testing over local IP, please use Localhost instead.");
-      } else {
-        setSecurityError(error.message || "Failed to verify identity. Please try again.");
-      }
-    } finally {
-      setVerifyingSecurity(false);
+      console.error("Error in attendance flow:", error);
+      alert("An error occurred. Please try again.");
+      setIsMarkingAttendance(false);
     }
   };
+
+
 
   if (loading) {
     return (
@@ -518,132 +616,227 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
   return (
     <div className="min-h-screen bg-white">
-      {showSecurityChallenge && (
-        <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center">
-          <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 mb-6">
-            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-bold text-foreground mb-2">Security Verification</h2>
-          <p className="text-secondary text-sm mb-4 max-w-xs">
-            Please verify your identity using biometric scan to access your dashboard.
-          </p>
-
-          {typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost' && (
-            <div className="mb-6 p-2 rounded bg-amber-50 border border-amber-100 text-[10px] text-amber-700 max-w-xs">
-              ⚠️ <b>Security Limitation:</b> Biometrics require <b>HTTPS</b>. Browsers disable this feature on local IP addresses (like {window.location.hostname}). Please test on <b>localhost</b> or via <b>tunnel (ngrok)</b>.
-            </div>
-          )}
-
-          {securityError && (
-            <div className="mb-6 p-3 rounded-lg bg-red-50 text-red-600 text-xs border border-red-100">
-              {securityError}
-            </div>
-          )}
-
-          <button
-            onClick={handleSecurityChallenge}
-            disabled={verifyingSecurity}
-            className="w-full max-w-xs h-12 bg-black text-white rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
-          >
-            {verifyingSecurity ? "Verifying..." : "Verify Identity"}
-          </button>
-
-          <button
-            onClick={handleLogout}
-            className="mt-4 text-sm text-secondary hover:text-foreground font-medium"
-          >
-            Sign Out
-          </button>
-
-          <button
-            onClick={() => setShowSecurityChallenge(false)}
-            className="mt-8 text-[10px] text-gray-300 hover:text-gray-400"
-          >
-            Debug: Skip Challenge (Development only)
-          </button>
-        </div>
-      )}
       <main className="w-full max-w-4xl mx-auto">
         <div className="p-4 md:p-6 space-y-4 md:space-y-6">
           {!showProfile ? (
             <>
-              <div className="flex items-center justify-between">
+              {/* Header section with Welcome */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                 <div>
-                  <h1 className="text-base font-semibold text-foreground">Student Dashboard</h1>
-                  <p className="mt-1 md:mt-2 text-sm text-secondary">Request outing permissions</p>
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    Hello, <span className="text-blue-600">{studentProfile.name.split(' ')[0]}!</span>
+                  </h1>
+                  <p className="text-sm text-gray-500 font-medium">Welcome back to Hostelease Dashboard</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={getAccurateLocation}
-                    disabled={isLocationChecking}
-                    className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${isAtHostel
-                      ? "bg-green-600 text-white"
-                      : "bg-blue-600 text-background hover:bg-blue-700"
-                      } ${isLocationChecking ? "opacity-75 cursor-not-allowed" : ""}`}
-                    title="Get accurate location"
-                  >
-                    {isLocationChecking ? (
-                      <>
-                        <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                        Verifying...
-                      </>
-                    ) : (
-                      <>📍 {isAtHostel ? "Verified" : "Location"}</>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setShowPermissionsHistory(!showPermissionsHistory)}
-                    className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${showPermissionsHistory ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"}`}
-                    title="View Permission History"
-                  >
-                    🕙 History
-                  </button>
+                <div className="flex items-center gap-2 self-end md:self-auto">
                   <button
                     onClick={handleLogout}
-                    className="px-4 py-2 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm font-medium hover:bg-filler transition-colors"
+                    className="p-2.5 rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-all hover:text-red-600"
                     title="Logout"
                   >
-                    Logout
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
                   </button>
                   <button
                     onClick={() => setShowProfile(true)}
-                    className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-blue-600 text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                    className="w-11 h-11 rounded-full ring-2 ring-blue-100 ring-offset-2 overflow-hidden hover:opacity-90 transition-opacity"
                   >
                     {studentProfile?.profilePicture ? (
                       <img
                         src={studentProfile.profilePicture}
                         alt={studentProfile.name}
-                        className="w-full h-full rounded-full object-cover"
+                        className="w-full h-full object-cover"
                       />
                     ) : (
-                      studentProfile && getInitials(studentProfile.name)
+                      <div className="w-full h-full bg-blue-600 text-white flex items-center justify-center font-bold">
+                        {getInitials(studentProfile.name)}
+                      </div>
                     )}
                   </button>
                 </div>
               </div>
 
-              {studentProfile?.studentStatus === "out" ? (
+              {/* Quick Info Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-2xl border border-blue-100 shadow-sm">
+                  <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1">Current Status</p>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full animate-pulse ${studentProfile.studentStatus === 'out' ? 'bg-red-500' : 'bg-green-500'}`} />
+                    <p className="text-lg font-bold text-gray-900 capitalize">Currently {studentProfile.studentStatus || 'IN'}</p>
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hostel & Room</p>
+                  <p className="text-lg font-bold text-gray-900">{studentProfile.hostelName}<span className="text-blue-600 ml-1">#{studentProfile.roomNumber}</span></p>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Location Lock</p>
+                    <p className="text-sm font-bold text-gray-700">{isAtHostel ? '📍 Verified' : '❌ Not Verified'}</p>
+                  </div>
+                  <button
+                    onClick={getAccurateLocation}
+                    disabled={isLocationChecking}
+                    className={`p-2 rounded-lg transition-all ${isAtHostel ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'}`}
+                    title="Refresh Location"
+                  >
+                    {isLocationChecking ? (
+                      <div className="w-5 h-5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Daily Attendance</p>
+                    <p className={`text-sm font-bold ${attendanceError ? 'text-red-600' : 'text-gray-700'}`}>
+                      {isAttendanceMarked ? '✅ Saved' : attendanceError ? attendanceError : `🕒 Allowed ${attendanceWindow.start} - ${attendanceWindow.end}`}
+                    </p>
+                  </div>
+                  {!isAttendanceMarked ? (
+                    <button
+                      onClick={handleMarkAttendance}
+                      disabled={isMarkingAttendance}
+                      className={`p-2 rounded-lg transition-all ${isMarkingAttendance ? 'bg-gray-100 text-gray-400' : isAtHostel ? 'bg-orange-100 text-orange-600 hover:bg-orange-200 shadow-sm shadow-orange-100' : 'bg-orange-50/50 text-orange-400 hover:bg-orange-100'}`}
+                      title={`Mark Attendance (${attendanceWindow.start} - ${attendanceWindow.end})`}
+                    >
+                      {isMarkingAttendance ? (
+                        <div className="w-5 h-5 border-2 border-orange-600/30 border-t-orange-600 rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="p-2 bg-green-100 text-green-600 rounded-lg">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons Row */}
+              <div className="flex gap-3 mb-4">
                 <button
-                  onClick={handleCheckIn}
-                  disabled={checkingIn}
-                  className="w-full h-12 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setShowPermissionsHistory(true)}
+                  className="flex-1 h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
                 >
-                  {checkingIn ? "Checking in..." : "I'm In"}
+                  🕙 Outing History
                 </button>
-              ) : (
-                <button
-                  onClick={() => setShowRequestForm(!showRequestForm)}
-                  disabled={!isAtHostel}
-                  className={`w-full h-12 rounded-lg font-medium transition-colors ${isAtHostel
-                    ? "bg-blue-600 text-background hover:bg-blue-700"
-                    : "bg-gray-200 text-gray-500 cursor-not-allowed"
-                    }`}
-                >
-                  {isAtHostel ? "Request Permission" : "Verify Location to Request Permission"}
-                </button>
-              )}
+                {studentProfile?.studentStatus === "out" ? (
+                  <button
+                    onClick={handleCheckIn}
+                    disabled={checkingIn}
+                    className="flex-[2] h-12 rounded-xl bg-green-600 text-white font-bold shadow-lg shadow-green-100 hover:bg-green-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {checkingIn ? (
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : "✅ I'm Back In"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowRequestForm(!showRequestForm)}
+                    disabled={!isAtHostel}
+                    className={`flex-[2] h-12 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 ${isAtHostel
+                      ? "bg-blue-600 text-white shadow-blue-100 hover:bg-blue-700"
+                      : "bg-gray-100 text-gray-400 cursor-not-allowed shadow-none"
+                      }`}
+                  >
+                    {isAtHostel ? "🚀 Request Permission" : "🔒 Verify Location First"}
+                  </button>
+                )}
+              </div>
+
+              {/* Detailed Student Information Section */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
+                <div className="bg-gray-50/50 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Student Profile Details</h2>
+                  <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">Official Record</span>
+                </div>
+
+                <div className="p-6">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-6">
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Phone Number</p>
+                      <p className="text-sm font-bold text-gray-900">{studentProfile.phoneNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Email Address</p>
+                      <p className="text-sm font-medium text-gray-600 truncate">{studentProfile.email}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hostel Name</p>
+                      <p className="text-sm font-bold text-gray-900">{studentProfile.hostelName}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Room Number</p>
+                      <p className="text-sm font-bold text-blue-600">#{studentProfile.roomNumber}</p>
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">College</p>
+                      <p className="text-sm font-bold text-gray-900">{studentProfile.collegeName || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Branch</p>
+                      <p className="text-sm font-bold text-gray-900">{studentProfile.branch || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Semester/Year</p>
+                      <p className="text-sm font-bold text-gray-900">{studentProfile.semester || "N/A"} ({studentProfile.year || "N/A"})</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">ERP Info</p>
+                      <p className="text-sm font-bold text-gray-900">{studentProfile.erpInformation || "N/A"}</p>
+                    </div>
+
+                    <div className="col-span-2 md:col-span-4 h-px bg-gray-50 my-2"></div>
+
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Father's Name</p>
+                      <p className="text-sm font-bold text-gray-900">{studentProfile.fatherName || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Father's Phone</p>
+                      <p className="text-sm font-bold text-gray-900">{studentProfile.fatherNumber || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Mother's Name</p>
+                      <p className="text-sm font-bold text-gray-900">{studentProfile.motherName || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Mother's Phone</p>
+                      <p className="text-sm font-bold text-gray-900">{studentProfile.motherNumber || "N/A"}</p>
+                    </div>
+
+                    <div className="col-span-2">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Permanent Address</p>
+                      <p className="text-sm font-medium text-gray-700">{studentProfile.homePinCode || "N/A"}, {studentProfile.homeState || ""}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Local Guardian</p>
+                      <p className="text-sm font-medium text-gray-700">{studentProfile.localGuardianAddress || "N/A"} ({studentProfile.localGuardianPhoneNumber || ""})</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex gap-4">
+                  <button
+                    onClick={() => setShowProfile(true)}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 text-sm font-bold hover:bg-gray-100 transition-all"
+                  >
+                    Edit Profile Details
+                  </button>
+                </div>
+              </div>
 
               {showRequestForm && (
                 <div className="p-6 rounded-lg border border-solid border-[#9CA3AF] bg-filler space-y-4">
@@ -946,6 +1139,41 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
           )}
         </div>
       </main>
+
+      {/* Mandatory Device Registration Modal */}
+      {showDeviceRegistration && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col p-8 text-center space-y-6">
+            <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto text-3xl">
+              📱
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-gray-900">Device Verification Required</h2>
+              <p className="text-gray-600">
+                To ensure security and prevent unauthorized check-ins, you must register this device with your account. This is a one-time mandatory step.
+              </p>
+            </div>
+            <div className="bg-blue-50 p-4 rounded-xl text-xs text-blue-700 font-medium font-outfit">
+              Note: Once registered, your check-ins and permissions will be locked to this specific device.
+            </div>
+            <button
+              onClick={handleRegisterDevice}
+              disabled={isRegisteringDevice}
+              className={`w-full h-14 rounded-2xl bg-blue-600 text-white font-bold text-lg shadow-lg shadow-blue-200 transition-all active:scale-95 ${isRegisteringDevice ? "opacity-75 cursor-not-allowed" : "hover:bg-blue-700 hover:shadow-xl"
+                }`}
+            >
+              {isRegisteringDevice ? (
+                <div className="flex items-center justify-center gap-2">
+                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Registering...
+                </div>
+              ) : (
+                "Register Device Now"
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
