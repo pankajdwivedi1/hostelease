@@ -374,21 +374,32 @@ export default function LoginPage() {
             </div>
 
             {/* Footer */}
-            <div className="flex flex-col items-center space-y-4 pt-4" style={{ fontFamily: 'Cambria, Georgia, serif' }}>
-              <div className="flex flex-col items-center space-y-1">
-                <p className="text-[12px] font-bold tracking-wider text-slate-900 uppercase">
-                  &copy; 2026 Hostelease Cloud Infostructure
-                </p>
-                <p className="text-[11px] font-medium tracking-wide text-slate-600 uppercase">
-                  Developed by Dr. Pankaj Prasad Dwivedi
-                </p>
-              </div>
-              <div className="flex gap-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                <span className="cursor-pointer hover:text-blue-600 transition-colors">Security</span>
-                <span className="text-slate-200">&bull;</span>
-                <span className="cursor-pointer hover:text-indigo-600 transition-colors">Privacy</span>
-                <span className="text-slate-200">&bull;</span>
-                <span className="cursor-pointer hover:text-slate-900 transition-colors">API</span>
+            <div className="w-full mt-12 p-6 rounded-3xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white shadow-2xl relative overflow-hidden group" style={{ fontFamily: 'Cambria, Georgia, serif' }}>
+              {/* Subtle glass effect overlay */}
+              <div className="absolute inset-0 bg-white/5 backdrop-blur-[1px]" />
+
+              {/* Decorative elements */}
+              <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-1000" />
+              <div className="absolute -left-10 -top-10 w-32 h-32 bg-blue-400/10 rounded-full blur-3xl group-hover:bg-blue-400/20 transition-all duration-1000" />
+
+              <div className="relative z-10 flex flex-col items-center space-y-5">
+                <div className="flex flex-col items-center space-y-2 text-center">
+                  <p className="text-[13px] font-black tracking-[0.15em] uppercase drop-shadow-sm">
+                    &copy; 2026 Hostelease Cloud Infostructure
+                  </p>
+                  <div className="h-px w-12 bg-white/30 rounded-full" />
+                  <p className="text-[10px] font-bold tracking-widest uppercase text-blue-50/90">
+                    Developed by <span className="text-white">Dr. Pankaj Prasad Dwivedi</span>
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-5 text-[10px] font-black uppercase tracking-[0.2em] text-blue-100/70">
+                  <span className="cursor-pointer hover:text-white hover:scale-105 transition-all duration-300">Security</span>
+                  <div className="h-1 w-1 rounded-full bg-blue-300/40" />
+                  <span className="cursor-pointer hover:text-white hover:scale-105 transition-all duration-300">Privacy</span>
+                  <div className="h-1 w-1 rounded-full bg-blue-300/40" />
+                  <span className="cursor-pointer hover:text-white hover:scale-105 transition-all duration-300">API</span>
+                </div>
               </div>
             </div>
 

@@ -194,15 +194,8 @@ export default function OnboardingPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleBack = async () => {
-    try {
-      const { signOut } = await import("firebase/auth");
-      await signOut(auth);
-      router.push("/login");
-    } catch (error) {
-      console.error("Error signing out:", error);
-      router.push("/login");
-    }
+  const handleBack = () => {
+    router.push("/?view=profile");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

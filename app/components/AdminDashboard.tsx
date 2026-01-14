@@ -900,7 +900,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 <span>•</span>
                                 <span>Room {student.roomNumber}</span>
                                 <span>•</span>
-                                <span>{student.phoneNumber}</span>
+                                <a href={`tel:${student.phoneNumber}`} title="Click to call" className="hover:text-blue-600 hover:underline">
+                                  {student.phoneNumber}
+                                </a>
                               </div>
                             </div>
                           </div>
@@ -965,7 +967,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   <div className="space-y-5 text-base">
                     <div>
                       <p className="text-secondary text-sm mb-1.5">Phone Number</p>
-                      <p className="text-foreground font-medium break-words">{selectedStudent.phoneNumber}</p>
+                      <a href={`tel:${selectedStudent.phoneNumber}`} title="Click to call" className="text-blue-600 font-medium break-words hover:underline">
+                        {selectedStudent.phoneNumber}
+                      </a>
                     </div>
                     <div>
                       <p className="text-secondary text-sm mb-1.5">Hostel Name</p>
@@ -984,7 +988,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     {selectedStudent.fatherNumber && (
                       <div>
                         <p className="text-secondary text-sm mb-1.5">Father's Number</p>
-                        <p className="text-foreground font-medium break-words">{selectedStudent.fatherNumber}</p>
+                        <a href={`tel:${selectedStudent.fatherNumber}`} title="Click to call" className="text-blue-600 font-medium break-words hover:underline">
+                          {selectedStudent.fatherNumber}
+                        </a>
                       </div>
                     )}
                     {selectedStudent.motherName && (
@@ -996,7 +1002,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     {selectedStudent.motherNumber && (
                       <div>
                         <p className="text-secondary text-sm mb-1.5">Mother's Number</p>
-                        <p className="text-foreground font-medium break-words">{selectedStudent.motherNumber}</p>
+                        <a href={`tel:${selectedStudent.motherNumber}`} title="Click to call" className="text-blue-600 font-medium break-words hover:underline">
+                          {selectedStudent.motherNumber}
+                        </a>
                       </div>
                     )}
                     {selectedStudent.homePinCode && (
@@ -1062,7 +1070,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     {selectedStudent.localGuardianPhoneNumber && (
                       <div>
                         <p className="text-secondary text-sm mb-1.5">Local Guardian Phone</p>
-                        <p className="text-foreground font-medium break-words">{selectedStudent.localGuardianPhoneNumber}</p>
+                        <a href={`tel:${selectedStudent.localGuardianPhoneNumber}`} title="Click to call" className="text-blue-600 font-medium break-words hover:underline">
+                          {selectedStudent.localGuardianPhoneNumber}
+                        </a>
                       </div>
                     )}
                   </div>
@@ -1093,39 +1103,33 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       return (
                         <div
                           key={permission.id}
-                          className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4"
+                          className="rounded-2xl border-0 bg-slate-50 p-4 shadow-sm"
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-1.5 md:gap-2 text-sm text-secondary mb-1">
-                                <span>{new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
-                                <span>•</span>
-                                <span>to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
-                              </div>
-                              <p className="text-sm text-foreground">
-                                {permission.reason}
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="space-y-1">
+                              <p className="text-[13px] font-black text-[#2D5A9E]">
+                                {new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}
+                              </p>
+                              <p className="text-[13px] font-black text-[#2D5A9E]">
+                                To {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}
                               </p>
                             </div>
-                            {showStatus && (
-                              <Badge
-                                variant={permission.status === "allowed" ? "default" : "destructive"}
-                                className={`text-xs px-2 md:px-2.5 py-0.5 whitespace-nowrap ml-3 ${permission.status === "allowed"
-                                  ? "bg-green-100 text-green-800 border-green-200"
-                                  : "bg-red-100 text-red-800 border-red-200"
-                                  }`}
-                              >
+                            {showStatus ? (
+                              <div className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${permission.status === "allowed"
+                                ? "bg-green-100/80 text-green-700 border border-green-200"
+                                : "bg-red-100/80 text-red-700 border border-red-200"
+                                }`}>
                                 {permission.status === "allowed" ? "Accepted" : "Rejected"}
-                              </Badge>
-                            )}
-                            {permission.status === "pending" && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs px-2 md:px-2.5 py-0.5 whitespace-nowrap ml-3 bg-yellow-100 text-yellow-800 border-yellow-200"
-                              >
+                              </div>
+                            ) : (
+                              <div className="px-3 py-1 rounded-full text-[11px] font-black bg-yellow-100 text-yellow-700 border border-yellow-200 uppercase tracking-wider">
                                 Pending
-                              </Badge>
+                              </div>
                             )}
                           </div>
+                          <p className="text-[13px] text-slate-800 leading-relaxed font-medium">
+                            {permission.reason}
+                          </p>
                         </div>
                       );
                     })}
