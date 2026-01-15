@@ -18,6 +18,10 @@ interface Permission {
     roomNumber: string;
     profilePicture?: string;
     studentStatus?: "in" | "out";
+    collegeName?: string;
+    branch?: string;
+    semester?: string;
+    section?: string;
   };
   fromDateTime: string | Date;
   toDateTime: string | Date;
@@ -88,6 +92,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [collegeFilter, setCollegeFilter] = useState<string>("all");
   const [semesterFilter, setSemesterFilter] = useState<string>("all");
   const [branchFilter, setBranchFilter] = useState<string>("all");
+  const [sectionFilter, setSectionFilter] = useState<string>("all");
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
   const [studentsLoading, setStudentsLoading] = useState(true);
   const [attendanceSummary, setAttendanceSummary] = useState<Record<string, number>>({});
@@ -457,19 +462,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const filteredPermissions = useMemo(() => {
     return permissions.filter((p) => {
-      const matchesStatus = filter === "all" || p.status === filter;
-      if (!matchesStatus) return false;
-      if (statusFilter === "all") return true;
       const student = typeof p.studentId === "object" ? p.studentId : null;
       if (!student) return false;
-      return student.studentStatus === statusFilter;
-    });
-  }, [permissions, filter, statusFilter]);
 
-  const filteredStudents = useMemo(() => {
-    return students.filter((student) => {
+      const matchesStatus = filter === "all" || p.status === filter;
       const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.email.toLowerCase().includes(searchQuery.toLowerCase());
+        student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.semester?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.branch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.section?.toLowerCase().includes(searchQuery.toLowerCase());
 
       let matchesHostel = hostelFilter === "all";
       if (!matchesHostel) {
@@ -477,24 +478,54 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
 
       const matchesCollege = collegeFilter === "all" || student.collegeName === collegeFilter;
-      const matchesSemester = semesterFilter === "all" || student.semester === semesterFilter;
+      const matchesSemester = semesterFilter === "all" || student.semester?.toUpperCase() === semesterFilter.toUpperCase();
       const matchesBranch = branchFilter === "all" || student.branch === branchFilter;
-      const matchesStatus = statusFilter === "all" || student.studentStatus === statusFilter;
-      return matchesSearch && matchesHostel && matchesCollege && matchesSemester && matchesBranch && matchesStatus;
+      const matchesSection = sectionFilter === "all" || student.section?.toUpperCase() === sectionFilter.toUpperCase();
+
+      if (!matchesStatus || !matchesSearch || !matchesHostel || !matchesCollege || !matchesSemester || !matchesBranch || !matchesSection) return false;
+
+      if (statusFilter === "all") return true;
+      return student.studentStatus === statusFilter;
     });
-  }, [students, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter, statusFilter]);
+  }, [permissions, filter, statusFilter, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter, sectionFilter]);
+
+  const filteredStudents = useMemo(() => {
+    return students.filter((student) => {
+      const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.semester?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.branch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.section?.toLowerCase().includes(searchQuery.toLowerCase());
+
+      let matchesHostel = hostelFilter === "all";
+      if (!matchesHostel) {
+        matchesHostel = (getHostelCategory(student.hostelName) || student.hostelName) === hostelFilter;
+      }
+
+      const matchesCollege = collegeFilter === "all" || student.collegeName === collegeFilter;
+      const matchesSemester = semesterFilter === "all" || student.semester?.toUpperCase() === semesterFilter.toUpperCase();
+      const matchesBranch = branchFilter === "all" || student.branch === branchFilter;
+      const matchesSection = sectionFilter === "all" || student.section?.toUpperCase() === sectionFilter.toUpperCase();
+      const matchesStatus = statusFilter === "all" || student.studentStatus === statusFilter;
+      return matchesSearch && matchesHostel && matchesCollege && matchesSemester && matchesBranch && matchesSection && matchesStatus;
+    });
+  }, [students, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter, sectionFilter, statusFilter]);
 
   // Optimized counts for status buttons
   const statusCounts = useMemo(() => {
     const baseList = students.filter(student => {
       const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.email.toLowerCase().includes(searchQuery.toLowerCase());
+        student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.semester?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.branch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.section?.toLowerCase().includes(searchQuery.toLowerCase());
       let matchesHostel = hostelFilter === "all";
       if (!matchesHostel) matchesHostel = (getHostelCategory(student.hostelName) || student.hostelName) === hostelFilter;
       const matchesCollege = collegeFilter === "all" || student.collegeName === collegeFilter;
-      const matchesSemester = semesterFilter === "all" || student.semester === semesterFilter;
+      const matchesSemester = semesterFilter === "all" || student.semester?.toUpperCase() === semesterFilter.toUpperCase();
       const matchesBranch = branchFilter === "all" || student.branch === branchFilter;
-      return matchesSearch && matchesHostel && matchesCollege && matchesSemester && matchesBranch;
+      const matchesSection = sectionFilter === "all" || student.section?.toUpperCase() === sectionFilter.toUpperCase();
+      return matchesSearch && matchesHostel && matchesCollege && matchesSemester && matchesBranch && matchesSection;
     });
 
     return {
@@ -502,7 +533,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       in: baseList.filter(s => s.studentStatus === 'in').length,
       out: baseList.filter(s => s.studentStatus === 'out').length
     };
-  }, [students, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter]);
+  }, [students, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter, sectionFilter]);
 
 
 
@@ -541,31 +572,59 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
               </div>
 
-              <div className="flex gap-2 md:gap-3 flex-wrap">
-                <button
-                  onClick={() => setFilter("all")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => setFilter("pending")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "pending" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
-                >
-                  Pending
-                </button>
-                <button
-                  onClick={() => setFilter("allowed")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "allowed" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
-                >
-                  Accepted
-                </button>
-                <button
-                  onClick={() => setFilter("rejected")}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "rejected" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
-                >
-                  Rejected
-                </button>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex gap-2 md:gap-3 flex-wrap items-center">
+                  <button
+                    onClick={() => setFilter("all")}
+                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setFilter("pending")}
+                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "pending" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                  >
+                    Pending
+                  </button>
+                  <button
+                    onClick={() => setFilter("allowed")}
+                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "allowed" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                  >
+                    Accepted
+                  </button>
+                  <button
+                    onClick={() => setFilter("rejected")}
+                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "rejected" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                  >
+                    Rejected
+                  </button>
+
+                  <select
+                    value={hostelFilter}
+                    onChange={(e) => setHostelFilter(e.target.value)}
+                    className="h-9 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground min-w-[120px]"
+                  >
+                    <option value="all">Hostel</option>
+                    {hostels.map((h) => (
+                      <option key={h._id || h.name} value={h.name}>{h.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="relative flex-1 max-w-sm">
+                  <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                    <svg className="w-4 h-4 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search student..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 h-9 text-sm rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
+                  />
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -719,7 +778,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-secondary mb-1.5">College Name</label>
                     <select
@@ -744,14 +803,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground"
                     >
                       <option value="all">All Semesters</option>
-                      <option value="1st Sem">1st Sem</option>
-                      <option value="2nd Sem">2nd Sem</option>
-                      <option value="3rd Sem">3rd Sem</option>
-                      <option value="4th Sem">4th Sem</option>
-                      <option value="5th Sem">5th Sem</option>
-                      <option value="6th Sem">6th Sem</option>
-                      <option value="7th Sem">7th Sem</option>
-                      <option value="8th Sem">8th Sem</option>
+                      <option value="1ST SEM">1ST SEM</option>
+                      <option value="2ND SEM">2ND SEM</option>
+                      <option value="3RD SEM">3RD SEM</option>
+                      <option value="4TH SEM">4TH SEM</option>
+                      <option value="5TH SEM">5TH SEM</option>
+                      <option value="6TH SEM">6TH SEM</option>
+                      <option value="7TH SEM">7TH SEM</option>
+                      <option value="8TH SEM">8TH SEM</option>
                     </select>
                   </div>
 
@@ -773,8 +832,29 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <option value="EX">EX</option>
                       <option value="MCA">MCA</option>
                       <option value="B PHARMA">B PHARMA</option>
+                      <option value="D PHARMA">D PHARMA</option>
                       <option value="MBA">MBA</option>
+                      <option value="MTECH">MTECH</option>
+                      <option value="M PHARMA">M PHARMA</option>
                       <option value="CSBS">CSBS</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-secondary mb-1.5">Section</label>
+                    <select
+                      value={sectionFilter}
+                      onChange={(e) => setSectionFilter(e.target.value)}
+                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground"
+                    >
+                      <option value="all">All Sections</option>
+                      <option value="NIL">NIL</option>
+                      <option value="A">A</option>
+                      <option value="B">B</option>
+                      <option value="C">C</option>
+                      <option value="D">D</option>
+                      <option value="E">E</option>
+                      <option value="F">F</option>
                     </select>
                   </div>
                 </div>

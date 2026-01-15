@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 
 import { useRef } from "react";
 
@@ -194,8 +194,15 @@ export default function OnboardingPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleBack = () => {
-    router.push("/?view=profile");
+  const handleBack = async () => {
+    try {
+      await signOut(auth);
+      sessionStorage.clear();
+      router.push("/login");
+    } catch (error) {
+      console.error("Error signing out:", error);
+      router.push("/login");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -592,7 +599,7 @@ export default function OnboardingPage() {
                     } bg-white text-foreground uppercase focus:outline-none focus:border-foreground`}
                 >
                   <option value="">SELECT BRANCH</option>
-                  {["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "MBA", "CSBS"].map((opt) => (
+                  {["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS"].map((opt) => (
                     <option key={opt} value={opt.toUpperCase()}>{opt.toUpperCase()}</option>
                   ))}
                 </select>

@@ -74,9 +74,9 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   }, [permissions]);
 
   const HOSTEL_LOCATIONS = [
-    { lat: 23.2483348, lng: 77.5026058, radius: 200, name: "Original Location" },
-    { lat: 23.2475529, lng: 77.5035134, radius: 100, name: "Loc 1" },
-    { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Loc 2" }
+    { lat: 23.2475529, lng: 77.5035134, radius: 100, name: "Gangotri hostel" },
+    { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" },
+    { lat: 23.2483348, lng: 77.5026058, radius: 200, name: "Centeral library" }
   ];
   const ACCURACY_THRESHOLD = 50; // meters
 
@@ -443,9 +443,10 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
         // Check if student is within any of the allowed circles
         let isInsideAny = false;
-        let closestInfo = { distance: Infinity, radius: 0 };
+        let matchedLocation: { lat: number; lng: number; radius: number; name: string; distance: number } | null = null;
+        let closestInfo = { distance: Infinity, radius: 0, name: "" };
 
-        HOSTEL_LOCATIONS.forEach(loc => {
+        for (const loc of HOSTEL_LOCATIONS) {
           const dist = calculateDistance(
             position.coords.latitude,
             position.coords.longitude,
@@ -454,21 +455,24 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
           );
           if (dist <= loc.radius) {
             isInsideAny = true;
+            matchedLocation = { ...loc, distance: dist };
           }
           if (dist < closestInfo.distance) {
-            closestInfo = { distance: dist, radius: loc.radius };
+            closestInfo = { distance: dist, radius: loc.radius, name: loc.name };
           }
-        });
+        }
 
         console.log(`\n=== FINAL LOCATION (${reason}) ===`);
         console.log(`Min Distance: ${Math.round(closestInfo.distance)} meters (Required: ${closestInfo.radius}m)`);
 
-        if (isInsideAny) {
+        if (isInsideAny && matchedLocation) {
           setIsAtHostel(true);
-          alert(`Location verified! Permission button is now active.`);
+          const dist = Math.round(matchedLocation.distance);
+          const locName = matchedLocation.name;
+          alert(`Location verified✔ You are ${dist} meters away from the ${locName}. Permission button is now active.`);
         } else {
           setIsAtHostel(false);
-          alert(`Verification failed! You are ${Math.round(closestInfo.distance)}m away. You must be within the restricted radius of the campus hostels.`);
+          alert(`Verification failed! You are ${Math.round(closestInfo.distance)}m away from ${closestInfo.name}. You must be within the restricted radius of the campus hostels.`);
         }
       } else {
         console.log("Falling back to getCurrentPosition...");
@@ -484,24 +488,28 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             }
 
             let isInsideAny = false;
-            let closestInfo = { distance: Infinity, radius: 0 };
+            let matchedLocation: { lat: number; lng: number; radius: number; name: string; distance: number } | null = null;
+            let closestInfo = { distance: Infinity, radius: 0, name: "" };
 
-            HOSTEL_LOCATIONS.forEach(loc => {
+            for (const loc of HOSTEL_LOCATIONS) {
               const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
               if (dist <= loc.radius) {
                 isInsideAny = true;
+                matchedLocation = { ...loc, distance: dist };
               }
               if (dist < closestInfo.distance) {
-                closestInfo = { distance: dist, radius: loc.radius };
+                closestInfo = { distance: dist, radius: loc.radius, name: loc.name };
               }
-            });
+            }
 
-            if (isInsideAny) {
+            if (isInsideAny && matchedLocation) {
               setIsAtHostel(true);
-              alert(`Location verified (fallback)!`);
+              const dist = Math.round(matchedLocation.distance);
+              const locName = matchedLocation.name;
+              alert(`Location verified✔ You are ${dist} meters away from the ${locName}. Permission button is now active.`);
             } else {
               setIsAtHostel(false);
-              alert(`Verification failed! You are ${Math.round(closestInfo.distance)}m away from the nearest campus point.`);
+              alert(`Verification failed! You are ${Math.round(closestInfo.distance)}m away from ${closestInfo.name}. You must be within the restricted radius of the campus hostels.`);
             }
           },
           (err) => {
@@ -854,6 +862,66 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                 )}
               </div>
 
+              {showRequestForm && (
+                <div className="p-6 rounded-lg border border-solid border-[#9CA3AF] bg-filler space-y-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      From Date & Time
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={fromDateTime}
+                      onChange={(e) => setFromDateTime(e.target.value)}
+                      className="w-full h-12 px-4 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground focus:outline-none focus:border-foreground"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      To Date & Time
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={toDateTime}
+                      onChange={(e) => setToDateTime(e.target.value)}
+                      className="w-full h-12 px-4 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground focus:outline-none focus:border-foreground"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Reason
+                    </label>
+                    <textarea
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value.slice(0, 100))}
+                      placeholder="Please specify why you need to go out........ (only 100 characters)"
+                      maxLength={100}
+                      rows={4}
+                      className="w-full px-4 py-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground resize-none"
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleRequestPermission}
+                      disabled={submitting}
+                      className="flex-1 h-12 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {submitting ? "Submitting..." : "Submit Request"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowRequestForm(false);
+                        setFromDateTime("");
+                        setToDateTime("");
+                        setReason("");
+                      }}
+                      className="flex-1 h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Detailed Student Information Section */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
                 <div className="bg-gray-50/50 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -955,64 +1023,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
               </div>
 
-              {showRequestForm && (
-                <div className="p-6 rounded-lg border border-solid border-[#9CA3AF] bg-filler space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      From Date & Time
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={fromDateTime}
-                      onChange={(e) => setFromDateTime(e.target.value)}
-                      className="w-full h-12 px-4 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground focus:outline-none focus:border-foreground"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      To Date & Time
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={toDateTime}
-                      onChange={(e) => setToDateTime(e.target.value)}
-                      className="w-full h-12 px-4 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground focus:outline-none focus:border-foreground"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Reason
-                    </label>
-                    <textarea
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                      placeholder="Enter reason for outing"
-                      rows={4}
-                      className="w-full px-4 py-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground resize-none"
-                    />
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={handleRequestPermission}
-                      disabled={submitting}
-                      className="flex-1 h-12 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {submitting ? "Submitting..." : "Submit Request"}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowRequestForm(false);
-                        setFromDateTime("");
-                        setToDateTime("");
-                        setReason("");
-                      }}
-                      className="flex-1 h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
+
 
               {showPermissionsHistory && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
@@ -1259,42 +1270,44 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             </>
           )}
         </div>
-      </main>
+      </main >
 
       {/* Mandatory Device Registration Modal */}
-      {showDeviceRegistration && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col p-8 text-center space-y-6">
-            <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto text-3xl">
-              📱
+      {
+        showDeviceRegistration && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+            <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col p-8 text-center space-y-6">
+              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto text-3xl">
+                📱
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold text-gray-900">Device Verification Required</h2>
+                <p className="text-gray-600">
+                  To ensure security and prevent unauthorized check-ins, you must register this device with your account. This is a one-time mandatory step.
+                </p>
+              </div>
+              <div className="bg-blue-50 p-4 rounded-xl text-xs text-blue-700 font-medium font-outfit">
+                Note: Once registered, your check-ins and permissions will be locked to this specific device.
+              </div>
+              <button
+                onClick={handleRegisterDevice}
+                disabled={isRegisteringDevice}
+                className={`w-full h-14 rounded-2xl bg-blue-600 text-white font-bold text-lg shadow-lg shadow-blue-200 transition-all active:scale-95 ${isRegisteringDevice ? "opacity-75 cursor-not-allowed" : "hover:bg-blue-700 hover:shadow-xl"
+                  }`}
+              >
+                {isRegisteringDevice ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Registering...
+                  </div>
+                ) : (
+                  "Register Device Now"
+                )}
+              </button>
             </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-gray-900">Device Verification Required</h2>
-              <p className="text-gray-600">
-                To ensure security and prevent unauthorized check-ins, you must register this device with your account. This is a one-time mandatory step.
-              </p>
-            </div>
-            <div className="bg-blue-50 p-4 rounded-xl text-xs text-blue-700 font-medium font-outfit">
-              Note: Once registered, your check-ins and permissions will be locked to this specific device.
-            </div>
-            <button
-              onClick={handleRegisterDevice}
-              disabled={isRegisteringDevice}
-              className={`w-full h-14 rounded-2xl bg-blue-600 text-white font-bold text-lg shadow-lg shadow-blue-200 transition-all active:scale-95 ${isRegisteringDevice ? "opacity-75 cursor-not-allowed" : "hover:bg-blue-700 hover:shadow-xl"
-                }`}
-            >
-              {isRegisteringDevice ? (
-                <div className="flex items-center justify-center gap-2">
-                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Registering...
-                </div>
-              ) : (
-                "Register Device Now"
-              )}
-            </button>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }

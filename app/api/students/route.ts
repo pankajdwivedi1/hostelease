@@ -103,6 +103,10 @@ export async function GET(request: NextRequest) {
 
     const search = searchParams.get("search");
     const hostelName = searchParams.get("hostelName");
+    const collegeName = searchParams.get("collegeName");
+    const semester = searchParams.get("semester");
+    const branch = searchParams.get("branch");
+    const section = searchParams.get("section");
 
     const light = searchParams.get("light") === "true"; // ⚡ OPTIMIZATION: Exclude heavy fields
 
@@ -115,6 +119,18 @@ export async function GET(request: NextRequest) {
     }
     if (hostelName && hostelName !== "all") {
       query.hostelName = { $regex: hostelName, $options: "i" };
+    }
+    if (collegeName && collegeName !== "all") {
+      query.collegeName = collegeName;
+    }
+    if (semester && semester !== "all") {
+      query.semester = { $regex: semester, $options: "i" };
+    }
+    if (branch && branch !== "all") {
+      query.branch = branch;
+    }
+    if (section && section !== "all") {
+      query.section = { $regex: section, $options: "i" };
     }
 
     let studentsQuery = Student.find(query).sort({ name: 1 });

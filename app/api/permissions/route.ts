@@ -69,8 +69,8 @@ export async function GET(request: NextRequest) {
 
     const light = searchParams.get("light") === "true";
     const studentFields = light
-      ? "name email phoneNumber hostelName roomNumber studentStatus"
-      : "name email phoneNumber hostelName roomNumber profilePicture studentStatus";
+      ? "name email phoneNumber hostelName roomNumber studentStatus collegeName branch semester section"
+      : "name email phoneNumber hostelName roomNumber profilePicture studentStatus collegeName branch semester section";
 
     const permissions = await Permission.find(query)
       .populate("studentId", studentFields)
