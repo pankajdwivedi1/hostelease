@@ -62,8 +62,10 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   const [isRegisteringDevice, setIsRegisteringDevice] = useState(false);
   const [isAttendanceMarked, setIsAttendanceMarked] = useState(false);
   const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
-  const [attendanceWindow, setAttendanceWindow] = useState({ start: "21:00", end: "22:30" });
+  const [attendanceWindow, setAttendanceWindow] = useState({ start: "21:00", end: "23:00" });
   const [attendanceError, setAttendanceError] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
 
   const latestPermission = useMemo(() => {
     if (permissions.length === 0) return null;
@@ -78,7 +80,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" },
     { lat: 23.2483348, lng: 77.5026058, radius: 200, name: "Centeral library" }
   ];
-  const ACCURACY_THRESHOLD = 50; // meters
+  const ACCURACY_THRESHOLD = 80; // meters
 
   // Simple obfuscation for local storage
   const getStoredDeviceId = () => {
@@ -604,7 +606,9 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     const istTime = istTimeStr.split(":").slice(0, 2).join(":"); // "HH:mm"
 
     if (istTime < attendanceWindow.start || istTime > attendanceWindow.end) {
-      setAttendanceError("This function will be activated between 9:00 PM to 10:30PM");
+      setToastMessage(`Daily attendance will be allowed between ${attendanceWindow.start} to ${attendanceWindow.end}`);
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 5000);
       return;
     }
 
@@ -682,14 +686,14 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
           {!showProfile ? (
             <>
               {/* Header section with Welcome */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
+              <div className="flex items-start justify-between gap-2 mb-4">
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">
+                  <h1 className="text-xl md:text-2xl font-bold text-gray-900 leading-tight">
                     Hello, <span className="text-blue-600">{studentProfile.name.split(' ')[0]}!</span>
                   </h1>
-                  <p className="text-sm text-gray-500 font-medium">Welcome back to Hostelease Dashboard</p>
+                  <p className="text-[11px] md:text-sm text-gray-500 font-medium whitespace-nowrap">Welcome back to Hostelease Dashboard</p>
                 </div>
-                <div className="flex items-center gap-2 self-end md:self-auto">
+                <div className="flex items-center gap-2 pt-1">
                   <button
                     onClick={handleLogout}
                     className="p-2.5 rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-all hover:text-red-600"
@@ -719,22 +723,22 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
               </div>
 
               {/* Quick Info Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-2xl border border-blue-100 shadow-sm">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-2" style={{ fontFamily: 'Cambria, Cochin, Georgia, Times, "Times New Roman", serif' }}>
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-2 md:p-2.5 rounded-2xl border border-blue-100 shadow-sm flex flex-col justify-center">
                   <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1">Current Status</p>
                   <div className="flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full animate-pulse ${studentProfile.studentStatus === 'out' ? 'bg-red-500' : 'bg-green-500'}`} />
-                    <p className="text-lg font-bold text-gray-900 capitalize">Currently {studentProfile.studentStatus || 'IN'}</p>
+                    <p className="text-[12px] font-bold text-gray-900 capitalize">Currently {studentProfile.studentStatus || 'IN'}</p>
                   </div>
                 </div>
-                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-2 md:p-2.5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hostel & Room</p>
-                  <p className="text-lg font-bold text-gray-900">{studentProfile.hostelName}<span className="text-blue-600 ml-1">#{studentProfile.roomNumber}</span></p>
+                  <p className="text-[12px] font-bold text-gray-900">{studentProfile.hostelName}<span className="text-blue-600 ml-1">#{studentProfile.roomNumber}</span></p>
                 </div>
-                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+                <div className="bg-white p-2 md:p-2.5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between gap-1">
                   <div>
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Location Lock</p>
-                    <p className="text-sm font-bold text-gray-700">{isAtHostel ? '📍 Verified' : '❌ Not Verified'}</p>
+                    <p className="text-[12px] font-bold text-gray-700">{isAtHostel ? '📍 Verified' : '❌ Not Verified'}</p>
                   </div>
                   <button
                     onClick={getAccurateLocation}
@@ -752,11 +756,11 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                     )}
                   </button>
                 </div>
-                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+                <div className="bg-white p-2 md:p-2.5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between gap-1">
                   <div className="flex-1">
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Daily Attendance</p>
-                    <p className={`text-sm font-bold ${attendanceError ? 'text-red-600' : 'text-gray-700'}`}>
-                      {isAttendanceMarked ? '✅ Saved' : attendanceError ? attendanceError : `🕒 Allowed ${attendanceWindow.start} - ${attendanceWindow.end}`}
+                    <p className="text-[12px] font-bold text-gray-700">
+                      {isAttendanceMarked ? '✅ Saved' : `🕒 ${attendanceWindow.start} - ${attendanceWindow.end}`}
                     </p>
                   </div>
                   {!isAttendanceMarked ? (
@@ -1308,6 +1312,17 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
           </div>
         )
       }
+      {/* Floating Toast Notification */}
+      {showToast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-5 duration-300 px-4 w-full max-w-sm">
+          <div className="bg-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-red-500/20 backdrop-blur-md">
+            <svg className="w-6 h-6 text-white/90 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm font-bold tracking-tight" style={{ fontFamily: 'Cambria, serif' }}>{toastMessage}</p>
+          </div>
+        </div>
+      )}
     </div >
   );
 }

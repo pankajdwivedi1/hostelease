@@ -778,7 +778,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-secondary mb-1.5">College Name</label>
                     <select
@@ -859,67 +859,99 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
                 </div>
 
-                <div className="flex gap-2 md:gap-3 flex-wrap">
+                <div className="grid grid-cols-6 sm:flex sm:flex-wrap gap-2 md:gap-3">
                   <button
                     onClick={() => setHostelFilter("all")}
-                    className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-1 ${hostelFilter === "all"
+                    className={`col-span-3 sm:w-auto px-2 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${hostelFilter === "all"
                       ? "bg-blue-600 text-background"
                       : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                       }`}
                   >
-                    <span>All</span>
-                    <span className="text-xs font-bold">{studentsLoading ? "..." : students.length}</span>
+                    <span className="text-center leading-[1.1]">Total Registered Students</span>
+                    <span className="text-[10px] opacity-90">{studentsLoading ? "..." : students.length}</span>
                   </button>
-                  {hostels.map((h) => {
+
+                  {/* Move Guest House to second position in first row */}
+                  {hostels.filter(h => h.name.toLowerCase().includes("guest")).map((h) => {
                     const count = students.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === h.name).length;
                     const presentCount = attendanceSummary[h.name] || 0;
-
                     return (
                       <button
                         key={h._id || h.name}
                         onClick={() => setHostelFilter(h.name)}
-                        className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-1 ${hostelFilter === h.name
+                        className={`col-span-3 sm:w-auto px-2 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${hostelFilter === h.name
                           ? "bg-blue-600 text-background"
                           : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                           }`}
                       >
-                        <span className="font-bold">{h.name}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] opacity-75">T: {count}</span>
-                          <span className="text-[10px] text-green-500 font-bold bg-green-50 px-1 rounded">P: {presentCount}</span>
+                        <span className="text-center leading-tight">{h.name}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] opacity-75">T: {count}</span>
+                          <span className="text-[9px] text-green-600 font-black bg-green-50/50 px-1 rounded">P: {presentCount}</span>
                         </div>
                       </button>
                     );
                   })}
+
+                  {/* Render Boys, Gangotri, Gaytri in Row 2 (3 columns) */}
+                  {hostels
+                    .filter(h => !h.name.toLowerCase().includes("guest"))
+                    .sort((a, b) => {
+                      const order = ["boys hostel", "gangotri hostel", "gaytri hostel"];
+                      const aIdx = order.indexOf(a.name.toLowerCase());
+                      const bIdx = order.indexOf(b.name.toLowerCase());
+                      return (aIdx === -1 ? 99 : aIdx) - (bIdx === -1 ? 99 : bIdx);
+                    })
+                    .map((h) => {
+                      const count = students.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === h.name).length;
+                      const presentCount = attendanceSummary[h.name] || 0;
+
+                      return (
+                        <button
+                          key={h._id || h.name}
+                          onClick={() => setHostelFilter(h.name)}
+                          className={`col-span-2 sm:w-auto px-2 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${hostelFilter === h.name
+                            ? "bg-blue-600 text-background"
+                            : "bg-filler text-foreground hover:bg-[#E8E8E6]"
+                            }`}
+                        >
+                          <span className="text-center leading-tight">{h.name}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] opacity-75">T: {count}</span>
+                            <span className="text-[9px] text-green-600 font-black bg-green-50/50 px-1 rounded">P: {presentCount}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
                 </div>
 
-                <div className="flex gap-2 md:gap-3 flex-wrap items-center">
+                <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-2 md:gap-3 items-center">
                   <button
                     onClick={() => setStatusFilter("all")}
-                    className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-1 ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:w-auto px-1 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
-                    <span>All Students</span>
-                    <span className="text-xs font-bold">{studentsLoading ? "..." : statusCounts.all}</span>
+                    <span className="text-center leading-[1.1]">Current Student Count</span>
+                    <span className="text-[10px]">{studentsLoading ? "..." : statusCounts.all}</span>
                   </button>
                   <button
                     onClick={() => setStatusFilter("in")}
-                    className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-1 ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:w-auto px-1 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
                     <span>In</span>
-                    <span className="text-xs font-bold">{studentsLoading ? "..." : statusCounts.in}</span>
+                    <span className="text-[10px]">{studentsLoading ? "..." : statusCounts.in}</span>
                   </button>
                   <button
                     onClick={() => setStatusFilter("out")}
-                    className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center gap-1 ${statusFilter === "out" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:w-auto px-1 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${statusFilter === "out" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
                     <span>Out</span>
-                    <span className="text-xs font-bold">{studentsLoading ? "..." : statusCounts.out}</span>
+                    <span className="text-[10px]">{studentsLoading ? "..." : statusCounts.out}</span>
                   </button>
                   {showRemoveButton && (
                     <button
                       onClick={exportToExcel}
                       disabled={studentsLoading}
-                      className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg bg-green-600 text-white font-medium transition-colors hover:bg-green-700 text-sm whitespace-nowrap flex items-center gap-1.5 ${studentsLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                      className={`w-full sm:w-auto px-3 md:px-4 py-1.5 md:py-2 rounded-lg bg-green-600 text-white font-medium transition-colors hover:bg-green-700 text-sm whitespace-nowrap flex items-center justify-center gap-1.5 ${studentsLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -929,67 +961,69 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   )}
                 </div>
 
-                <div className="space-y-3">
-                  {studentsLoading ? (
-                    <div className="flex flex-col items-center justify-center py-12 gap-3">
-                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
-                      <p className="text-secondary text-sm">Loading student directory...</p>
-                    </div>
-                  ) : filteredStudents.length === 0 ? (
-                    <p className="text-secondary text-center py-8">No students found</p>
-                  ) : (
-                    filteredStudents.map((student) => {
-                      const studentPermissions = permissions.filter((p) => {
-                        if (!p.studentId) return false;
-                        return typeof p.studentId === "object" ? p.studentId._id === student.id : p.studentId === student.id;
-                      });
-                      return (
-                        <button
-                          key={student.id}
-                          onClick={() => handleProfileClick(student.id)}
-                          className="w-full text-left rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4 hover:bg-[#E8E8E6] transition-colors"
-                        >
-                          <div className="flex items-center gap-3 md:gap-4">
-                            <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0">
-                              {student.profilePicture ? (
-                                <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
-                              ) : (
-                                getInitials(student.name)
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <p className="text-base font-semibold text-foreground">{student.name}</p>
-                                  {presentStudentIds.includes(student.id) && (
-                                    <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 text-[9px] font-bold rounded-full border border-green-200 uppercase">
-                                      <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                      </svg>
-                                      Present
-                                    </span>
-                                  )}
+                <div className="max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="space-y-3">
+                    {studentsLoading ? (
+                      <div className="flex flex-col items-center justify-center py-12 gap-3">
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
+                        <p className="text-secondary text-sm">Loading student directory...</p>
+                      </div>
+                    ) : filteredStudents.length === 0 ? (
+                      <p className="text-secondary text-center py-8">No students found</p>
+                    ) : (
+                      filteredStudents.map((student) => {
+                        const studentPermissions = permissions.filter((p) => {
+                          if (!p.studentId) return false;
+                          return typeof p.studentId === "object" ? p.studentId._id === student.id : p.studentId === student.id;
+                        });
+                        return (
+                          <button
+                            key={student.id}
+                            onClick={() => handleProfileClick(student.id)}
+                            className="w-full text-left rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4 hover:bg-[#E8E8E6] transition-colors"
+                          >
+                            <div className="flex items-center gap-3 md:gap-4">
+                              <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0">
+                                {student.profilePicture ? (
+                                  <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
+                                ) : (
+                                  getInitials(student.name)
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-base font-semibold text-foreground">{student.name}</p>
+                                    {presentStudentIds.includes(student.id) && (
+                                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 text-[9px] font-bold rounded-full border border-green-200 uppercase">
+                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        Present
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${student.studentStatus === 'out' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}`}>
+                                    {student.studentStatus || 'in'}
+                                  </span>
                                 </div>
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${student.studentStatus === 'out' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}`}>
-                                  {student.studentStatus || 'in'}
-                                </span>
-                              </div>
-                              <p className="text-sm text-secondary mt-0.5">{student.email}</p>
-                              <div className="flex items-center gap-3 md:gap-4 mt-2 text-sm text-secondary">
-                                <span>{getHostelCategory(student.hostelName) || student.hostelName}</span>
-                                <span>•</span>
-                                <span>Room {student.roomNumber}</span>
-                                <span>•</span>
-                                <a href={`tel:${student.phoneNumber}`} title="Click to call" className="hover:text-blue-600 hover:underline">
-                                  {student.phoneNumber}
-                                </a>
+                                <p className="text-sm text-secondary mt-0.5">{student.email}</p>
+                                <div className="flex items-center gap-3 md:gap-4 mt-2 text-sm text-secondary">
+                                  <span>{getHostelCategory(student.hostelName) || student.hostelName}</span>
+                                  <span>•</span>
+                                  <span>Room {student.roomNumber}</span>
+                                  <span>•</span>
+                                  <a href={`tel:${student.phoneNumber}`} title="Click to call" className="hover:text-blue-600 hover:underline">
+                                    {student.phoneNumber}
+                                  </a>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </button>
-                      );
-                    })
-                  )}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               </div>
             </>

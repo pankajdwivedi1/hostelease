@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
 
         // Check GPS Accuracy (New requirement)
         const bodyAccuracy = body.accuracy; // We'll need to update frontend to pass this
-        if (bodyAccuracy !== undefined && bodyAccuracy > 50) {
+        if (bodyAccuracy !== undefined && bodyAccuracy > 80) {
             return NextResponse.json(
                 {
                     error: "Waiting for better GPS signal... (Accuracy too low)",
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
         const istTime = istTimeStr.split(":").slice(0, 2).join(":"); // "HH:mm"
 
         const startTime = adminSettings?.attendanceStartTime || "21:00";
-        const endTime = adminSettings?.attendanceEndTime || "22:30";
+        const endTime = adminSettings?.attendanceEndTime || "23:00";
 
         if (istTime < startTime || istTime > endTime) {
             return NextResponse.json(
@@ -223,7 +223,7 @@ export async function GET(request: NextRequest) {
 
             return NextResponse.json({
                 marked: !!attendance,
-                startTime: adminSettings?.attendanceStartTime || "18:00",
+                startTime: adminSettings?.attendanceStartTime || "21:00",
                 endTime: adminSettings?.attendanceEndTime || "23:00"
             });
         }
