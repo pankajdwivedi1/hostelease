@@ -16,6 +16,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const existingStudent = await Student.findOne({ firebaseUID });
+    let registrationId = existingStudent?.registrationId;
+
+    if (!registrationId) {
+      const hostelPrefixes: { [key: string]: string } = {
+        "Guest House Boys Hostel": "GUEST",
+        "Boys Hostel": "BOYS",
+        "Gangotri Hostel": "GANGOTRI",
+        "Gaytri Hostel": "GAYTRI"
+      };
+
+      let prefix = "STUDENT";
+      for (const [hName, p] of Object.entries(hostelPrefixes)) {
+        if (hostelName.toLowerCase().includes(hName.toLowerCase())) {
+          prefix = p;
+          break;
+        }
+      }
+
+      // Find the highest number for this prefix
+      const lastStudent = await Student.findOne({
+        registrationId: { $regex: new RegExp(`^${prefix}-`) }
+      }).sort({ registrationId: -1 });
+
+      let nextNumber = 1;
+      if (lastStudent && lastStudent.registrationId) {
+        const parts = lastStudent.registrationId.split('-');
+        const lastNumber = parseInt(parts[1]);
+        if (!isNaN(lastNumber)) {
+          nextNumber = lastNumber + 1;
+        }
+      }
+      registrationId = `${prefix}-${String(nextNumber).padStart(4, '0')}`;
+    }
+
     const student = await Student.findOneAndUpdate(
       { firebaseUID },
       {
@@ -25,6 +60,7 @@ export async function POST(request: NextRequest) {
         phoneNumber,
         hostelName,
         roomNumber,
+        registrationId,
         profilePicture: profilePicture || "",
         studentStatus: "in",
         fatherName: fatherName || "",
@@ -115,6 +151,7 @@ export async function GET(request: NextRequest) {
       query.$or = [
         { name: { $regex: search, $options: "i" } },
         { email: { $regex: search, $options: "i" } },
+        { registrationId: { $regex: search, $options: "i" } },
       ];
     }
     if (hostelName && hostelName !== "all") {

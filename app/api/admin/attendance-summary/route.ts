@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
     try {
         await connectDB();
 
+        const searchParams = request.nextUrl.searchParams;
+        const requestedDate = searchParams.get("date");
+
         // Get today's date in IST YYYY-MM-DD
         const dateObj = new Date();
         const istDateStr = dateObj.toLocaleDateString("en-IN", {
@@ -36,6 +39,8 @@ export async function GET(request: NextRequest) {
             // Fallback for unexpected formats
             today = dateObj.toISOString().split('T')[0];
         }
+
+        const date = requestedDate || today;
 
         // Fetch hostels to use for mapping (Optimized with cache)
         const nowMs = Date.now();
@@ -67,9 +72,9 @@ export async function GET(request: NextRequest) {
             return closeMatch || rawName;
         };
 
-        // Get counts grouped by raw hostelName for today
+        // Get counts grouped by raw hostelName for the selected date
         const summary = await Attendance.aggregate([
-            { $match: { date: today } },
+            { $match: { date: date } },
             { $group: { _id: "$hostelName", count: { $sum: 1 } } }
         ]);
 
@@ -91,14 +96,14 @@ export async function GET(request: NextRequest) {
         });
 
         // Also get the list of studentIds who marked attendance to highlight them in UI
-        const presentStudents = await Attendance.find({ date: today }).select("studentId");
+        const presentStudents = await Attendance.find({ date: date }).select("studentId");
         const presentStudentIds = presentStudents.map(a => a.studentId.toString());
 
         return NextResponse.json({
             success: true,
             summary: formattedSummary,
             presentStudentIds,
-            date: today
+            date: date
         });
     } catch (error: any) {
         console.error("Error fetching attendance summary:", error);

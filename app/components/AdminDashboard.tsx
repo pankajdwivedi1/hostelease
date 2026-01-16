@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import * as XLSX from "xlsx";
 import { auth } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
+import Barcode from "react-barcode";
 
 interface Permission {
   _id: string;
@@ -41,6 +42,35 @@ interface SimplePermission {
   deanStatus: "pending" | "allowed" | "rejected";
 }
 
+interface AttendanceLog {
+  _id: string;
+  studentId: {
+    name: string;
+    email: string;
+    hostelName: string;
+    roomNumber: string;
+    registrationId?: string;
+  } | null;
+  istTime: string;
+  location: {
+    accuracy: number;
+  };
+}
+
+interface DBNotification {
+  _id: string;
+  message: string;
+  image?: string;
+  targetType: "all" | "hostel" | "individual";
+  targetStudentId?: {
+    name: string;
+    registrationId: string;
+  };
+  priority: "normal" | "urgent" | "critical";
+  createdAt: string;
+  acknowledgedBy: string[];
+}
+
 interface StudentDetails {
   id: string;
   name: string;
@@ -65,6 +95,7 @@ interface StudentDetails {
   section?: string;
   homeState?: string;
   studentStatus?: "in" | "out";
+  registrationId?: string;
   permissions: SimplePermission[];
 }
 
@@ -97,6 +128,32 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [studentsLoading, setStudentsLoading] = useState(true);
   const [attendanceSummary, setAttendanceSummary] = useState<Record<string, number>>({});
   const [presentStudentIds, setPresentStudentIds] = useState<string[]>([]);
+  const [currentTab, setCurrentTab] = useState<"permissions" | "attendance" | "messaging">("permissions");
+  const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
+  const [attendanceLogsLoading, setAttendanceLogsLoading] = useState(false);
+  const [adminNotifications, setAdminNotifications] = useState<DBNotification[]>([]);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [newMessage, setNewMessage] = useState({
+    message: "",
+    targetType: "all",
+    targetHostel: "",
+    targetStudentId: "",
+    priority: "normal" as const,
+    image: "",
+    expiryHours: "24" // Default 24 hours
+  });
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [attendanceHostelFilter, setAttendanceHostelFilter] = useState("all");
+  const [showExportPreview, setShowExportPreview] = useState(false);
+  const [exportPreviewData, setExportPreviewData] = useState<any[]>([]);
+  const [exportType, setExportType] = useState<'students' | 'attendance'>('students');
+  const absentees = useMemo(() => {
+    let list = students.filter(s => !presentStudentIds.includes(s.id));
+    if (currentTab === "attendance" && attendanceHostelFilter !== "all") {
+      list = list.filter(s => s.hostelName === attendanceHostelFilter);
+    }
+    return list;
+  }, [students, presentStudentIds, attendanceHostelFilter, currentTab]);
 
   const fetchHostels = async (forceRefresh = false) => {
     try {
@@ -170,6 +227,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           localGuardianPhoneNumber: s.localGuardianPhoneNumber,
           homeState: s.homeState,
           studentStatus: s.studentStatus || "in",
+          registrationId: s.registrationId,
           permissions: []
         }));
         setStudents(formattedStudents);
@@ -203,7 +261,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const fetchAttendanceSummary = async () => {
     try {
-      const response = await fetch("/api/admin/attendance-summary");
+      const response = await fetch(`/api/admin/attendance-summary?date=${selectedDate}`);
       const data = await response.json();
       if (data.success) {
         setAttendanceSummary(data.summary);
@@ -211,6 +269,101 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (error) {
       console.error("Error fetching attendance summary:", error);
+    }
+  };
+
+  const fetchAttendanceLogs = async () => {
+    try {
+      setAttendanceLogsLoading(true);
+      const response = await fetch(`/api/admin/attendance?date=${selectedDate}&hostelName=${attendanceHostelFilter}`);
+      const data = await response.json();
+      if (data.success) {
+        setAttendanceLogs(data.attendance || []);
+      }
+    } catch (error) {
+      console.error("Error fetching attendance logs:", error);
+    } finally {
+      setAttendanceLogsLoading(false);
+    }
+  };
+
+  const fetchAdminNotifications = async () => {
+    try {
+      const response = await fetch("/api/admin/notifications");
+      const data = await response.json();
+      if (data.success) {
+        setAdminNotifications(data.notifications);
+      }
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewMessage(prev => ({ ...prev, image: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!newMessage.message) return;
+    try {
+      setSendingMessage(true);
+      const senderId = sessionStorage.getItem("firebaseUID") || sessionStorage.getItem("userType");
+
+      // Calculate expiry date
+      let expiresAt = null;
+      if (newMessage.expiryHours !== "never") {
+        expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + parseInt(newMessage.expiryHours));
+      }
+
+      const response = await fetch("/api/admin/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...newMessage, senderId, expiresAt }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert("Notification broadcasted successfully!");
+        setNewMessage({
+          message: "",
+          targetType: "all",
+          targetHostel: "",
+          targetStudentId: "",
+          priority: "normal",
+          image: "",
+          expiryHours: "24"
+        });
+        fetchAdminNotifications();
+      } else {
+        alert(data.error || "Failed to broadcast notification");
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const handleCleanup = async (type: "attendance" | "notifications") => {
+    if (!confirm(`Are you sure you want to clean up ${type}? This will delete old records.`)) return;
+    try {
+      const endpoint = type === "attendance" ? "/api/admin/attendance-cleanup" : "/api/admin/notifications?action=cleanup";
+      const response = await fetch(endpoint, { method: "DELETE" });
+      const data = await response.json();
+      if (data.success) {
+        alert(`${type} cleanup successful! ${data.deletedCount} records removed.`);
+        if (type === "attendance") fetchAttendanceLogs();
+        else fetchAdminNotifications();
+      }
+    } catch (error) {
+      console.error(`Error cleaning up ${type}:`, error);
     }
   };
 
@@ -230,17 +383,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     };
 
     loadData();
+    fetchAdminNotifications();
+  }, []);
 
-    // ⚡ Fetch Attendance Summary
+  useEffect(() => {
     fetchAttendanceSummary();
+    if (currentTab === "attendance") {
+      fetchAttendanceLogs();
+    }
+  }, [selectedDate, attendanceHostelFilter, currentTab]);
 
+  useEffect(() => {
     const interval = setInterval(() => {
       fetchPermissions();
       fetchAttendanceSummary();
-    }, 15000);
+      if (currentTab === 'attendance') fetchAttendanceLogs();
+      if (currentTab === 'messaging') fetchAdminNotifications();
+    }, 20000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [currentTab, selectedDate]);
 
   const handleLogout = async () => {
     try {
@@ -330,8 +492,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const exportToExcel = () => {
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(students.map(s => ({
+    const data = students.map(s => ({
+      "Student ID": s.registrationId || "N/A",
       Name: s.name,
       Email: s.email,
       Phone: s.phoneNumber,
@@ -341,9 +503,40 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       Branch: s.branch,
       Year: s.year,
       Semester: s.semester
-    })));
-    XLSX.utils.book_append_sheet(wb, ws, "Students");
-    XLSX.writeFile(wb, "students_data.xlsx");
+    }));
+    setExportPreviewData(data);
+    setExportType('students');
+    setShowExportPreview(true);
+  };
+
+  const exportAttendanceToExcel = () => {
+    const data = attendanceLogs.map(log => ({
+      "Student ID": log.studentId?.registrationId || "N/A",
+      Student: log.studentId?.name || "Unknown",
+      Email: log.studentId?.email || "N/A",
+      Hostel: log.studentId?.hostelName || "N/A",
+      Room: log.studentId?.roomNumber || "N/A",
+      Time: log.istTime,
+      Accuracy: log.location.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"
+    }));
+    setExportPreviewData(data);
+    setExportType('attendance');
+    setShowExportPreview(true);
+  };
+
+  const confirmDownload = () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(exportPreviewData);
+
+    if (exportType === 'students') {
+      XLSX.utils.book_append_sheet(wb, ws, "Students");
+      XLSX.writeFile(wb, "students_data.xlsx");
+    } else {
+      const hostelNameSuffix = attendanceHostelFilter !== "all" ? `_${attendanceHostelFilter}` : "";
+      XLSX.utils.book_append_sheet(wb, ws, `${selectedDate}${hostelNameSuffix} Report`.slice(0, 31));
+      XLSX.writeFile(wb, `attendance_report_${selectedDate}${hostelNameSuffix}.xlsx`);
+    }
+    setShowExportPreview(false);
   };
 
   const getInitials = (name: string) => {
@@ -380,7 +573,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           student = {
             ...student,
             profilePicture: data.student.profilePicture,
-            // Update any other fields if needed
             fatherName: data.student.fatherName,
             fatherNumber: data.student.fatherNumber,
             motherName: data.student.motherName,
@@ -392,10 +584,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             localGuardianPhoneNumber: data.student.localGuardianPhoneNumber,
             homeState: data.student.homeState,
             studentStatus: data.student.studentStatus || "in",
+            registrationId: data.student.registrationId,
           };
-
-          // Optionally update the main list cache with this new detail so subsequent clicks are fast?
-          // That might complicate the cache size again. Let's just keep it in selectedStudent for now.
         }
       } catch (e) {
         console.error("Failed to fetch full student details", e);
@@ -419,7 +609,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           roomNumber: s.roomNumber,
           profilePicture: s.profilePicture,
           permissions: [],
-          // Default empty strings for fields not present in permission population
           fatherName: "",
           fatherNumber: "",
           motherName: "",
@@ -436,6 +625,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           localGuardianPhoneNumber: "",
           homeState: "",
           studentStatus: s.studentStatus || "in",
+          registrationId: (s as any).registrationId || "",
         };
       }
     }
@@ -468,6 +658,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const matchesStatus = filter === "all" || p.status === filter;
       const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).registrationId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.semester?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.branch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.section?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -493,6 +684,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     return students.filter((student) => {
       const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).registrationId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.semester?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.branch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.section?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -516,6 +708,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const baseList = students.filter(student => {
       const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).registrationId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.semester?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.branch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.section?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -572,170 +765,527 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
               </div>
 
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex gap-2 md:gap-3 flex-wrap items-center">
-                  <button
-                    onClick={() => setFilter("all")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
-                  >
-                    All
-                  </button>
-                  <button
-                    onClick={() => setFilter("pending")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "pending" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
-                  >
-                    Pending
-                  </button>
-                  <button
-                    onClick={() => setFilter("allowed")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "allowed" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
-                  >
-                    Accepted
-                  </button>
-                  <button
-                    onClick={() => setFilter("rejected")}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "rejected" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
-                  >
-                    Rejected
-                  </button>
-
-                  <select
-                    value={hostelFilter}
-                    onChange={(e) => setHostelFilter(e.target.value)}
-                    className="h-9 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground min-w-[120px]"
-                  >
-                    <option value="all">Hostel</option>
-                    {hostels.map((h) => (
-                      <option key={h._id || h.name} value={h.name}>{h.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="relative flex-1 max-w-sm">
-                  <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                    <svg className="w-4 h-4 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Search student..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-3 h-9 text-sm rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
-                  />
-                </div>
+              {/* Tab Navigation */}
+              <div className="flex items-center gap-1 bg-filler p-1 rounded-xl mb-6">
+                <button
+                  onClick={() => setCurrentTab('permissions')}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${currentTab === 'permissions' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                >
+                  Permissions
+                </button>
+                <button
+                  onClick={() => setCurrentTab('attendance')}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${currentTab === 'attendance' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                >
+                  Daily Attendance
+                </button>
+                <button
+                  onClick={() => setCurrentTab('messaging')}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${currentTab === 'messaging' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                >
+                  Messaging
+                </button>
               </div>
 
-              <div className="space-y-3">
-                {loading ? (
-                  <div className="flex flex-col items-center justify-center py-12 gap-3">
-                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
-                    <p className="text-secondary text-sm">Loading permissions...</p>
+              {currentTab === 'permissions' && (
+                <>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex gap-2 md:gap-3 flex-wrap items-center">
+                      <button
+                        onClick={() => setFilter("all")}
+                        className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                      >
+                        All
+                      </button>
+                      <button
+                        onClick={() => setFilter("pending")}
+                        className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "pending" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                      >
+                        Pending
+                      </button>
+                      <button
+                        onClick={() => setFilter("allowed")}
+                        className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "allowed" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                      >
+                        Accepted
+                      </button>
+                      <button
+                        onClick={() => setFilter("rejected")}
+                        className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "rejected" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                      >
+                        Rejected
+                      </button>
+
+                      <select
+                        value={hostelFilter}
+                        onChange={(e) => setHostelFilter(e.target.value)}
+                        className="h-9 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground min-w-[120px]"
+                      >
+                        <option value="all">Hostel</option>
+                        {hostels.map((h) => (
+                          <option key={h._id || h.name} value={h.name}>{h.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="relative flex-1 max-w-sm">
+                      <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                        <svg className="w-4 h-4 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Search student..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-3 h-9 text-sm rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
+                      />
+                    </div>
                   </div>
-                ) : filteredPermissions.length === 0 ? (
-                  <p className="text-secondary">No permissions found</p>
-                ) : (
-                  filteredPermissions.map((permission) => {
-                    const student = typeof permission.studentId === "object" ? permission.studentId : null;
-                    if (!student) return null;
 
-                    const initials = getInitials(student.name);
-                    const profilePic = student.profilePicture && student.profilePicture.trim() !== "" && student.profilePicture !== "undefined";
+                  <div className="space-y-3">
+                    {loading ? (
+                      <div className="flex flex-col items-center justify-center py-12 gap-3">
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
+                        <p className="text-secondary text-sm">Loading permissions...</p>
+                      </div>
+                    ) : filteredPermissions.length === 0 ? (
+                      <p className="text-secondary">No permissions found</p>
+                    ) : (
+                      filteredPermissions.map((permission) => {
+                        const student = typeof permission.studentId === "object" ? permission.studentId : null;
+                        if (!student) return null;
 
-                    return (
-                      <div key={permission._id} className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4">
-                        <div className="flex flex-col gap-3">
-                          <div className="flex items-start gap-3 md:gap-4">
-                            <button
-                              onClick={() => handleProfileClick(student._id)}
-                              className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
-                            >
-                              {profilePic ? (
-                                <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
-                              ) : (
-                                initials
-                              )}
-                            </button>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm md:text-base font-semibold text-foreground">{student.name}</p>
-                              <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-2 mt-0.5 md:mt-1 text-xs md:text-sm text-secondary">
-                                <span>{new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
-                                <span className="hidden md:inline">•</span>
-                                <span>to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
+                        const initials = getInitials(student.name);
+                        const profilePic = student.profilePicture && student.profilePicture.trim() !== "" && student.profilePicture !== "undefined";
+
+                        return (
+                          <div key={permission._id} className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4">
+                            <div className="flex flex-col gap-3">
+                              <div className="flex items-start gap-3 md:gap-4">
+                                <button
+                                  onClick={() => handleProfileClick(student._id)}
+                                  className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                                >
+                                  {profilePic ? (
+                                    <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
+                                  ) : (
+                                    initials
+                                  )}
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm md:text-base font-semibold text-foreground">{student.name}</p>
+                                  <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-2 mt-0.5 md:mt-1 text-xs md:text-sm text-secondary">
+                                    <span>{new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
+                                    <span className="hidden md:inline">•</span>
+                                    <span>to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
+                                  </div>
+                                  <p className="text-sm text-foreground mt-1.5 md:mt-2">{permission.reason}</p>
+                                </div>
                               </div>
-                              <p className="text-sm text-foreground mt-1.5 md:mt-2">{permission.reason}</p>
+
+                              <div className="flex items-center justify-around md:justify-end md:gap-8 pt-2 border-t border-gray-200 md:border-0 md:pt-0">
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="text-[11px] md:text-[13px] font-medium text-foreground whitespace-nowrap">Warden approval</span>
+                                  <div className="flex items-center gap-1.5 md:gap-2">
+                                    <button
+                                      onClick={() => userType === "warden" && handleStatusChange(permission._id, "allowed")}
+                                      disabled={userType !== "warden" || permission.deanStatus !== "pending"}
+                                      className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${userType !== "warden" ? "cursor-default" : "cursor-pointer"}`}
+                                    >
+                                      <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                    </button>
+                                    <button
+                                      onClick={() => userType === "warden" && handleStatusChange(permission._id, "rejected")}
+                                      disabled={userType !== "warden" || permission.deanStatus !== "pending"}
+                                      className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${userType !== "warden" ? "cursor-default" : "cursor-pointer"}`}
+                                    >
+                                      <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                  </div>
+                                  {/* Warden Status Label */}
+                                  {permission.wardenStatus === "rejected" && (
+                                    <span className="text-[10px] md:text-xs font-medium text-red-600 bg-red-50 px-1.5 md:px-2 py-0.5 rounded">
+                                      Rejected
+                                    </span>
+                                  )}
+                                  {permission.wardenStatus === "allowed" && (
+                                    <span className="text-[10px] md:text-xs font-medium text-green-600 bg-green-50 px-1.5 md:px-2 py-0.5 rounded">
+                                      Accepted
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="text-[11px] md:text-[13px] font-medium text-foreground whitespace-nowrap">Dean approval</span>
+                                  <div className="flex items-center gap-1.5 md:gap-2">
+                                    <button
+                                      onClick={() => (userType === "admin" || userType === "developer") && handleStatusChange(permission._id, "allowed")}
+                                      disabled={userType !== "admin" && userType !== "developer"}
+                                      className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300"} ${userType !== "admin" && userType !== "developer" ? "cursor-default" : "cursor-pointer"}`}
+                                    >
+                                      <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                    </button>
+                                    <button
+                                      onClick={() => (userType === "admin" || userType === "developer") && handleStatusChange(permission._id, "rejected")}
+                                      disabled={userType !== "admin" && userType !== "developer"}
+                                      className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${userType !== "admin" && userType !== "developer" ? "cursor-default" : "cursor-pointer"}`}
+                                    >
+                                      <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                  </div>
+                                  {/* Dean Status Label */}
+                                  {permission.deanStatus === "rejected" && (
+                                    <span className="text-[10px] md:text-xs font-medium text-red-600 bg-red-50 px-1.5 md:px-2 py-0.5 rounded">
+                                      Rejected
+                                    </span>
+                                  )}
+                                  {permission.deanStatus === "allowed" && (
+                                    <span className="text-[10px] md:text-xs font-medium text-green-600 bg-green-50 px-1.5 md:px-2 py-0.5 rounded">
+                                      Accepted
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </>
+              )}
 
-                          <div className="flex items-center justify-around md:justify-end md:gap-8 pt-2 border-t border-gray-200 md:border-0 md:pt-0">
-                            <div className="flex flex-col items-center gap-1">
-                              <span className="text-[11px] md:text-[13px] font-medium text-foreground whitespace-nowrap">Warden approval</span>
-                              <div className="flex items-center gap-1.5 md:gap-2">
-                                <button
-                                  onClick={() => userType === "warden" && handleStatusChange(permission._id, "allowed")}
-                                  disabled={userType !== "warden" || permission.deanStatus !== "pending"}
-                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${userType !== "warden" ? "cursor-default" : "cursor-pointer"}`}
-                                >
-                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                </button>
-                                <button
-                                  onClick={() => userType === "warden" && handleStatusChange(permission._id, "rejected")}
-                                  disabled={userType !== "warden" || permission.deanStatus !== "pending"}
-                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${userType !== "warden" ? "cursor-default" : "cursor-pointer"}`}
-                                >
-                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                </button>
-                              </div>
-                              {/* Warden Status Label */}
-                              {permission.wardenStatus === "rejected" && (
-                                <span className="text-[10px] md:text-xs font-medium text-red-600 bg-red-50 px-1.5 md:px-2 py-0.5 rounded">
-                                  Rejected
-                                </span>
-                              )}
-                              {permission.wardenStatus === "allowed" && (
-                                <span className="text-[10px] md:text-xs font-medium text-green-600 bg-green-50 px-1.5 md:px-2 py-0.5 rounded">
-                                  Accepted
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex flex-col items-center gap-1">
-                              <span className="text-[11px] md:text-[13px] font-medium text-foreground whitespace-nowrap">Dean approval</span>
-                              <div className="flex items-center gap-1.5 md:gap-2">
-                                <button
-                                  onClick={() => (userType === "admin" || userType === "developer") && handleStatusChange(permission._id, "allowed")}
-                                  disabled={userType !== "admin" && userType !== "developer"}
-                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300"} ${userType !== "admin" && userType !== "developer" ? "cursor-default" : "cursor-pointer"}`}
-                                >
-                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                </button>
-                                <button
-                                  onClick={() => (userType === "admin" || userType === "developer") && handleStatusChange(permission._id, "rejected")}
-                                  disabled={userType !== "admin" && userType !== "developer"}
-                                  className={`w-5 h-5 md:w-6 md:h-6 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${userType !== "admin" && userType !== "developer" ? "cursor-default" : "cursor-pointer"}`}
-                                >
-                                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                </button>
-                              </div>
-                              {/* Dean Status Label */}
-                              {permission.deanStatus === "rejected" && (
-                                <span className="text-[10px] md:text-xs font-medium text-red-600 bg-red-50 px-1.5 md:px-2 py-0.5 rounded">
-                                  Rejected
-                                </span>
-                              )}
-                              {permission.deanStatus === "allowed" && (
-                                <span className="text-[10px] md:text-xs font-medium text-green-600 bg-green-50 px-1.5 md:px-2 py-0.5 rounded">
-                                  Accepted
-                                </span>
-                              )}
-                            </div>
+              {currentTab === 'attendance' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                      <div>
+                        <h2 className="text-lg font-bold text-foreground">Daily Attendance Monitoring</h2>
+                        <p className="text-sm text-secondary">Student entries and absentees for {selectedDate === new Date().toISOString().split('T')[0] ? 'today' : selectedDate}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="date"
+                          value={selectedDate}
+                          onChange={(e) => setSelectedDate(e.target.value)}
+                          max={new Date().toISOString().split('T')[0]}
+                          className="h-10 px-4 rounded-xl border border-gray-200 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500 bg-white shadow-sm cursor-pointer"
+                        />
+                        <select
+                          value={attendanceHostelFilter}
+                          onChange={(e) => setAttendanceHostelFilter(e.target.value)}
+                          className="h-10 px-4 rounded-xl border border-gray-200 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500 bg-white shadow-sm cursor-pointer"
+                        >
+                          <option value="all">All Hostels</option>
+                          {hostels.map((h) => (
+                            <option key={h._id || h.name} value={h.name}>{h.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={exportAttendanceToExcel}
+                        className="px-4 py-2 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                        Export Excel
+                      </button>
+                      {(userType === "admin" || userType === "developer") && (
+                        <button
+                          onClick={() => handleCleanup("attendance")}
+                          className="px-4 py-2 text-xs font-semibold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                        >
+                          Purge Logs
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 md:gap-4">
+                    <div className="bg-filler p-3 md:p-4 rounded-xl border border-gray-100 shadow-sm">
+                      <p className="text-[10px] md:text-xs font-bold text-secondary uppercase tracking-wider">Total Present</p>
+                      <p className="text-xl md:text-2xl font-black text-blue-600 mt-1">{presentStudentIds.length}</p>
+                    </div>
+                    <div className="bg-filler p-3 md:p-4 rounded-xl border border-gray-100 shadow-sm text-red-600">
+                      <p className="text-[10px] md:text-xs font-bold uppercase tracking-wider">Total Absentees</p>
+                      <p className="text-xl md:text-2xl font-black mt-1">{absentees.length}</p>
+                    </div>
+                    <div className="bg-filler p-3 md:p-4 rounded-xl border border-gray-100 shadow-sm">
+                      <p className="text-[10px] md:text-xs font-bold text-secondary uppercase tracking-wider">Present Ratio</p>
+                      <p className="text-xl md:text-2xl font-black text-foreground mt-1">
+                        {students.length > 0 ? Math.round((presentStudentIds.length / students.length) * 100) : 0}%
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Hostel Breakdown */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {Object.entries(attendanceSummary).map(([hostel, count]) => (
+                      <div key={hostel} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                        <p className="text-[10px] font-bold text-secondary uppercase truncate">{hostel}</p>
+                        <p className="text-lg font-black text-foreground">{count}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Entry Logs Table */}
+                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="bg-filler px-1 py-1 flex border-b border-gray-200">
+                      <p className="px-4 py-2 text-xs font-bold text-secondary uppercase tracking-widest">Entry Logs ({selectedDate === new Date().toISOString().split('T')[0] ? 'Today' : selectedDate})</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                        <thead className="bg-[#fcfcfc] text-secondary font-bold uppercase text-[9px] border-b border-gray-100">
+                          <tr>
+                            <th className="px-4 py-3">Student</th>
+                            <th className="px-4 py-3">Hostel/Room</th>
+                            <th className="px-4 py-3">Time</th>
+                            <th className="px-4 py-3">Accuracy</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {attendanceLogsLoading ? (
+                            <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic">Refreshing database...</td></tr>
+                          ) : attendanceLogs.length === 0 ? (
+                            <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic">No entries found for {selectedDate === new Date().toISOString().split('T')[0] ? '9:00 PM onwards' : selectedDate}.</td></tr>
+                          ) : (
+                            attendanceLogs.map((log) => (
+                              <tr key={log._id} className="hover:bg-filler/50 transition-colors">
+                                <td className="px-4 py-3 font-bold text-foreground">{log.studentId?.name || "Unknown"}</td>
+                                <td className="px-4 py-3 text-secondary text-xs">{log.studentId?.hostelName} - {log.studentId?.roomNumber}</td>
+                                <td className="px-4 py-3">
+                                  <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-md font-bold text-xs">{log.istTime}</span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`text-[10px] font-bold ${log.location.accuracy < 50 ? "text-green-600" : "text-orange-500"}`}>
+                                    {log.location.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Absentee List */}
+                  <div className="bg-red-50/30 rounded-xl border border-red-100 p-4">
+                    <h3 className="text-sm font-bold text-red-900 mb-3 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                      {selectedDate === new Date().toISOString().split('T')[0] ? "Today's" : selectedDate} Absentee List ({absentees.length} students)
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {absentees.slice(0, 21).map(s => (
+                        <div key={s.id} className="bg-white p-3 rounded-lg border border-red-100 flex items-center gap-3 shadow-sm hover:shadow-md transition-shadow">
+                          <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-[10px] font-black">
+                            {getInitials(s.name)}
                           </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-foreground truncate">{s.name}</p>
+                            <p className="text-[9px] text-secondary truncate uppercase">{s.hostelName} • {s.roomNumber}</p>
+                          </div>
+                          <a href={`tel:${s.phoneNumber}`} className="ml-auto w-7 h-7 bg-green-50 text-green-600 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                          </a>
+                        </div>
+                      ))}
+                      {absentees.length > 21 && (
+                        <p className="text-[10px] text-secondary text-center col-span-full pt-2 font-medium">Plus {absentees.length - 21} more absentees...</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {currentTab === 'messaging' && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-lg font-bold text-foreground">Dean Messaging System</h2>
+                      <p className="text-sm text-secondary">Broadcast messages to students or individuals</p>
+                    </div>
+                    <button
+                      onClick={() => handleCleanup("notifications")}
+                      className="px-4 py-2 text-xs font-semibold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                    >
+                      Clear History (30+ Days)
+                    </button>
+                  </div>
+
+                  <div className="bg-filler p-5 rounded-2xl border border-blue-100 shadow-sm">
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-xs font-bold text-secondary uppercase">Message Content</label>
+                          <label className="cursor-pointer bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-[10px] font-bold hover:bg-blue-100 transition-colors flex items-center gap-1">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            {newMessage.image ? "Change Image" : "Add Image (Paste/Upload)"}
+                            <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                          </label>
+                        </div>
+                        <div className="relative">
+                          <textarea
+                            value={newMessage.message}
+                            onChange={(e) => setNewMessage({ ...newMessage, message: e.target.value })}
+                            onPaste={(e) => {
+                              const item = e.clipboardData.items[0];
+                              if (item?.type.startsWith('image/')) {
+                                const file = item.getAsFile();
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    setNewMessage(prev => ({ ...prev, image: reader.result as string }));
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }
+                            }}
+                            placeholder="Type your message here... You can also paste an image directly."
+                            className="w-full p-4 rounded-xl border border-gray-200 focus:outline-none focus:border-blue-500 min-h-[120px] text-sm"
+                          />
+                          {newMessage.image && (
+                            <div className="mt-3 relative inline-block">
+                              <img src={newMessage.image} alt="Preview" className="max-h-40 rounded-lg border border-gray-100 shadow-sm" />
+                              <button
+                                onClick={() => setNewMessage(prev => ({ ...prev, image: "" }))}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    );
-                  })
-                )}
-              </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-secondary uppercase mb-2">Target Audience</label>
+                          <select
+                            value={newMessage.targetType}
+                            onChange={(e: any) => setNewMessage({ ...newMessage, targetType: e.target.value })}
+                            className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500"
+                          >
+                            <option value="all">All Students</option>
+                            <option value="hostel">Specific Hostel</option>
+                            <option value="individual">Individual Student</option>
+                          </select>
+                        </div>
+
+                        {newMessage.targetType === "hostel" && (
+                          <div>
+                            <label className="block text-xs font-bold text-secondary uppercase mb-2">Select Hostel</label>
+                            <select
+                              value={newMessage.targetHostel}
+                              onChange={(e) => setNewMessage({ ...newMessage, targetHostel: e.target.value })}
+                              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500"
+                            >
+                              <option value="">Choose Hostel...</option>
+                              {hostels.map((h) => (
+                                <option key={h._id} value={h.name}>
+                                  {h.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {newMessage.targetType === "individual" && (
+                          <div>
+                            <label className="block text-xs font-bold text-secondary uppercase mb-2">Student ID/Email</label>
+                            <input
+                              type="text"
+                              value={newMessage.targetStudentId}
+                              onChange={(e) => setNewMessage({ ...newMessage, targetStudentId: e.target.value })}
+                              placeholder="Enter Student ID (e.g. BOYS-0001)"
+                              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="block text-xs font-bold text-secondary uppercase mb-2">Priority</label>
+                          <select
+                            value={newMessage.priority}
+                            onChange={(e: any) => setNewMessage({ ...newMessage, priority: e.target.value })}
+                            className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500"
+                          >
+                            <option value="normal">Normal</option>
+                            <option value="urgent">Urgent (Orange)</option>
+                            <option value="critical">Critical (Red)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-secondary uppercase mb-2">Display Duration</label>
+                          <select
+                            value={newMessage.expiryHours}
+                            onChange={(e) => setNewMessage({ ...newMessage, expiryHours: e.target.value })}
+                            className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500"
+                          >
+                            <option value="1">1 Hour</option>
+                            <option value="6">6 Hours</option>
+                            <option value="12">12 Hours</option>
+                            <option value="24">1 Day</option>
+                            <option value="72">3 Days</option>
+                            <option value="168">1 Week</option>
+                            <option value="never">Never (Manual Delete)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={handleSendMessage}
+                        disabled={sendingMessage || !newMessage.message}
+                        className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 disabled:bg-gray-300 disabled:shadow-none"
+                      >
+                        {sendingMessage ? "Sending..." : "Send Notification"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-bold text-secondary uppercase">Recent Broadcasts</h3>
+                    {adminNotifications.length === 0 ? (
+                      <p className="text-secondary text-sm italic">No recent messages sent</p>
+                    ) : (
+                      adminNotifications.map((notif) => (
+                        <div key={notif._id} className="bg-white p-4 rounded-xl border border-gray-200 flex items-start gap-4">
+                          <div
+                            className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${notif.priority === "critical"
+                              ? "bg-red-500"
+                              : notif.priority === "urgent"
+                                ? "bg-orange-500"
+                                : "bg-blue-500"
+                              }`}
+                          />
+                          <div className="flex-1">
+                            <div className="flex justify-between items-start">
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-black uppercase text-secondary tracking-widest">{notif.targetType} broadcast</span>
+                                {notif.targetType === "individual" && notif.targetStudentId && (
+                                  <span className="text-[10px] font-bold text-blue-600 uppercase mt-0.5">
+                                    To: {notif.targetStudentId.name} ({notif.targetStudentId.registrationId})
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-secondary">{new Date(notif.createdAt).toLocaleDateString()}</span>
+                            </div>
+                            <p className="text-sm text-foreground mt-1">{notif.message}</p>
+                            {notif.image && (
+                              <div className="mt-2">
+                                <img src={notif.image} alt="Broadcast" className="max-h-20 rounded-lg border border-gray-100" />
+                              </div>
+                            )}
+                            <div className="mt-2 text-[10px] font-bold text-blue-600">Acknowledged by: {notif.acknowledgedBy?.length || 0} students</div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -859,10 +1409,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
                 </div>
 
-                <div className="grid grid-cols-6 sm:flex sm:flex-wrap gap-2 md:gap-3">
+                <div className="grid grid-cols-6 sm:flex sm:flex-nowrap gap-2 md:gap-3">
                   <button
                     onClick={() => setHostelFilter("all")}
-                    className={`col-span-3 sm:w-auto px-2 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${hostelFilter === "all"
+                    className={`col-span-3 sm:flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${hostelFilter === "all"
                       ? "bg-blue-600 text-background"
                       : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                       }`}
@@ -879,7 +1429,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <button
                         key={h._id || h.name}
                         onClick={() => setHostelFilter(h.name)}
-                        className={`col-span-3 sm:w-auto px-2 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${hostelFilter === h.name
+                        className={`col-span-3 sm:flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${hostelFilter === h.name
                           ? "bg-blue-600 text-background"
                           : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                           }`}
@@ -910,7 +1460,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <button
                           key={h._id || h.name}
                           onClick={() => setHostelFilter(h.name)}
-                          className={`col-span-2 sm:w-auto px-2 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${hostelFilter === h.name
+                          className={`col-span-2 sm:flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${hostelFilter === h.name
                             ? "bg-blue-600 text-background"
                             : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                             }`}
@@ -925,24 +1475,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     })}
                 </div>
 
-                <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-2 md:gap-3 items-center">
+                <div className="grid grid-cols-3 sm:flex sm:flex-nowrap gap-2 md:gap-3 items-center">
                   <button
                     onClick={() => setStatusFilter("all")}
-                    className={`w-full sm:w-auto px-1 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 px-1 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
                     <span className="text-center leading-[1.1]">Current Student Count</span>
                     <span className="text-[10px]">{studentsLoading ? "..." : statusCounts.all}</span>
                   </button>
                   <button
                     onClick={() => setStatusFilter("in")}
-                    className={`w-full sm:w-auto px-1 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 px-1 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
                     <span>In</span>
                     <span className="text-[10px]">{studentsLoading ? "..." : statusCounts.in}</span>
                   </button>
                   <button
                     onClick={() => setStatusFilter("out")}
-                    className={`w-full sm:w-auto px-1 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${statusFilter === "out" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 px-1 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${statusFilter === "out" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
                     <span>Out</span>
                     <span className="text-[10px]">{studentsLoading ? "..." : statusCounts.out}</span>
@@ -951,7 +1501,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <button
                       onClick={exportToExcel}
                       disabled={studentsLoading}
-                      className={`w-full sm:w-auto px-3 md:px-4 py-1.5 md:py-2 rounded-lg bg-green-600 text-white font-medium transition-colors hover:bg-green-700 text-sm whitespace-nowrap flex items-center justify-center gap-1.5 ${studentsLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                      className={`w-full sm:flex-1 px-3 md:px-4 py-1.5 md:py-2 rounded-lg bg-green-600 text-white font-medium transition-colors hover:bg-green-700 text-sm whitespace-nowrap flex items-center justify-center gap-1.5 ${studentsLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -961,7 +1511,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   )}
                 </div>
 
-                <div className="max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                <div>
                   <div className="space-y-3">
                     {studentsLoading ? (
                       <div className="flex flex-col items-center justify-center py-12 gap-3">
@@ -1075,6 +1625,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
                     </div>
                     <p className="text-sm text-secondary">{selectedStudent.email}</p>
+                    {selectedStudent.registrationId && (
+                      <div className="flex flex-col items-center gap-2 mt-4 bg-gray-50 p-4 rounded-xl border border-gray-100 shadow-sm w-full">
+                        <p className="text-[10px] font-black text-blue-600 tracking-widest uppercase">Registration ID</p>
+                        <p className="text-lg font-black text-gray-900 leading-none">{selectedStudent.registrationId}</p>
+                        <div className="scale-[0.8] py-2 bg-white rounded-lg px-2">
+                          <Barcode
+                            value={selectedStudent.registrationId}
+                            width={1.2}
+                            height={40}
+                            fontSize={10}
+                            displayValue={false}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-4">
@@ -1253,33 +1818,100 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             </div>
           </div>
         </div>
-      )}
+      )
+      }
 
-      {showDeleteConfirm && selectedStudent && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowDeleteConfirm(false)}>
-          <div className="bg-white rounded-lg max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-foreground mb-2">Confirm Deletion</h3>
-            <p className="text-sm text-secondary mb-6">
-              Are you sure you want to remove <strong>{selectedStudent.name}</strong>? This action will permanently delete the student from the database and Firebase Auth. This cannot be undone.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="px-4 py-2 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleDeleteStudent(selectedStudent.id)}
-                disabled={deletingStudentId === selectedStudent.id}
-                className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium transition-colors hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {deletingStudentId === selectedStudent.id ? "Removing..." : "Remove Student"}
-              </button>
+      {
+        showDeleteConfirm && selectedStudent && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowDeleteConfirm(false)}>
+            <div className="bg-white rounded-lg max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Confirm Deletion</h3>
+              <p className="text-sm text-secondary mb-6">
+                Are you sure you want to remove <strong>{selectedStudent.name}</strong>? This action will permanently delete the student from the database and Firebase Auth. This cannot be undone.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="px-4 py-2 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteStudent(selectedStudent.id)}
+                  disabled={deletingStudentId === selectedStudent.id}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium transition-colors hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {deletingStudentId === selectedStudent.id ? "Removing..." : "Remove Student"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )
+        )
+      }
+      {
+        showExportPreview && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+              <div className="p-4 border-b flex items-center justify-between bg-white sticky top-0">
+                <div>
+                  <h3 className="text-lg font-bold text-foreground">Export Preview</h3>
+                  <p className="text-sm text-secondary">Verify data before downloading ({exportPreviewData.length} records)</p>
+                </div>
+                <button
+                  onClick={() => setShowExportPreview(false)}
+                  className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-auto p-4">
+                <div className="inline-block min-w-full align-middle">
+                  <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                      <thead className="bg-[#fcfcfc]">
+                        <tr>
+                          {exportPreviewData.length > 0 && Object.keys(exportPreviewData[0]).map((header) => (
+                            <th key={header} className="px-4 py-3 text-left font-bold text-secondary uppercase tracking-wider text-[10px]">
+                              {header}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-100">
+                        {exportPreviewData.map((row, i) => (
+                          <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                            {Object.values(row).map((val: any, j) => (
+                              <td key={j} className="px-4 py-2.5 text-foreground whitespace-nowrap">
+                                {val}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border-t bg-gray-50 flex items-center justify-end gap-3 sticky bottom-0">
+                <button
+                  onClick={() => setShowExportPreview(false)}
+                  className="px-6 py-2.5 rounded-xl border border-gray-200 bg-white text-foreground font-semibold hover:bg-gray-100 transition-all text-sm shadow-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDownload}
+                  className="px-8 py-2.5 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700 transition-all text-sm shadow-lg shadow-green-100 flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                  Download Excel
+                </button>
+              </div>
+            </div>
+          </div>
+        )
       }
     </div>
   );

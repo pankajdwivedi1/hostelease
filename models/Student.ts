@@ -35,6 +35,7 @@ export interface IStudentBase {
   };
   deviceId?: string;
 
+  registrationId?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -148,24 +149,18 @@ const StudentSchema = new Schema<IStudent>(
       index: true,
     },
     lastCheckInLocation: {
-      lat: {
-        type: Number,
-        required: false,
-      },
-      lng: {
-        type: Number,
-        required: false,
-      },
-      accuracy: {
-        type: Number,
-        required: false,
-      },
-      timestamp: {
-        type: Date,
-        required: false,
-      },
+      lat: { type: Number, required: false },
+      lng: { type: Number, required: false },
+      accuracy: { type: Number, required: false },
+      timestamp: { type: Date, required: false },
     },
-
+    registrationId: {
+      type: String,
+      required: false,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
   },
   {
     timestamps: true,

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import Barcode from "react-barcode";
 
 interface Permission {
   _id: string;
@@ -40,6 +41,16 @@ interface StudentProfile {
   section?: string;
   homeState?: string;
   deviceId?: string;
+  registrationId?: string;
+}
+
+interface DBNotification {
+  _id: string;
+  message: string;
+  image?: string;
+  priority: "normal" | "urgent" | "critical";
+  expiresAt?: string;
+  createdAt: string;
 }
 
 export default function StudentDashboard({ initialData }: { initialData?: any }) {
@@ -66,6 +77,11 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   const [attendanceError, setAttendanceError] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
+  const [notifications, setNotifications] = useState<DBNotification[]>([]);
+  const [currentNotification, setCurrentNotification] = useState<DBNotification | null>(null);
+  const [showNotifPopup, setShowNotifPopup] = useState(false);
+  const [isAcknowledging, setIsAcknowledging] = useState(false);
+  const [sessionDismissedIds, setSessionDismissedIds] = useState<string[]>([]);
 
   const latestPermission = useMemo(() => {
     if (permissions.length === 0) return null;
@@ -80,7 +96,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" },
     { lat: 23.2483348, lng: 77.5026058, radius: 200, name: "Centeral library" }
   ];
-  const ACCURACY_THRESHOLD = 80; // meters
+  const ACCURACY_THRESHOLD = 1000; // meters (High tolerance for indoor use)
 
   // Simple obfuscation for local storage
   const getStoredDeviceId = () => {
@@ -173,7 +189,44 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
           console.error("Error checking attendance status:", e);
         }
       };
+      // Initialize session dismissed notifications
+      const dismissed = JSON.parse(sessionStorage.getItem("dismissed_notifs") || "[]");
+      setSessionDismissedIds(dismissed);
+
+      // Fetch Notifications
+      const fetchStudentNotifications = async () => {
+        try {
+          const res = await fetch(`/api/student/notifications?studentId=${encodeURIComponent(studentProfile._id)}&hostelName=${encodeURIComponent(studentProfile.hostelName)}`);
+          const data = await res.json();
+          if (data.success && data.notifications.length > 0) {
+            // Filter out ones dismissed in current session
+            const currentDismissed = JSON.parse(sessionStorage.getItem("dismissed_notifs") || "[]");
+            const active = data.notifications.filter((n: any) => !currentDismissed.includes(n._id));
+
+            setNotifications(active);
+            if (active.length > 0) {
+              setCurrentNotification(active[0]);
+              setShowNotifPopup(true);
+            } else {
+              setShowNotifPopup(false);
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching notifications:", e);
+        }
+      };
+
       checkAttendance();
+
+      // Delay initial notification fetch by 3 seconds as requested
+      const initialNotifTimer = setTimeout(fetchStudentNotifications, 3000);
+
+      const notifInterval = setInterval(fetchStudentNotifications, 30000); // Check every 30 seconds
+
+      return () => {
+        clearInterval(notifInterval);
+        clearTimeout(initialNotifTimer);
+      };
     }
   }, [studentProfile, loading]);
 
@@ -195,8 +248,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      sessionStorage.removeItem("userType");
-      sessionStorage.removeItem("firebaseUID");
+      sessionStorage.clear();
       router.push("/login?logout=success");
     } catch (error) {
       console.error("Error signing out:", error);
@@ -437,12 +489,6 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         console.log(`Student Location: Lat=${position.coords.latitude}, Lng=${position.coords.longitude}`);
         console.log(`Accuracy: ${finalAccuracy} meters`);
 
-        if (finalAccuracy > ACCURACY_THRESHOLD) {
-          setIsAtHostel(false);
-          alert(`Waiting for better GPS signal... (Current Accuracy: ${finalAccuracy}m). Please stay in an open area.`);
-          return;
-        }
-
         // Check if student is within any of the allowed circles
         let isInsideAny = false;
         let matchedLocation: { lat: number; lng: number; radius: number; name: string; distance: number } | null = null;
@@ -467,14 +513,20 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         console.log(`\n=== FINAL LOCATION (${reason}) ===`);
         console.log(`Min Distance: ${Math.round(closestInfo.distance)} meters (Required: ${closestInfo.radius}m)`);
 
+        if (finalAccuracy > ACCURACY_THRESHOLD) {
+          setIsAtHostel(false);
+          alert(`Verification failed❌, Your GPS signal is too weak (Accuracy: ${finalAccuracy}m). You are currently ${Math.round(closestInfo.distance)} meters away from ${closestInfo.name}. Please move near a window.`);
+          return;
+        }
+
         if (isInsideAny && matchedLocation) {
           setIsAtHostel(true);
           const dist = Math.round(matchedLocation.distance);
           const locName = matchedLocation.name;
-          alert(`Location verified✔ You are ${dist} meters away from the ${locName}. Permission button is now active.`);
+          alert(`Verification Success✔️, You are ${dist} meters away from ${locName}. (Accuracy: ${finalAccuracy}m). Permission button is now active.`);
         } else {
           setIsAtHostel(false);
-          alert(`Verification failed! You are ${Math.round(closestInfo.distance)}m away from ${closestInfo.name}. You must be within the restricted radius of the campus hostels.`);
+          alert(`Verification failed❌, You are ${Math.round(closestInfo.distance)} meters away from ${closestInfo.name}. (Accuracy: ${finalAccuracy}m). You must be within the hostel radius.`);
         }
       } else {
         console.log("Falling back to getCurrentPosition...");
@@ -482,12 +534,6 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
           (pos) => {
             const { latitude, longitude, accuracy } = pos.coords;
             const finalAccuracy = Math.round(accuracy);
-
-            if (finalAccuracy > ACCURACY_THRESHOLD) {
-              setIsAtHostel(false);
-              alert(`Waiting for better GPS signal... (Current Accuracy: ${finalAccuracy}m).`);
-              return;
-            }
 
             let isInsideAny = false;
             let matchedLocation: { lat: number; lng: number; radius: number; name: string; distance: number } | null = null;
@@ -504,14 +550,20 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
               }
             }
 
+            if (finalAccuracy > ACCURACY_THRESHOLD) {
+              setIsAtHostel(false);
+              alert(`Verification failed❌, Your GPS signal is too weak (Accuracy: ${finalAccuracy}m). You are currently ${Math.round(closestInfo.distance)} meters away from ${closestInfo.name}. Please move near a window.`);
+              return;
+            }
+
             if (isInsideAny && matchedLocation) {
               setIsAtHostel(true);
               const dist = Math.round(matchedLocation.distance);
               const locName = matchedLocation.name;
-              alert(`Location verified✔ You are ${dist} meters away from the ${locName}. Permission button is now active.`);
+              alert(`Verification Success✔️, You are ${dist} meters away from ${locName}. (Accuracy: ${finalAccuracy}m). Permission button is now active.`);
             } else {
               setIsAtHostel(false);
-              alert(`Verification failed! You are ${Math.round(closestInfo.distance)}m away from ${closestInfo.name}. You must be within the restricted radius of the campus hostels.`);
+              alert(`Verification failed❌, You are ${Math.round(closestInfo.distance)} meters away from ${closestInfo.name}. (Accuracy: ${finalAccuracy}m). You must be within the hostel radius.`);
             }
           },
           (err) => {
@@ -548,8 +600,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
           bestPosition = position;
         }
 
-        if (accuracy <= 20) {
-          completeLocation(bestPosition, "reached 20m accuracy");
+        if (accuracy <= 60) {
+          completeLocation(bestPosition, "reached 60m accuracy");
         }
       },
       (error) => {
@@ -589,9 +641,47 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
     setTimeout(() => {
       if (!isCompleted) {
-        completeLocation(bestPosition, "timeout after 15 seconds");
+        completeLocation(bestPosition, "timeout after 25 seconds");
       }
-    }, 15000);
+    }, 25000);
+  };
+
+  const handleAcknowledge = async (notificationId: string) => {
+    if (!studentProfile) return;
+    try {
+      setIsAcknowledging(true);
+      const response = await fetch("/api/student/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: studentProfile._id,
+          notificationId
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        // Save to session storage to hide for THIS session
+        const currentDismissed = JSON.parse(sessionStorage.getItem("dismissed_notifs") || "[]");
+        if (!currentDismissed.includes(notificationId)) {
+          currentDismissed.push(notificationId);
+          sessionStorage.setItem("dismissed_notifs", JSON.stringify(currentDismissed));
+          setSessionDismissedIds(currentDismissed);
+        }
+
+        setShowNotifPopup(false);
+        // Check for next notification
+        const remaining = notifications.filter(n => n._id !== notificationId);
+        setNotifications(remaining);
+        if (remaining.length > 0) {
+          setCurrentNotification(remaining[0]);
+          setTimeout(() => setShowNotifPopup(true), 500);
+        }
+      }
+    } catch (error) {
+      console.error("Error acknowledging notification:", error);
+    } finally {
+      setIsAcknowledging(false);
+    }
   };
 
   const handleMarkAttendance = async () => {
@@ -802,11 +892,11 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                     <div className="flex flex-col items-center gap-2">
                       <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Warden approval</span>
                       <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all ${latestPermission.wardenStatus === "allowed" ? "border-green-500 bg-green-50 text-green-600 shadow-sm ring-4 ring-green-50" : "border-gray-100 text-gray-300"}`}>
-                          <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.wardenStatus === "allowed" ? "border-green-500 bg-green-50 text-green-600 shadow-sm ring-4 ring-green-50" : "border-gray-100 text-gray-300"}`}>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                         </div>
-                        <div className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all ${latestPermission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm ring-4 ring-red-50" : "border-gray-100 text-gray-300"}`}>
-                          <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm ring-4 ring-red-50" : "border-gray-100 text-gray-300"}`}>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
                         </div>
                       </div>
                       <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${latestPermission.wardenStatus === 'allowed' ? 'text-green-600 bg-green-50' : latestPermission.wardenStatus === 'rejected' ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-100'}`}>
@@ -819,11 +909,11 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                     <div className="flex flex-col items-center gap-2">
                       <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Dean approval</span>
                       <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all ${latestPermission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-lg shadow-green-100 scale-110" : "border-gray-100 text-gray-300"}`}>
-                          <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-lg shadow-green-100 scale-110" : "border-gray-100 text-gray-300"}`}>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                         </div>
-                        <div className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all ${latestPermission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm ring-4 ring-red-50" : "border-gray-100 text-gray-300"}`}>
-                          <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm ring-4 ring-red-50" : "border-gray-100 text-gray-300"}`}>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
                         </div>
                       </div>
                       <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${latestPermission.deanStatus === 'allowed' ? 'text-green-600 bg-green-50' : latestPermission.deanStatus === 'rejected' ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-100'}`}>
@@ -1154,6 +1244,24 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                         </span>
                       </div>
                       <p className="text-sm text-secondary">{studentProfile.email}</p>
+
+                      {studentProfile.registrationId && (
+                        <div className="mt-4 flex flex-col items-center gap-2 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                          <p className="text-xs font-black text-blue-600 tracking-widest uppercase">Registration ID</p>
+                          <p className="text-lg font-black text-gray-900 leading-none">{studentProfile.registrationId}</p>
+                          <div className="scale-[0.85] py-2">
+                            <Barcode
+                              value={studentProfile.registrationId}
+                              width={1.5}
+                              height={50}
+                              fontSize={12}
+                              background="#ffffff"
+                              lineColor="#000000"
+                              displayValue={false}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
@@ -1312,17 +1420,50 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
           </div>
         )
       }
-      {/* Floating Toast Notification */}
-      {showToast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-5 duration-300 px-4 w-full max-w-sm">
-          <div className="bg-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-red-500/20 backdrop-blur-md">
-            <svg className="w-6 h-6 text-white/90 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p className="text-sm font-bold tracking-tight" style={{ fontFamily: 'Cambria, serif' }}>{toastMessage}</p>
+
+      {/* Notification Popup */}
+      {
+        showNotifPopup && currentNotification && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+            <div className={`bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col p-6 space-y-4 border-b-4 ${currentNotification.priority === 'critical' ? 'border-red-600' : currentNotification.priority === 'urgent' ? 'border-orange-500' : 'border-blue-600'}`}>
+              <div className="flex items-center justify-between">
+                <div className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest ${currentNotification.priority === 'critical' ? 'bg-red-100 text-red-600' : currentNotification.priority === 'urgent' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                  Message from Dean
+                </div>
+                <span className="text-[10px] text-gray-400">{new Date(currentNotification.createdAt).toLocaleDateString()}</span>
+              </div>
+              {currentNotification.image && (
+                <div className="w-full rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+                  <img src={currentNotification.image} alt="Notification" className="w-full h-auto object-contain max-h-[300px]" />
+                </div>
+              )}
+              <p className="text-gray-800 font-medium leading-relaxed">
+                {currentNotification.message}
+              </p>
+              <button
+                onClick={() => handleAcknowledge(currentNotification._id)}
+                disabled={isAcknowledging}
+                className={`w-full h-12 rounded-xl text-white font-bold transition-all active:scale-95 ${currentNotification.priority === 'critical' ? 'bg-red-600 hover:bg-red-700' : currentNotification.priority === 'urgent' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'} disabled:opacity-50`}
+              >
+                {isAcknowledging ? 'Acknowledging...' : 'I have Read & Acknowledged'}
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
+      {/* Floating Toast Notification */}
+      {
+        showToast && (
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-5 duration-300 px-4 w-full max-w-sm">
+            <div className="bg-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-red-500/20 backdrop-blur-md">
+              <svg className="w-6 h-6 text-white/90 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm font-bold tracking-tight" style={{ fontFamily: 'Cambria, serif' }}>{toastMessage}</p>
+            </div>
+          </div>
+        )
+      }
     </div >
   );
 }
