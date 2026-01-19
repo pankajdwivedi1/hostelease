@@ -106,7 +106,8 @@ export async function GET(request: NextRequest) {
       let student;
       if (minimal) {
         // ⚡ OPTIMIZED: Ultra-minimal selection for fastest login flow
-        student = await Student.findOne({ firebaseUID }).select("_id firebaseUID name studentStatus deviceId");
+        // Include dob and category to prevent profile completion modal from showing incorrectly
+        student = await Student.findOne({ firebaseUID }).select("_id firebaseUID name studentStatus deviceId dob category");
       } else {
         student = await Student.findOne({ firebaseUID });
       }
