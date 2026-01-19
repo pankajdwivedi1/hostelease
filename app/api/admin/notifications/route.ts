@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import dbConnect from "@/lib/mongodb";
+import connectDB from "@/lib/mongodb";
 import Notification from "@/models/Notification";
 import Student from "@/models/Student";
 
 export async function POST(request: Request) {
     try {
-        await dbConnect();
+        await connectDB();
         const body = await request.json();
         const { senderId, targetType, targetHostel, message, priority } = body;
         let { targetStudentId } = body;
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
     try {
-        await dbConnect();
+        await connectDB();
         const notifications = await Notification.find()
             .populate("targetStudentId", "name registrationId")
             .sort({ createdAt: -1 })
@@ -65,7 +65,7 @@ export async function GET() {
 
 export async function DELETE(request: Request) {
     try {
-        await dbConnect();
+        await connectDB();
         const { searchParams } = new URL(request.url);
         const action = searchParams.get("action");
 

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import dbConnect from "@/lib/mongodb";
+import connectDB from "@/lib/mongodb";
 import Notification from "@/models/Notification";
 import mongoose from "mongoose";
 
 export async function GET(request: Request) {
     try {
-        await dbConnect();
+        await connectDB();
         const { searchParams } = new URL(request.url);
         const studentId = searchParams.get("studentId");
         const hostelName = searchParams.get("hostelName");
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
-        await dbConnect();
+        await connectDB();
         const { notificationId, studentId } = await request.json();
 
         if (!notificationId || !studentId) {

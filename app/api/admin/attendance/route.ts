@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import dbConnect from "@/lib/mongodb";
+import connectDB from "@/lib/mongodb";
 import Attendance from "@/models/Attendance";
 import Student from "@/models/Student";
 
 export async function GET(request: Request) {
     try {
-        await dbConnect();
+        await connectDB();
         const { searchParams } = new URL(request.url);
         const date = searchParams.get("date"); // Format: YYYY-MM-DD
         const hostelName = searchParams.get("hostelName");

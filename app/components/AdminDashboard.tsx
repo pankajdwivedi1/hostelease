@@ -716,35 +716,75 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
 
     setIsLocationChecking(true);
+
+    const processLocation = (position: GeolocationPosition) => {
+      const { latitude, longitude, accuracy } = position.coords;
+      const finalAccuracy = Math.round(accuracy);
+      setLastCheckAccuracy(finalAccuracy);
+
+      const locationsToTest = hostelLocations.length > 0 ? hostelLocations : [
+        { lat: 23.2475529, lng: 77.5035134, radius: 100, name: "Gangotri hostel" },
+        { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" },
+        { lat: 23.2483348, lng: 77.5026058, radius: 200, name: "Centeral library" }
+      ];
+
+      const results = locationsToTest.map(loc => {
+        const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
+        // ⚡ IMPROVED: Account for GPS accuracy (Effective Distance)
+        // Cap the accuracy offset at 50m to prevent false positives when GPS is very poor
+        const offset = Math.min(finalAccuracy, 50);
+        const isVerified = dist <= loc.radius;
+        return { ...loc, distance: dist, isVerified: isVerified, appliedOffset: offset };
+      });
+      setLocationVerificationResults(results);
+      setIsLocationChecking(false);
+    };
+
+    const handleError = (error: GeolocationPositionError, isHighAccuracy: boolean) => {
+      console.warn(`Location test error (${isHighAccuracy ? 'High' : 'Low'} Accuracy):`, error);
+      console.warn(`Error code: ${error.code}, Message: ${error.message}`);
+
+      // If high accuracy failed, try low accuracy as fallback
+      if (isHighAccuracy) {
+        console.log("High accuracy failed. Falling back to low accuracy mode...");
+        navigator.geolocation.getCurrentPosition(
+          processLocation,
+          (lowAccError) => handleError(lowAccError, false),
+          {
+            enableHighAccuracy: false,
+            timeout: 40000, // 40 seconds for low accuracy fallback
+            maximumAge: 120000 // Accept cached positions up to 2 minutes old
+          }
+        );
+        return;
+      }
+
+      // Both high and low accuracy failed
+      setIsLocationChecking(false);
+      let errorMsg = "Could not retrieve location. ";
+
+      if (error.code === 1) {
+        errorMsg += "Location permission denied. Please enable location services in your browser settings.";
+      } else if (error.code === 2) {
+        errorMsg += "Position unavailable. Please check your GPS signal and ensure you're not indoors.";
+      } else if (error.code === 3) {
+        errorMsg += "Location request timed out. Please ensure:\n- GPS is enabled\n- You have a clear view of the sky\n- Location services are allowed for this site\n\nTry moving to an open area and retry.";
+      } else {
+        errorMsg += "An unknown error occurred. Please try again.";
+      }
+
+      alert(errorMsg);
+    };
+
+    // First attempt: High accuracy with 30s timeout (mobile-friendly)
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-        const finalAccuracy = Math.round(accuracy);
-        setLastCheckAccuracy(finalAccuracy);
-
-        const locationsToTest = hostelLocations.length > 0 ? hostelLocations : [
-          { lat: 23.2475529, lng: 77.5035134, radius: 100, name: "Gangotri hostel" },
-          { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" },
-          { lat: 23.2483348, lng: 77.5026058, radius: 200, name: "Centeral library" }
-        ];
-
-        const results = locationsToTest.map(loc => {
-          const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
-          // ⚡ IMPROVED: Account for GPS accuracy (Effective Distance)
-          // Cap the accuracy offset at 50m to prevent false positives when GPS is very poor
-          const offset = Math.min(finalAccuracy, 50);
-          const isVerified = dist <= loc.radius;
-          return { ...loc, distance: dist, isVerified: isVerified, appliedOffset: offset };
-        });
-        setLocationVerificationResults(results);
-        setIsLocationChecking(false);
-      },
-      (error) => {
-        console.error("Location error:", error);
-        setIsLocationChecking(false);
-        alert("Could not get location. Please ensure GPS is on.");
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      processLocation,
+      (error) => handleError(error, true),
+      {
+        enableHighAccuracy: true,
+        timeout: 30000, // Increased to 30 seconds for mobile devices
+        maximumAge: 10000 // Accept recent positions (10 seconds old)
+      }
     );
   };
 

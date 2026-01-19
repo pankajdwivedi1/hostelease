@@ -758,7 +758,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             }
             alert(errorMessage);
           },
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
         );
       }
     };
@@ -806,7 +806,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
             alert(errorMessage);
           },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 }
         );
       },
       { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }

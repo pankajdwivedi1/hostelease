@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import dbConnect from "@/lib/mongodb";
+import connectDB from "@/lib/mongodb";
 import Attendance from "@/models/Attendance";
 
 export async function DELETE(request: Request) {
     try {
-        await dbConnect();
+        await connectDB();
 
         // Cleanup attendance records older than 6 months
         const sixMonthsAgo = new Date();
