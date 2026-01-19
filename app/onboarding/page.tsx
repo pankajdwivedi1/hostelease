@@ -36,6 +36,8 @@ export default function OnboardingPage() {
     section: "",
     localGuardianAddress: "",
     localGuardianPhoneNumber: "",
+    dob: "",
+    category: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -91,6 +93,8 @@ export default function OnboardingPage() {
               section: data.student.section || "",
               localGuardianAddress: data.student.localGuardianAddress || "",
               localGuardianPhoneNumber: data.student.localGuardianPhoneNumber || "",
+              dob: data.student.dob ? new Date(data.student.dob).toISOString().split("T")[0] : "",
+              category: data.student.category || "",
             });
             if (data.student.profilePicture) {
               setCapturedImage(data.student.profilePicture);
@@ -186,6 +190,14 @@ export default function OnboardingPage() {
       newErrors.localGuardianPhoneNumber = "Local guardian phone number is required";
     }
 
+    if (!formData.dob.trim()) {
+      newErrors.dob = "Date of birth is required";
+    }
+
+    if (!formData.category) {
+      newErrors.category = "Category is required";
+    }
+
     if (!capturedImage) {
       newErrors.profilePicture = "Profile picture is required. Please capture your photo.";
     }
@@ -239,6 +251,8 @@ export default function OnboardingPage() {
           section: formData.section,
           localGuardianAddress: formData.localGuardianAddress,
           localGuardianPhoneNumber: formData.localGuardianPhoneNumber,
+          dob: formData.dob,
+          category: formData.category,
         }),
       });
 
@@ -437,47 +451,89 @@ export default function OnboardingPage() {
                 onChange={(e) => handleChange("name", e.target.value)}
                 placeholder="Enter your full name"
                 className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.name ? "border-red-500" : "border-[#9CA3AF]"
-                  } bg-white text-foreground uppercase placeholder:text-secondary focus:outline-none focus:border-foreground`}
+                  } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
               />
               {errors.name && (
                 <p className="mt-1 text-sm text-red-600">{errors.name}</p>
               )}
             </div>
 
-            <div>
-              <label htmlFor="phoneNumber" className="block text-sm font-medium text-foreground mb-2">
-                Phone Number
-              </label>
-              <input
-                type="tel"
-                id="phoneNumber"
-                value={formData.phoneNumber}
-                onChange={(e) => handleChange("phoneNumber", e.target.value)}
-                placeholder="Enter your phone number"
-                className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.phoneNumber ? "border-red-500" : "border-[#9CA3AF]"
-                  } bg-white text-foreground uppercase placeholder:text-secondary focus:outline-none focus:border-foreground`}
-              />
-              {errors.phoneNumber && (
-                <p className="mt-1 text-sm text-red-600">{errors.phoneNumber}</p>
-              )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="phoneNumber" className="block text-sm font-medium text-foreground mb-2">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  id="phoneNumber"
+                  value={formData.phoneNumber}
+                  onChange={(e) => handleChange("phoneNumber", e.target.value)}
+                  placeholder="Enter your phone number"
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.phoneNumber ? "border-red-500" : "border-[#9CA3AF]"
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                />
+                {errors.phoneNumber && (
+                  <p className="mt-1 text-sm text-red-600">{errors.phoneNumber}</p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="dob" className="block text-sm font-medium text-foreground mb-2">
+                  Date of birth
+                </label>
+                <input
+                  type="date"
+                  id="dob"
+                  value={formData.dob}
+                  onChange={(e) => handleChange("dob", e.target.value)}
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.dob ? "border-red-500" : "border-[#9CA3AF]"
+                    } bg-white text-foreground text-xs focus:outline-none focus:border-foreground`}
+                />
+                {errors.dob && (
+                  <p className="mt-1 text-sm text-red-600">{errors.dob}</p>
+                )}
+              </div>
             </div>
 
-            <div>
-              <label htmlFor="erpInformation" className="block text-sm font-medium text-foreground mb-2">
-                Enter your ERP ID
-              </label>
-              <input
-                type="text"
-                id="erpInformation"
-                value={formData.erpInformation}
-                onChange={(e) => handleChange("erpInformation", e.target.value)}
-                placeholder="Enter your ERP information"
-                className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.erpInformation ? "border-red-500" : "border-[#9CA3AF]"
-                  } bg-white text-foreground uppercase placeholder:text-secondary focus:outline-none focus:border-foreground`}
-              />
-              {errors.erpInformation && (
-                <p className="mt-1 text-sm text-red-600">{errors.erpInformation}</p>
-              )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="category" className="block text-sm font-medium text-foreground mb-2">
+                  Category
+                </label>
+                <select
+                  id="category"
+                  value={formData.category}
+                  onChange={(e) => handleChange("category", e.target.value)}
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.category ? "border-red-500" : "border-[#9CA3AF]"
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground`}
+                >
+                  <option value="">SELECT CATEGORY</option>
+                  {["GENERAL", "SC", "ST", "OBC"].map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+                {errors.category && (
+                  <p className="mt-1 text-sm text-red-600">{errors.category}</p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="erpInformation" className="block text-sm font-medium text-foreground mb-2">
+                  Enter your ERP ID
+                </label>
+                <input
+                  type="text"
+                  id="erpInformation"
+                  value={formData.erpInformation}
+                  onChange={(e) => handleChange("erpInformation", e.target.value)}
+                  placeholder="Enter your ERP information"
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.erpInformation ? "border-red-500" : "border-[#9CA3AF]"
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                />
+                {errors.erpInformation && (
+                  <p className="mt-1 text-sm text-red-600">{errors.erpInformation}</p>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -490,7 +546,7 @@ export default function OnboardingPage() {
                   value={formData.collegeName}
                   onChange={(e) => handleChange("collegeName", e.target.value)}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.collegeName ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground uppercase focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground`}
                 >
                   <option value="">SELECT COLLEGE</option>
                   {["OIST", "OCT", "OCP", "OPM", "OIPR"].map((opt) => (
@@ -511,7 +567,7 @@ export default function OnboardingPage() {
                   onChange={(e) => handleChange("hostelName", e.target.value)}
                   disabled={hostelsLoading}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.hostelName ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground uppercase focus:outline-none focus:border-foreground disabled:opacity-50 disabled:cursor-not-allowed`}
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   <option value="">{hostelsLoading ? "LOADING HOSTELS..." : "SELECT HOSTEL"}</option>
                   {hostels.map((hostel) => (
@@ -538,7 +594,7 @@ export default function OnboardingPage() {
                   onChange={(e) => handleChange("joiningDate", e.target.value)}
                   placeholder="e.g. 01-01-2000"
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.joiningDate ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground uppercase placeholder:text-secondary focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
                 />
                 {errors.joiningDate && (
                   <p className="mt-1 text-sm text-red-600">{errors.joiningDate}</p>
@@ -553,7 +609,7 @@ export default function OnboardingPage() {
                   value={formData.year}
                   onChange={(e) => handleChange("year", e.target.value)}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.year ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground uppercase focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground`}
                 >
                   <option value="">SELECT YEAR</option>
                   {["1st year", "2nd year", "3rd year", "4th year"].map((opt) => (
@@ -576,7 +632,7 @@ export default function OnboardingPage() {
                   value={formData.semester}
                   onChange={(e) => handleChange("semester", e.target.value)}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.semester ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground uppercase focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground`}
                 >
                   <option value="">SELECT SEMESTER</option>
                   {["1st Sem", "2nd Sem", "3rd Sem", "4th Sem", "5th Sem", "6th Sem", "7th Sem", "8th Sem"].map((opt) => (
@@ -596,10 +652,10 @@ export default function OnboardingPage() {
                   value={formData.branch}
                   onChange={(e) => handleChange("branch", e.target.value)}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.branch ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground uppercase focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground`}
                 >
                   <option value="">SELECT BRANCH</option>
-                  {["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS"].map((opt) => (
+                  {["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"].map((opt) => (
                     <option key={opt} value={opt.toUpperCase()}>{opt.toUpperCase()}</option>
                   ))}
                 </select>
@@ -619,7 +675,7 @@ export default function OnboardingPage() {
                   value={formData.section}
                   onChange={(e) => handleChange("section", e.target.value)}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.section ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground uppercase focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground`}
                 >
                   <option value="">SELECT SECTION</option>
                   {["NIL", "A", "B", "C", "D", "E", "F"].map((opt) => (
@@ -641,7 +697,7 @@ export default function OnboardingPage() {
                   onChange={(e) => handleChange("roomNumber", e.target.value)}
                   placeholder="Enter your room number"
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.roomNumber ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground uppercase placeholder:text-secondary focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
                 />
                 {errors.roomNumber && (
                   <p className="mt-1 text-sm text-red-600">{errors.roomNumber}</p>
@@ -649,122 +705,128 @@ export default function OnboardingPage() {
               </div>
             </div>
 
-            <div>
-              <label htmlFor="fatherName" className="block text-sm font-medium text-foreground mb-2">
-                Father&apos;s Name
-              </label>
-              <input
-                type="text"
-                id="fatherName"
-                value={formData.fatherName}
-                onChange={(e) => handleChange("fatherName", e.target.value)}
-                placeholder="Enter father&apos;s name"
-                className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.fatherName ? "border-red-500" : "border-[#9CA3AF]"
-                  } bg-white text-foreground uppercase placeholder:text-secondary focus:outline-none focus:border-foreground`}
-              />
-              {errors.fatherName && (
-                <p className="mt-1 text-sm text-red-600">{errors.fatherName}</p>
-              )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="fatherName" className="block text-sm font-medium text-foreground mb-2">
+                  Father&apos;s Name
+                </label>
+                <input
+                  type="text"
+                  id="fatherName"
+                  value={formData.fatherName}
+                  onChange={(e) => handleChange("fatherName", e.target.value)}
+                  placeholder="Enter father&apos;s name"
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.fatherName ? "border-red-500" : "border-[#9CA3AF]"
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                />
+                {errors.fatherName && (
+                  <p className="mt-1 text-sm text-red-600">{errors.fatherName}</p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="fatherNumber" className="block text-sm font-medium text-foreground mb-2">
+                  Father&apos;s Phone Number
+                </label>
+                <input
+                  type="tel"
+                  id="fatherNumber"
+                  value={formData.fatherNumber}
+                  onChange={(e) => handleChange("fatherNumber", e.target.value)}
+                  placeholder="Enter father&apos;s phone number"
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.fatherNumber ? "border-red-500" : "border-[#9CA3AF]"
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                />
+                {errors.fatherNumber && (
+                  <p className="mt-1 text-sm text-red-600">{errors.fatherNumber}</p>
+                )}
+              </div>
             </div>
 
-            <div>
-              <label htmlFor="fatherNumber" className="block text-sm font-medium text-foreground mb-2">
-                Father&apos;s Phone Number
-              </label>
-              <input
-                type="tel"
-                id="fatherNumber"
-                value={formData.fatherNumber}
-                onChange={(e) => handleChange("fatherNumber", e.target.value)}
-                placeholder="Enter father&apos;s phone number"
-                className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.fatherNumber ? "border-red-500" : "border-[#9CA3AF]"
-                  } bg-white text-foreground uppercase placeholder:text-secondary focus:outline-none focus:border-foreground`}
-              />
-              {errors.fatherNumber && (
-                <p className="mt-1 text-sm text-red-600">{errors.fatherNumber}</p>
-              )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="motherName" className="block text-sm font-medium text-foreground mb-2">
+                  Mother&apos;s Name
+                </label>
+                <input
+                  type="text"
+                  id="motherName"
+                  value={formData.motherName}
+                  onChange={(e) => handleChange("motherName", e.target.value)}
+                  placeholder="Enter mother&apos;s name"
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.motherName ? "border-red-500" : "border-[#9CA3AF]"
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                />
+                {errors.motherName && (
+                  <p className="mt-1 text-sm text-red-600">{errors.motherName}</p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="motherNumber" className="block text-sm font-medium text-foreground mb-2">
+                  Mother&apos;s Phone Number
+                </label>
+                <input
+                  type="tel"
+                  id="motherNumber"
+                  value={formData.motherNumber}
+                  onChange={(e) => handleChange("motherNumber", e.target.value)}
+                  placeholder="Enter mother&apos;s phone number"
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.motherNumber ? "border-red-500" : "border-[#9CA3AF]"
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                />
+                {errors.motherNumber && (
+                  <p className="mt-1 text-sm text-red-600">{errors.motherNumber}</p>
+                )}
+              </div>
             </div>
 
-            <div>
-              <label htmlFor="motherName" className="block text-sm font-medium text-foreground mb-2">
-                Mother&apos;s Name
-              </label>
-              <input
-                type="text"
-                id="motherName"
-                value={formData.motherName}
-                onChange={(e) => handleChange("motherName", e.target.value)}
-                placeholder="Enter mother&apos;s name"
-                className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.motherName ? "border-red-500" : "border-[#9CA3AF]"
-                  } bg-white text-foreground uppercase placeholder:text-secondary focus:outline-none focus:border-foreground`}
-              />
-              {errors.motherName && (
-                <p className="mt-1 text-sm text-red-600">{errors.motherName}</p>
-              )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="homePinCode" className="block text-sm font-medium text-foreground mb-2">
+                  Permanent address with pincode
+                </label>
+                <input
+                  type="text"
+                  id="homePinCode"
+                  value={formData.homePinCode}
+                  onChange={(e) => handleChange("homePinCode", e.target.value)}
+                  placeholder="Enter permanent address with pincode"
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.homePinCode ? "border-red-500" : "border-[#9CA3AF]"
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                />
+                {errors.homePinCode && (
+                  <p className="mt-1 text-sm text-red-600">{errors.homePinCode}</p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="homeState" className="block text-sm font-medium text-foreground mb-2">
+                  State
+                </label>
+                <select
+                  id="homeState"
+                  value={formData.homeState}
+                  onChange={(e) => handleChange("homeState", e.target.value)}
+                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.homeState ? "border-red-500" : "border-[#9CA3AF]"
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground`}
+                >
+                  <option value="">SELECT STATE</option>
+                  {[
+                    "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
+                    "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", "Lakshadweep", "Delhi", "Puducherry", "Ladakh", "Jammu and Kashmir"
+                  ].sort().map((state) => (
+                    <option key={state} value={state.toUpperCase()}>{state.toUpperCase()}</option>
+                  ))}
+                </select>
+                {errors.homeState && (
+                  <p className="mt-1 text-sm text-red-600">{errors.homeState}</p>
+                )}
+              </div>
             </div>
 
-            <div>
-              <label htmlFor="motherNumber" className="block text-sm font-medium text-foreground mb-2">
-                Mother&apos;s Phone Number
-              </label>
-              <input
-                type="tel"
-                id="motherNumber"
-                value={formData.motherNumber}
-                onChange={(e) => handleChange("motherNumber", e.target.value)}
-                placeholder="Enter mother&apos;s phone number"
-                className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.motherNumber ? "border-red-500" : "border-[#9CA3AF]"
-                  } bg-white text-foreground uppercase placeholder:text-secondary focus:outline-none focus:border-foreground`}
-              />
-              {errors.motherNumber && (
-                <p className="mt-1 text-sm text-red-600">{errors.motherNumber}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="homePinCode" className="block text-sm font-medium text-foreground mb-2">
-                Parmanent address with pincode
-              </label>
-              <input
-                type="text"
-                id="homePinCode"
-                value={formData.homePinCode}
-                onChange={(e) => handleChange("homePinCode", e.target.value)}
-                placeholder="Enter permanent address with pincode"
-                className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.homePinCode ? "border-red-500" : "border-[#9CA3AF]"
-                  } bg-white text-foreground uppercase placeholder:text-secondary focus:outline-none focus:border-foreground`}
-              />
-              {errors.homePinCode && (
-                <p className="mt-1 text-sm text-red-600">{errors.homePinCode}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="homeState" className="block text-sm font-medium text-foreground mb-2">
-                State
-              </label>
-              <select
-                id="homeState"
-                value={formData.homeState}
-                onChange={(e) => handleChange("homeState", e.target.value)}
-                className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.homeState ? "border-red-500" : "border-[#9CA3AF]"
-                  } bg-white text-foreground uppercase focus:outline-none focus:border-foreground`}
-              >
-                <option value="">SELECT STATE</option>
-                {[
-                  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
-                  "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", "Lakshadweep", "Delhi", "Puducherry", "Ladakh", "Jammu and Kashmir"
-                ].sort().map((state) => (
-                  <option key={state} value={state.toUpperCase()}>{state.toUpperCase()}</option>
-                ))}
-              </select>
-              {errors.homeState && (
-                <p className="mt-1 text-sm text-red-600">{errors.homeState}</p>
-              )}
-            </div>
-
-            <div>
-              <div className="space-y-4 pt-2">
+            <div className="pt-2">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="localGuardianAddress" className="block text-sm font-medium text-foreground mb-2">
                     Local guardian address
@@ -776,7 +838,7 @@ export default function OnboardingPage() {
                     onChange={(e) => handleChange("localGuardianAddress", e.target.value)}
                     placeholder="Enter local guardian address"
                     className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.localGuardianAddress ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground uppercase placeholder:text-secondary focus:outline-none focus:border-foreground`}
+                      } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
                   />
                   {errors.localGuardianAddress && (
                     <p className="mt-1 text-sm text-red-600">{errors.localGuardianAddress}</p>
@@ -784,7 +846,7 @@ export default function OnboardingPage() {
                 </div>
                 <div>
                   <label htmlFor="localGuardianPhoneNumber" className="block text-sm font-medium text-foreground mb-2">
-                    Local guardian Mobile Number
+                    Local guardian Mobile
                   </label>
                   <input
                     type="tel"
@@ -793,7 +855,7 @@ export default function OnboardingPage() {
                     onChange={(e) => handleChange("localGuardianPhoneNumber", e.target.value)}
                     placeholder="Enter local guardian mobile number"
                     className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.localGuardianPhoneNumber ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground uppercase placeholder:text-secondary focus:outline-none focus:border-foreground`}
+                      } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
                   />
                   {errors.localGuardianPhoneNumber && (
                     <p className="mt-1 text-sm text-red-600">{errors.localGuardianPhoneNumber}</p>
@@ -801,6 +863,7 @@ export default function OnboardingPage() {
                 </div>
               </div>
             </div>
+
 
             {Object.keys(errors).length > 0 && (
               <div className="p-3 rounded-lg bg-red-50 border border-red-200">

@@ -42,6 +42,8 @@ interface StudentProfile {
   homeState?: string;
   deviceId?: string;
   registrationId?: string;
+  dob?: string;
+  category?: string;
 }
 
 interface DBNotification {
@@ -82,6 +84,18 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   const [showNotifPopup, setShowNotifPopup] = useState(false);
   const [isAcknowledging, setIsAcknowledging] = useState(false);
   const [sessionDismissedIds, setSessionDismissedIds] = useState<string[]>([]);
+  const [locationVerificationResults, setLocationVerificationResults] = useState<{
+    name: string;
+    distance: number;
+    isVerified: boolean;
+    radius: number;
+    lat: number;
+    lng: number;
+  }[]>([]);
+  const [lastCheckAccuracy, setLastCheckAccuracy] = useState<number | null>(null);
+  const [showMandatoryUpdate, setShowMandatoryUpdate] = useState(false);
+  const [mandatoryFormData, setMandatoryFormData] = useState({ dob: "", category: "" });
+  const [updatingProfile, setUpdatingProfile] = useState(false);
 
   const latestPermission = useMemo(() => {
     if (permissions.length === 0) return null;
@@ -91,11 +105,31 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     )[0];
   }, [permissions]);
 
-  const HOSTEL_LOCATIONS = [
-    { lat: 23.2475529, lng: 77.5035134, radius: 100, name: "Gangotri hostel" },
-    { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" },
-    { lat: 23.2483348, lng: 77.5026058, radius: 200, name: "Centeral library" }
-  ];
+  const [hostelLocations, setHostelLocations] = useState<any[]>([]);
+  const [isLocationsLoading, setIsLocationsLoading] = useState(false);
+
+  const fetchHostelLocations = async () => {
+    try {
+      setIsLocationsLoading(true);
+      const response = await fetch("/api/admin/settings");
+      if (!response.ok) throw new Error(`Failed to fetch settings: ${response.status}`);
+      const data = await response.json();
+      if (data.success && data.locations) {
+        setHostelLocations(data.locations);
+      } else {
+        // Fallback to defaults
+        setHostelLocations([
+          { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
+          { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
+          { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
+        ]);
+      }
+    } catch (error) {
+      console.error("Error fetching locations:", error);
+    } finally {
+      setIsLocationsLoading(false);
+    }
+  };
   const ACCURACY_THRESHOLD = 1000; // meters (High tolerance for indoor use)
 
   // Simple obfuscation for local storage
@@ -144,10 +178,14 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         }),
       });
 
+      if (!response.ok) {
+        throw new Error(`Failed to register device: ${response.status}`);
+      }
+
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to register device");
+      if (data.error) {
+        throw new Error(data.error);
       }
 
       storeDeviceId(newDeviceId);
@@ -176,10 +214,20 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         setShowDeviceRegistration(true);
       }
 
+      // Hard Redirect Check: DOB and Category
+      if (!studentProfile.dob || !studentProfile.category) {
+        setShowMandatoryUpdate(true);
+        setMandatoryFormData({
+          dob: studentProfile.dob || "",
+          category: studentProfile.category || ""
+        });
+      }
+
       // Check attendance status
       const checkAttendance = async () => {
         try {
           const res = await fetch(`/api/students/attendance?studentId=${studentProfile._id}`);
+          if (!res.ok) throw new Error(`Failed to check attendance: ${res.status}`);
           const data = await res.json();
           if (data.marked) setIsAttendanceMarked(true);
           if (data.startTime && data.endTime) {
@@ -197,6 +245,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       const fetchStudentNotifications = async () => {
         try {
           const res = await fetch(`/api/student/notifications?studentId=${encodeURIComponent(studentProfile._id)}&hostelName=${encodeURIComponent(studentProfile.hostelName)}`);
+          if (!res.ok) throw new Error(`Failed to fetch notifications: ${res.status}`);
           const data = await res.json();
           if (data.success && data.notifications.length > 0) {
             // Filter out ones dismissed in current session
@@ -268,6 +317,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         try {
           // ⚡ STEP 1: Load MINIMAL data first if not provided
           const minimalResponse = await fetch(`/api/students?firebaseUID=${user.uid}&minimal=true`);
+          if (!minimalResponse.ok) throw new Error(`Failed to fetch minimal data: ${minimalResponse.status}`);
           const minimalData = await minimalResponse.json();
           if (minimalData.student) {
             currentStudent = {
@@ -295,6 +345,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         const loadFullProfile = async () => {
           try {
             const fullResponse = await fetch(`/api/students?firebaseUID=${user.uid}`);
+            if (!fullResponse.ok) throw new Error(`Failed to fetch full profile: ${fullResponse.status}`);
             const fullData = await fullResponse.json();
             if (fullData.student && isMounted) {
               const fullStudentData = {
@@ -312,6 +363,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         const fetchPermissions = async () => {
           try {
             const permResponse = await fetch(`/api/permissions?studentId=${studentId}&light=true`);
+            if (!permResponse.ok) throw new Error(`Failed to fetch permissions: ${permResponse.status}`);
             const permData = await permResponse.json();
 
             if (permData.permissions && isMounted) {
@@ -371,11 +423,13 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         }),
       });
 
+      if (!response.ok) {
+        throw new Error(`Failed to create permission: ${response.status}`);
+      }
+
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to create permission");
-      }
+      if (data.error) throw new Error(data.error);
 
       if (data.permission) {
         setPermissions([data.permission, ...permissions]);
@@ -390,6 +444,81 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       alert(error.message || "Failed to create permission request");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return "N/A";
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return dateString;
+      return date.toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+    } catch (e) {
+      return dateString;
+    }
+  };
+
+  const handleMandatoryUpdateSubmit = async () => {
+    if (!studentProfile || !mandatoryFormData.dob || !mandatoryFormData.category) {
+      alert("Please fill all required fields.");
+      return;
+    }
+
+    try {
+      setUpdatingProfile(true);
+
+      // Prepare update payload
+      const updateData: any = {
+        dob: mandatoryFormData.dob,
+        category: mandatoryFormData.category
+      };
+
+      // Parallel check: Save device ID if missing in DB
+      let deviceRegisteredSuccessfully = false;
+      if (!studentProfile.deviceId) {
+        const generateUUID = () => {
+          if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+          });
+        };
+        const newDeviceId = generateUUID();
+        updateData.deviceId = newDeviceId;
+        storeDeviceId(newDeviceId);
+        deviceRegisteredSuccessfully = true;
+      }
+
+      const response = await fetch(`/api/students/${studentProfile._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updateData),
+      });
+
+      if (!response.ok) throw new Error(`Failed to update profile: ${response.status}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setStudentProfile(data.student);
+        setShowMandatoryUpdate(false);
+        if (deviceRegisteredSuccessfully) {
+          alert("Your device is registered successfully!");
+        } else {
+          alert("Profile updated successfully!");
+        }
+      } else {
+        throw new Error(data.error || "Failed to update profile");
+      }
+    } catch (error: any) {
+      console.error("Error updating profile:", error);
+      alert(error.message || "Failed to save details. Please try again.");
+    } finally {
+      setUpdatingProfile(false);
     }
   };
 
@@ -412,11 +541,12 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || "Failed to check in");
+        throw new Error(`Failed to check in: ${response.status}`);
       }
+
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
 
       if (data.student) {
         const studentData = {
@@ -494,13 +624,20 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         let matchedLocation: { lat: number; lng: number; radius: number; name: string; distance: number } | null = null;
         let closestInfo = { distance: Infinity, radius: 0, name: "" };
 
-        for (const loc of HOSTEL_LOCATIONS) {
+        const locationsToTest = hostelLocations.length > 0 ? hostelLocations : [
+          { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
+          { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
+          { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
+        ];
+
+        for (const loc of locationsToTest) {
           const dist = calculateDistance(
             position.coords.latitude,
             position.coords.longitude,
             loc.lat,
             loc.lng
           );
+          // ⚡ STRICT: Check if distance is strictly within radius
           if (dist <= loc.radius) {
             isInsideAny = true;
             matchedLocation = { ...loc, distance: dist };
@@ -515,9 +652,24 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
         if (finalAccuracy > ACCURACY_THRESHOLD) {
           setIsAtHostel(false);
+          // Update all results with failed status
+          const results = locationsToTest.map((loc: any) => {
+            const dist = calculateDistance(position.coords.latitude, position.coords.longitude, loc.lat, loc.lng);
+            return { ...loc, distance: dist, isVerified: false };
+          });
+          setLocationVerificationResults(results);
+          setLastCheckAccuracy(finalAccuracy);
           alert(`Verification failed❌, Your GPS signal is too weak (Accuracy: ${finalAccuracy}m). You are currently ${Math.round(closestInfo.distance)} meters away from ${closestInfo.name}. Please move near a window.`);
           return;
         }
+
+        const results = locationsToTest.map((loc: any) => {
+          const dist = calculateDistance(position.coords.latitude, position.coords.longitude, loc.lat, loc.lng);
+          const isVerified = dist <= loc.radius;
+          return { ...loc, distance: dist, isVerified: isVerified };
+        });
+        setLocationVerificationResults(results);
+        setLastCheckAccuracy(finalAccuracy);
 
         if (isInsideAny && matchedLocation) {
           setIsAtHostel(true);
@@ -539,8 +691,15 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             let matchedLocation: { lat: number; lng: number; radius: number; name: string; distance: number } | null = null;
             let closestInfo = { distance: Infinity, radius: 0, name: "" };
 
-            for (const loc of HOSTEL_LOCATIONS) {
+            const locationsToTest = hostelLocations.length > 0 ? hostelLocations : [
+              { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
+              { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
+              { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
+            ];
+
+            for (const loc of locationsToTest) {
               const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
+              // ⚡ STRICT: Check if distance is strictly within radius
               if (dist <= loc.radius) {
                 isInsideAny = true;
                 matchedLocation = { ...loc, distance: dist };
@@ -552,9 +711,23 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
             if (finalAccuracy > ACCURACY_THRESHOLD) {
               setIsAtHostel(false);
+              const results = locationsToTest.map((loc: any) => {
+                const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
+                return { ...loc, distance: dist, isVerified: false };
+              });
+              setLocationVerificationResults(results);
+              setLastCheckAccuracy(finalAccuracy);
               alert(`Verification failed❌, Your GPS signal is too weak (Accuracy: ${finalAccuracy}m). You are currently ${Math.round(closestInfo.distance)} meters away from ${closestInfo.name}. Please move near a window.`);
               return;
             }
+
+            const results = locationsToTest.map((loc: any) => {
+              const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
+              const isVerified = dist <= loc.radius;
+              return { ...loc, distance: dist, isVerified: isVerified };
+            });
+            setLocationVerificationResults(results);
+            setLastCheckAccuracy(finalAccuracy);
 
             if (isInsideAny && matchedLocation) {
               setIsAtHostel(true);
@@ -658,6 +831,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
           notificationId
         }),
       });
+      if (!response.ok) throw new Error(`Failed to acknowledge: ${response.status}`);
       const data = await response.json();
       if (data.success) {
         // Save to session storage to hide for THIS session
@@ -1061,6 +1235,17 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                       <p className="text-sm font-bold text-gray-900">{studentProfile.erpInformation || "N/A"}</p>
                     </div>
 
+                    <div className="col-span-2 md:col-span-4 p-3 bg-blue-50/50 rounded-xl border border-blue-100 grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Category</p>
+                        <p className="text-sm font-bold text-gray-900">{studentProfile.category || "N/A"}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Date of Birth</p>
+                        <p className="text-sm font-bold text-gray-900">{formatDate(studentProfile.dob)}</p>
+                      </div>
+                    </div>
+
                     <div className="col-span-2 md:col-span-4 h-px bg-gray-50 my-2"></div>
 
                     <div>
@@ -1201,6 +1386,65 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                           </div>
                         ))
                       )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Mandatory Profile Update Overlay */}
+              {showMandatoryUpdate && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
+                  <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-white/20">
+                    <div className="p-8 pb-6 text-center">
+                      <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                      <h2 className="text-2xl font-black text-gray-900 mb-2">Complete Your Profile</h2>
+                      <p className="text-gray-500 text-sm">Please provide the following mandatory details to continue accessing your dashboard.</p>
+                    </div>
+
+                    <div className="px-8 pb-8 space-y-5">
+                      <div>
+                        <label className="block text-[11px] font-black text-blue-600 uppercase tracking-widest mb-2 px-1">Social Category</label>
+                        <select
+                          value={mandatoryFormData.category}
+                          onChange={(e) => setMandatoryFormData(prev => ({ ...prev, category: e.target.value }))}
+                          className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                        >
+                          <option value="">Select Category</option>
+                          <option value="GENERAL">GENERAL</option>
+                          <option value="SC">SC</option>
+                          <option value="ST">ST</option>
+                          <option value="OBC">OBC</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-black text-blue-600 uppercase tracking-widest mb-2 px-1">Date of Birth</label>
+                        <input
+                          type="date"
+                          value={mandatoryFormData.dob}
+                          onChange={(e) => setMandatoryFormData(prev => ({ ...prev, dob: e.target.value }))}
+                          className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                        />
+                      </div>
+
+                      <button
+                        onClick={handleMandatoryUpdateSubmit}
+                        disabled={updatingProfile || !mandatoryFormData.dob || !mandatoryFormData.category}
+                        className="w-full h-14 bg-blue-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2"
+                      >
+                        {updatingProfile ? (
+                          <>
+                            <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                            Updating...
+                          </>
+                        ) : (
+                          "Save & Continue"
+                        )}
+                      </button>
                     </div>
                   </div>
                 </div>

@@ -8,6 +8,8 @@ export interface IStudentBase {
   name: string;
   email: string;
   phoneNumber: string;
+  dob?: Date;
+  category?: string;
   hostelName: string;
   roomNumber: string;
   profilePicture?: string;
@@ -53,6 +55,7 @@ const StudentSchema = new Schema<IStudent>(
     name: {
       type: String,
       required: true,
+      index: true, // ⚡ INDEXED: Added index for sorting
     },
     email: {
       type: String,
@@ -63,6 +66,14 @@ const StudentSchema = new Schema<IStudent>(
     phoneNumber: {
       type: String,
       required: true,
+    },
+    dob: {
+      type: Date,
+      required: false,
+    },
+    category: {
+      type: String,
+      required: false,
     },
     hostelName: {
       type: String,

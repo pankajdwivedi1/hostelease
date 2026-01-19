@@ -87,9 +87,9 @@ export async function POST(request: NextRequest) {
 
         // Use provided coordinates with their specific radii
         const defaultLocations = [
-            { lat: 23.2483348, lng: 77.5026058, radius: 200, name: "Original Location" }, // Previous location
-            { lat: 23.2475529, lng: 77.5035134, radius: 100, name: "Loc 1" },
-            { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Loc 2" }
+            { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" }, // Loc 1
+            { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" }, // Original Location
+            { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }       // Loc 2
         ];
 
         const hostelLocations = (adminSettings?.hostelLocations && adminSettings.hostelLocations.length > 0)
@@ -97,8 +97,8 @@ export async function POST(request: NextRequest) {
             : defaultLocations;
 
         // Check GPS Accuracy (New requirement)
-        const bodyAccuracy = body.accuracy; // We'll need to update frontend to pass this
-        if (bodyAccuracy !== undefined && bodyAccuracy > 80) {
+        const bodyAccuracy = Math.round(body.accuracy || 0);
+        if (bodyAccuracy !== undefined && bodyAccuracy > 200) {
             return NextResponse.json(
                 {
                     error: "Waiting for better GPS signal... (Accuracy too low)",
@@ -137,7 +137,8 @@ export async function POST(request: NextRequest) {
             // Default to 100 if radius.radius is missing (though our schema now has it)
             const allowedRadius = (loc as any).radius || 100;
 
-            if (dist <= allowedRadius) {
+            // ⚡ IMPROVED: Account for GPS accuracy (Effective Distance)
+            if ((dist - bodyAccuracy) <= allowedRadius) {
                 isInsideAny = true;
                 break;
             }

@@ -59,3 +59,37 @@ export async function DELETE(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await connectDB();
+    const { id: studentId } = await params;
+    const body = await request.json();
+
+    if (!studentId) {
+      return NextResponse.json({ error: "Student ID is required" }, { status: 400 });
+    }
+
+    const updatedStudent = await Student.findByIdAndUpdate(
+      studentId,
+      { $set: body },
+      { new: true }
+    );
+
+    if (!updatedStudent) {
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, student: updatedStudent }, { status: 200 });
+  } catch (error: any) {
+    console.error("Error updating student:", error);
+    return NextResponse.json(
+      { error: error.message || "Failed to update student" },
+      { status: 500 }
+    );
+  }
+}
+
+

@@ -1,0 +1,20 @@
+﻿                className="flex-1 h-12 rounded-xl border border-gray-200 text-gray-600 font-black text-[10px] uppercase tracking-widest hover:bg-gray-50 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveLocation}
+                disabled={isUpdatingSettings}
+                className="flex-[2] h-12 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-200 hover:bg-blue-700 hover:shadow-xl transition-all disabled:opacity-50"
+              >
+                {isUpdatingSettings ? "SAVING..." : "SAVE MAPPING"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      )
+      }
+    </div>
+  );
+}
