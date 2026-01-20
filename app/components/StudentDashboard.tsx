@@ -111,13 +111,13 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   const fetchHostelLocations = async () => {
     try {
       setIsLocationsLoading(true);
-      const response = await fetch("/api/admin/settings");
-      if (!response.ok) throw new Error(`Failed to fetch settings: ${response.status}`);
+      const response = await fetch("/api/admin/locations");
+      if (!response.ok) throw new Error(`Failed to fetch locations: ${response.status}`);
       const data = await response.json();
       if (data.success && data.locations) {
         setHostelLocations(data.locations);
       } else {
-        // Fallback to defaults
+        // Fallback to defaults if database is empty
         setHostelLocations([
           { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
           { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
@@ -126,6 +126,12 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       }
     } catch (error) {
       console.error("Error fetching locations:", error);
+      // Set fallback on error to ensure app doesn't break
+      setHostelLocations([
+        { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
+        { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
+        { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
+      ]);
     } finally {
       setIsLocationsLoading(false);
     }
@@ -266,6 +272,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       };
 
       checkAttendance();
+      fetchHostelLocations(); // Fetch latest locations from database
 
       // Delay initial notification fetch by 3 seconds as requested
       const initialNotifTimer = setTimeout(fetchStudentNotifications, 3000);
