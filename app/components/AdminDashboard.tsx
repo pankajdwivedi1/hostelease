@@ -234,15 +234,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const fetchHostelLocations = async () => {
     try {
       setIsLocationsLoading(true);
-      const response = await fetch("/api/admin/settings");
+      const response = await fetch("/api/admin/locations");
       if (!response.ok) {
-        throw new Error(`Failed to fetch settings: ${response.status} ${response.statusText}`);
+        throw new Error(`Failed to fetch locations: ${response.status} ${response.statusText}`);
       }
       const data = await response.json();
       if (data.success && data.locations) {
         setHostelLocations(data.locations);
       } else {
-        // Fallback to strict defaults (Library = 23.2475529, Gangotri = 23.2483348)
+        // Fallback to strict defaults if no locations exist
         setHostelLocations([
           { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
           { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
@@ -251,6 +251,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (error) {
       console.error("Error fetching locations:", error);
+      // Set fallback on error
+      setHostelLocations([
+        { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
+        { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
+        { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
+      ]);
     } finally {
       setIsLocationsLoading(false);
     }
@@ -278,8 +284,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const handleDeleteLocation = async (index: number) => {
     if (!confirm("Are you sure you want to delete this location?")) return;
 
-    const newLocations = hostelLocations.filter((_, i) => i !== index);
-    await saveLocationsToDB(newLocations);
+    try {
+      setIsUpdatingSettings(true);
+      const response = await fetch(`/api/admin/locations?index=${index}`, {
+        method: "DELETE"
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to delete location");
+      }
+
+      alert(`Location "${data.deletedLocation.name}" deleted successfully!`);
+      await fetchHostelLocations(); // Refresh the list
+    } catch (error: any) {
+      console.error("Error deleting location:", error);
+      alert(error.message || "Failed to delete location");
+    } finally {
+      setIsUpdatingSettings(false);
+    }
   };
 
   const saveLocationsToDB = async (locations: any[]) => {
@@ -317,16 +341,45 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       return;
     }
 
-    let updatedLocations = [...hostelLocations];
-    if (editingLocationIndex !== null) {
-      updatedLocations[editingLocationIndex] = locationForm;
-    } else {
-      updatedLocations.push(locationForm);
-    }
+    try {
+      setIsUpdatingSettings(true);
 
-    const success = await saveLocationsToDB(updatedLocations);
-    if (success) {
+      let response;
+      if (editingLocationIndex !== null) {
+        // UPDATE existing location
+        response = await fetch("/api/admin/locations", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            index: editingLocationIndex,
+            ...locationForm
+          })
+        });
+      } else {
+        // ADD new location
+        response = await fetch("/api/admin/locations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(locationForm)
+        });
+      }
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to save location");
+      }
+
+      alert(data.message || "Location saved successfully!");
       setShowLocationModal(false);
+      setEditingLocationIndex(null);
+      setLocationForm({ name: "", lat: 0, lng: 0, radius: 100 });
+      await fetchHostelLocations(); // Refresh the list
+    } catch (error: any) {
+      console.error("Error saving location:", error);
+      alert(error.message || "Failed to save location");
+    } finally {
+      setIsUpdatingSettings(false);
     }
   };
 
@@ -722,10 +775,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const finalAccuracy = Math.round(accuracy);
       setLastCheckAccuracy(finalAccuracy);
 
+      // Use database locations instead of hardcoded values
+      // This ensures location testing uses the same locations admins can add/edit
       const locationsToTest = hostelLocations.length > 0 ? hostelLocations : [
-        { lat: 23.2475529, lng: 77.5035134, radius: 100, name: "Gangotri hostel" },
-        { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" },
-        { lat: 23.2483348, lng: 77.5026058, radius: 200, name: "Centeral library" }
+        { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
+        { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
+        { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
       ];
 
       const results = locationsToTest.map(loc => {
