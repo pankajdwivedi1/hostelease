@@ -1354,7 +1354,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                               </div>
                             </div>
                             <div className="h-px w-full bg-slate-200/50 mb-3" />
-                            <p className="text-[14px] text-slate-800 leading-relaxed font-medium">
+                            <p className="text-[11px] text-slate-800 leading-relaxed font-medium">
                               {permission.reason}
                             </p>
 

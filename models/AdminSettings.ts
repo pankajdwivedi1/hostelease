@@ -10,6 +10,8 @@ export interface IAdminSettings {
   }[];
   attendanceStartTime?: string; // Format: HH:mm, default 21:00
   attendanceEndTime?: string; // Format: HH:mm, default 22:30
+  adminPassword?: string;
+  wardenPassword?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -31,6 +33,14 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
     attendanceEndTime: {
       type: String,
       default: "22:30",
+    },
+    adminPassword: {
+      type: String,
+      default: "pankajdwivedi81", // Default if not changed
+    },
+    wardenPassword: {
+      type: String,
+      default: "warden456", // Default if not changed
     },
   },
   {

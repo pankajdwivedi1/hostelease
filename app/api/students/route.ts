@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
       if (minimal) {
         // ⚡ OPTIMIZED: Ultra-minimal selection for fastest login flow
         // Include dob and category to prevent profile completion modal from showing incorrectly
-        student = await Student.findOne({ firebaseUID }).select("_id firebaseUID name studentStatus deviceId dob category");
+        student = await Student.findOne({ firebaseUID }).select("_id firebaseUID name studentStatus deviceId dob category isProfileLocked");
       } else {
         student = await Student.findOne({ firebaseUID });
       }

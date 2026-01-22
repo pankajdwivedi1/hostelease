@@ -41,6 +41,7 @@ export default function OnboardingPage() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [isProfileLocked, setIsProfileLocked] = useState(false);
   const [user, setUser] = useState<any>(null);
 
   // Fetch hostels from API
@@ -98,6 +99,9 @@ export default function OnboardingPage() {
             });
             if (data.student.profilePicture) {
               setCapturedImage(data.student.profilePicture);
+            }
+            if (data.student.isProfileLocked) {
+              setIsProfileLocked(true);
             }
           }
         } catch (error) {
@@ -219,7 +223,7 @@ export default function OnboardingPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm() || !user) return;
+    if (isProfileLocked || !validateForm() || !user) return;
 
     try {
       setLoading(true);
@@ -362,6 +366,19 @@ export default function OnboardingPage() {
             <div className="text-center pt-8 sm:pt-0">
               <h1 className="text-base font-semibold text-foreground">Welcome to Hostelease</h1>
               <p className="mt-2 text-sm text-secondary">Please fill in your details to get started</p>
+              {isProfileLocked && (
+                <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-amber-800 uppercase tracking-tight">Profile Locked</p>
+                    <p className="text-[10px] text-amber-600 font-medium">Your profile has been locked by administration. You can no longer edit your information.</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -376,7 +393,8 @@ export default function OnboardingPage() {
                 <button
                   type="button"
                   onClick={startCamera}
-                  className="w-full py-3 rounded-lg border-2 border-dashed border-[#9CA3AF] text-secondary hover:border-foreground hover:text-foreground transition-colors flex items-center justify-center gap-2"
+                  disabled={isProfileLocked}
+                  className="w-full py-3 rounded-lg border-2 border-dashed border-[#9CA3AF] text-secondary hover:border-foreground hover:text-foreground transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -422,11 +440,12 @@ export default function OnboardingPage() {
                   />
                   <button
                     type="button"
+                    disabled={isProfileLocked}
                     onClick={() => {
                       setCapturedImage(null);
                       startCamera();
                     }}
-                    className="absolute bottom-1 right-1 p-1 bg-black/50 rounded-full text-white hover:bg-black/70"
+                    className="absolute bottom-1 right-1 p-1 bg-black/50 rounded-full text-white hover:bg-black/70 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -450,8 +469,9 @@ export default function OnboardingPage() {
                 value={formData.name}
                 onChange={(e) => handleChange("name", e.target.value)}
                 placeholder="Enter your full name"
+                disabled={isProfileLocked}
                 className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.name ? "border-red-500" : "border-[#9CA3AF]"
-                  } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                  } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
               />
               {errors.name && (
                 <p className="mt-1 text-sm text-red-600">{errors.name}</p>
@@ -469,8 +489,9 @@ export default function OnboardingPage() {
                   value={formData.phoneNumber}
                   onChange={(e) => handleChange("phoneNumber", e.target.value)}
                   placeholder="Enter your phone number"
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.phoneNumber ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 />
                 {errors.phoneNumber && (
                   <p className="mt-1 text-sm text-red-600">{errors.phoneNumber}</p>
@@ -486,8 +507,9 @@ export default function OnboardingPage() {
                   id="dob"
                   value={formData.dob}
                   onChange={(e) => handleChange("dob", e.target.value)}
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.dob ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 />
                 {errors.dob && (
                   <p className="mt-1 text-sm text-red-600">{errors.dob}</p>
@@ -504,8 +526,9 @@ export default function OnboardingPage() {
                   id="category"
                   value={formData.category}
                   onChange={(e) => handleChange("category", e.target.value)}
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.category ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 >
                   <option value="">SELECT CATEGORY</option>
                   {["GENERAL", "SC", "ST", "OBC"].map((opt) => (
@@ -527,8 +550,9 @@ export default function OnboardingPage() {
                   value={formData.erpInformation}
                   onChange={(e) => handleChange("erpInformation", e.target.value)}
                   placeholder="Enter your ERP information"
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.erpInformation ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 />
                 {errors.erpInformation && (
                   <p className="mt-1 text-sm text-red-600">{errors.erpInformation}</p>
@@ -545,8 +569,9 @@ export default function OnboardingPage() {
                   id="collegeName"
                   value={formData.collegeName}
                   onChange={(e) => handleChange("collegeName", e.target.value)}
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.collegeName ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 >
                   <option value="">SELECT COLLEGE</option>
                   {["OIST", "OCT", "OCP", "OPM", "OIPR"].map((opt) => (
@@ -565,7 +590,7 @@ export default function OnboardingPage() {
                   id="hostelName"
                   value={formData.hostelName}
                   onChange={(e) => handleChange("hostelName", e.target.value)}
-                  disabled={hostelsLoading}
+                  disabled={hostelsLoading || isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.hostelName ? "border-red-500" : "border-[#9CA3AF]"
                     } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
@@ -593,8 +618,9 @@ export default function OnboardingPage() {
                   value={formData.joiningDate}
                   onChange={(e) => handleChange("joiningDate", e.target.value)}
                   placeholder="e.g. 01-01-2000"
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.joiningDate ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 />
                 {errors.joiningDate && (
                   <p className="mt-1 text-sm text-red-600">{errors.joiningDate}</p>
@@ -608,8 +634,9 @@ export default function OnboardingPage() {
                   id="year"
                   value={formData.year}
                   onChange={(e) => handleChange("year", e.target.value)}
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.year ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 >
                   <option value="">SELECT YEAR</option>
                   {["1st year", "2nd year", "3rd year", "4th year"].map((opt) => (
@@ -631,8 +658,9 @@ export default function OnboardingPage() {
                   id="semester"
                   value={formData.semester}
                   onChange={(e) => handleChange("semester", e.target.value)}
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.semester ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 >
                   <option value="">SELECT SEMESTER</option>
                   {["1st Sem", "2nd Sem", "3rd Sem", "4th Sem", "5th Sem", "6th Sem", "7th Sem", "8th Sem"].map((opt) => (
@@ -651,8 +679,9 @@ export default function OnboardingPage() {
                   id="branch"
                   value={formData.branch}
                   onChange={(e) => handleChange("branch", e.target.value)}
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.branch ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 >
                   <option value="">SELECT BRANCH</option>
                   {["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"].map((opt) => (
@@ -674,8 +703,9 @@ export default function OnboardingPage() {
                   id="section"
                   value={formData.section}
                   onChange={(e) => handleChange("section", e.target.value)}
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.section ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 >
                   <option value="">SELECT SECTION</option>
                   {["NIL", "A", "B", "C", "D", "E", "F"].map((opt) => (
@@ -696,8 +726,9 @@ export default function OnboardingPage() {
                   value={formData.roomNumber}
                   onChange={(e) => handleChange("roomNumber", e.target.value)}
                   placeholder="Enter your room number"
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.roomNumber ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 />
                 {errors.roomNumber && (
                   <p className="mt-1 text-sm text-red-600">{errors.roomNumber}</p>
@@ -716,8 +747,9 @@ export default function OnboardingPage() {
                   value={formData.fatherName}
                   onChange={(e) => handleChange("fatherName", e.target.value)}
                   placeholder="Enter father&apos;s name"
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.fatherName ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 />
                 {errors.fatherName && (
                   <p className="mt-1 text-sm text-red-600">{errors.fatherName}</p>
@@ -734,8 +766,9 @@ export default function OnboardingPage() {
                   value={formData.fatherNumber}
                   onChange={(e) => handleChange("fatherNumber", e.target.value)}
                   placeholder="Enter father&apos;s phone number"
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.fatherNumber ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 />
                 {errors.fatherNumber && (
                   <p className="mt-1 text-sm text-red-600">{errors.fatherNumber}</p>
@@ -754,8 +787,9 @@ export default function OnboardingPage() {
                   value={formData.motherName}
                   onChange={(e) => handleChange("motherName", e.target.value)}
                   placeholder="Enter mother&apos;s name"
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.motherName ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 />
                 {errors.motherName && (
                   <p className="mt-1 text-sm text-red-600">{errors.motherName}</p>
@@ -772,8 +806,9 @@ export default function OnboardingPage() {
                   value={formData.motherNumber}
                   onChange={(e) => handleChange("motherNumber", e.target.value)}
                   placeholder="Enter mother&apos;s phone number"
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.motherNumber ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 />
                 {errors.motherNumber && (
                   <p className="mt-1 text-sm text-red-600">{errors.motherNumber}</p>
@@ -792,8 +827,9 @@ export default function OnboardingPage() {
                   value={formData.homePinCode}
                   onChange={(e) => handleChange("homePinCode", e.target.value)}
                   placeholder="Enter permanent address with pincode"
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.homePinCode ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 />
                 {errors.homePinCode && (
                   <p className="mt-1 text-sm text-red-600">{errors.homePinCode}</p>
@@ -808,8 +844,9 @@ export default function OnboardingPage() {
                   id="homeState"
                   value={formData.homeState}
                   onChange={(e) => handleChange("homeState", e.target.value)}
+                  disabled={isProfileLocked}
                   className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.homeState ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground`}
+                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                 >
                   <option value="">SELECT STATE</option>
                   {[
@@ -837,8 +874,9 @@ export default function OnboardingPage() {
                     value={formData.localGuardianAddress}
                     onChange={(e) => handleChange("localGuardianAddress", e.target.value)}
                     placeholder="Enter local guardian address"
+                    disabled={isProfileLocked}
                     className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.localGuardianAddress ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                      } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                   />
                   {errors.localGuardianAddress && (
                     <p className="mt-1 text-sm text-red-600">{errors.localGuardianAddress}</p>
@@ -854,8 +892,9 @@ export default function OnboardingPage() {
                     value={formData.localGuardianPhoneNumber}
                     onChange={(e) => handleChange("localGuardianPhoneNumber", e.target.value)}
                     placeholder="Enter local guardian mobile number"
+                    disabled={isProfileLocked}
                     className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.localGuardianPhoneNumber ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground`}
+                      } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                   />
                   {errors.localGuardianPhoneNumber && (
                     <p className="mt-1 text-sm text-red-600">{errors.localGuardianPhoneNumber}</p>
@@ -878,13 +917,15 @@ export default function OnboardingPage() {
               >
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-[2] h-12 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "Saving..." : "Save your details"}
-              </button>
+              {!isProfileLocked && (
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-[2] h-12 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? "Saving..." : "Save your details"}
+                </button>
+              )}
             </div>
           </form>
         </div>

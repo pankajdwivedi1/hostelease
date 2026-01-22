@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import connectDB from "@/lib/mongodb";
+import AdminSettings from "@/models/AdminSettings";
 
-const WARDEN_PASSWORD = "warden456";
+const DEFAULT_WARDEN_PASSWORD = "warden456";
 
 export async function POST(request: NextRequest) {
     try {
+        await connectDB();
         const body = await request.json();
         const { password } = body;
 
@@ -14,7 +17,11 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        if (password === WARDEN_PASSWORD) {
+        // Fetch from DB
+        const settings = await AdminSettings.findOne({});
+        const dynamicPassword = settings?.wardenPassword || DEFAULT_WARDEN_PASSWORD;
+
+        if (password === dynamicPassword) {
             return NextResponse.json({ success: true }, { status: 200 });
         } else {
             return NextResponse.json(

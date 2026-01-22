@@ -38,6 +38,7 @@ export interface IStudentBase {
   deviceId?: string;
 
   registrationId?: string;
+  isProfileLocked?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -171,6 +172,10 @@ const StudentSchema = new Schema<IStudent>(
       unique: true,
       sparse: true,
       index: true,
+    },
+    isProfileLocked: {
+      type: Boolean,
+      default: false,
     },
   },
   {

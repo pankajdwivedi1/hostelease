@@ -104,6 +104,7 @@ interface StudentDetails {
   category?: string;
   studentStatus?: "in" | "out";
   registrationId?: string;
+  isProfileLocked?: boolean;
   permissions: SimplePermission[];
 }
 
@@ -196,6 +197,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     radius: 100
   });
 
+  // Attendance Time Settings
+  const [attendanceTimeSettings, setAttendanceTimeSettings] = useState({
+    startTime: "21:00",
+    endTime: "22:30"
+  });
+  const [showAttendanceTimeModal, setShowAttendanceTimeModal] = useState(false);
+  const [isUpdatingAttendanceTime, setIsUpdatingAttendanceTime] = useState(false);
+
+  const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -259,6 +271,57 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       ]);
     } finally {
       setIsLocationsLoading(false);
+    }
+  };
+
+  // Fetch Attendance Time Settings
+  const fetchAttendanceTimeSettings = async () => {
+    try {
+      const response = await fetch("/api/admin/settings");
+      if (!response.ok) throw new Error("Failed to fetch settings");
+      const data = await response.json();
+      if (data.success) {
+        setAttendanceTimeSettings({
+          startTime: data.startTime || "21:00",
+          endTime: data.endTime || "22:30"
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching attendance settings:", error);
+    }
+  };
+
+  // Update Attendance Time Settings
+  const handleSaveAttendanceTime = async () => {
+    if (!attendanceTimeSettings.startTime || !attendanceTimeSettings.endTime) {
+      alert("Please fill both start and end times");
+      return;
+    }
+
+    try {
+      setIsUpdatingAttendanceTime(true);
+      const response = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startTime: attendanceTimeSettings.startTime,
+          endTime: attendanceTimeSettings.endTime
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error("Failed to update attendance time");
+      }
+
+      alert("Attendance time updated successfully!");
+      setShowAttendanceTimeModal(false);
+      await fetchAttendanceTimeSettings();
+    } catch (error: any) {
+      console.error("Error updating attendance time:", error);
+      alert(error.message || "Failed to update attendance time");
+    } finally {
+      setIsUpdatingAttendanceTime(false);
     }
   };
 
@@ -538,6 +601,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           homeState: s.homeState,
           studentStatus: s.studentStatus || "in",
           registrationId: s.registrationId,
+          isProfileLocked: s.isProfileLocked || false,
           permissions: []
         }));
         setStudents(formattedStudents);
@@ -686,6 +750,88 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
+  const handleToggleProfileLock = async (studentId: string, currentStatus: boolean) => {
+    try {
+      const response = await fetch(`/api/students/${studentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isProfileLocked: !currentStatus }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update lock status");
+
+      const data = await response.json();
+      if (data.success) {
+        // Update local state
+        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, isProfileLocked: !currentStatus } : s));
+        if (selectedStudent && selectedStudent.id === studentId) {
+          setSelectedStudent({ ...selectedStudent, isProfileLocked: !currentStatus });
+        }
+        alert(`Profile ${!currentStatus ? 'Locked' : 'Unlocked'} successfully!`);
+      }
+    } catch (error) {
+      console.error("Error toggling profile lock:", error);
+      alert("Failed to update profile lock status");
+    }
+  };
+
+  const handleBulkProfileLock = async (lock: boolean) => {
+    const action = lock ? "LOCK" : "UNLOCK";
+    if (!confirm(`Are you sure you want to ${action} ALL student profiles?`)) return;
+
+    try {
+      setIsUpdatingSettings(true);
+      const response = await fetch("/api/admin/students/bulk-lock", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lock }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert(data.message);
+        fetchStudents(true); // Refresh student list
+      } else {
+        throw new Error(data.error || "Failed to update profiles");
+      }
+    } catch (error: any) {
+      console.error("Bulk lock error:", error);
+      alert(error.message || "Failed to perform bulk action");
+    } finally {
+      setIsUpdatingSettings(false);
+    }
+  };
+
+  const handleResetPassword = async (type: "dean" | "warden") => {
+    const newPassword = prompt(`Enter new password for ${type}:`);
+    if (!newPassword || newPassword.trim().length < 4) {
+      if (newPassword !== null) alert("Password must be at least 4 characters long.");
+      return;
+    }
+
+    try {
+      setIsUpdatingPassword(true);
+      const response = await fetch("/api/admin/passwords", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, newPassword: newPassword.trim() }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert(`${type.toUpperCase()} password changed successfully!`);
+      } else {
+        throw new Error(data.error || "Failed to update password");
+      }
+    } catch (error: any) {
+      console.error("Password reset error:", error);
+      alert(error.message || "Something went wrong while resetting password.");
+    } finally {
+      setIsUpdatingPassword(false);
+      setShowPasswordResetModal(false);
+    }
+  };
+
   useEffect(() => {
     const loadData = () => {
       setLoading(true);
@@ -705,6 +851,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     fetchAdminNotifications();
     if (title === "Developer Dashboard") {
       fetchHostelLocations();
+      fetchAttendanceTimeSettings(); // Fetch attendance time settings
     }
   }, [title]);
 
@@ -1211,7 +1358,43 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       disabled={isUpdatingSettings}
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-amber-100 transition-all disabled:opacity-50 whitespace-nowrap"
                     >
-                      {isUpdatingSettings ? "Updating..." : "✨ Add New Location"}
+                      {isUpdatingSettings ? "Updating..." : "✨ Set New Location"}
+                    </button>
+                  )}
+                  {title === "Developer Dashboard" && (
+                    <button
+                      onClick={() => setShowAttendanceTimeModal(true)}
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-green-100 transition-all whitespace-nowrap"
+                    >
+                      ⏰ Set Attendance Time
+                    </button>
+                  )}
+                  {title === "Developer Dashboard" && (
+                    <button
+                      onClick={() => setShowPasswordResetModal(true)}
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap"
+                    >
+                      🔑 Change Password
+                    </button>
+                  )}
+                  {title === "Developer Dashboard" && (
+                    <button
+                      onClick={() => handleBulkProfileLock(true)}
+                      disabled={isUpdatingSettings}
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-red-100 transition-all disabled:opacity-50 whitespace-nowrap"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                      Lock All
+                    </button>
+                  )}
+                  {title === "Developer Dashboard" && (
+                    <button
+                      onClick={() => handleBulkProfileLock(false)}
+                      disabled={isUpdatingSettings}
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-blue-100 transition-all disabled:opacity-50 whitespace-nowrap"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+                      Unlock All
                     </button>
                   )}
                   <button
@@ -1513,7 +1696,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 </div>
                               </div>
                               <div className="mt-1 md:mt-2">
-                                <p className="text-sm md:text-base text-foreground font-medium">{permission.reason}</p>
+                                <p className="text-[10px] md:text-xs text-foreground font-medium">{permission.reason}</p>
                               </div>
                             </div>
                           </div>
@@ -2349,6 +2532,35 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       )}
                     </div>
                     <p className="text-sm text-gray-500 font-medium">{selectedStudent.email}</p>
+
+                    <div className="mt-4 flex flex-col items-center gap-2">
+                      <button
+                        onClick={() => handleToggleProfileLock(selectedStudent.id, !!selectedStudent.isProfileLocked)}
+                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm border ${selectedStudent.isProfileLocked
+                          ? "bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200"
+                          : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                          }`}
+                      >
+                        {selectedStudent.isProfileLocked ? (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                            Locked (Click to Unlock)
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                            </svg>
+                            Unlocked (Click to Lock)
+                          </>
+                        )}
+                      </button>
+                      {selectedStudent.isProfileLocked && (
+                        <p className="text-[10px] text-amber-600 font-bold uppercase tracking-tight">Student cannot edit profile anymore</p>
+                      )}
+                    </div>
 
                     {(selectedStudent.registrationId || selectedStudent.erpInformation) && (
                       <div className="mt-5 mx-auto max-w-sm bg-blue-50/50 rounded-xl border border-blue-100 p-3 shadow-sm relative overflow-hidden group">
@@ -3272,6 +3484,145 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             className="max-h-[85vh] max-w-[95vw] md:max-w-[80vw] object-contain rounded-lg shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           />
+        </div>
+      )}
+
+      {/* Attendance Time Settings Modal */}
+      {showAttendanceTimeModal && (
+        <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-black text-gray-900 tracking-tight">
+                ⏰ SET ATTENDANCE TIME
+              </h3>
+              <button
+                onClick={() => setShowAttendanceTimeModal(false)}
+                className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+              >
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Start Time
+                </label>
+                <input
+                  type="time"
+                  value={attendanceTimeSettings.startTime}
+                  onChange={(e) => setAttendanceTimeSettings({ ...attendanceTimeSettings, startTime: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:ring-4 focus:ring-green-500/20 focus:border-green-500 font-bold text-lg transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  End Time
+                </label>
+                <input
+                  type="time"
+                  value={attendanceTimeSettings.endTime}
+                  onChange={(e) => setAttendanceTimeSettings({ ...attendanceTimeSettings, endTime: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:ring-4 focus:ring-green-500/20 focus:border-green-500 font-bold text-lg transition-all"
+                />
+              </div>
+
+              <div className="bg-green-50 border-2 border-green-200 p-4 rounded-xl">
+                <p className="text-sm text-green-800 font-medium mb-1">
+                  📌 Students will be able to mark attendance between:
+                </p>
+                <p className="font-black text-lg text-green-900">
+                  {attendanceTimeSettings.startTime} to {attendanceTimeSettings.endTime}
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setShowAttendanceTimeModal(false)}
+                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-bold hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveAttendanceTime}
+                  disabled={isUpdatingAttendanceTime}
+                  className="flex-[2] px-4 py-3 rounded-xl bg-green-600 text-white font-black hover:bg-green-700 transition-colors disabled:opacity-50 shadow-lg shadow-green-200"
+                >
+                  {isUpdatingAttendanceTime ? "SAVING..." : "SAVE TIME"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPasswordResetModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden shadow-2xl transition-all duration-300 scale-100 p-8">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">
+                Change Password
+              </h2>
+              <button
+                onClick={() => setShowPasswordResetModal(false)}
+                className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+              >
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-500 font-medium mb-6">
+              Select the account you want to reset the password for:
+            </p>
+
+            <div className="space-y-4">
+              <button
+                onClick={() => handleResetPassword("dean")}
+                disabled={isUpdatingPassword}
+                className="w-full flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 border-2 border-blue-100 rounded-2xl transition-all group active:scale-95 disabled:opacity-50"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-200 group-hover:rotate-6 transition-transform">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                  </div>
+                  <div className="text-left">
+                    <p className="font-black text-blue-900 uppercase text-sm tracking-tight">Dean Account</p>
+                    <p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Main Admin Access</p>
+                  </div>
+                </div>
+                <svg className="w-5 h-5 text-blue-300 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+              </button>
+
+              <button
+                onClick={() => handleResetPassword("warden")}
+                disabled={isUpdatingPassword}
+                className="w-full flex items-center justify-between p-4 bg-indigo-50 hover:bg-indigo-100 border-2 border-indigo-100 rounded-2xl transition-all group active:scale-95 disabled:opacity-50"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200 group-hover:-rotate-6 transition-transform">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                  </div>
+                  <div className="text-left">
+                    <p className="font-black text-indigo-900 uppercase text-sm tracking-tight">Warden Account</p>
+                    <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest">Hostel Management</p>
+                  </div>
+                </div>
+                <svg className="w-5 h-5 text-indigo-300 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowPasswordResetModal(false)}
+              className="w-full mt-6 py-3 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors uppercase tracking-widest"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </div>
