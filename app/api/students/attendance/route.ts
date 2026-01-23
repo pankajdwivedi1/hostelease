@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
             {
                 success: true,
-                message: "Your attendance has been saved with green tick",
+                message: "Your attendance has been saved successfully ✔️",
                 attendance: newAttendance,
             },
             { status: 200 }

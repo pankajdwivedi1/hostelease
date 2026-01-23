@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
                 ? settings.hostelLocations
                 : defaultLocations,
             startTime: settings?.attendanceStartTime || "21:00",
-            endTime: settings?.attendanceEndTime || "22:30"
+            endTime: settings?.attendanceEndTime || "22:30",
+            registrationFieldsConfig: settings?.registrationFieldsConfig || {}
         });
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);
@@ -37,12 +38,13 @@ export async function POST(request: NextRequest) {
     try {
         await connectDB();
         const body = await request.json();
-        const { locations, startTime, endTime } = body;
+        const { locations, startTime, endTime, registrationFieldsConfig } = body;
 
         const updateData: any = {};
         if (locations) updateData.hostelLocations = locations;
         if (startTime) updateData.attendanceStartTime = startTime;
         if (endTime) updateData.attendanceEndTime = endTime;
+        if (registrationFieldsConfig) updateData.registrationFieldsConfig = registrationFieldsConfig;
 
         const settings = await AdminSettings.findOneAndUpdate(
             {},

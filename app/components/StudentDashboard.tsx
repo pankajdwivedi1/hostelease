@@ -136,7 +136,10 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       setIsLocationsLoading(false);
     }
   };
-  const ACCURACY_THRESHOLD = 1000; // meters (High tolerance for indoor use)
+  const [gpsLockStatus, setGpsLockStatus] = useState<'idle' | 'locking' | 'locked' | 'error'>('idle');
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [lockProgress, setLockProgress] = useState(0);
+
 
   // Simple obfuscation for local storage
   const getStoredDeviceId = () => {
@@ -600,230 +603,115 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     }
 
     setIsLocationChecking(true);
-    console.log("Getting accurate location...");
+    setGpsLockStatus('locking');
+    setLockProgress(0);
+    setGpsAccuracy(null);
+    console.log("Starting High-Speed Location Lock...");
 
     let watchId: number | null = null;
-    let bestAccuracy = Infinity;
-    let bestPosition: GeolocationPosition | null = null;
-    let attempts = 0;
     let isCompleted = false;
+    let bestPosition: GeolocationPosition | null = null;
+    let lockTimer: NodeJS.Timeout | null = null;
 
-    const completeLocation = (position: GeolocationPosition | null, reason: string) => {
-      if (isCompleted) return;
-      isCompleted = true;
-      setIsLocationChecking(false);
+    const performVerification = (position: GeolocationPosition) => {
+      const { accuracy, latitude, longitude } = position.coords;
 
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-        watchId = null;
-      }
+      // Check if student is within any of the allowed circles
+      let isInsideAny = false;
+      let matchedLocation: any = null;
+      let closestInfo = { distance: Infinity, radius: 0, name: "" };
 
-      if (position) {
-        const finalAccuracy = Math.round(position.coords.accuracy);
+      const locationsToTest = hostelLocations.length > 0 ? hostelLocations : [
+        { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
+        { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
+        { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
+      ];
 
-        // Log coordinates before calculation
-        console.log(`\n=== COORDINATE CHECK ===`);
-        console.log(`Student Location: Lat=${position.coords.latitude}, Lng=${position.coords.longitude}`);
-        console.log(`Accuracy: ${finalAccuracy} meters`);
-
-        // Check if student is within any of the allowed circles
-        let isInsideAny = false;
-        let matchedLocation: { lat: number; lng: number; radius: number; name: string; distance: number } | null = null;
-        let closestInfo = { distance: Infinity, radius: 0, name: "" };
-
-        const locationsToTest = hostelLocations.length > 0 ? hostelLocations : [
-          { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
-          { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
-          { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
-        ];
-
-        for (const loc of locationsToTest) {
-          const dist = calculateDistance(
-            position.coords.latitude,
-            position.coords.longitude,
-            loc.lat,
-            loc.lng
-          );
-          // ⚡ STRICT: Check if distance is strictly within radius
-          if (dist <= loc.radius) {
-            isInsideAny = true;
-            matchedLocation = { ...loc, distance: dist };
-          }
-          if (dist < closestInfo.distance) {
-            closestInfo = { distance: dist, radius: loc.radius, name: loc.name };
-          }
+      const results = locationsToTest.map((loc: any) => {
+        const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
+        const isVerified = dist <= loc.radius;
+        if (isVerified) {
+          isInsideAny = true;
+          matchedLocation = { ...loc, distance: dist };
         }
-
-        console.log(`\n=== FINAL LOCATION (${reason}) ===`);
-        console.log(`Min Distance: ${Math.round(closestInfo.distance)} meters (Required: ${closestInfo.radius}m)`);
-
-        if (finalAccuracy > ACCURACY_THRESHOLD) {
-          setIsAtHostel(false);
-          // Update all results with failed status
-          const results = locationsToTest.map((loc: any) => {
-            const dist = calculateDistance(position.coords.latitude, position.coords.longitude, loc.lat, loc.lng);
-            return { ...loc, distance: dist, isVerified: false };
-          });
-          setLocationVerificationResults(results);
-          setLastCheckAccuracy(finalAccuracy);
-          alert(`Verification failed❌, Your GPS signal is too weak (Accuracy: ${finalAccuracy}m). You are currently ${Math.round(closestInfo.distance)} meters away from ${closestInfo.name}. Please move near a window.`);
-          return;
+        if (dist < closestInfo.distance) {
+          closestInfo = { distance: dist, radius: loc.radius, name: loc.name };
         }
+        return { ...loc, distance: dist, isVerified };
+      });
 
-        const results = locationsToTest.map((loc: any) => {
-          const dist = calculateDistance(position.coords.latitude, position.coords.longitude, loc.lat, loc.lng);
-          const isVerified = dist <= loc.radius;
-          return { ...loc, distance: dist, isVerified: isVerified };
-        });
-        setLocationVerificationResults(results);
-        setLastCheckAccuracy(finalAccuracy);
+      setLocationVerificationResults(results);
+      setLastCheckAccuracy(Math.round(accuracy));
 
-        if (isInsideAny && matchedLocation) {
-          setIsAtHostel(true);
-          const dist = Math.round(matchedLocation.distance);
-          const locName = matchedLocation.name;
-          alert(`Verification Success✔️, You are ${dist} meters away from ${locName}. (Accuracy: ${finalAccuracy}m). Permission button is now active.`);
-        } else {
-          setIsAtHostel(false);
-          alert(`Verification failed❌, You are ${Math.round(closestInfo.distance)} meters away from ${closestInfo.name}. (Accuracy: ${finalAccuracy}m). You must be within the hostel radius.`);
-        }
+      if (isInsideAny && matchedLocation) {
+        setIsAtHostel(true);
+        alert(`Verification Success✔️, You are ${Math.round(matchedLocation.distance)} meters away from ${matchedLocation.name}. (Accuracy: ${Math.round(accuracy)}m). Permission button is now active.`);
       } else {
-        console.log("Falling back to getCurrentPosition...");
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const { latitude, longitude, accuracy } = pos.coords;
-            const finalAccuracy = Math.round(accuracy);
-
-            let isInsideAny = false;
-            let matchedLocation: { lat: number; lng: number; radius: number; name: string; distance: number } | null = null;
-            let closestInfo = { distance: Infinity, radius: 0, name: "" };
-
-            const locationsToTest = hostelLocations.length > 0 ? hostelLocations : [
-              { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
-              { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
-              { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
-            ];
-
-            for (const loc of locationsToTest) {
-              const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
-              // ⚡ STRICT: Check if distance is strictly within radius
-              if (dist <= loc.radius) {
-                isInsideAny = true;
-                matchedLocation = { ...loc, distance: dist };
-              }
-              if (dist < closestInfo.distance) {
-                closestInfo = { distance: dist, radius: loc.radius, name: loc.name };
-              }
-            }
-
-            if (finalAccuracy > ACCURACY_THRESHOLD) {
-              setIsAtHostel(false);
-              const results = locationsToTest.map((loc: any) => {
-                const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
-                return { ...loc, distance: dist, isVerified: false };
-              });
-              setLocationVerificationResults(results);
-              setLastCheckAccuracy(finalAccuracy);
-              alert(`Verification failed❌, Your GPS signal is too weak (Accuracy: ${finalAccuracy}m). You are currently ${Math.round(closestInfo.distance)} meters away from ${closestInfo.name}. Please move near a window.`);
-              return;
-            }
-
-            const results = locationsToTest.map((loc: any) => {
-              const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
-              const isVerified = dist <= loc.radius;
-              return { ...loc, distance: dist, isVerified: isVerified };
-            });
-            setLocationVerificationResults(results);
-            setLastCheckAccuracy(finalAccuracy);
-
-            if (isInsideAny && matchedLocation) {
-              setIsAtHostel(true);
-              const dist = Math.round(matchedLocation.distance);
-              const locName = matchedLocation.name;
-              alert(`Verification Success✔️, You are ${dist} meters away from ${locName}. (Accuracy: ${finalAccuracy}m). Permission button is now active.`);
-            } else {
-              setIsAtHostel(false);
-              alert(`Verification failed❌, You are ${Math.round(closestInfo.distance)} meters away from ${closestInfo.name}. (Accuracy: ${finalAccuracy}m). You must be within the hostel radius.`);
-            }
-          },
-          (err) => {
-            console.error("Fallback geolocation error:", err.code, err.message);
-            setIsLocationChecking(false);
-
-            let errorMessage = "Could not get location. ";
-            if (err.code === 1) {
-              errorMessage += "Please enable location permission in your browser settings.";
-              if (!window.location.protocol.includes('https') && !window.location.hostname.includes('localhost')) {
-                errorMessage += " Note: Your browser may require HTTPS for location access.";
-              }
-            } else if (err.code === 2) {
-              errorMessage += "Location unavailable. Please enable GPS/location services on your device.";
-            } else if (err.code === 3) {
-              errorMessage += "Location request timed out. Please try again.";
-            } else {
-              errorMessage += "Please ensure GPS is on and permission is granted.";
-            }
-            alert(errorMessage);
-          },
-          { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
-        );
+        setIsAtHostel(false);
+        alert(`Verification failed❌, You are ${Math.round(closestInfo.distance)} meters away from ${closestInfo.name}. (Accuracy: ${Math.round(accuracy)}m). You must be within the hostel radius.`);
       }
     };
 
+    const cleanup = () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      if (lockTimer !== null) clearTimeout(lockTimer);
+    };
+
+    const finishLock = () => {
+      if (isCompleted || !bestPosition) return;
+      isCompleted = true;
+      const finalPosition = bestPosition;
+      cleanup();
+
+      setGpsLockStatus('locked');
+      setLockProgress(100);
+
+      setTimeout(() => {
+        setIsLocationChecking(false);
+        performVerification(finalPosition);
+      }, 500);
+    };
+
+    // Hard limit: 15 seconds if absolutely no signal
+    const hardTimeoutId = setTimeout(() => {
+      if (!isCompleted) {
+        isCompleted = true;
+        cleanup();
+        setIsLocationChecking(false);
+        setGpsLockStatus('error');
+        alert("Location Error: Please ensure GPS is enabled and try again.");
+      }
+    }, 15000);
+
     watchId = navigator.geolocation.watchPosition(
       (position) => {
-        attempts++;
-        const { accuracy } = position.coords;
+        if (isCompleted) return;
 
-        if (accuracy < bestAccuracy) {
-          bestAccuracy = accuracy;
+        const { accuracy } = position.coords;
+        setGpsAccuracy(Math.round(accuracy));
+
+        // Use the first location immediately as bestPosition
+        if (!bestPosition) {
           bestPosition = position;
+          // Start a 2.5 second "refinement" buffer as soon as we get the FIRST data
+          lockTimer = setTimeout(finishLock, 2500);
+          setLockProgress(40);
+        } else if (accuracy < bestPosition.coords.accuracy) {
+          bestPosition = position;
+          setLockProgress((prev) => Math.min(95, prev + 15));
         }
 
-        if (accuracy <= 60) {
-          completeLocation(bestPosition, "reached 60m accuracy");
+        // If accuracy is already very good (<50m), don't wait for the buffer
+        if (accuracy <= 50) {
+          clearTimeout(hardTimeoutId);
+          finishLock();
         }
       },
       (error) => {
-        console.error("WatchPosition error:", error.code, error.message);
-
-        // Try getCurrentPosition as immediate fallback
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            if (!isCompleted) {
-              bestPosition = position;
-              completeLocation(bestPosition, "fallback to getCurrentPosition");
-            }
-          },
-          (fallbackError) => {
-            console.error("Fallback geolocation error:", fallbackError.code, fallbackError.message);
-            setIsLocationChecking(false);
-
-            let errorMessage = "Could not get location. ";
-            if (fallbackError.code === 1) {
-              errorMessage += "Please enable location permission in your browser settings. ";
-              if (!window.location.protocol.includes('https') && !window.location.hostname.includes('localhost')) {
-                errorMessage += "Note: Location access requires HTTPS for security.";
-              }
-            } else if (fallbackError.code === 2) {
-              errorMessage += "Location unavailable. Please check your GPS/location services.";
-            } else if (fallbackError.code === 3) {
-              errorMessage += "Location request timed out. Please try again.";
-            }
-
-            alert(errorMessage);
-          },
-          { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 }
-        );
+        console.warn("GPS Lock Search:", error.message);
       },
-      { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
-
-    setTimeout(() => {
-      if (!isCompleted) {
-        completeLocation(bestPosition, "timeout after 25 seconds");
-      }
-    }, 25000);
   };
 
   const handleAcknowledge = async (notificationId: string) => {
@@ -851,7 +739,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
         setShowNotifPopup(false);
         // Check for next notification
-        const remaining = notifications.filter(n => n._id !== notificationId);
+        const remaining = notifications.filter((n: any) => n._id !== notificationId);
         setNotifications(remaining);
         if (remaining.length > 0) {
           setCurrentNotification(remaining[0]);
@@ -1453,6 +1341,59 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                         )}
                       </button>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* GPS Locking Overlay */}
+              {isLocationChecking && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-[2px] animate-in fade-in duration-300">
+                  <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden border border-gray-100 p-8 text-center">
+                    <div className="relative w-20 h-20 mx-auto mb-6">
+                      <div className="absolute inset-0 border-4 border-blue-50 rounded-full"></div>
+                      <div
+                        className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"
+                        style={{ borderRightColor: 'transparent' }}
+                      ></div>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-blue-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    <h3 className="text-xl font-black text-gray-900 mb-2">Locking GPS...</h3>
+                    <p className="text-gray-500 text-sm mb-6 font-medium">Connecting to satellites for high accuracy attendance</p>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Accuracy</span>
+                        <span className={`text-xs font-bold ${gpsAccuracy && gpsAccuracy <= 100 ? 'text-green-600' : 'text-orange-500'}`}>
+                          {gpsAccuracy ? `${gpsAccuracy}m` : 'Calculating...'}
+                        </span>
+                      </div>
+
+                      <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-blue-600 transition-all duration-500 rounded-full shadow-[0_0_10px_rgba(37,99,235,0.4)]"
+                          style={{ width: `${lockProgress}%` }}
+                        ></div>
+                      </div>
+
+                      <p className="text-[11px] text-gray-400 font-bold italic animate-bounce">
+                        {gpsAccuracy && gpsAccuracy > 300
+                          ? "📍 Move closer to a window for faster lock"
+                          : "Please wait, filtering network signal..."}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => setIsLocationChecking(false)}
+                      className="mt-8 text-xs font-bold text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      Cancel Verification
+                    </button>
                   </div>
                 </div>
               )}

@@ -3,6 +3,9 @@ import mongoose, { Schema, Model } from "mongoose";
 export interface IHostel {
     _id?: string;
     name: string;
+    totalRooms?: number;
+    wardenUsername?: string;
+    wardenPassword?: string;
     createdAt?: Date;
     updatedAt?: Date;
 }
@@ -14,6 +17,19 @@ const HostelSchema: Schema = new Schema(
             required: true,
             unique: true,
             trim: true,
+        },
+        totalRooms: {
+            type: Number,
+            default: 100,
+        },
+        wardenUsername: {
+            type: String,
+            required: false,
+            trim: true,
+        },
+        wardenPassword: {
+            type: String,
+            required: false,
         },
     },
     { timestamps: true }

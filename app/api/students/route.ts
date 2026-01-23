@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, homePinCode, homeState, erpInformation, joiningDate, branch, collegeName, year, semester, section, localGuardianAddress, localGuardianPhoneNumber } = body;
+    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, homePinCode, homeState, erpInformation, joiningDate, branch, collegeName, year, semester, section, localGuardianAddress, localGuardianPhoneNumber, dob, category } = body;
 
     if (!firebaseUID || !name || !email || !phoneNumber || !hostelName || !roomNumber) {
       return NextResponse.json(
@@ -78,6 +78,8 @@ export async function POST(request: NextRequest) {
         section: section || "",
         localGuardianAddress: localGuardianAddress || "",
         localGuardianPhoneNumber: localGuardianPhoneNumber || "",
+        dob: dob || "",
+        category: category || "",
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
