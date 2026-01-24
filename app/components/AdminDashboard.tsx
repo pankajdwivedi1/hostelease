@@ -1510,15 +1510,27 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           {!showAllStudents ? (
             <>
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div>
-                  <h1 className="text-lg md:text-xl font-bold text-foreground">{title}</h1>
-                  <div className="flex items-center gap-2 mt-1">
-                    {studentsLoading ? (
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></span>
-                    ) : (
-                      <p className="text-sm text-secondary">{students.length} Students</p>
-                    )}
+                <div className="flex justify-between items-start w-full md:w-auto">
+                  <div>
+                    <h1 className="text-lg md:text-xl font-bold text-foreground">{title}</h1>
+                    <div className="flex items-center gap-2 mt-1">
+                      {studentsLoading ? (
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></span>
+                      ) : (
+                        <p className="text-sm text-secondary">{students.length} Students</p>
+                      )}
+                    </div>
                   </div>
+
+                  <button
+                    onClick={handleLogout}
+                    className="md:hidden px-4 py-2 rounded-xl border border-solid border-gray-100 bg-white text-foreground text-[10px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all flex items-center gap-2"
+                  >
+                    LOGOUT
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                  </button>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
@@ -1583,9 +1595,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </button>
                   <button
                     onClick={handleLogout}
-                    className="px-4 py-2 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm font-medium hover:bg-filler transition-colors"
+                    className="hidden md:flex px-4 py-2 rounded-xl border border-solid border-gray-100 bg-white text-foreground text-[10px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all items-center gap-2 hover:bg-gray-50"
                   >
-                    Logout
+                    LOGOUT
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
                   </button>
                 </div>
               </div>
@@ -2038,31 +2053,38 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <div className="bg-filler px-1 py-1 flex border-b border-gray-200">
                       <p className="px-4 py-2 text-xs font-bold text-secondary uppercase tracking-widest">Entry Logs ({selectedDate === new Date().toISOString().split('T')[0] ? 'Today' : selectedDate})</p>
                     </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead className="bg-[#fcfcfc] text-secondary font-bold uppercase text-[9px] border-b border-gray-100">
+                    <div className="overflow-x-hidden">
+                      <table className="w-full text-left table-fixed border-collapse">
+                        <thead className="bg-[#fcfcfc] text-secondary font-bold uppercase text-[8px] md:text-[9px] border-b border-gray-100">
                           <tr>
-                            <th className="px-4 py-3">Student</th>
-                            <th className="px-4 py-3">Hostel/Room</th>
-                            <th className="px-4 py-3">Time</th>
-                            <th className="px-4 py-3">Accuracy</th>
+                            <th className="px-2 md:px-4 py-3 w-[30%] md:w-1/3">Student</th>
+                            <th className="px-2 md:px-4 py-3 w-[30%] md:w-1/3">Hostel/Room</th>
+                            <th className="px-2 md:px-4 py-3 w-[20%] md:w-1/6 text-center">Time</th>
+                            <th className="px-2 md:px-4 py-3 w-[20%] md:w-1/6 text-right">Accuracy</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-gray-50">
                           {attendanceLogsLoading ? (
-                            <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic">Refreshing database...</td></tr>
+                            <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">Refreshing database...</td></tr>
                           ) : attendanceLogs.length === 0 ? (
-                            <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic">No entries found for {selectedDate === new Date().toISOString().split('T')[0] ? '9:00 PM onwards' : selectedDate}.</td></tr>
+                            <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">No entries found for {selectedDate === new Date().toISOString().split('T')[0] ? '9:00 PM onwards' : selectedDate}.</td></tr>
                           ) : (
                             (showAllEntryLogs ? attendanceLogs : attendanceLogs.slice(0, 10)).map((log) => (
                               <tr key={log._id} className="hover:bg-filler/50 transition-colors">
-                                <td className="px-4 py-3 font-bold text-foreground">{log.studentId?.name || "Unknown"}</td>
-                                <td className="px-4 py-3 text-secondary text-xs">{log.studentId?.hostelName} - {log.studentId?.roomNumber}</td>
-                                <td className="px-4 py-3">
-                                  <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-md font-bold text-xs">{log.istTime}</span>
+                                <td className="px-2 md:px-4 py-3">
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="font-bold text-gray-900 text-[10px] md:text-sm uppercase truncate tracking-tight">{log.studentId?.name || "Unknown"}</span>
+                                    <span className="text-[8px] md:hidden text-gray-400 font-medium uppercase truncate">{log.studentId?.hostelName} - {log.studentId?.roomNumber}</span>
+                                  </div>
                                 </td>
-                                <td className="px-4 py-3">
-                                  <span className={`text-[10px] font-bold ${log.location.accuracy < 50 ? "text-green-600" : "text-orange-500"}`}>
+                                <td className="px-2 md:px-4 py-3 text-secondary text-[9px] md:text-xs truncate">
+                                  {log.studentId?.hostelName} - {log.studentId?.roomNumber}
+                                </td>
+                                <td className="px-1 md:px-4 py-2 md:py-3 text-center">
+                                  <span className="inline-block px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-md font-black text-[9px] md:text-xs whitespace-nowrap">{log.istTime}</span>
+                                </td>
+                                <td className="px-2 md:px-4 py-3 text-right">
+                                  <span className={`text-[9px] md:text-[10px] font-black ${log.location.accuracy < 50 ? "text-green-600" : "text-orange-500"}`}>
                                     {log.location.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"}
                                   </span>
                                 </td>
@@ -2354,9 +2376,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="px-4 py-2 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm font-medium hover:bg-filler transition-colors"
+                  className="px-4 py-2 rounded-xl border border-solid border-gray-100 bg-white text-foreground text-[10px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all flex items-center gap-2"
                 >
-                  Logout
+                  LOGOUT
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
                 </button>
               </div>
 
@@ -2898,15 +2923,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               </div>
 
               {showRemoveButton && (
-                <div className="flex justify-end gap-3 mt-4">
+                <div className="grid grid-cols-3 sm:flex sm:justify-end gap-2 md:gap-3 mt-4">
                   <button
                     onClick={() => handleResetDeviceID(selectedStudent.id)}
-                    className="px-4 py-2 rounded-lg border-2 border-amber-600 text-amber-600 font-bold transition-all hover:bg-amber-50 text-sm flex items-center gap-2"
+                    className="flex flex-col sm:flex-row items-center justify-center text-center gap-1 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl border-2 border-amber-600 text-amber-600 font-bold transition-all hover:bg-amber-50 text-[10px] sm:text-sm"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                     </svg>
-                    Reset Device ID
+                    <span className="leading-tight">Reset Device ID</span>
                   </button>
                   <button
                     onClick={() => {
@@ -2914,22 +2939,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       setEditErrors({});
                       setShowEditStudentModal(true);
                     }}
-                    className="px-4 py-2 rounded-lg border-2 border-blue-600 text-blue-600 font-bold transition-all hover:bg-blue-50 text-sm flex items-center gap-2"
+                    className="flex flex-col sm:flex-row items-center justify-center text-center gap-1 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl border-2 border-blue-600 text-blue-600 font-bold transition-all hover:bg-blue-50 text-[10px] sm:text-sm"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
-                    Edit Details
+                    <span className="leading-tight">Edit Details</span>
                   </button>
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
                     disabled={deletingStudentId === selectedStudent.id}
-                    className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold transition-colors hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-2"
+                    className="flex flex-col sm:flex-row items-center justify-center text-center gap-1 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl bg-red-600 text-white font-bold transition-all hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-[10px] sm:text-sm shadow-lg shadow-red-100"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                    Remove Student
+                    <span className="leading-tight">Remove Student</span>
                   </button>
                 </div>
               )}
