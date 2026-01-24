@@ -16,6 +16,20 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Check if student already has a registered device
+        const existingStudent = await Student.findById(studentId);
+
+        if (!existingStudent) {
+            return NextResponse.json({ error: "Student not found" }, { status: 404 });
+        }
+
+        if (existingStudent.deviceId && existingStudent.deviceId.trim() !== "") {
+            return NextResponse.json(
+                { error: "Your device is already registered for this account. Please contact the administrator to reset your device link if you have a new phone." },
+                { status: 403 }
+            );
+        }
+
         // Update student with deviceId
         const student = await Student.findByIdAndUpdate(
             studentId,

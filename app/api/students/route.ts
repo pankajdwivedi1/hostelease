@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, homePinCode, homeState, erpInformation, joiningDate, branch, collegeName, year, semester, section, localGuardianAddress, localGuardianPhoneNumber, dob, category } = body;
+    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, homePinCode, homeState, erpInformation, joiningDate, branch, collegeName, year, semester, section, localGuardianAddress, localGuardianPhoneNumber, dob, category, deviceId } = body;
 
     if (!firebaseUID || !name || !email || !phoneNumber || !hostelName || !roomNumber) {
       return NextResponse.json(
@@ -51,36 +51,45 @@ export async function POST(request: NextRequest) {
       registrationId = `${prefix}-${String(nextNumber).padStart(4, '0')}`;
     }
 
+    const updateData: any = {
+      firebaseUID,
+      name,
+      email,
+      phoneNumber,
+      hostelName,
+      roomNumber,
+      registrationId,
+      profilePicture: profilePicture || "",
+      studentStatus: "in",
+      fatherName: fatherName || "",
+      fatherNumber: fatherNumber || "",
+      motherName: motherName || "",
+      motherNumber: motherNumber || "",
+      homePinCode: homePinCode || "",
+      homeState: homeState || "",
+      erpInformation: erpInformation || "",
+      joiningDate: joiningDate ? new Date(joiningDate) : undefined,
+      branch: branch || "",
+      collegeName: collegeName || "",
+      year: year || "",
+      semester: semester || "",
+      section: section || "",
+      localGuardianAddress: localGuardianAddress || "",
+      localGuardianPhoneNumber: localGuardianPhoneNumber || "",
+      dob: dob || "",
+      category: category || "",
+    };
+
+    if (deviceId) {
+      // Admin-Only Reset Rule: Only set deviceId if student doesn't have one yet
+      if (!existingStudent || !existingStudent.deviceId || existingStudent.deviceId.trim() === "") {
+        updateData.deviceId = deviceId;
+      }
+    }
+
     const student = await Student.findOneAndUpdate(
       { firebaseUID },
-      {
-        firebaseUID,
-        name,
-        email,
-        phoneNumber,
-        hostelName,
-        roomNumber,
-        registrationId,
-        profilePicture: profilePicture || "",
-        studentStatus: "in",
-        fatherName: fatherName || "",
-        fatherNumber: fatherNumber || "",
-        motherName: motherName || "",
-        motherNumber: motherNumber || "",
-        homePinCode: homePinCode || "",
-        homeState: homeState || "",
-        erpInformation: erpInformation || "",
-        joiningDate: joiningDate ? new Date(joiningDate) : undefined,
-        branch: branch || "",
-        collegeName: collegeName || "",
-        year: year || "",
-        semester: semester || "",
-        section: section || "",
-        localGuardianAddress: localGuardianAddress || "",
-        localGuardianPhoneNumber: localGuardianPhoneNumber || "",
-        dob: dob || "",
-        category: category || "",
-      },
+      updateData,
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
@@ -109,7 +118,7 @@ export async function GET(request: NextRequest) {
       if (minimal) {
         // ⚡ OPTIMIZED: Ultra-minimal selection for fastest login flow
         // Include dob and category to prevent profile completion modal from showing incorrectly
-        student = await Student.findOne({ firebaseUID }).select("_id firebaseUID name studentStatus deviceId dob category isProfileLocked");
+        student = await Student.findOne({ firebaseUID }).select("_id firebaseUID name studentStatus deviceId dob category homeState section isProfileLocked");
       } else {
         student = await Student.findOne({ firebaseUID });
       }

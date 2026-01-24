@@ -94,7 +94,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   }[]>([]);
   const [lastCheckAccuracy, setLastCheckAccuracy] = useState<number | null>(null);
   const [showMandatoryUpdate, setShowMandatoryUpdate] = useState(false);
-  const [mandatoryFormData, setMandatoryFormData] = useState({ dob: "", category: "" });
+  const [mandatoryFormData, setMandatoryFormData] = useState({ dob: "", category: "", homeState: "", section: "" });
   const [updatingProfile, setUpdatingProfile] = useState(false);
 
   const latestPermission = useMemo(() => {
@@ -188,7 +188,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to register device: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to register device: ${response.status}`);
       }
 
       const data = await response.json();
@@ -223,13 +224,18 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         setShowDeviceRegistration(true);
       }
 
-      // Hard Redirect Check: DOB and Category
-      if (!studentProfile.dob || !studentProfile.category) {
+      // Hard Redirect Check: Critical fields must be filled
+      const isSectionInvalid = !studentProfile.section || studentProfile.section === "NIL" || studentProfile.section === "NILL";
+      if (!studentProfile.dob || !studentProfile.category || !studentProfile.homeState || isSectionInvalid) {
         setShowMandatoryUpdate(true);
         setMandatoryFormData({
           dob: studentProfile.dob || "",
-          category: studentProfile.category || ""
+          category: studentProfile.category || "",
+          homeState: studentProfile.homeState || "",
+          section: isSectionInvalid ? "" : (studentProfile.section || "")
         });
+      } else {
+        setShowMandatoryUpdate(false);
       }
 
       // Check attendance status
@@ -326,7 +332,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       if (!currentStudent) {
         try {
           // ⚡ STEP 1: Load MINIMAL data first if not provided
-          const minimalResponse = await fetch(`/api/students?firebaseUID=${user.uid}&minimal=true`);
+          const minimalResponse = await fetch(`/api/students?firebaseUID=${user.uid}&minimal=true`, { cache: 'no-store' });
           if (!minimalResponse.ok) throw new Error(`Failed to fetch minimal data: ${minimalResponse.status}`);
           const minimalData = await minimalResponse.json();
           if (minimalData.student) {
@@ -354,7 +360,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         // ⚡ STEP 2: Load FULL profile data asynchronously in background
         const loadFullProfile = async () => {
           try {
-            const fullResponse = await fetch(`/api/students?firebaseUID=${user.uid}`);
+            const fullResponse = await fetch(`/api/students?firebaseUID=${user.uid}`, { cache: 'no-store' });
             if (!fullResponse.ok) throw new Error(`Failed to fetch full profile: ${fullResponse.status}`);
             const fullData = await fullResponse.json();
             if (fullData.student && isMounted) {
@@ -473,7 +479,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   };
 
   const handleMandatoryUpdateSubmit = async () => {
-    if (!studentProfile || !mandatoryFormData.dob || !mandatoryFormData.category) {
+    if (!studentProfile || !mandatoryFormData.dob || !mandatoryFormData.category || !mandatoryFormData.homeState || !mandatoryFormData.section) {
       alert("Please fill all required fields.");
       return;
     }
@@ -484,7 +490,9 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       // Prepare update payload
       const updateData: any = {
         dob: mandatoryFormData.dob,
-        category: mandatoryFormData.category
+        category: mandatoryFormData.category,
+        homeState: mandatoryFormData.homeState,
+        section: mandatoryFormData.section
       };
 
       // Parallel check: Save device ID if missing in DB
@@ -1326,9 +1334,35 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                         />
                       </div>
 
+                      <div>
+                        <label className="block text-[11px] font-black text-blue-600 uppercase tracking-widest mb-2 px-1">Home State</label>
+                        <select
+                          value={mandatoryFormData.homeState}
+                          onChange={(e) => setMandatoryFormData(prev => ({ ...prev, homeState: e.target.value }))}
+                          className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                        >
+                          <option value="">SELECT STATE</option>
+                          {["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"].map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-black text-blue-600 uppercase tracking-widest mb-2 px-1">Section</label>
+                        <select
+                          value={mandatoryFormData.section}
+                          onChange={(e) => setMandatoryFormData(prev => ({ ...prev, section: e.target.value.toUpperCase() }))}
+                          className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                        >
+                          <option value="">SELECT SECTION</option>
+                          {["A", "B", "C", "D", "E", "F"].map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      </div>
+
                       <button
                         onClick={handleMandatoryUpdateSubmit}
-                        disabled={updatingProfile || !mandatoryFormData.dob || !mandatoryFormData.category}
+                        disabled={updatingProfile || !mandatoryFormData.dob || !mandatoryFormData.category || !mandatoryFormData.homeState || !mandatoryFormData.section}
                         className="w-full h-14 bg-blue-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2"
                       >
                         {updatingProfile ? (

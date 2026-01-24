@@ -135,8 +135,8 @@ export default function OnboardingPage() {
     const isRequired = (field: string) => {
       // Basic essential fields are always required
       if (["name", "phoneNumber", "hostelName", "roomNumber", "joiningDate"].includes(field)) return true;
-      // Other fields depend on config
-      return formConfig[field]?.visible && formConfig[field]?.required;
+      // If a field is visible, it is now considered required to ensure complete data collection
+      return formConfig[field]?.visible !== false;
     };
 
     const isVisible = (field: string) => {
@@ -192,6 +192,38 @@ export default function OnboardingPage() {
 
     try {
       setLoading(true);
+      // Device Registration Logic
+      const getStoredDeviceId = () => {
+        try {
+          const stored = localStorage.getItem("device_id_token");
+          if (!stored) return null;
+          return atob(stored);
+        } catch (e) {
+          return null;
+        }
+      };
+
+      const storeDeviceId = (id: string) => {
+        localStorage.setItem("device_id_token", btoa(id));
+      };
+
+      let currentDeviceId = getStoredDeviceId();
+      let deviceJustRegistered = false;
+
+      if (!currentDeviceId) {
+        const generateUUID = () => {
+          if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+          });
+        };
+        currentDeviceId = generateUUID();
+        storeDeviceId(currentDeviceId);
+        deviceJustRegistered = true;
+      }
+
       const response = await fetch("/api/students", {
         method: "POST",
         headers: {
@@ -222,6 +254,7 @@ export default function OnboardingPage() {
           localGuardianPhoneNumber: formData.localGuardianPhoneNumber,
           dob: formData.dob,
           category: formData.category,
+          deviceId: currentDeviceId, // Include deviceId in the payload
         }),
       });
 
@@ -229,6 +262,10 @@ export default function OnboardingPage() {
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to save data");
+      }
+
+      if (deviceJustRegistered) {
+        alert("Device registered successfully! You can now use all features.");
       }
 
       localStorage.setItem("userType", "student");
@@ -693,7 +730,7 @@ export default function OnboardingPage() {
                       } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
                   >
                     <option value="">SELECT SECTION</option>
-                    {["NIL", "A", "B", "C", "D", "E", "F"].map((opt) => (
+                    {["A", "B", "C", "D", "E", "F"].map((opt) => (
                       <option key={opt} value={opt.toUpperCase()}>{opt.toUpperCase()}</option>
                     ))}
                   </select>

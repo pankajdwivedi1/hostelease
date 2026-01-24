@@ -105,6 +105,7 @@ interface StudentDetails {
   studentStatus?: "in" | "out";
   registrationId?: string;
   isProfileLocked?: boolean;
+  deviceId?: string;
   permissions: SimplePermission[];
 }
 
@@ -1171,6 +1172,30 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       alert(error.message || "Failed to delete student. Please try again.");
     } finally {
       setDeletingStudentId(null);
+    }
+  };
+
+  const handleResetDeviceID = async (studentId: string) => {
+    if (!confirm("Are you sure you want to reset this student's device registration? This will allow them to register a new phone.")) return;
+
+    try {
+      const response = await fetch(`/api/students/${studentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId: "" })
+      });
+
+      if (!response.ok) throw new Error("Failed to reset device ID");
+
+      alert("Device registration reset successfully!");
+      // Refresh local state
+      if (selectedStudent && selectedStudent.id === studentId) {
+        setSelectedStudent({ ...selectedStudent, deviceId: "" });
+      }
+      await fetchStudents(true);
+    } catch (error) {
+      console.error("Error resetting device ID:", error);
+      alert("Failed to reset device ID. Please try again.");
     }
   };
 
@@ -2422,7 +2447,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground"
                     >
                       <option value="all">All Sections</option>
-                      <option value="NIL">NIL</option>
                       <option value="A">A</option>
                       <option value="B">B</option>
                       <option value="C">C</option>
@@ -2875,6 +2899,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
               {showRemoveButton && (
                 <div className="flex justify-end gap-3 mt-4">
+                  <button
+                    onClick={() => handleResetDeviceID(selectedStudent.id)}
+                    className="px-4 py-2 rounded-lg border-2 border-amber-600 text-amber-600 font-bold transition-all hover:bg-amber-50 text-sm flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    Reset Device ID
+                  </button>
                   <button
                     onClick={() => {
                       setEditStudentForm({ ...selectedStudent });
@@ -3948,6 +3981,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               }`}
                           >
                             {registrationFields[fieldKey].visible ? "VISIBLE" : "HIDDEN"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              const updated = { ...registrationFields };
+                              updated[fieldKey].required = !updated[fieldKey].required;
+                              handleUpdateRegistrationFields(updated);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${registrationFields[fieldKey].required
+                              ? "bg-amber-500 text-white shadow-lg shadow-amber-100"
+                              : "bg-gray-200 text-gray-500"
+                              }`}
+                          >
+                            {registrationFields[fieldKey].required ? "REQUIRED" : "OPTIONAL"}
                           </button>
                         </div>
                       </div>
