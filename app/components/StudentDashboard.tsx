@@ -1611,22 +1611,34 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       </main >
 
       {/* Mandatory Device Registration Modal */}
-      {
-        showDeviceRegistration && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
-            <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col p-8 text-center space-y-6">
-              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto text-3xl">
-                📱
+      {showDeviceRegistration && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col p-8 text-center space-y-6">
+            <div className={`w-20 h-20 ${studentProfile?.deviceId ? 'bg-amber-100' : 'bg-blue-100'} rounded-full flex items-center justify-center mx-auto text-3xl`}>
+              {studentProfile?.deviceId ? '⚠️' : '📱'}
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-gray-900">
+                {studentProfile?.deviceId ? 'Multiple Device Detected' : 'Device Verification Required'}
+              </h2>
+              <p className="text-gray-600">
+                {studentProfile?.deviceId
+                  ? "Your account is already registered with another device. For security reasons, you can only use one device at a time."
+                  : "To ensure security and prevent unauthorized check-ins, you must register this device with your account. This is a one-time mandatory step."}
+              </p>
+            </div>
+
+            {studentProfile?.deviceId ? (
+              <div className="bg-amber-50 p-4 rounded-xl text-xs text-amber-700 font-bold border border-amber-100">
+                Please contact the Administrator to reset your device link if you have a new phone or have lost your previous device.
               </div>
-              <div className="space-y-2">
-                <h2 className="text-2xl font-bold text-gray-900">Device Verification Required</h2>
-                <p className="text-gray-600">
-                  To ensure security and prevent unauthorized check-ins, you must register this device with your account. This is a one-time mandatory step.
-                </p>
-              </div>
+            ) : (
               <div className="bg-blue-50 p-4 rounded-xl text-xs text-blue-700 font-medium font-outfit">
                 Note: Once registered, your check-ins and permissions will be locked to this specific device.
               </div>
+            )}
+
+            {!studentProfile?.deviceId && (
               <button
                 onClick={handleRegisterDevice}
                 disabled={isRegisteringDevice}
@@ -1639,13 +1651,22 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                     Registering...
                   </div>
                 ) : (
-                  "Register Device Now"
+                  "Register This Device Now"
                 )}
               </button>
-            </div>
+            )}
+
+            {studentProfile?.deviceId && (
+              <button
+                onClick={handleLogout}
+                className="w-full h-14 rounded-2xl bg-gray-100 text-gray-900 font-bold text-lg hover:bg-gray-200 transition-all active:scale-95"
+              >
+                Logout
+              </button>
+            )}
           </div>
-        )
-      }
+        </div>
+      )}
 
       {/* Notification Popup */}
       {
