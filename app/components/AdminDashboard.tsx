@@ -176,6 +176,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   }[]>([]);
   const [lastCheckAccuracy, setLastCheckAccuracy] = useState<number | null>(null);
   const [isLocationChecking, setIsLocationChecking] = useState(false);
+  const [gpsLockStatus, setGpsLockStatus] = useState<'idle' | 'locking' | 'locked' | 'error'>('idle');
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [lockProgress, setLockProgress] = useState(0);
   const [selectedAttendanceHostel, setSelectedAttendanceHostel] = useState<string | null>(null);
   const [showAllEntryLogs, setShowAllEntryLogs] = useState(false);
   const [showAllAbsentees, setShowAllAbsentees] = useState(false);
@@ -215,6 +218,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [hostelsConfig, setHostelsConfig] = useState<any[]>([]);
   const [registrationFields, setRegistrationFields] = useState<Record<string, any>>({});
   const [activeSettingsTab, setActiveSettingsTab] = useState<"wardens" | "rooms" | "form">("wardens");
+
+  // Measurement Tool State
+  const [isMeasuring, setIsMeasuring] = useState(false);
+  const [measurePoints, setMeasurePoints] = useState<[number, number][]>([]);
+  const [measureDistance, setMeasureDistance] = useState<number | null>(null);
+  const [isLocationModalMaximized, setIsLocationModalMaximized] = useState(false);
 
   const getInitials = (name: string) => {
     return name
@@ -1055,21 +1064,38 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     return R * c;
   };
 
-  const getAccurateLocation = () => {
+  const getAccurateLocation = (mode: 'test' | 'form' = 'test') => {
     if (!navigator.geolocation) {
       alert("Geolocation is not supported by your browser");
       return;
     }
 
     setIsLocationChecking(true);
+    setGpsLockStatus('locking');
+    setLockProgress(0);
+    setGpsAccuracy(null);
+    console.log("Starting High-Speed Admin Location Lock...");
 
-    const processLocation = (position: GeolocationPosition) => {
+    let watchId: number | null = null;
+    let isCompleted = false;
+    let bestPosition: GeolocationPosition | null = null;
+    let lockTimer: NodeJS.Timeout | null = null;
+
+    const performVerification = (position: GeolocationPosition) => {
       const { latitude, longitude, accuracy } = position.coords;
       const finalAccuracy = Math.round(accuracy);
       setLastCheckAccuracy(finalAccuracy);
 
-      // Use database locations instead of hardcoded values
-      // This ensures location testing uses the same locations admins can add/edit
+      if (mode === 'form') {
+        const lat = parseFloat(latitude.toFixed(8));
+        const lng = parseFloat(longitude.toFixed(8));
+        setLocationForm(prev => ({ ...prev, lat, lng }));
+        setIsLocationChecking(false);
+        setGpsLockStatus('idle');
+        return;
+      }
+
+      // Proximity Test Mode
       const locationsToTest = hostelLocations.length > 0 ? hostelLocations : [
         { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
         { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
@@ -1078,61 +1104,70 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       const results = locationsToTest.map(loc => {
         const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
-        // ⚡ IMPROVED: Account for GPS accuracy (Effective Distance)
-        // Cap the accuracy offset at 50m to prevent false positives when GPS is very poor
         const offset = Math.min(finalAccuracy, 50);
         const isVerified = dist <= loc.radius;
         return { ...loc, distance: dist, isVerified: isVerified, appliedOffset: offset };
       });
+
       setLocationVerificationResults(results);
       setIsLocationChecking(false);
+      setGpsLockStatus('idle');
     };
 
-    const handleError = (error: GeolocationPositionError, isHighAccuracy: boolean) => {
-      console.warn(`Location test error (${isHighAccuracy ? 'High' : 'Low'} Accuracy):`, error);
-      console.warn(`Error code: ${error.code}, Message: ${error.message}`);
-
-      // If high accuracy failed, try low accuracy as fallback
-      if (isHighAccuracy) {
-        console.log("High accuracy failed. Falling back to low accuracy mode...");
-        navigator.geolocation.getCurrentPosition(
-          processLocation,
-          (lowAccError) => handleError(lowAccError, false),
-          {
-            enableHighAccuracy: false,
-            timeout: 40000, // 40 seconds for low accuracy fallback
-            maximumAge: 120000 // Accept cached positions up to 2 minutes old
-          }
-        );
-        return;
-      }
-
-      // Both high and low accuracy failed
-      setIsLocationChecking(false);
-      let errorMsg = "Could not retrieve location. ";
-
-      if (error.code === 1) {
-        errorMsg += "Location permission denied. Please enable location services in your browser settings.";
-      } else if (error.code === 2) {
-        errorMsg += "Position unavailable. Please check your GPS signal and ensure you're not indoors.";
-      } else if (error.code === 3) {
-        errorMsg += "Location request timed out. Please ensure:\n- GPS is enabled\n- You have a clear view of the sky\n- Location services are allowed for this site\n\nTry moving to an open area and retry.";
-      } else {
-        errorMsg += "An unknown error occurred. Please try again.";
-      }
-
-      alert(errorMsg);
+    const cleanup = () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      if (lockTimer !== null) clearTimeout(lockTimer);
     };
 
-    // First attempt: High accuracy with 30s timeout (mobile-friendly)
-    navigator.geolocation.getCurrentPosition(
-      processLocation,
-      (error) => handleError(error, true),
-      {
-        enableHighAccuracy: true,
-        timeout: 30000, // Increased to 30 seconds for mobile devices
-        maximumAge: 10000 // Accept recent positions (10 seconds old)
+    const finishLock = () => {
+      if (isCompleted || !bestPosition) return;
+      isCompleted = true;
+      const finalPosition = bestPosition;
+      cleanup();
+
+      setGpsLockStatus('locked');
+      setLockProgress(100);
+
+      setTimeout(() => {
+        performVerification(finalPosition);
+      }, 500);
+    };
+
+    const hardTimeoutId = setTimeout(() => {
+      if (!isCompleted) {
+        isCompleted = true;
+        cleanup();
+        setIsLocationChecking(false);
+        setGpsLockStatus('error');
+        alert("Location Error: Please ensure GPS is enabled and try again.");
       }
+    }, 15000);
+
+    watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        if (isCompleted) return;
+
+        const { accuracy } = position.coords;
+        setGpsAccuracy(Math.round(accuracy));
+
+        if (!bestPosition) {
+          bestPosition = position;
+          lockTimer = setTimeout(finishLock, 2500);
+          setLockProgress(40);
+        } else if (accuracy < bestPosition.coords.accuracy) {
+          bestPosition = position;
+          setLockProgress((prev) => Math.min(95, prev + 15));
+        }
+
+        if (accuracy <= 30) {
+          clearTimeout(hardTimeoutId);
+          finishLock();
+        }
+      },
+      (error) => {
+        console.warn("Admin GPS Lock Search:", error.message);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
@@ -1607,17 +1642,41 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
               {title === "Developer Dashboard" && (
                 <div className="mb-6 space-y-4">
-                  <button
-                    onClick={getAccurateLocation}
-                    disabled={isLocationChecking}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-50 text-indigo-700 rounded-xl font-bold border border-indigo-100 hover:bg-indigo-100 transition-all shadow-sm"
-                  >
-                    {isLocationChecking ? (
-                      <div className="w-5 h-5 border-2 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
-                    ) : (
-                      "🔍 Test Current Location Proximity"
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => getAccurateLocation('test')}
+                      disabled={isLocationChecking}
+                      className="w-full flex items-center justify-center gap-3 py-3.5 bg-indigo-50 text-indigo-700 rounded-xl font-bold border border-indigo-100 hover:bg-indigo-100 transition-all shadow-sm active:scale-95 disabled:opacity-80"
+                    >
+                      {isLocationChecking ? (
+                        <div className="flex items-center gap-3">
+                          <div className="relative flex items-center justify-center">
+                            <div className="w-5 h-5 border-2 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
+                            <div className="absolute inset-0 bg-indigo-400/10 rounded-full animate-pulse" />
+                          </div>
+                          <div className="flex flex-col items-start leading-tight">
+                            <span className="text-[11px] uppercase tracking-wider">Locking Signal...</span>
+                            <span className="text-[10px] font-black text-indigo-500">ACCURACY: {gpsAccuracy ? `${gpsAccuracy}m` : '--'}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        "🔍 Test Current Location Proximity"
+                      )}
+                    </button>
+                    {isLocationChecking && (
+                      <div className="px-1 flex flex-col gap-1 animate-in fade-in slide-in-from-top-1 duration-300">
+                        <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-indigo-500 transition-all duration-500"
+                            style={{ width: `${lockProgress}%` }}
+                          />
+                        </div>
+                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest text-center">
+                          {gpsAccuracy && gpsAccuracy > 100 ? "📍 Move for better signal" : "Synchronizing..."}
+                        </p>
+                      </div>
                     )}
-                  </button>
+                  </div>
 
                   <div className="bg-white p-4 md:p-6 rounded-2xl border border-dashed border-gray-300 font-mono text-[11px] md:text-xs shadow-sm">
                     <div className="text-center space-y-1 mb-6">
@@ -1908,18 +1967,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <h2 className="text-lg font-bold text-foreground">Daily Attendance Monitoring</h2>
                         <p className="text-sm text-secondary">Student entries and absentees for {selectedDate === new Date().toISOString().split('T')[0] ? 'today' : selectedDate}</p>
                       </div>
-                      <div className="flex items-center gap-3 w-full sm:w-auto">
+                      <div className="grid grid-cols-2 gap-3 w-full sm:w-auto sm:flex sm:items-center">
                         <input
                           type="date"
                           value={selectedDate}
                           onChange={(e) => setSelectedDate(e.target.value)}
                           max={new Date().toISOString().split('T')[0]}
-                          className="h-11 px-4 rounded-xl border border-gray-200 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500 bg-white shadow-sm cursor-pointer hover:border-blue-300 transition-colors flex-1 sm:flex-none"
+                          className="h-11 px-4 rounded-xl border border-gray-200 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500 bg-white shadow-sm cursor-pointer hover:border-blue-300 transition-colors w-full sm:w-auto sm:min-w-[160px]"
                         />
                         <select
                           value={attendanceHostelFilter}
                           onChange={(e) => setAttendanceHostelFilter(e.target.value)}
-                          className="h-11 px-4 rounded-xl border border-gray-200 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500 bg-white shadow-sm cursor-pointer hover:border-blue-300 transition-colors flex-1 sm:flex-none"
+                          className="h-11 px-4 rounded-xl border border-gray-200 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500 bg-white shadow-sm cursor-pointer hover:border-blue-300 transition-colors w-full sm:w-auto sm:min-w-[160px]"
                         >
                           <option value="all">All Hostels</option>
                           {hostels.map((h) => (
@@ -3134,51 +3193,60 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       {/* Location Mapping Modal */}
       {
         showLocationModal && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[95vh] flex flex-col">
-              <div className="p-4 md:p-6 overflow-y-auto custom-scrollbar">
-                <div className="flex items-center justify-between mb-2 md:mb-3">
+          <div className={`fixed inset-0 z-[60] flex items-center justify-center ${isLocationModalMaximized ? 'p-0' : 'p-4'} bg-black/60 backdrop-blur-sm animate-in fade-in duration-200`}>
+            <div className={`bg-white w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col transition-all duration-300 ${isLocationModalMaximized
+              ? 'max-w-none h-screen rounded-none'
+              : 'max-w-lg rounded-3xl max-h-[95vh]'
+              }`}>
+              <div className={`p-4 md:p-6 overflow-y-auto custom-scrollbar flex-1 flex flex-col ${isLocationModalMaximized ? 'p-0 md:p-0' : ''}`}>
+                <div className={`flex items-center justify-between mb-2 md:mb-3 ${isLocationModalMaximized ? 'p-4 pb-2' : ''}`}>
                   <h3 className="text-lg md:text-xl font-black text-gray-900 tracking-tight">
                     {editingLocationIndex !== null ? "EDIT LOCATION" : "ADD NEW LOCATION"}
                   </h3>
-                  <button
-                    onClick={() => setShowLocationModal(false)}
-                    className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
-                  >
-                    <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setShowLocationModal(false);
+                        setIsLocationModalMaximized(false);
+                      }}
+                      className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+                    >
+                      <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="space-y-2 md:space-y-3">
-                  <div>
+                {!isLocationModalMaximized && (
+                  <div className="mb-4">
                     <div className="flex items-center justify-between mb-0.5 px-1">
                       <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest">Location Name</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!navigator.geolocation) {
-                            alert("Geolocation is not supported by your browser");
-                            return;
-                          }
-                          navigator.geolocation.getCurrentPosition(
-                            (position) => {
-                              const lat = parseFloat(position.coords.latitude.toFixed(6));
-                              const lng = parseFloat(position.coords.longitude.toFixed(6));
-                              setLocationForm(prev => ({ ...prev, lat, lng }));
-                            },
-                            () => {
-                              alert("Could not retrieve your location. Please ensure GPS is on.");
-                            },
-                            { enableHighAccuracy: true }
-                          );
-                        }}
-                        className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors bg-blue-50 px-2 py-1 rounded border border-blue-100 uppercase tracking-wider"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
-                        </svg>
-                        Get Location
-                      </button>
+                      <div className="flex items-center gap-3">
+                        {isLocationChecking && (
+                          <div className="flex flex-col items-end gap-1 animate-in fade-in slide-in-from-right-2">
+                            <span className="text-[9px] font-black text-blue-600 uppercase tracking-tighter">
+                              Signal: {gpsAccuracy ? `${gpsAccuracy}m` : '--'}
+                            </span>
+                            <div className="w-16 h-1 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${lockProgress}%` }} />
+                            </div>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => getAccurateLocation('form')}
+                          disabled={isLocationChecking}
+                          className="h-8 md:h-9 px-3 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 hover:bg-blue-100 transition-all flex items-center gap-2 disabled:opacity-70 group"
+                        >
+                          {isLocationChecking ? (
+                            <div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+                          ) : (
+                            <svg className="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
+                            </svg>
+                          )}
+                          <span className="text-[10px] font-black uppercase tracking-wider">{isLocationChecking ? "Locking..." : "Get Location"}</span>
+                        </button>
+                      </div>
                     </div>
                     <input
                       type="text"
@@ -3188,65 +3256,182 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       className="w-full h-10 md:h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-sm"
                     />
                   </div>
+                )}
 
-                  <div className="h-[43vh] min-h-[300px] w-full rounded-xl overflow-hidden border border-gray-200 relative z-0 flex-shrink-0 shadow-inner">
-                    <LocationPickerMap
-                      lat={locationForm.lat}
-                      lng={locationForm.lng}
-                      radius={locationForm.radius}
-                      zoom={mapZoom}
-                      onMove={(lat, lng) => setLocationForm(prev => ({ ...prev, lat, lng }))}
-                    />
-                  </div>
+                <div className={`w-full rounded-xl overflow-hidden border border-gray-200 relative z-0 flex-shrink-0 shadow-inner transition-all duration-300 ${isLocationModalMaximized ? 'flex-1 mb-0 h-auto rounded-none border-0' : 'h-[43vh] min-h-[300px]'
+                  }`}>
+                  <LocationPickerMap
+                    lat={locationForm.lat}
+                    lng={locationForm.lng}
+                    radius={locationForm.radius}
+                    zoom={mapZoom}
+                    onMove={(lat, lng) => {
+                      const roundedLat = parseFloat(lat.toFixed(8));
+                      const roundedLng = parseFloat(lng.toFixed(8));
+                      setLocationForm(prev => ({ ...prev, lat: roundedLat, lng: roundedLng }));
+                    }}
+                    isMeasuring={isMeasuring}
+                    measurePoints={measurePoints}
+                    onMeasure={(points, dist) => {
+                      setMeasurePoints(points);
+                      setMeasureDistance(dist);
+                    }}
+                    isMaximized={isLocationModalMaximized}
+                  />
 
-                  <div className="grid grid-cols-2 gap-3 md:gap-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-0.5 px-1">Latitude</label>
-                      <input
-                        type="number"
-                        step="any"
-                        value={locationForm.lat}
-                        onChange={(e) => setLocationForm({ ...locationForm, lat: parseFloat(e.target.value) })}
-                        className="w-full h-10 md:h-12 px-3 md:px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-0.5 px-1">Longitude</label>
-                      <input
-                        type="number"
-                        step="any"
-                        value={locationForm.lng}
-                        onChange={(e) => setLocationForm({ ...locationForm, lng: parseFloat(e.target.value) })}
-                        className="w-full h-10 md:h-12 px-3 md:px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-sm"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-0.5 px-1">Radius (meters)</label>
-                    <input
-                      type="number"
-                      value={locationForm.radius}
-                      onChange={(e) => setLocationForm({ ...locationForm, radius: parseInt(e.target.value) })}
-                      className="w-full h-10 md:h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-sm"
-                    />
-                  </div>
-
-                  <div className="pt-1.5 flex gap-3 pb-safe">
+                  {/* Maximize/Minimize Toggle - Bottom Right Overlay */}
+                  <div className="absolute bottom-3 right-3 z-[1000]">
                     <button
-                      onClick={() => setShowLocationModal(false)}
-                      className="flex-1 h-10 md:h-12 rounded-xl border border-gray-200 text-gray-600 font-black text-[10px] uppercase tracking-widest hover:bg-gray-50 transition-all"
+                      type="button"
+                      onClick={() => setIsLocationModalMaximized(!isLocationModalMaximized)}
+                      className="p-1.5 sm:p-3 bg-white/90 backdrop-blur-sm rounded-lg sm:rounded-2xl shadow-xl border border-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white hover:scale-110 transition-all active:scale-95 flex items-center justify-center group"
+                      title={isLocationModalMaximized ? "Minimize View" : "Full Screen Map"}
                     >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleSaveLocation}
-                      disabled={isUpdatingSettings}
-                      className="flex-[2] h-10 md:h-12 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-200 hover:bg-blue-700 hover:shadow-xl transition-all disabled:opacity-50"
-                    >
-                      {isUpdatingSettings ? "SAVING..." : "SAVE MAPPING"}
+                      {isLocationModalMaximized ? (
+                        <svg className="w-[14px] h-[14px] sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                      ) : (
+                        <svg className="w-[14px] h-[14px] sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+                      )}
                     </button>
                   </div>
+
+                  {/* Measurement Controls Overlay */}
+                  <div className="absolute top-3 right-3 z-[1000] flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newMode = !isMeasuring;
+                        setIsMeasuring(newMode);
+                        if (!newMode) {
+                          setMeasurePoints([]);
+                          setMeasureDistance(null);
+                        }
+                      }}
+                      className={`p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl shadow-lg border transition-all flex items-center justify-center ${isMeasuring
+                        ? "bg-red-600 border-red-500 text-white scale-110"
+                        : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                        }`}
+                      title={isMeasuring ? "Stop Measuring" : "Measure Distance"}
+                    >
+                      {isMeasuring ? (
+                        <svg className="w-[14px] h-[14px] sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      ) : (
+                        <svg className="w-[14px] h-[14px] sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+
+                  {isMeasuring && measureDistance !== null && (
+                    <div className="absolute bottom-3 left-3 z-[1000] bg-white/95 backdrop-blur-sm px-2 py-1 sm:px-4 sm:py-2 rounded-[14px] sm:rounded-2xl shadow-xl border border-blue-100 flex items-center gap-1.5 sm:gap-3 animate-in slide-in-from-bottom-2 duration-300 max-w-[calc(100%-60px)] sm:max-w-none">
+                      <div className="flex flex-col">
+                        <span className="text-[7px] sm:text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none">Measured Distance</span>
+                        <span className="text-[10px] sm:text-sm font-black text-gray-900 leading-tight">
+                          {measureDistance > 999
+                            ? `${(measureDistance / 1000).toFixed(3)} kms`
+                            : `${Math.round(measureDistance)} meters`}
+                        </span>
+                      </div>
+                      <div className="w-px h-6 sm:h-8 bg-gray-100" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLocationForm(prev => ({ ...prev, radius: Math.round(measureDistance) }));
+                          setIsMeasuring(false);
+                          setMeasurePoints([]);
+                          setMeasureDistance(null);
+                        }}
+                        className="bg-blue-600 text-white px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[8px] sm:text-xs font-black uppercase tracking-tight hover:bg-blue-700 transition-colors whitespace-nowrap"
+                      >
+                        Use as Radius
+                      </button>
+                    </div>
+                  )}
+
+                  {isMeasuring && measurePoints.length > 0 && measurePoints.length < 2 && (
+                    <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-[1000] bg-black/70 backdrop-blur-md px-4 py-2 rounded-xl text-white text-[10px] font-bold uppercase tracking-widest animate-pulse">
+                      Click another point to measure
+                    </div>
+                  )}
+                </div>
+
+                {!isLocationModalMaximized && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3 md:gap-4 mt-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-0.5 px-1">Latitude</label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={locationForm.lat === 0 ? "" : locationForm.lat.toString()}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "") {
+                              setLocationForm({ ...locationForm, lat: 0 });
+                            } else {
+                              const parsed = parseFloat(val);
+                              if (!isNaN(parsed)) {
+                                setLocationForm({ ...locationForm, lat: parseFloat(parsed.toFixed(8)) });
+                              }
+                            }
+                          }}
+                          className="w-full h-10 md:h-12 px-3 md:px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-0.5 px-1">Longitude</label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={locationForm.lng === 0 ? "" : locationForm.lng.toString()}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "") {
+                              setLocationForm({ ...locationForm, lng: 0 });
+                            } else {
+                              const parsed = parseFloat(val);
+                              if (!isNaN(parsed)) {
+                                setLocationForm({ ...locationForm, lng: parseFloat(parsed.toFixed(8)) });
+                              }
+                            }
+                          }}
+                          className="w-full h-10 md:h-12 px-3 md:px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-0.5 px-1">Radius (meters)</label>
+                      <input
+                        type="number"
+                        value={locationForm.radius}
+                        onChange={(e) => setLocationForm({ ...locationForm, radius: parseInt(e.target.value) })}
+                        className="w-full h-10 md:h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-sm"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className={`pt-4 flex gap-3 pb-safe ${isLocationModalMaximized ? 'mt-auto' : ''}`}>
+                  <button
+                    onClick={() => {
+                      setShowLocationModal(false);
+                      setIsLocationModalMaximized(false);
+                    }}
+                    className="flex-1 h-10 md:h-12 rounded-xl border border-gray-200 text-gray-600 font-black text-[10px] uppercase tracking-widest hover:bg-gray-50 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveLocation}
+                    disabled={isUpdatingSettings}
+                    className="flex-[2] h-10 md:h-12 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-200 hover:bg-blue-700 hover:shadow-xl transition-all disabled:opacity-50"
+                  >
+                    {isUpdatingSettings ? "SAVING..." : "SAVE MAPPING"}
+                  </button>
                 </div>
               </div>
             </div>
@@ -3254,792 +3439,802 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         )
       }
 
-      {showEditStudentModal && (
-        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-md flex items-center justify-center p-0 sm:p-4 overflow-hidden animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-2xl h-full sm:h-auto sm:max-h-[90vh] sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
-            {/* Modal Header */}
-            <div className="p-4 md:p-6 border-b flex items-center justify-between bg-white relative z-10">
-              <div>
-                <h3 className="text-xl font-black text-gray-900 tracking-tight">EDIT STUDENT DETAILS</h3>
-                <p className="text-xs text-secondary font-bold uppercase tracking-widest mt-1">Updating profile for {editStudentForm.name}</p>
-              </div>
-              <button
-                onClick={() => {
-                  if (isEditCameraOpen) {
-                    if (editVideoRef.current?.srcObject) {
-                      (editVideoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
-                    }
-                    setIsEditCameraOpen(false);
-                  }
-                  setShowEditStudentModal(false);
-                }}
-                className="w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
-              >
-                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            {/* Modal Body - Scrollable Form */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar">
-              <form id="editStudentForm" onSubmit={async (e) => {
-                e.preventDefault();
-                try {
-                  setIsUpdatingStudent(true);
-                  const response = await fetch(`/api/students/${selectedStudent?.id}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      ...editStudentForm,
-                      joiningDate: editStudentForm.joiningDate ? new Date(editStudentForm.joiningDate).toISOString() : undefined
-                    }),
-                  });
-
-                  if (!response.ok) throw new Error("Update failed");
-
-                  const data = await response.json();
-                  if (data.success) {
-                    alert("Student details updated successfully!");
-                    setShowEditStudentModal(false);
-                    fetchStudents(true);
-                    if (selectedStudent) {
-                      setSelectedStudent({ ...selectedStudent, ...editStudentForm } as StudentDetails);
-                    }
-                  }
-                } catch (err) {
-                  console.error(err);
-                  alert("Failed to update student details");
-                } finally {
-                  setIsUpdatingStudent(false);
-                }
-              }} className="space-y-6">
-
-                {/* Photo Section */}
-                <div className="flex flex-col items-center gap-4 bg-gray-50 p-6 rounded-2xl border border-dashed border-gray-300">
-                  <label className="text-xs font-black text-gray-500 uppercase tracking-widest">Profile Photo</label>
-
-                  {!isEditCameraOpen ? (
-                    <div className="relative group">
-                      <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-xl relative">
-                        {editStudentForm.profilePicture ? (
-                          <img src={editStudentForm.profilePicture} alt="Preview" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                            <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            setIsEditCameraOpen(true);
-                            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                            if (editVideoRef.current) editVideoRef.current.srcObject = stream;
-                          } catch (err) {
-                            alert("Camera access failed");
-                            setIsEditCameraOpen(false);
-                          }
-                        }}
-                        className="absolute bottom-0 right-0 bg-blue-600 text-white p-2.5 rounded-full shadow-lg hover:bg-blue-700 transition-all scale-90 group-hover:scale-100"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-full max-w-sm rounded-2xl overflow-hidden bg-black aspect-square relative shadow-2xl">
-                      <video ref={editVideoRef} autoPlay playsInline className="w-full h-full object-cover mirror" />
-                      <div className="absolute bottom-4 inset-x-0 flex justify-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (editVideoRef.current?.srcObject) {
-                              (editVideoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
-                            }
-                            setIsEditCameraOpen(false);
-                          }}
-                          className="px-4 py-2 bg-white/20 backdrop-blur-md text-white rounded-full text-xs font-bold border border-white/30 hover:bg-white/30"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (editVideoRef.current && editCanvasRef.current) {
-                              const canvas = editCanvasRef.current;
-                              const video = editVideoRef.current;
-                              canvas.width = video.videoWidth;
-                              canvas.height = video.videoHeight;
-                              const ctx = canvas.getContext('2d');
-                              if (ctx) {
-                                ctx.drawImage(video, 0, 0);
-                                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                                setEditStudentForm(prev => ({ ...prev, profilePicture: dataUrl }));
-                                if (video.srcObject) (video.srcObject as MediaStream).getTracks().forEach(t => t.stop());
-                                setIsEditCameraOpen(false);
-                              }
-                            }
-                          }}
-                          className="px-6 py-2 bg-white text-blue-600 rounded-full text-xs font-black shadow-lg"
-                        >
-                          Capture
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  <canvas ref={editCanvasRef} className="hidden" />
+      {
+        showEditStudentModal && (
+          <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-md flex items-center justify-center p-0 sm:p-4 overflow-hidden animate-in fade-in duration-300">
+            <div className="bg-white w-full max-w-2xl h-full sm:h-auto sm:max-h-[90vh] sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+              {/* Modal Header */}
+              <div className="p-4 md:p-6 border-b flex items-center justify-between bg-white relative z-10">
+                <div>
+                  <h3 className="text-xl font-black text-gray-900 tracking-tight">EDIT STUDENT DETAILS</h3>
+                  <p className="text-xs text-secondary font-bold uppercase tracking-widest mt-1">Updating profile for {editStudentForm.name}</p>
                 </div>
+                <button
+                  onClick={() => {
+                    if (isEditCameraOpen) {
+                      if (editVideoRef.current?.srcObject) {
+                        (editVideoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+                      }
+                      setIsEditCameraOpen(false);
+                    }
+                    setShowEditStudentModal(false);
+                  }}
+                  className="w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                >
+                  <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
 
-                {/* Form Fields Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                  {/* Basic Info */}
-                  <div className="col-span-full border-b pb-2">
-                    <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest">Personal Information</h4>
+              {/* Modal Body - Scrollable Form */}
+              <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar">
+                <form id="editStudentForm" onSubmit={async (e) => {
+                  e.preventDefault();
+                  try {
+                    setIsUpdatingStudent(true);
+                    const response = await fetch(`/api/students/${selectedStudent?.id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        ...editStudentForm,
+                        joiningDate: editStudentForm.joiningDate ? new Date(editStudentForm.joiningDate).toISOString() : undefined
+                      }),
+                    });
+
+                    if (!response.ok) throw new Error("Update failed");
+
+                    const data = await response.json();
+                    if (data.success) {
+                      alert("Student details updated successfully!");
+                      setShowEditStudentModal(false);
+                      fetchStudents(true);
+                      if (selectedStudent) {
+                        setSelectedStudent({ ...selectedStudent, ...editStudentForm } as StudentDetails);
+                      }
+                    }
+                  } catch (err) {
+                    console.error(err);
+                    alert("Failed to update student details");
+                  } finally {
+                    setIsUpdatingStudent(false);
+                  }
+                }} className="space-y-6">
+
+                  {/* Photo Section */}
+                  <div className="flex flex-col items-center gap-4 bg-gray-50 p-6 rounded-2xl border border-dashed border-gray-300">
+                    <label className="text-xs font-black text-gray-500 uppercase tracking-widest">Profile Photo</label>
+
+                    {!isEditCameraOpen ? (
+                      <div className="relative group">
+                        <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-xl relative">
+                          {editStudentForm.profilePicture ? (
+                            <img src={editStudentForm.profilePicture} alt="Preview" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                              <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              setIsEditCameraOpen(true);
+                              const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                              if (editVideoRef.current) editVideoRef.current.srcObject = stream;
+                            } catch (err) {
+                              alert("Camera access failed");
+                              setIsEditCameraOpen(false);
+                            }
+                          }}
+                          className="absolute bottom-0 right-0 bg-blue-600 text-white p-2.5 rounded-full shadow-lg hover:bg-blue-700 transition-all scale-90 group-hover:scale-100"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-full max-w-sm rounded-2xl overflow-hidden bg-black aspect-square relative shadow-2xl">
+                        <video ref={editVideoRef} autoPlay playsInline className="w-full h-full object-cover mirror" />
+                        <div className="absolute bottom-4 inset-x-0 flex justify-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (editVideoRef.current?.srcObject) {
+                                (editVideoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+                              }
+                              setIsEditCameraOpen(false);
+                            }}
+                            className="px-4 py-2 bg-white/20 backdrop-blur-md text-white rounded-full text-xs font-bold border border-white/30 hover:bg-white/30"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (editVideoRef.current && editCanvasRef.current) {
+                                const canvas = editCanvasRef.current;
+                                const video = editVideoRef.current;
+                                canvas.width = video.videoWidth;
+                                canvas.height = video.videoHeight;
+                                const ctx = canvas.getContext('2d');
+                                if (ctx) {
+                                  ctx.drawImage(video, 0, 0);
+                                  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                                  setEditStudentForm(prev => ({ ...prev, profilePicture: dataUrl }));
+                                  if (video.srcObject) (video.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+                                  setIsEditCameraOpen(false);
+                                }
+                              }
+                            }}
+                            className="px-6 py-2 bg-white text-blue-600 rounded-full text-xs font-black shadow-lg"
+                          >
+                            Capture
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <canvas ref={editCanvasRef} className="hidden" />
                   </div>
 
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Full Name</label>
-                    <input
-                      type="text"
-                      value={editStudentForm.name || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, name: e.target.value.toUpperCase() }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Phone Number</label>
-                    <input
-                      type="tel"
-                      value={editStudentForm.phoneNumber || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, phoneNumber: e.target.value }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Date of Birth</label>
-                    <input
-                      type="date"
-                      value={editStudentForm.dob ? new Date(editStudentForm.dob).toISOString().split('T')[0] : ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, dob: e.target.value }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Category</label>
-                    <select
-                      value={editStudentForm.category || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, category: e.target.value }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 uppercase"
-                    >
-                      <option value="">SELECT CATEGORY</option>
-                      {["GENERAL", "SC", "ST", "OBC"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">ERP ID</label>
-                    <input
-                      type="text"
-                      value={editStudentForm.erpInformation || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, erpInformation: e.target.value.toUpperCase() }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Registration ID</label>
-                    <input
-                      type="text"
-                      value={editStudentForm.registrationId || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, registrationId: e.target.value.toUpperCase() }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    />
-                  </div>
-
-                  {/* Institution details */}
-                  <div className="col-span-full border-b pb-2 pt-4">
-                    <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest">Institutional details</h4>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">College Name</label>
-                    <select
-                      value={editStudentForm.collegeName || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, collegeName: e.target.value }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    >
-                      <option value="">SELECT COLLEGE</option>
-                      {["OIST", "OCT", "OCP", "OPM", "OIPR"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Branch</label>
-                    <select
-                      value={editStudentForm.branch || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, branch: e.target.value }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    >
-                      <option value="">SELECT BRANCH</option>
-                      {["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 col-span-full">
-                    <div>
-                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Year</label>
-                      <select
-                        value={editStudentForm.year || ""}
-                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, year: e.target.value }))}
-                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                      >
-                        <option value="">SELECT YEAR</option>
-                        {["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                      </select>
+                  {/* Form Fields Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                    {/* Basic Info */}
+                    <div className="col-span-full border-b pb-2">
+                      <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest">Personal Information</h4>
                     </div>
+
                     <div>
-                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Semester</label>
-                      <select
-                        value={editStudentForm.semester || ""}
-                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, semester: e.target.value }))}
-                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                      >
-                        <option value="">SELECT SEMESTER</option>
-                        {["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Hostel details */}
-                  <div className="col-span-full border-b pb-2 pt-4">
-                    <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest">Hostel details</h4>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Hostel Name</label>
-                    <select
-                      value={editStudentForm.hostelName?.toUpperCase() || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, hostelName: e.target.value }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    >
-                      <option value="">SELECT HOSTEL</option>
-                      {hostels.map(h => <option key={h._id} value={h.name.toUpperCase()}>{h.name.toUpperCase()}</option>)}
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Room No</label>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Full Name</label>
                       <input
                         type="text"
-                        value={editStudentForm.roomNumber || ""}
-                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, roomNumber: e.target.value.toUpperCase() }))}
+                        value={editStudentForm.name || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, name: e.target.value.toUpperCase() }))}
                         className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
                       />
                     </div>
+
                     <div>
-                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Joining Date</label>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Phone Number</label>
+                      <input
+                        type="tel"
+                        value={editStudentForm.phoneNumber || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, phoneNumber: e.target.value }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Date of Birth</label>
                       <input
                         type="date"
-                        value={editStudentForm.joiningDate ? new Date(editStudentForm.joiningDate).toISOString().split('T')[0] : ""}
-                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, joiningDate: e.target.value }))}
+                        value={editStudentForm.dob ? new Date(editStudentForm.dob).toISOString().split('T')[0] : ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, dob: e.target.value }))}
                         className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
                       />
                     </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Category</label>
+                      <select
+                        value={editStudentForm.category || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, category: e.target.value }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 uppercase"
+                      >
+                        <option value="">SELECT CATEGORY</option>
+                        {["GENERAL", "SC", "ST", "OBC"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">ERP ID</label>
+                      <input
+                        type="text"
+                        value={editStudentForm.erpInformation || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, erpInformation: e.target.value.toUpperCase() }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Registration ID</label>
+                      <input
+                        type="text"
+                        value={editStudentForm.registrationId || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, registrationId: e.target.value.toUpperCase() }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      />
+                    </div>
+
+                    {/* Institution details */}
+                    <div className="col-span-full border-b pb-2 pt-4">
+                      <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest">Institutional details</h4>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">College Name</label>
+                      <select
+                        value={editStudentForm.collegeName || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, collegeName: e.target.value }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      >
+                        <option value="">SELECT COLLEGE</option>
+                        {["OIST", "OCT", "OCP", "OPM", "OIPR"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Branch</label>
+                      <select
+                        value={editStudentForm.branch || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, branch: e.target.value }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      >
+                        <option value="">SELECT BRANCH</option>
+                        {["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 col-span-full">
+                      <div>
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Year</label>
+                        <select
+                          value={editStudentForm.year || ""}
+                          onChange={(e) => setEditStudentForm(prev => ({ ...prev, year: e.target.value }))}
+                          className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                        >
+                          <option value="">SELECT YEAR</option>
+                          {["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Semester</label>
+                        <select
+                          value={editStudentForm.semester || ""}
+                          onChange={(e) => setEditStudentForm(prev => ({ ...prev, semester: e.target.value }))}
+                          className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                        >
+                          <option value="">SELECT SEMESTER</option>
+                          {["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Hostel details */}
+                    <div className="col-span-full border-b pb-2 pt-4">
+                      <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest">Hostel details</h4>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Hostel Name</label>
+                      <select
+                        value={editStudentForm.hostelName?.toUpperCase() || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, hostelName: e.target.value }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      >
+                        <option value="">SELECT HOSTEL</option>
+                        {hostels.map(h => <option key={h._id} value={h.name.toUpperCase()}>{h.name.toUpperCase()}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Room No</label>
+                        <input
+                          type="text"
+                          value={editStudentForm.roomNumber || ""}
+                          onChange={(e) => setEditStudentForm(prev => ({ ...prev, roomNumber: e.target.value.toUpperCase() }))}
+                          className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Joining Date</label>
+                        <input
+                          type="date"
+                          value={editStudentForm.joiningDate ? new Date(editStudentForm.joiningDate).toISOString().split('T')[0] : ""}
+                          onChange={(e) => setEditStudentForm(prev => ({ ...prev, joiningDate: e.target.value }))}
+                          className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Guardian details */}
+                    <div className="col-span-full border-b pb-2 pt-4">
+                      <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest">Guardian details</h4>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Father's Name</label>
+                      <input
+                        type="text"
+                        value={editStudentForm.fatherName || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, fatherName: e.target.value.toUpperCase() }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Father's No</label>
+                      <input
+                        type="tel"
+                        value={editStudentForm.fatherNumber || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, fatherNumber: e.target.value }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Mother's Name</label>
+                      <input
+                        type="text"
+                        value={editStudentForm.motherName || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, motherName: e.target.value.toUpperCase() }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Mother's No</label>
+                      <input
+                        type="tel"
+                        value={editStudentForm.motherNumber || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, motherNumber: e.target.value }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      />
+                    </div>
+
+                    {/* Address info */}
+                    <div className="col-span-full border-b pb-2 pt-4">
+                      <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest">Address Information</h4>
+                    </div>
+
+                    <div className="col-span-full">
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Permanent Address (with PIN)</label>
+                      <input
+                        type="text"
+                        value={editStudentForm.homePinCode || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, homePinCode: e.target.value.toUpperCase() }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Home State</label>
+                      <select
+                        value={editStudentForm.homeState || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, homeState: e.target.value }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      >
+                        <option value="">SELECT STATE</option>
+                        {["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"].map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Local Guardian */}
+                    <div className="col-span-full border-b pb-2 pt-4">
+                      <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest">Local Guardian Details</h4>
+                    </div>
+
+                    <div className="col-span-full">
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Guardian Address</label>
+                      <input
+                        type="text"
+                        value={editStudentForm.localGuardianAddress || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, localGuardianAddress: e.target.value.toUpperCase() }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Guardian Mobile No</label>
+                      <input
+                        type="tel"
+                        value={editStudentForm.localGuardianPhoneNumber || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, localGuardianPhoneNumber: e.target.value }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      />
+                    </div>
+
                   </div>
-
-                  {/* Guardian details */}
-                  <div className="col-span-full border-b pb-2 pt-4">
-                    <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest">Guardian details</h4>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Father's Name</label>
-                    <input
-                      type="text"
-                      value={editStudentForm.fatherName || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, fatherName: e.target.value.toUpperCase() }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Father's No</label>
-                    <input
-                      type="tel"
-                      value={editStudentForm.fatherNumber || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, fatherNumber: e.target.value }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Mother's Name</label>
-                    <input
-                      type="text"
-                      value={editStudentForm.motherName || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, motherName: e.target.value.toUpperCase() }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Mother's No</label>
-                    <input
-                      type="tel"
-                      value={editStudentForm.motherNumber || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, motherNumber: e.target.value }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    />
-                  </div>
-
-                  {/* Address info */}
-                  <div className="col-span-full border-b pb-2 pt-4">
-                    <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest">Address Information</h4>
-                  </div>
-
-                  <div className="col-span-full">
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Permanent Address (with PIN)</label>
-                    <input
-                      type="text"
-                      value={editStudentForm.homePinCode || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, homePinCode: e.target.value.toUpperCase() }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Home State</label>
-                    <select
-                      value={editStudentForm.homeState || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, homeState: e.target.value }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    >
-                      <option value="">SELECT STATE</option>
-                      {["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"].map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-
-                  {/* Local Guardian */}
-                  <div className="col-span-full border-b pb-2 pt-4">
-                    <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest">Local Guardian Details</h4>
-                  </div>
-
-                  <div className="col-span-full">
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Guardian Address</label>
-                    <input
-                      type="text"
-                      value={editStudentForm.localGuardianAddress || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, localGuardianAddress: e.target.value.toUpperCase() }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Guardian Mobile No</label>
-                    <input
-                      type="tel"
-                      value={editStudentForm.localGuardianPhoneNumber || ""}
-                      onChange={(e) => setEditStudentForm(prev => ({ ...prev, localGuardianPhoneNumber: e.target.value }))}
-                      className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
-                    />
-                  </div>
-
-                </div>
-              </form>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 md:p-6 border-t bg-gray-50 flex items-center justify-end gap-4 sticky bottom-0 z-10">
-              <button
-                type="button"
-                onClick={() => setShowEditStudentModal(false)}
-                className="px-6 py-3 rounded-xl border border-gray-200 bg-white text-gray-600 font-bold hover:bg-gray-100 transition-all text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                form="editStudentForm"
-                disabled={isUpdatingStudent}
-                className="px-8 py-3 rounded-xl bg-blue-600 text-white font-black hover:bg-blue-700 transition-all text-sm shadow-lg shadow-blue-100 disabled:opacity-50 flex items-center gap-2"
-              >
-                {isUpdatingStudent ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Updating...
-                  </>
-                ) : "Save Changes"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {zoomedImage && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => setZoomedImage(null)}
-        >
-          <button
-            onClick={() => setZoomedImage(null)}
-            className="absolute top-4 right-4 md:top-6 md:right-6 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2.5 transition-colors z-[101]"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-          <img
-            src={zoomedImage}
-            alt="Zoomed Profile"
-            className="max-h-[85vh] max-w-[95vw] md:max-w-[80vw] object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
-
-      {/* Attendance Time Settings Modal */}
-      {showAttendanceTimeModal && (
-        <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-black text-gray-900 tracking-tight">
-                ⏰ SET ATTENDANCE TIME
-              </h3>
-              <button
-                onClick={() => setShowAttendanceTimeModal(false)}
-                className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
-              >
-                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="space-y-5">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Start Time
-                </label>
-                <input
-                  type="time"
-                  value={attendanceTimeSettings.startTime}
-                  onChange={(e) => setAttendanceTimeSettings({ ...attendanceTimeSettings, startTime: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:ring-4 focus:ring-green-500/20 focus:border-green-500 font-bold text-lg transition-all"
-                />
+                </form>
               </div>
 
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  End Time
-                </label>
-                <input
-                  type="time"
-                  value={attendanceTimeSettings.endTime}
-                  onChange={(e) => setAttendanceTimeSettings({ ...attendanceTimeSettings, endTime: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:ring-4 focus:ring-green-500/20 focus:border-green-500 font-bold text-lg transition-all"
-                />
-              </div>
-
-              <div className="bg-green-50 border-2 border-green-200 p-4 rounded-xl">
-                <p className="text-sm text-green-800 font-medium mb-1">
-                  📌 Students will be able to mark attendance between:
-                </p>
-                <p className="font-black text-lg text-green-900">
-                  {attendanceTimeSettings.startTime} to {attendanceTimeSettings.endTime}
-                </p>
-              </div>
-
-              <div className="flex gap-3 pt-4">
+              {/* Modal Footer */}
+              <div className="p-4 md:p-6 border-t bg-gray-50 flex items-center justify-end gap-4 sticky bottom-0 z-10">
                 <button
-                  onClick={() => setShowAttendanceTimeModal(false)}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-bold hover:bg-gray-50 transition-colors"
+                  type="button"
+                  onClick={() => setShowEditStudentModal(false)}
+                  className="px-6 py-3 rounded-xl border border-gray-200 bg-white text-gray-600 font-bold hover:bg-gray-100 transition-all text-sm"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleSaveAttendanceTime}
-                  disabled={isUpdatingAttendanceTime}
-                  className="flex-[2] px-4 py-3 rounded-xl bg-green-600 text-white font-black hover:bg-green-700 transition-colors disabled:opacity-50 shadow-lg shadow-green-200"
+                  type="submit"
+                  form="editStudentForm"
+                  disabled={isUpdatingStudent}
+                  className="px-8 py-3 rounded-xl bg-blue-600 text-white font-black hover:bg-blue-700 transition-all text-sm shadow-lg shadow-blue-100 disabled:opacity-50 flex items-center gap-2"
                 >
-                  {isUpdatingAttendanceTime ? "SAVING..." : "SAVE TIME"}
+                  {isUpdatingStudent ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Updating...
+                    </>
+                  ) : "Save Changes"}
                 </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-      {showPasswordResetModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden shadow-2xl transition-all duration-300 scale-100 p-8">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">
-                Change Password
-              </h2>
+      {
+        zoomedImage && (
+          <div
+            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+            onClick={() => setZoomedImage(null)}
+          >
+            <button
+              onClick={() => setZoomedImage(null)}
+              className="absolute top-4 right-4 md:top-6 md:right-6 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2.5 transition-colors z-[101]"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+            <img
+              src={zoomedImage}
+              alt="Zoomed Profile"
+              className="max-h-[85vh] max-w-[95vw] md:max-w-[80vw] object-contain rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        )
+      }
+
+      {/* Attendance Time Settings Modal */}
+      {
+        showAttendanceTimeModal && (
+          <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-black text-gray-900 tracking-tight">
+                  ⏰ SET ATTENDANCE TIME
+                </h3>
+                <button
+                  onClick={() => setShowAttendanceTimeModal(false)}
+                  className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                >
+                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Start Time
+                  </label>
+                  <input
+                    type="time"
+                    value={attendanceTimeSettings.startTime}
+                    onChange={(e) => setAttendanceTimeSettings({ ...attendanceTimeSettings, startTime: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:ring-4 focus:ring-green-500/20 focus:border-green-500 font-bold text-lg transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    End Time
+                  </label>
+                  <input
+                    type="time"
+                    value={attendanceTimeSettings.endTime}
+                    onChange={(e) => setAttendanceTimeSettings({ ...attendanceTimeSettings, endTime: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:ring-4 focus:ring-green-500/20 focus:border-green-500 font-bold text-lg transition-all"
+                  />
+                </div>
+
+                <div className="bg-green-50 border-2 border-green-200 p-4 rounded-xl">
+                  <p className="text-sm text-green-800 font-medium mb-1">
+                    📌 Students will be able to mark attendance between:
+                  </p>
+                  <p className="font-black text-lg text-green-900">
+                    {attendanceTimeSettings.startTime} to {attendanceTimeSettings.endTime}
+                  </p>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => setShowAttendanceTimeModal(false)}
+                    className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-bold hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveAttendanceTime}
+                    disabled={isUpdatingAttendanceTime}
+                    className="flex-[2] px-4 py-3 rounded-xl bg-green-600 text-white font-black hover:bg-green-700 transition-colors disabled:opacity-50 shadow-lg shadow-green-200"
+                  >
+                    {isUpdatingAttendanceTime ? "SAVING..." : "SAVE TIME"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        showPasswordResetModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden shadow-2xl transition-all duration-300 scale-100 p-8">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">
+                  Change Password
+                </h2>
+                <button
+                  onClick={() => setShowPasswordResetModal(false)}
+                  className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                >
+                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <p className="text-sm text-gray-500 font-medium mb-6">
+                Select the account you want to reset the password for:
+              </p>
+
+              <div className="space-y-4">
+                <button
+                  onClick={() => handleResetPassword("dean")}
+                  disabled={isUpdatingPassword}
+                  className="w-full flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 border-2 border-blue-100 rounded-2xl transition-all group active:scale-95 disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-200 group-hover:rotate-6 transition-transform">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                    </div>
+                    <div className="text-left">
+                      <p className="font-black text-blue-900 uppercase text-sm tracking-tight">Dean Account</p>
+                      <p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Main Admin Access</p>
+                    </div>
+                  </div>
+                  <svg className="w-5 h-5 text-blue-300 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+                </button>
+
+                <button
+                  onClick={() => handleResetPassword("warden")}
+                  disabled={isUpdatingPassword}
+                  className="w-full flex items-center justify-between p-4 bg-indigo-50 hover:bg-indigo-100 border-2 border-indigo-100 rounded-2xl transition-all group active:scale-95 disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200 group-hover:-rotate-6 transition-transform">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                    </div>
+                    <div className="text-left">
+                      <p className="font-black text-indigo-900 uppercase text-sm tracking-tight">Warden Account</p>
+                      <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest">Hostel Management</p>
+                    </div>
+                  </div>
+                  <svg className="w-5 h-5 text-indigo-300 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+                </button>
+              </div>
+
               <button
                 onClick={() => setShowPasswordResetModal(false)}
-                className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                className="w-full mt-6 py-3 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors uppercase tracking-widest"
               >
-                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                Cancel
               </button>
             </div>
-
-            <p className="text-sm text-gray-500 font-medium mb-6">
-              Select the account you want to reset the password for:
-            </p>
-
-            <div className="space-y-4">
-              <button
-                onClick={() => handleResetPassword("dean")}
-                disabled={isUpdatingPassword}
-                className="w-full flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 border-2 border-blue-100 rounded-2xl transition-all group active:scale-95 disabled:opacity-50"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-200 group-hover:rotate-6 transition-transform">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-                  </div>
-                  <div className="text-left">
-                    <p className="font-black text-blue-900 uppercase text-sm tracking-tight">Dean Account</p>
-                    <p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Main Admin Access</p>
-                  </div>
-                </div>
-                <svg className="w-5 h-5 text-blue-300 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
-              </button>
-
-              <button
-                onClick={() => handleResetPassword("warden")}
-                disabled={isUpdatingPassword}
-                className="w-full flex items-center justify-between p-4 bg-indigo-50 hover:bg-indigo-100 border-2 border-indigo-100 rounded-2xl transition-all group active:scale-95 disabled:opacity-50"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200 group-hover:-rotate-6 transition-transform">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                  </div>
-                  <div className="text-left">
-                    <p className="font-black text-indigo-900 uppercase text-sm tracking-tight">Warden Account</p>
-                    <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest">Hostel Management</p>
-                  </div>
-                </div>
-                <svg className="w-5 h-5 text-indigo-300 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
-              </button>
-            </div>
-
-            <button
-              onClick={() => setShowPasswordResetModal(false)}
-              className="w-full mt-6 py-3 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors uppercase tracking-widest"
-            >
-              Cancel
-            </button>
           </div>
-        </div>
-      )}
-      {showSystemSettingsModal && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[24px] sm:rounded-[32px] w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden shadow-2xl flex flex-col transition-all duration-300 scale-100">
-            {/* Modal Header */}
-            <div className="p-5 sm:p-8 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <div className="flex items-center gap-3 sm:gap-4">
-                <span className="p-2 sm:p-3 bg-indigo-600 text-white rounded-xl sm:rounded-2xl shadow-lg shadow-indigo-100 text-lg sm:text-2xl">🛠️</span>
-                <div>
-                  <h2 className="text-lg sm:text-2xl font-black text-gray-900 uppercase tracking-tight">
-                    System Settings
-                  </h2>
-                  <p className="text-[9px] sm:text-xs font-bold text-gray-400 mt-0.5 uppercase tracking-widest">Config Wardens, Rooms & Forms</p>
+        )
+      }
+      {
+        showSystemSettingsModal && (
+          <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-300">
+            <div className="bg-white rounded-[24px] sm:rounded-[32px] w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden shadow-2xl flex flex-col transition-all duration-300 scale-100">
+              {/* Modal Header */}
+              <div className="p-5 sm:p-8 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <span className="p-2 sm:p-3 bg-indigo-600 text-white rounded-xl sm:rounded-2xl shadow-lg shadow-indigo-100 text-lg sm:text-2xl">🛠️</span>
+                  <div>
+                    <h2 className="text-lg sm:text-2xl font-black text-gray-900 uppercase tracking-tight">
+                      System Settings
+                    </h2>
+                    <p className="text-[9px] sm:text-xs font-bold text-gray-400 mt-0.5 uppercase tracking-widest">Config Wardens, Rooms & Forms</p>
+                  </div>
                 </div>
-              </div>
-              <button
-                onClick={() => setShowSystemSettingsModal(false)}
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl hover:bg-white hover:shadow-xl hover:scale-110 flex items-center justify-center transition-all bg-gray-100 text-gray-500"
-              >
-                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            {/* Modal Tabs */}
-            <div className="flex p-1 bg-gray-100/30 gap-1 mx-4 sm:mx-8 mt-4 sm:mt-6 rounded-xl overflow-x-hidden overflow-y-hidden no-scrollbar">
-              {[
-                { id: "wardens", label: "Wardens", icon: "👮" },
-                { id: "rooms", label: "Rooms", icon: "🏠" },
-                { id: "form", label: "Reg Form", icon: "📝" }
-              ].map((tab) => (
                 <button
-                  key={tab.id}
-                  onClick={() => setActiveSettingsTab(tab.id as any)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap ${activeSettingsTab === tab.id
-                    ? "bg-white text-indigo-600 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700 hover:bg-white/50"
-                    }`}
+                  onClick={() => setShowSystemSettingsModal(false)}
+                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl hover:bg-white hover:shadow-xl hover:scale-110 flex items-center justify-center transition-all bg-gray-100 text-gray-500"
                 >
-                  <span className="text-sm sm:text-lg">{tab.icon}</span>
-                  {tab.label}
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
-              ))}
-            </div>
+              </div>
 
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar">
-              {activeSettingsTab === "wardens" && (
-                <div className="space-y-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-                    <div className="bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl flex items-start gap-4 flex-1">
-                      <span className="text-xl sm:text-2xl">💡</span>
-                      <p className="text-xs sm:text-sm text-blue-800 font-medium">
-                        Map individual wardens to each hostel. They can only see students from their assigned hostel.
+              {/* Modal Tabs */}
+              <div className="flex p-1 bg-gray-100/30 gap-1 mx-4 sm:mx-8 mt-4 sm:mt-6 rounded-xl overflow-x-hidden overflow-y-hidden no-scrollbar">
+                {[
+                  { id: "wardens", label: "Wardens", icon: "👮" },
+                  { id: "rooms", label: "Rooms", icon: "🏠" },
+                  { id: "form", label: "Reg Form", icon: "📝" }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveSettingsTab(tab.id as any)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap ${activeSettingsTab === tab.id
+                      ? "bg-white text-indigo-600 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700 hover:bg-white/50"
+                      }`}
+                  >
+                    <span className="text-sm sm:text-lg">{tab.icon}</span>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Modal Body */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar">
+                {activeSettingsTab === "wardens" && (
+                  <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+                      <div className="bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl flex items-start gap-4 flex-1">
+                        <span className="text-xl sm:text-2xl">💡</span>
+                        <p className="text-xs sm:text-sm text-blue-800 font-medium">
+                          Map individual wardens to each hostel. They can only see students from their assigned hostel.
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleCreateHostel}
+                        className="w-full sm:w-auto px-6 py-3.5 sm:py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
+                        Add Hostel
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {hostelsConfig.map((hostel) => (
+                        <div key={hostel._id} className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 hover:border-indigo-100 transition-all relative group">
+                          <button
+                            onClick={() => handleDeleteHostelConfig(hostel._id, hostel.name)}
+                            className="absolute -top-3 -right-3 w-8 h-8 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center hover:bg-red-600 shadow-lg shadow-red-100"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          </button>
+                          <h4 className="font-black text-gray-900 uppercase tracking-tight mb-4 flex items-center justify-between">
+                            {hostel.name}
+                            <span className="px-2 py-0.5 bg-green-100 text-green-600 text-[10px] rounded-full">ACTIVE</span>
+                          </h4>
+                          <div className="space-y-4 text-xs">
+                            <div>
+                              <label className="block font-black text-gray-400 uppercase tracking-widest mb-1 text-[9px]">Warden Username</label>
+                              <input
+                                type="text"
+                                defaultValue={hostel.wardenUsername || ""}
+                                placeholder="Warden Login ID"
+                                onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenUsername: e.target.value })}
+                                className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all font-bold"
+                              />
+                            </div>
+                            <div>
+                              <label className="block font-black text-gray-400 uppercase tracking-widest mb-1 text-[9px]">Warden Password</label>
+                              <input
+                                type="password"
+                                defaultValue={hostel.wardenPassword || ""}
+                                placeholder="Warden Password"
+                                onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenPassword: e.target.value })}
+                                className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all font-bold"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {hostelsConfig.length === 0 && (
+                        <div className="col-span-full py-12 text-center bg-gray-50 rounded-[32px] border-2 border-dashed border-gray-200">
+                          <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">No hostels found. Add one to get started.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {activeSettingsTab === "rooms" && (
+                  <div className="space-y-6">
+                    <div className="bg-amber-50 border-2 border-amber-100 p-4 rounded-2xl flex items-start gap-4 mb-8">
+                      <span className="text-xl sm:text-2xl">🔢</span>
+                      <p className="text-xs sm:text-sm text-amber-800 font-medium">
+                        Manage the total room capacity for each hostel. Students cannot register for rooms beyond this limit.
                       </p>
                     </div>
-                    <button
-                      onClick={handleCreateHostel}
-                      className="w-full sm:w-auto px-6 py-3.5 sm:py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
-                      Add Hostel
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {hostelsConfig.map((hostel) => (
-                      <div key={hostel._id} className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 hover:border-indigo-100 transition-all relative group">
-                        <button
-                          onClick={() => handleDeleteHostelConfig(hostel._id, hostel.name)}
-                          className="absolute -top-3 -right-3 w-8 h-8 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center hover:bg-red-600 shadow-lg shadow-red-100"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        </button>
-                        <h4 className="font-black text-gray-900 uppercase tracking-tight mb-4 flex items-center justify-between">
-                          {hostel.name}
-                          <span className="px-2 py-0.5 bg-green-100 text-green-600 text-[10px] rounded-full">ACTIVE</span>
-                        </h4>
-                        <div className="space-y-4 text-xs">
-                          <div>
-                            <label className="block font-black text-gray-400 uppercase tracking-widest mb-1 text-[9px]">Warden Username</label>
-                            <input
-                              type="text"
-                              defaultValue={hostel.wardenUsername || ""}
-                              placeholder="Warden Login ID"
-                              onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenUsername: e.target.value })}
-                              className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all font-bold"
-                            />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {hostelsConfig.map((hostel) => (
+                        <div key={hostel._id} className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex items-center justify-between">
+                          <div className="flex-1 min-w-0 pr-4">
+                            <h4 className="font-black text-gray-900 uppercase tracking-tight truncate">{hostel.name}</h4>
+                            <p className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest truncate">Total Rooms</p>
                           </div>
-                          <div>
-                            <label className="block font-black text-gray-400 uppercase tracking-widest mb-1 text-[9px]">Warden Password</label>
+                          <div className="flex items-center gap-3 sm:gap-4 bg-white px-3 sm:px-4 py-2 rounded-2xl border-2 border-gray-100 shadow-sm focus-within:border-indigo-400 transition-all shrink-0">
                             <input
-                              type="password"
-                              defaultValue={hostel.wardenPassword || ""}
-                              placeholder="Warden Password"
-                              onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenPassword: e.target.value })}
-                              className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all font-bold"
+                              type="number"
+                              defaultValue={hostel.totalRooms || 0}
+                              placeholder="0"
+                              onBlur={(e) => {
+                                const newVal = parseInt(e.target.value);
+                                if (!isNaN(newVal)) {
+                                  handleUpdateHostelConfig({ ...hostel, id: hostel._id, totalRooms: newVal });
+                                }
+                              }}
+                              className="w-16 sm:w-24 text-center font-black text-lg sm:text-xl text-gray-900 bg-transparent outline-none border-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                           </div>
                         </div>
-                      </div>
-                    ))}
-                    {hostelsConfig.length === 0 && (
-                      <div className="col-span-full py-12 text-center bg-gray-50 rounded-[32px] border-2 border-dashed border-gray-200">
-                        <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">No hostels found. Add one to get started.</p>
-                      </div>
-                    )}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {activeSettingsTab === "rooms" && (
-                <div className="space-y-6">
-                  <div className="bg-amber-50 border-2 border-amber-100 p-4 rounded-2xl flex items-start gap-4 mb-8">
-                    <span className="text-xl sm:text-2xl">🔢</span>
-                    <p className="text-xs sm:text-sm text-amber-800 font-medium">
-                      Manage the total room capacity for each hostel. Students cannot register for rooms beyond this limit.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {hostelsConfig.map((hostel) => (
-                      <div key={hostel._id} className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex items-center justify-between">
-                        <div className="flex-1 min-w-0 pr-4">
-                          <h4 className="font-black text-gray-900 uppercase tracking-tight truncate">{hostel.name}</h4>
-                          <p className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest truncate">Total Rooms</p>
+                {activeSettingsTab === "form" && (
+                  <div className="space-y-6 pb-8">
+                    <div className="bg-purple-50 border-2 border-purple-100 p-4 rounded-2xl flex items-start gap-4 mb-8">
+                      <span className="text-xl sm:text-2xl">🛡️</span>
+                      <p className="text-xs sm:text-sm text-purple-800 font-medium">
+                        Toggle fields on the student registration form. Hidden fields will not be visible to students during registration.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {Object.keys(registrationFields).map((fieldKey) => (
+                        <div key={fieldKey} className="p-4 rounded-2xl border-2 border-gray-100 flex items-center justify-between hover:bg-gray-50/50 transition-all">
+                          <div>
+                            <p className="font-black text-gray-900 text-xs uppercase tracking-tight">{registrationFields[fieldKey].label}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                const updated = { ...registrationFields };
+                                updated[fieldKey].visible = !updated[fieldKey].visible;
+                                handleUpdateRegistrationFields(updated);
+                              }}
+                              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${registrationFields[fieldKey].visible
+                                ? "bg-green-500 text-white shadow-lg shadow-green-100"
+                                : "bg-gray-200 text-gray-500"
+                                }`}
+                            >
+                              {registrationFields[fieldKey].visible ? "VISIBLE" : "HIDDEN"}
+                            </button>
+                            <button
+                              onClick={() => {
+                                const updated = { ...registrationFields };
+                                updated[fieldKey].required = !updated[fieldKey].required;
+                                handleUpdateRegistrationFields(updated);
+                              }}
+                              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${registrationFields[fieldKey].required
+                                ? "bg-amber-500 text-white shadow-lg shadow-amber-100"
+                                : "bg-gray-200 text-gray-500"
+                                }`}
+                            >
+                              {registrationFields[fieldKey].required ? "REQUIRED" : "OPTIONAL"}
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3 sm:gap-4 bg-white px-3 sm:px-4 py-2 rounded-2xl border-2 border-gray-100 shadow-sm focus-within:border-indigo-400 transition-all shrink-0">
-                          <input
-                            type="number"
-                            defaultValue={hostel.totalRooms || 0}
-                            placeholder="0"
-                            onBlur={(e) => {
-                              const newVal = parseInt(e.target.value);
-                              if (!isNaN(newVal)) {
-                                handleUpdateHostelConfig({ ...hostel, id: hostel._id, totalRooms: newVal });
-                              }
-                            }}
-                            className="w-16 sm:w-24 text-center font-black text-lg sm:text-xl text-gray-900 bg-transparent outline-none border-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          />
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
-              {activeSettingsTab === "form" && (
-                <div className="space-y-6 pb-8">
-                  <div className="bg-purple-50 border-2 border-purple-100 p-4 rounded-2xl flex items-start gap-4 mb-8">
-                    <span className="text-xl sm:text-2xl">🛡️</span>
-                    <p className="text-xs sm:text-sm text-purple-800 font-medium">
-                      Toggle fields on the student registration form. Hidden fields will not be visible to students during registration.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {Object.keys(registrationFields).map((fieldKey) => (
-                      <div key={fieldKey} className="p-4 rounded-2xl border-2 border-gray-100 flex items-center justify-between hover:bg-gray-50/50 transition-all">
-                        <div>
-                          <p className="font-black text-gray-900 text-xs uppercase tracking-tight">{registrationFields[fieldKey].label}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => {
-                              const updated = { ...registrationFields };
-                              updated[fieldKey].visible = !updated[fieldKey].visible;
-                              handleUpdateRegistrationFields(updated);
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${registrationFields[fieldKey].visible
-                              ? "bg-green-500 text-white shadow-lg shadow-green-100"
-                              : "bg-gray-200 text-gray-500"
-                              }`}
-                          >
-                            {registrationFields[fieldKey].visible ? "VISIBLE" : "HIDDEN"}
-                          </button>
-                          <button
-                            onClick={() => {
-                              const updated = { ...registrationFields };
-                              updated[fieldKey].required = !updated[fieldKey].required;
-                              handleUpdateRegistrationFields(updated);
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${registrationFields[fieldKey].required
-                              ? "bg-amber-500 text-white shadow-lg shadow-amber-100"
-                              : "bg-gray-200 text-gray-500"
-                              }`}
-                          >
-                            {registrationFields[fieldKey].required ? "REQUIRED" : "OPTIONAL"}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 sm:p-8 border-t border-gray-100 bg-gray-50/50 flex items-center justify-end">
-              <button
-                onClick={() => setShowSystemSettingsModal(false)}
-                className="w-full sm:w-auto px-10 py-3.5 sm:py-4 bg-gray-900 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl hover:bg-black transition-all shadow-xl active:scale-95"
-              >
-                CLOSE SETTINGS
-              </button>
+              {/* Modal Footer */}
+              <div className="p-4 sm:p-8 border-t border-gray-100 bg-gray-50/50 flex items-center justify-end">
+                <button
+                  onClick={() => setShowSystemSettingsModal(false)}
+                  className="w-full sm:w-auto px-10 py-3.5 sm:py-4 bg-gray-900 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl hover:bg-black transition-all shadow-xl active:scale-95"
+                >
+                  CLOSE SETTINGS
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }

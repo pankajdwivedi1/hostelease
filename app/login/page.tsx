@@ -199,22 +199,24 @@ function LoginForm() {
   };
 
   return (
-    <div className="relative flex h-screen w-screen items-center justify-center overflow-hidden bg-[#fafafa] font-sans selection:bg-blue-100">
+    <div className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-x-hidden overflow-y-auto no-scrollbar bg-[#fafafa] font-sans selection:bg-blue-100 p-4 sm:p-6 lg:p-8">
       <style jsx global>{`
-        body {
+        html, body {
+          height: 100%;
           overflow: hidden !important;
-          height: 100vh;
+          margin: 0;
+          padding: 0;
         }
-        ::-webkit-scrollbar {
+        .no-scrollbar::-webkit-scrollbar {
           display: none;
         }
-        * {
+        .no-scrollbar {
           -ms-overflow-style: none;
           scrollbar-width: none;
         }
       `}</style>
       {/* Dynamic Background Elements */}
-      <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 z-0 overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-100/50 blur-[120px] animate-pulse" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-100/50 blur-[120px] animate-pulse" style={{ animationDelay: '2s' }} />
         <div
@@ -223,9 +225,9 @@ function LoginForm() {
         />
       </div>
 
-      <main className="relative z-10 w-full max-w-lg px-6 py-4">
-        <div className={`transition-all duration-1000 transform ${mounted ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
-          <div className="flex flex-col items-center space-y-4 sm:space-y-6">
+      <main className="relative z-10 w-full max-w-lg flex flex-col justify-center min-h-full py-2 sm:py-6">
+        <div className={`transition-all duration-1000 transform ${mounted ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'} flex flex-col justify-center`}>
+          <div className="flex flex-col items-center space-y-2.5 sm:space-y-6">
 
             {/* Logo and Title */}
             <div className="flex flex-col items-center space-y-2 text-center">
@@ -241,37 +243,40 @@ function LoginForm() {
                 <img
                   src="/logo.jpeg"
                   alt="Hostelease Logo"
-                  className="relative h-16 w-16 sm:h-20 sm:w-20 rounded-full object-cover transition-all duration-500 group-hover:scale-105 group-hover:rotate-3 shadow-2xl border-4 border-white"
+                  className={`relative rounded-full object-cover transition-all duration-500 group-hover:scale-105 group-hover:rotate-3 shadow-2xl border-4 border-white ${(showAdminPassword || showWardenPassword || showDeveloperPassword)
+                    ? "h-10 w-10 sm:h-14 sm:w-14"
+                    : "h-16 w-16 sm:h-20 sm:w-20"
+                    }`}
                   title="Click for developer login"
                 />
               </div>
               <div className="space-y-1 sm:space-y-2">
-                <h1 className="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">
+                <h1 className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "text-2xl sm:text-4xl" : "text-3xl sm:text-5xl"} font-black tracking-tight text-slate-900 transition-all duration-500`}>
                   Hostel<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">ease</span>
                 </h1>
-                <div className="flex flex-col items-center space-y-3">
-                  <p className="text-[10px] font-black text-blue-600/60 tracking-[0.3em] uppercase">
+                <div className="flex flex-col items-center space-y-2 sm:space-y-3">
+                  <p className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "hidden sm:block text-[8px] sm:text-[10px]" : "text-[9px] sm:text-[10px]"} font-black text-blue-600/60 tracking-[0.3em] uppercase transition-all duration-500`}>
                     Management Reimagined
                   </p>
 
                   {/* Logout success popup positioned exactly above the description */}
                   {showLogoutToast && (
-                    <div className="w-full max-w-[320px] animate-in fade-in slide-in-from-top-2 duration-500 my-1">
-                      <div className="flex items-center gap-3 rounded-xl border border-emerald-100 bg-[#e6fcf5] pr-4 shadow-sm overflow-hidden min-h-[48px]">
-                        <div className="w-1.5 self-stretch bg-[#059669]" />
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#059669] text-white flex-shrink-0">
-                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                    <div className="w-full max-w-[280px] sm:max-w-[320px] animate-in fade-in slide-in-from-top-2 duration-500 my-0.5 sm:my-1">
+                      <div className="flex items-center gap-2 sm:gap-3 rounded-lg sm:rounded-xl border border-emerald-100 bg-[#e6fcf5] pr-3 sm:pr-4 shadow-sm overflow-hidden min-h-[40px] sm:min-h-[48px]">
+                        <div className="w-1 self-stretch bg-[#059669]" />
+                        <div className="flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-full bg-[#059669] text-white flex-shrink-0">
+                          <svg className="h-3 w-3 sm:h-3.5 sm:w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                           </svg>
                         </div>
-                        <p className="text-[13px] font-bold text-[#064e3b] tracking-tight text-left">
+                        <p className="text-[11px] sm:text-[13px] font-bold text-[#064e3b] tracking-tight text-left">
                           You have successfully logged out.
                         </p>
                       </div>
                     </div>
                   )}
 
-                  <p className="max-w-[280px] text-xs sm:text-sm font-medium text-slate-500 leading-relaxed">
+                  <p className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "hidden sm:block opacity-0 sm:opacity-100 max-h-0 sm:max-h-20" : "max-h-20 opacity-100"} max-w-[260px] sm:max-w-[280px] text-[11px] sm:text-sm font-medium text-slate-500 leading-tight sm:leading-relaxed transition-all duration-500 overflow-hidden`}>
                     The smart, all-in-one ecosystem for modern hostel administration and student living.
                   </p>
                 </div>
@@ -283,8 +288,8 @@ function LoginForm() {
               {/* Decorative background glow for the container */}
               <div className="absolute -inset-1 rounded-[32px] bg-gradient-to-b from-gray-200/50 to-transparent opacity-50 blur-sm transition duration-500 group-hover:opacity-100" />
 
-              <div className="relative overflow-hidden rounded-[32px] border border-white bg-white/80 backdrop-blur-xl p-1.5 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.08)] transition-all duration-500 hover:shadow-[0_48px_80px_-20px_rgba(0,0,0,0.12)]">
-                <div className="rounded-[26px] bg-slate-50/40 p-5 sm:p-7">
+              <div className="relative overflow-hidden rounded-[24px] sm:rounded-[32px] border border-white bg-white/80 backdrop-blur-xl p-1 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.08)] transition-all duration-500">
+                <div className="rounded-[20px] sm:rounded-[26px] bg-slate-50/40 p-4 sm:p-7">
 
                   {error && (
                     <div className="mb-6 flex animate-in fade-in slide-in-from-top-4 items-center gap-3 rounded-xl border border-red-100 bg-red-50/50 p-4 text-sm text-red-600 backdrop-blur-md">
@@ -295,12 +300,12 @@ function LoginForm() {
                     </div>
                   )}
 
-                  <div className="space-y-6">
+                  <div className="space-y-4 sm:space-y-6">
                     {/* Student Login */}
                     <button
                       onClick={handleGoogleLogin}
                       disabled={loading}
-                      className="group relative flex w-full items-center justify-center gap-4 overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-4.5 text-sm font-bold text-slate-900 transition-all hover:border-blue-200 hover:bg-slate-50 hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.1)] disabled:opacity-50 active:scale-[0.98]"
+                      className="group relative flex w-full items-center justify-center gap-3 sm:gap-4 overflow-hidden rounded-xl sm:rounded-2xl border border-slate-200 bg-white px-4 py-3.5 sm:py-4.5 text-xs sm:text-sm font-bold text-slate-900 transition-all hover:border-blue-200 hover:bg-slate-50 disabled:opacity-50 active:scale-[0.98]"
                     >
                       <svg className="h-5 w-5" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -316,7 +321,7 @@ function LoginForm() {
                       ) : "Continue as Student"}
                     </button>
 
-                    <div className="relative flex items-center py-2">
+                    <div className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "py-1 sm:py-2" : "py-2"} relative flex items-center transition-all`}>
                       <div className="grow border-t border-slate-100"></div>
                       <span className="mx-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">Staff Portal</span>
                       <div className="grow border-t border-slate-100"></div>
@@ -326,14 +331,14 @@ function LoginForm() {
                     <div className="grid grid-cols-2 gap-4">
                       <button
                         onClick={handleAdminLogin}
-                        className={`group flex flex-col items-center justify-center gap-3 rounded-2xl border-2 p-4 sm:p-5 transition-all duration-500 active:scale-95 ${showAdminPassword
+                        className={`group flex flex-col items-center justify-center gap-2 sm:gap-3 rounded-2xl border-2 p-3 sm:p-5 transition-all duration-500 active:scale-95 ${showAdminPassword
                           ? "border-blue-500 bg-blue-50/50 shadow-inner"
                           : "border-transparent bg-white hover:bg-slate-50 hover:border-slate-100 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)]"
                           }`}
                       >
-                        <div className={`flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-2xl transition-all duration-500 ${showAdminPassword ? "bg-blue-600 text-white rotate-6 shadow-blue-200 shadow-xl" : "bg-blue-50 text-blue-600 group-hover:scale-110 group-hover:-rotate-3"
+                        <div className={`flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-2xl transition-all duration-500 ${showAdminPassword ? "bg-blue-600 text-white rotate-6 shadow-blue-200 shadow-xl" : "bg-blue-50 text-blue-600 group-hover:scale-110 group-hover:-rotate-3"
                           }`}>
-                          <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className="h-6 w-6 sm:h-7 sm:w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                           </svg>
                         </div>
@@ -347,14 +352,14 @@ function LoginForm() {
 
                       <button
                         onClick={handleWardenLogin}
-                        className={`group flex flex-col items-center justify-center gap-3 rounded-2xl border-2 p-4 sm:p-5 transition-all duration-500 active:scale-95 ${showWardenPassword
+                        className={`group flex flex-col items-center justify-center gap-2 sm:gap-3 rounded-2xl border-2 p-3 sm:p-5 transition-all duration-500 active:scale-95 ${showWardenPassword
                           ? "border-indigo-500 bg-indigo-50/50 shadow-inner"
                           : "border-transparent bg-white hover:bg-slate-50 hover:border-slate-100 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)]"
                           }`}
                       >
-                        <div className={`flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-2xl transition-all duration-500 ${showWardenPassword ? "bg-indigo-600 text-white -rotate-6 shadow-indigo-200 shadow-xl" : "bg-indigo-50 text-indigo-600 group-hover:scale-110 group-hover:rotate-3"
+                        <div className={`flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-2xl transition-all duration-500 ${showWardenPassword ? "bg-indigo-600 text-white -rotate-6 shadow-indigo-200 shadow-xl" : "bg-indigo-50 text-indigo-600 group-hover:scale-110 group-hover:rotate-3"
                           }`}>
-                          <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className="h-6 w-6 sm:h-7 sm:w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                           </svg>
                         </div>
@@ -369,9 +374,9 @@ function LoginForm() {
 
                     {/* Password Verification Section */}
                     {(showAdminPassword || showWardenPassword || showDeveloperPassword) && (
-                      <div className="mt-8 animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-500">
-                        <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-[0_20px_40px_-12px_rgba(0,0,0,0.1)]">
-                          <label className="mb-3 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      <div className="mt-4 sm:mt-8 animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-500">
+                        <div className="rounded-2xl border border-slate-100 bg-white p-4 sm:p-6 shadow-[0_12px_24px_-8px_rgba(0,0,0,0.08)]">
+                          <label className="mb-2 sm:mb-3 block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
                             {showAdminPassword ? "Dean Authentication Key" : showWardenPassword ? "Warden Authentication Key" : "Developer Override"}
                           </label>
                           <div className="relative group">
@@ -392,7 +397,7 @@ function LoginForm() {
                                   else handleDeveloperLogin();
                                 }
                               }}
-                              className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-4 text-slate-900 placeholder-slate-300 transition-all focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+                              className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:py-4 text-sm sm:text-base text-slate-900 placeholder-slate-300 transition-all focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10"
                               placeholder="••••••••••••"
                             />
                           </div>
@@ -440,28 +445,28 @@ function LoginForm() {
             </div>
 
             {/* Premium Refined Footer */}
-            <footer className="w-full max-w-sm mt-4 pb-6 sm:pb-8">
-              <div className="flex flex-col items-center space-y-4 text-center">
-                <div className="space-y-3">
+            <footer className="w-full max-w-sm mt-2 sm:mt-4 pb-4 sm:pb-8">
+              <div className="flex flex-col items-center space-y-2 sm:space-y-4 text-center">
+                <div className="space-y-1.5 sm:space-y-3">
                   <div className="flex items-center justify-center gap-2">
-                    <div className="h-px w-6 bg-slate-200" />
-                    <p className="text-[10px] font-bold tracking-[0.2em] text-slate-400 uppercase">
+                    <div className="h-px w-4 sm:w-6 bg-slate-200" />
+                    <p className="text-[8px] sm:text-[10px] font-bold tracking-[0.2em] text-slate-400 uppercase">
                       &copy; 2026 Hostelease Cloud
                     </p>
-                    <div className="h-px w-6 bg-slate-200" />
+                    <div className="h-px w-4 sm:w-6 bg-slate-200" />
                   </div>
 
                   <div className="group cursor-default">
-                    <p className="text-[10px] font-medium text-slate-400 tracking-wider" style={{ fontFamily: 'Cambria, Georgia, serif' }}>
+                    <p className="text-[8px] sm:text-[10px] font-medium text-slate-400 tracking-wider" style={{ fontFamily: 'Cambria, Georgia, serif' }}>
                       Developed meticulously by
                     </p>
-                    <p className="text-sm font-bold text-slate-700 mt-1 transition-colors group-hover:text-blue-600" style={{ fontFamily: 'Cambria, Georgia, serif' }}>
+                    <p className="text-xs sm:text-sm font-bold text-slate-700 mt-0.5 transition-colors group-hover:text-blue-600" style={{ fontFamily: 'Cambria, Georgia, serif' }}>
                       Dr. Pankaj Prasad Dwivedi
                     </p>
                   </div>
                 </div>
 
-                <nav className="flex items-center gap-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
+                <nav className="flex items-center gap-4 sm:gap-6 text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
                   <a href="#" className="hover:text-blue-600 transition-colors">Security</a>
                   <div className="h-1 w-1 rounded-full bg-slate-200" />
                   <a href="#" className="hover:text-blue-600 transition-colors">Privacy</a>
