@@ -176,16 +176,31 @@ export default function LocationPickerMap({
                 ))}
 
                 {isMeasuring && measurePoints.length === 2 && (
-                    <Polyline
-                        positions={measurePoints}
-                        pathOptions={{
-                            color: '#FF0000',
-                            weight: 5,
-                            dashArray: '6, 6',
-                            lineCap: 'butt',
-                            className: 'running-measure-line'
-                        }}
-                    />
+                    <>
+                        <Polyline
+                            positions={measurePoints}
+                            pathOptions={{
+                                color: '#FF0000',
+                                weight: 4,
+                                dashArray: '8, 8',
+                                lineCap: 'round',
+                                className: 'running-measure-line'
+                            }}
+                        />
+                        {/* Fallback Inline Styles for the animation in case global.css is not loading or being purged */}
+                        <style dangerouslySetInnerHTML={{
+                            __html: `
+                            @keyframes running-dash-fallback {
+                                from { stroke-dashoffset: 24; }
+                                to { stroke-dashoffset: 0; }
+                            }
+                            .running-measure-line {
+                                animation: running-dash-fallback 0.6s linear infinite !important;
+                                stroke-dasharray: 8, 8 !important;
+                                stroke-linecap: round !important;
+                            }
+                        `}} />
+                    </>
                 )}
 
                 <MapUpdater lat={lat} lng={lng} zoom={zoom} />

@@ -109,7 +109,6 @@ input[type="radio"] {
 @keyframes running-dash {
   from {
     stroke-dashoffset: 24;
-    /* Move by 2 full cycles (6+6) * 2 */
   }
 
   to {
@@ -117,12 +116,33 @@ input[type="radio"] {
   }
 }
 
+@keyframes pulse-point {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 .running-measure-line {
   stroke: #FF0000 !important;
-  stroke-width: 3 !important;
-  stroke-dasharray: 6, 6 !important;
-  animation: running-dash 0.4s linear infinite !important;
-  filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.9)) drop-shadow(0 0 10px rgba(255, 0, 0, 0.4)) !important;
-  stroke-linecap: butt !important;
-  /* Square ends look clearer for tighter dashes */
+  stroke-width: 4 !important;
+  stroke-dasharray: 8, 8 !important;
+  animation: running-dash 0.6s linear infinite !important;
+  filter: drop-shadow(0 0 4px rgba(255, 0, 0, 0.8)) !important;
+  stroke-linecap: round !important;
+  pointer-events: none !important;
+}
+
+.measure-point-pulse {
+  animation: pulse-point 1.5s ease-in-out infinite;
 }
