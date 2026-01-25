@@ -25,7 +25,20 @@ export async function POST(request: NextRequest) {
 
         if (existingStudent.deviceId && existingStudent.deviceId.trim() !== "") {
             return NextResponse.json(
-                { error: "Your device is already registered for this account. Please contact the administrator to reset your device link if you have a new phone." },
+                { error: "Your account is already registered with a device. Please contact the administrator to reset your device link." },
+                { status: 403 }
+            );
+        }
+
+        // CRITICAL: Check if THIS deviceId is already used by ANY other student
+        const deviceUsedBy = await Student.findOne({
+            deviceId: deviceId,
+            _id: { $ne: studentId }
+        });
+
+        if (deviceUsedBy) {
+            return NextResponse.json(
+                { error: "This device is already registered with another student account (Registration ID: " + (deviceUsedBy.registrationId || "N/A") + "). Multiple accounts are not allowed on the same device." },
                 { status: 403 }
             );
         }

@@ -162,19 +162,23 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     try {
       setIsRegisteringDevice(true);
 
-      // Fallback UUID generator if crypto.randomUUID is not available
-      const generateUUID = () => {
-        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-          return crypto.randomUUID();
-        }
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-          const r = Math.random() * 16 | 0;
-          const v = c === 'x' ? r : (r & 0x3 | 0x8);
-          return v.toString(16);
-        });
-      };
+      // Check if this browser already has a device ID token from ANY previous user
+      let currentDeviceId = getStoredDeviceId();
 
-      const newDeviceId = generateUUID();
+      if (!currentDeviceId) {
+        // Fallback UUID generator if crypto.randomUUID is not available
+        const generateUUID = () => {
+          if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+            return crypto.randomUUID();
+          }
+          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+          });
+        };
+        currentDeviceId = generateUUID();
+      }
 
       const response = await fetch("/api/students/register-device", {
         method: "POST",
@@ -183,7 +187,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         },
         body: JSON.stringify({
           studentId: studentProfile._id,
-          deviceId: newDeviceId,
+          deviceId: currentDeviceId,
         }),
       });
 
@@ -194,12 +198,10 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
       const data = await response.json();
 
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      if (data.error) throw new Error(data.error);
 
-      storeDeviceId(newDeviceId);
-      setStudentProfile({ ...studentProfile, deviceId: newDeviceId });
+      storeDeviceId(currentDeviceId);
+      setStudentProfile({ ...studentProfile, deviceId: currentDeviceId });
       setShowDeviceRegistration(false);
       alert("Device registered successfully! You can now use all features.");
     } catch (error: any) {
@@ -219,8 +221,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   useEffect(() => {
     if (studentProfile && !loading) {
       const storedId = getStoredDeviceId();
-      // If no ID in localStorage, OR if DB has an ID but it doesn't match localStorage
-      if (!storedId || (studentProfile.deviceId && studentProfile.deviceId !== storedId)) {
+      // FIX: Force registration if NO deviceId in DB OR if DB ID doesn't match browser
+      if (!studentProfile.deviceId || (storedId && studentProfile.deviceId !== storedId)) {
         setShowDeviceRegistration(true);
       }
 
@@ -852,41 +854,42 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         <div className="p-4 md:p-6 space-y-4 md:space-y-6">
           {!showProfile ? (
             <>
-              {/* Header section with Welcome */}
-              <div className="flex items-start justify-between gap-2 mb-4">
-                <div>
-                  <h1 className="text-xl md:text-2xl font-bold text-gray-900 leading-tight">
-                    Hello, <span className="text-blue-600">{studentProfile.name.split(' ')[0]}!</span>
-                  </h1>
-                  <p className="text-[11px] md:text-sm text-gray-500 font-medium whitespace-nowrap">Welcome back to Hostelease Dashboard</p>
+              {/* Header section: Profile @ Top-Right, Logout next to Name */}
+              <div className="flex items-start justify-between gap-4 mb-6">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center flex-wrap gap-3 mb-1">
+                    <h1 className="text-xl md:text-3xl font-bold text-gray-900 leading-tight">
+                      Hello, <span className="text-blue-600">{studentProfile.name.split(' ')[0]}!</span>
+                    </h1>
+                    <button
+                      onClick={handleLogout}
+                      className="px-3 py-1.5 rounded-xl border border-solid border-gray-100 bg-white text-foreground text-[9px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all flex items-center gap-1.5 hover:bg-gray-50 mt-1 md:mt-0"
+                    >
+                      LOGOUT
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                    </button>
+                  </div>
+                  <p className="text-[11px] md:text-sm text-gray-500 font-medium">Welcome back to Hostelease Dashboard</p>
                 </div>
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    onClick={handleLogout}
-                    className="px-4 py-2 rounded-xl border border-solid border-gray-100 bg-white text-foreground text-[10px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all flex items-center gap-2"
-                  >
-                    LOGOUT
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => setShowProfile(true)}
-                    className="w-11 h-11 rounded-full ring-2 ring-blue-100 ring-offset-2 overflow-hidden hover:opacity-90 transition-opacity"
-                  >
-                    {studentProfile?.profilePicture ? (
-                      <img
-                        src={studentProfile.profilePicture}
-                        alt={studentProfile.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-blue-600 text-white flex items-center justify-center font-bold">
-                        {getInitials(studentProfile.name)}
-                      </div>
-                    )}
-                  </button>
-                </div>
+
+                <button
+                  onClick={() => setShowProfile(true)}
+                  className="w-14 h-14 md:w-16 md:h-16 rounded-full ring-2 ring-blue-100 ring-offset-2 overflow-hidden hover:opacity-90 transition-opacity flex-shrink-0 shadow-lg"
+                >
+                  {studentProfile?.profilePicture ? (
+                    <img
+                      src={studentProfile.profilePicture}
+                      alt={studentProfile.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-blue-600 text-white flex items-center justify-center font-bold text-lg">
+                      {getInitials(studentProfile.name)}
+                    </div>
+                  )}
+                </button>
               </div>
 
               {/* Quick Info Grid */}
