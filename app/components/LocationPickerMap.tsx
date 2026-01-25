@@ -176,32 +176,37 @@ export default function LocationPickerMap({
                 ))}
 
                 {isMeasuring && measurePoints.length === 2 && (
-                    <>
-                        <Polyline
-                            positions={measurePoints}
-                            pathOptions={{
-                                color: '#FF0000',
-                                weight: 4,
-                                dashArray: '8, 8',
-                                lineCap: 'round',
-                                className: 'running-measure-line'
-                            }}
-                        />
-                        {/* Fallback Inline Styles for the animation in case global.css is not loading or being purged */}
-                        <style dangerouslySetInnerHTML={{
-                            __html: `
-                            @keyframes running-dash-fallback {
-                                from { stroke-dashoffset: 24; }
-                                to { stroke-dashoffset: 0; }
-                            }
-                            .running-measure-line {
-                                animation: running-dash-fallback 0.6s linear infinite !important;
-                                stroke-dasharray: 8, 8 !important;
-                                stroke-linecap: round !important;
-                            }
-                        `}} />
-                    </>
+                    <Polyline
+                        positions={measurePoints}
+                        pathOptions={{
+                            color: '#FF0000',
+                            weight: 4,
+                            dashArray: '10, 10',
+                            lineCap: 'round',
+                            className: 'running-measure-line'
+                        }}
+                    />
                 )}
+
+                {/* Always-on fallback styles to prevent production build pruning */}
+                <style dangerouslySetInnerHTML={{
+                    __html: `
+                    @keyframes marching-ants-fallback {
+                        0% { stroke-dashoffset: 20; }
+                        100% { stroke-dashoffset: 0; }
+                    }
+                    @-webkit-keyframes marching-ants-fallback {
+                        0% { stroke-dashoffset: 20; }
+                        100% { stroke-dashoffset: 0; }
+                    }
+                    .running-measure-line {
+                        -webkit-animation: marching-ants-fallback 0.7s linear infinite !important;
+                        animation: marching-ants-fallback 0.7s linear infinite !important;
+                        stroke-dasharray: 10, 10 !important;
+                        stroke-linecap: round !important;
+                        visibility: visible !important;
+                    }
+                `}} />
 
                 <MapUpdater lat={lat} lng={lng} zoom={zoom} />
                 <MapResizer isMaximized={isMaximized} />
