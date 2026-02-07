@@ -44,6 +44,7 @@ interface StudentProfile {
   registrationId?: string;
   dob?: string;
   category?: string;
+  dynamicFields?: Record<string, any>;
 }
 
 interface DBNotification {
@@ -96,6 +97,21 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   const [showMandatoryUpdate, setShowMandatoryUpdate] = useState(false);
   const [mandatoryFormData, setMandatoryFormData] = useState({ dob: "", category: "", homeState: "", section: "" });
   const [updatingProfile, setUpdatingProfile] = useState(false);
+  const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
+  const [attendanceStep, setAttendanceStep] = useState<'idle' | 'gps' | 'accuracy' | 'saving' | 'done' | 'error'>('idle');
+  const [attendanceRetryCount, setAttendanceRetryCount] = useState(0);
+
+  const fetchSystemSettings = async () => {
+    try {
+      const res = await fetch("/api/admin/settings");
+      const data = await res.json();
+      if (data.success) {
+        setFormBuilderConfig(data.formBuilderConfig || []);
+      }
+    } catch (e) {
+      console.error("Error fetching system settings:", e);
+    }
+  };
 
   const latestPermission = useMemo(() => {
     if (permissions.length === 0) return null;
@@ -104,6 +120,82 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       new Date(b.fromDateTime).getTime() - new Date(a.fromDateTime).getTime()
     )[0];
   }, [permissions]);
+
+  // Payment System State
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [bankSettings, setBankSettings] = useState<any>(null);
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"upi" | "qr">("upi");
+  const [paymentForm, setPaymentForm] = useState({
+    utrNumber: "",
+    amount: "",
+    paymentSource: "GPay",
+    screenshot: ""
+  });
+
+  const fetchPaymentData = async () => {
+    if (!studentProfile?._id) return;
+    try {
+      // Fetch History
+      const historyRes = await fetch(`/api/students/payments?studentId=${studentProfile._id}`);
+      const historyData = await historyRes.json();
+      if (historyData.success) setPaymentHistory(historyData.payments);
+
+      // Fetch Bank Details
+      const settingsRes = await fetch("/api/admin/settings");
+      const settingsData = await settingsRes.json();
+      if (settingsData.success) {
+        setBankSettings({
+          bank: settingsData.universityBankDetails,
+          fee: settingsData.hostelFeeAmount,
+          instructions: settingsData.paymentInstructions
+        });
+        if (!paymentForm.amount && settingsData.hostelFeeAmount) {
+          setPaymentForm(prev => ({ ...prev, amount: settingsData.hostelFeeAmount.toString() }));
+        }
+      }
+    } catch (e) {
+      console.error("Error fetching payment data:", e);
+    }
+  };
+
+  const handlePaymentSubmit = async () => {
+    if (!paymentForm.utrNumber || !paymentForm.amount || !studentProfile) {
+      alert("Please fill all fields");
+      return;
+    }
+
+    try {
+      setIsSubmittingPayment(true);
+      const res = await fetch("/api/students/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: studentProfile._id,
+          registrationId: studentProfile.registrationId,
+          utrNumber: paymentForm.utrNumber,
+          amount: parseFloat(paymentForm.amount),
+          paymentSource: paymentForm.paymentSource,
+          screenshot: paymentForm.screenshot
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        setShowPaymentModal(false);
+        setPaymentForm({ utrNumber: "", amount: bankSettings?.fee?.toString() || "", paymentSource: "GPay", screenshot: "" });
+        await fetchPaymentData();
+      } else {
+        alert(data.error || "Failed to submit payment");
+      }
+    } catch (e) {
+      alert("Error submitting payment");
+    } finally {
+      setIsSubmittingPayment(false);
+    }
+  };
 
   const [hostelLocations, setHostelLocations] = useState<any[]>([]);
   const [isLocationsLoading, setIsLocationsLoading] = useState(false);
@@ -284,6 +376,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
       checkAttendance();
       fetchHostelLocations(); // Fetch latest locations from database
+      fetchPaymentData(); // Load payments and bank info
+      fetchSystemSettings(); // Load dynamic form config
 
       // Delay initial notification fetch by 3 seconds as requested
       const initialNotifTimer = setTimeout(fetchStudentNotifications, 3000);
@@ -763,11 +857,12 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     }
   };
 
-  const handleMarkAttendance = async () => {
+  const handleMarkAttendance = async (retryAttempt = 0) => {
     if (!studentProfile) return;
 
     // Clear previous error
     setAttendanceError(null);
+    setAttendanceStep('idle');
 
     // 1. Time Verification (Client-side check for immediate feedback)
     const now = new Date();
@@ -788,43 +883,108 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
     try {
       setIsMarkingAttendance(true);
-      const deviceId = getStoredDeviceId();
+      setAttendanceRetryCount(retryAttempt);
+      let deviceId = getStoredDeviceId();
+
+      // Auto-generate device ID if missing
+      if (!deviceId) {
+        const generateUUID = () => {
+          if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+            return crypto.randomUUID();
+          }
+          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+          });
+        };
+        deviceId = generateUUID();
+        storeDeviceId(deviceId);
+        console.log('📱 Auto-generated device ID:', deviceId);
+      }
+
+      // Step 1: GPS Verification
+      setAttendanceStep('gps');
 
       // Get current position for the request
       navigator.geolocation.getCurrentPosition(async (position) => {
-        const { latitude, longitude } = position.coords;
+        try {
+          const { latitude, longitude } = position.coords;
 
-        const response = await fetch("/api/students/attendance", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            studentId: studentProfile._id,
-            lat: latitude,
-            lng: longitude,
-            accuracy: position.coords.accuracy,
-            deviceId: deviceId,
-          }),
-        });
+          // Step 2: Checking Accuracy
+          setAttendanceStep('accuracy');
+          await new Promise(r => setTimeout(r, 500)); // Brief pause for UX
 
-        const data = await response.json();
+          // Step 3: Saving to Database
+          setAttendanceStep('saving');
 
-        if (response.ok) {
-          setIsAttendanceMarked(true);
-          alert(data.message || "Attendance marked successfully!");
-        } else {
-          alert(data.error || "Failed to mark attendance");
+          const response = await fetch("/api/students/attendance", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              studentId: studentProfile._id,
+              lat: latitude,
+              lng: longitude,
+              accuracy: position.coords.accuracy,
+              deviceId: deviceId,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            setAttendanceStep('done');
+            setIsAttendanceMarked(true);
+            setTimeout(() => {
+              alert(data.message || "Attendance marked successfully!");
+              setAttendanceStep('idle');
+            }, 800);
+          } else {
+            // Server error - attempt retry
+            if (retryAttempt < 3 && (response.status === 429 || response.status === 503 || response.status === 500)) {
+              setAttendanceStep('error');
+              const retryDelay = (retryAttempt + 1) * 2000; // 2s, 4s, 6s
+              console.log(`Retrying attendance (attempt ${retryAttempt + 1}/3) in ${retryDelay}ms...`);
+              setTimeout(() => {
+                setIsMarkingAttendance(false);
+                handleMarkAttendance(retryAttempt + 1);
+              }, retryDelay);
+            } else {
+              setAttendanceStep('error');
+              alert(data.error || "Failed to mark attendance. Please try again.");
+              setIsMarkingAttendance(false);
+            }
+          }
+        } catch (fetchError: any) {
+          console.error("Fetch error:", fetchError);
+
+          // Network error - attempt retry
+          if (retryAttempt < 3) {
+            setAttendanceStep('error');
+            const retryDelay = (retryAttempt + 1) * 2000;
+            console.log(`Network error. Retrying (attempt ${retryAttempt + 1}/3) in ${retryDelay}ms...`);
+            setTimeout(() => {
+              setIsMarkingAttendance(false);
+              handleMarkAttendance(retryAttempt + 1);
+            }, retryDelay);
+          } else {
+            setAttendanceStep('error');
+            alert("Network error. Please check your connection and try again.");
+            setIsMarkingAttendance(false);
+          }
         }
-        setIsMarkingAttendance(false);
       }, (error) => {
         console.error("Location error:", error);
+        setAttendanceStep('error');
         alert("Failed to get location for attendance.");
         setIsMarkingAttendance(false);
-      }, { enableHighAccuracy: true });
+      }, { enableHighAccuracy: true, timeout: 10000 });
 
     } catch (error: any) {
       console.error("Error in attendance flow:", error);
+      setAttendanceStep('error');
       alert("An error occurred. Please try again.");
       setIsMarkingAttendance(false);
     }
@@ -893,7 +1053,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
               </div>
 
               {/* Quick Info Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-2" style={{ fontFamily: 'Cambria, Cochin, Georgia, Times, "Times New Roman", serif' }}>
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-2" style={{ fontFamily: 'Cambria, Cochin, Georgia, Times, "Times New Roman", serif' }}>
                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-2 md:p-2.5 rounded-2xl border border-blue-100 shadow-sm flex flex-col justify-center">
                   <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1">Current Status</p>
                   <div className="flex items-center gap-2">
@@ -926,6 +1086,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                     )}
                   </button>
                 </div>
+
                 <div className="bg-white p-2 md:p-2.5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between gap-1">
                   <div className="flex-1">
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Daily Attendance</p>
@@ -935,7 +1096,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                   </div>
                   {!isAttendanceMarked ? (
                     <button
-                      onClick={handleMarkAttendance}
+                      onClick={() => handleMarkAttendance()}
                       disabled={isMarkingAttendance}
                       className={`p-2 rounded-lg transition-all ${isMarkingAttendance ? 'bg-gray-100 text-gray-400' : isAtHostel ? 'bg-orange-100 text-orange-600 hover:bg-orange-200 shadow-sm shadow-orange-100' : 'bg-orange-50/50 text-orange-400 hover:bg-orange-100'}`}
                       title={`Mark Attendance (${attendanceWindow.start} - ${attendanceWindow.end})`}
@@ -956,6 +1117,109 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                     </div>
                   )}
                 </div>
+
+                {/* ⭐ PROGRESS INDICATORS - Shows only when marking attendance */}
+                {isMarkingAttendance && attendanceStep !== 'idle' && (
+                  <div className="col-span-2 lg:col-span-5 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-3 rounded-2xl border-2 border-blue-200 shadow-lg">
+                    <div className="flex items-center gap-3">
+                      {/* Progress Steps */}
+                      <div className="flex-1 space-y-2">
+                        {/* GPS Step */}
+                        <div className={`flex items-center gap-2 text-xs font-bold transition-all ${attendanceStep === 'gps' ? 'text-blue-700 animate-pulse' : attendanceStep === 'accuracy' || attendanceStep === 'saving' || attendanceStep === 'done' ? 'text-green-600' : 'text-gray-400'}`}>
+                          {attendanceStep === 'gps' ? (
+                            <div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+                          ) : (
+                            <span className="text-base">{(['accuracy', 'saving', 'done'].includes(attendanceStep)) ? '✅' : '🛰️'}</span>
+                          )}
+                          <span>{(['accuracy', 'saving', 'done'].includes(attendanceStep)) ? 'GPS Verified' : 'Verifying GPS location...'}</span>
+                        </div>
+
+                        {/* Accuracy Step */}
+                        {(['accuracy', 'saving', 'done'].includes(attendanceStep)) && (
+                          <div className={`flex items-center gap-2 text-xs font-bold transition-all ${attendanceStep === 'accuracy' ? 'text-blue-700 anim ate-pulse' : attendanceStep === 'saving' || attendanceStep === 'done' ? 'text-green-600' : 'text-gray-400'}`}>
+                            {attendanceStep === 'accuracy' ? (
+                              <div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+                            ) : (
+                              <span className="text-base">{(['saving', 'done'].includes(attendanceStep)) ? '✅' : '📍'}</span>
+                            )}
+                            <span>{(['saving', 'done'].includes(attendanceStep)) ? 'Accuracy Confirmed' : 'Checking location accuracy...'}</span>
+                          </div>
+                        )}
+
+                        {/* Saving Step */}
+                        {(['saving', 'done'].includes(attendanceStep)) && (
+                          <div className={`flex items-center gap-2 text-xs font-bold transition-all ${attendanceStep === 'saving' ? 'text-blue-700 animate-pulse' : attendanceStep === 'done' ? 'text-green-600' : 'text-gray-400'}`}>
+                            {attendanceStep === 'saving' ? (
+                              <div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+                            ) : (
+                              <span className="text-base">{attendanceStep === 'done' ? '✅' : '💾'}</span>
+                            )}
+                            <span>{attendanceStep === 'done' ? 'Attendance marked successfully!' : 'Marking attendance...'}</span>
+                          </div>
+                        )}
+
+                        {/* Error State */}
+                        {attendanceStep === 'error' && (
+                          <div className="flex items-center gap-2 text-xs font-bold text-red-600">
+                            <span className="text-base">❌</span>
+                            <span>Retrying... (Attempt {attendanceRetryCount + 1}/3)</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="w-20 h-20 relative">
+                        <svg className="w-full h-full transform -rotate-90">
+                          <circle cx="40" cy="40" r="35" stroke="#e5e7eb" strokeWidth="6" fill="none" />
+                          <circle
+                            cx="40"
+                            cy="40"
+                            r="35"
+                            stroke={attendanceStep === 'error' ? '#ef4444' : attendanceStep === 'done' ? '#10b981' : '#3b82f6'}
+                            strokeWidth="6"
+                            fill="none"
+                            strokeDasharray="220"
+                            strokeDashoffset={220 - (220 * (attendanceStep === 'gps' ? 0.33 : attendanceStep === 'accuracy' ? 0.66 : attendanceStep === 'saving' || attendanceStep === 'done' ? 1 : 0))}
+                            className="transition-all duration-500"
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-sm font-black text-gray-700">
+                            {attendanceStep === 'gps' ? '33%' : attendanceStep === 'accuracy' ? '66%' : attendanceStep === 'saving' || attendanceStep === 'done' ? '100%' : '0%'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+
+                {false && (
+                  <div className="bg-white p-2 md:p-2.5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between gap-1 transition-all hover:border-blue-200 group col-span-2 lg:col-span-1">
+
+                    <div className="flex-1">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fee Payment</p>
+                      <p className={`text-[12px] font-bold ${paymentHistory.some(p => p.status === 'verified') ? 'text-green-600' : 'text-orange-500'}`}>
+                        {paymentHistory.some(p => p.status === 'verified') ? '✅ Paid' :
+                          paymentHistory.some(p => p.status === 'pending') ? '⏳ Verifying' : '🔴 Unpaid'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowPaymentModal(true)}
+                      className={`p-2 rounded-lg transition-all active:scale-95 flex items-center gap-2 ${paymentHistory.some(p => p.status === 'verified') ? 'bg-green-50 text-green-600' : 'bg-blue-600 text-white shadow-lg shadow-blue-100'}`}
+                      title="Payment Details"
+                    >
+                      <span className="text-[10px] font-black uppercase tracking-tight px-1">{paymentHistory.some(p => p.status === 'verified') ? 'View' : 'Pay'}</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {paymentHistory.some(p => p.status === 'verified') ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        )}
+                      </svg>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Latest Permission Status Card */}
@@ -1105,109 +1369,29 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
                 <div className="p-6">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-6">
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Phone Number</p>
-                      <a href={`tel:${studentProfile.phoneNumber}`} title="Click to call" className="text-sm font-bold text-blue-600 hover:underline">
-                        {studentProfile.phoneNumber}
-                      </a>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Email Address</p>
-                      <p className="text-sm font-medium text-gray-600 truncate">{studentProfile.email}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hostel Name</p>
-                      <p className="text-sm font-bold text-gray-900">{studentProfile.hostelName}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Room Number</p>
-                      <p className="text-sm font-bold text-blue-600">#{studentProfile.roomNumber}</p>
-                    </div>
+                    {formBuilderConfig.filter(f => f.visible && f.type !== 'image').map((field) => {
+                      const value = (studentProfile as any)[field.id] || studentProfile.dynamicFields?.[field.id] || "N/A";
+                      const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? formatDate(value) : value;
 
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">College</p>
-                      <p className="text-sm font-bold text-gray-900">{studentProfile.collegeName || "N/A"}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Branch</p>
-                      <p className="text-sm font-bold text-gray-900">{studentProfile.branch || "N/A"}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Semester/Year</p>
-                      <p className="text-sm font-bold text-gray-900">{studentProfile.semester || "N/A"} ({studentProfile.year || "N/A"})</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">ERP Info</p>
-                      <p className="text-sm font-bold text-gray-900">{studentProfile.erpInformation || "N/A"}</p>
-                    </div>
-
-                    <div className="col-span-2 md:col-span-4 p-3 bg-blue-50/50 rounded-xl border border-blue-100 grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Category</p>
-                        <p className="text-sm font-bold text-gray-900">{studentProfile.category || "N/A"}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Date of Birth</p>
-                        <p className="text-sm font-bold text-gray-900">{formatDate(studentProfile.dob)}</p>
-                      </div>
-                    </div>
-
-                    <div className="col-span-2 md:col-span-4 h-px bg-gray-50 my-2"></div>
-
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Father's Name</p>
-                      <p className="text-sm font-bold text-gray-900">{studentProfile.fatherName || "N/A"}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Father's Phone</p>
-                      {studentProfile.fatherNumber ? (
-                        <a href={`tel:${studentProfile.fatherNumber}`} title="Click to call" className="text-sm font-bold text-blue-600 hover:underline">
-                          {studentProfile.fatherNumber}
-                        </a>
-                      ) : (
-                        <p className="text-sm font-bold text-gray-900">N/A</p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Mother's Name</p>
-                      <p className="text-sm font-bold text-gray-900">{studentProfile.motherName || "N/A"}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Mother's Phone</p>
-                      {studentProfile.motherNumber ? (
-                        <a href={`tel:${studentProfile.motherNumber}`} title="Click to call" className="text-sm font-bold text-blue-600 hover:underline">
-                          {studentProfile.motherNumber}
-                        </a>
-                      ) : (
-                        <p className="text-sm font-bold text-gray-900">N/A</p>
-                      )}
-                    </div>
-
-                    <div className="col-span-2">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Permanent Address</p>
-                      <p className="text-sm font-medium text-gray-700">{studentProfile.homePinCode || "N/A"}, {studentProfile.homeState || ""}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Local Guardian</p>
-                      <p className="text-sm font-medium text-gray-700">
-                        {studentProfile.localGuardianAddress || "N/A"}
-                        {studentProfile.localGuardianPhoneNumber && (
-                          <>
-                            {" "}(
-                            <a href={`tel:${studentProfile.localGuardianPhoneNumber}`} title="Click to call" className="text-blue-600 hover:underline font-bold">
-                              {studentProfile.localGuardianPhoneNumber}
+                      return (
+                        <div key={field.id} className={field.id === 'homePinCode' || field.id === 'localGuardianAddress' ? "col-span-2" : ""}>
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{field.label}</p>
+                          {field.type === 'tel' || field.id.toLowerCase().includes('number') || field.id.toLowerCase().includes('phone') ? (
+                            <a href={`tel:${value}`} title="Click to call" className="text-sm font-bold text-blue-600 hover:underline">
+                              {value}
                             </a>
-                            )
-                          </>
-                        )}
-                      </p>
-                    </div>
+                          ) : (
+                            <p className={`text-sm font-bold ${field.id === 'roomNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
+                              {field.id === 'roomNumber' && value !== 'N/A' ? '#' : ''}{displayValue}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
+
                 </div>
-
-
               </div>
-
 
 
               {showPermissionsHistory && (
@@ -1494,108 +1678,17 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
-                    <div className="flex flex-col">
-                      <p className="text-secondary mb-1">Phone Number</p>
-                      <p className="text-foreground font-medium">{studentProfile.phoneNumber}</p>
-                    </div>
-                    <div className="flex flex-col">
-                      <p className="text-secondary mb-1">Hostel Name</p>
-                      <p className="text-foreground font-medium">{studentProfile.hostelName}</p>
-                    </div>
-                    <div className="flex flex-col">
-                      <p className="text-secondary mb-1">Room Number</p>
-                      <p className="text-foreground font-medium">{studentProfile.roomNumber}</p>
-                    </div>
-                    {studentProfile.erpInformation && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">ERP Information</p>
-                        <p className="text-foreground font-medium">{studentProfile.erpInformation}</p>
-                      </div>
-                    )}
-                    {studentProfile.joiningDate && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Joining Date</p>
-                        <p className="text-foreground font-medium">{new Date(studentProfile.joiningDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</p>
-                      </div>
-                    )}
-                    {studentProfile.branch && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Branch</p>
-                        <p className="text-foreground font-medium">{studentProfile.branch}</p>
-                      </div>
-                    )}
-                    {studentProfile.collegeName && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">College Name</p>
-                        <p className="text-foreground font-medium">{studentProfile.collegeName}</p>
-                      </div>
-                    )}
-                    {studentProfile.year && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Year</p>
-                        <p className="text-foreground font-medium">{studentProfile.year}</p>
-                      </div>
-                    )}
-                    {studentProfile.semester && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Semester</p>
-                        <p className="text-foreground font-medium">{studentProfile.semester}</p>
-                      </div>
-                    )}
-                    {studentProfile.section && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Section</p>
-                        <p className="text-foreground font-medium">{studentProfile.section}</p>
-                      </div>
-                    )}
-                    {studentProfile.fatherName && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Father&apos;s Name</p>
-                        <p className="text-foreground font-medium">{studentProfile.fatherName}</p>
-                      </div>
-                    )}
-                    {studentProfile.fatherNumber && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Father&apos;s Number</p>
-                        <p className="text-foreground font-medium">{studentProfile.fatherNumber}</p>
-                      </div>
-                    )}
-                    {studentProfile.motherName && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Mother&apos;s Name</p>
-                        <p className="text-foreground font-medium">{studentProfile.motherName}</p>
-                      </div>
-                    )}
-                    {studentProfile.motherNumber && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Mother&apos;s Number</p>
-                        <p className="text-foreground font-medium">{studentProfile.motherNumber}</p>
-                      </div>
-                    )}
-                    {studentProfile.homePinCode && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Permanent Address</p>
-                        <p className="text-foreground font-medium">{studentProfile.homePinCode}</p>
-                      </div>
-                    )}
-                    {studentProfile.homeState && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">State</p>
-                        <p className="text-foreground font-medium">{studentProfile.homeState}</p>
-                      </div>
-                    )}
-                    {studentProfile.localGuardianAddress && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Local Guardian Address</p>
-                        <p className="text-foreground font-medium">{studentProfile.localGuardianAddress}</p>
-                      </div>
-                    )}
-                    {studentProfile.localGuardianPhoneNumber && (
-                      <div className="flex flex-col">
-                        <p className="text-secondary mb-1">Local Guardian Phone</p>
-                        <p className="text-foreground font-medium">{studentProfile.localGuardianPhoneNumber}</p>
-                      </div>
-                    )}
+                    {formBuilderConfig.filter(f => f.visible).map((field) => {
+                      const value = (studentProfile as any)[field.id] || studentProfile.dynamicFields?.[field.id] || "N/A";
+                      const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? formatDate(value) : value;
+
+                      return (
+                        <div key={field.id} className="flex flex-col">
+                          <p className="text-secondary mb-1">{field.label}</p>
+                          <p className="text-foreground font-medium">{displayValue}</p>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1611,65 +1704,67 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             </>
           )}
         </div>
-      </main >
+      </main>
 
       {/* Mandatory Device Registration Modal */}
-      {showDeviceRegistration && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col p-8 text-center space-y-6">
-            <div className={`w-20 h-20 ${studentProfile?.deviceId ? 'bg-amber-100' : 'bg-blue-100'} rounded-full flex items-center justify-center mx-auto text-3xl`}>
-              {studentProfile?.deviceId ? '⚠️' : '📱'}
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-gray-900">
-                {studentProfile?.deviceId ? 'Multiple Device Detected' : 'Device Verification Required'}
-              </h2>
-              <p className="text-gray-600">
-                {studentProfile?.deviceId
-                  ? "Your account is already registered with another device. For security reasons, you can only use one device at a time."
-                  : "To ensure security and prevent unauthorized check-ins, you must register this device with your account. This is a one-time mandatory step."}
-              </p>
-            </div>
-
-            {studentProfile?.deviceId ? (
-              <div className="bg-amber-50 p-4 rounded-xl text-xs text-amber-700 font-bold border border-amber-100">
-                Please contact the Administrator to reset your device link if you have a new phone or have lost your previous device.
+      {
+        showDeviceRegistration && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+            <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col p-8 text-center space-y-6">
+              <div className={`w-20 h-20 ${studentProfile?.deviceId ? 'bg-amber-100' : 'bg-blue-100'} rounded-full flex items-center justify-center mx-auto text-3xl`}>
+                {studentProfile?.deviceId ? '⚠️' : '📱'}
               </div>
-            ) : (
-              <div className="bg-blue-50 p-4 rounded-xl text-xs text-blue-700 font-medium font-outfit">
-                Note: Once registered, your check-ins and permissions will be locked to this specific device.
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {studentProfile?.deviceId ? 'Multiple Device Detected' : 'Device Verification Required'}
+                </h2>
+                <p className="text-gray-600">
+                  {studentProfile?.deviceId
+                    ? "Your account is already registered with another device. For security reasons, you can only use one device at a time."
+                    : "To ensure security and prevent unauthorized check-ins, you must register this device with your account. This is a one-time mandatory step."}
+                </p>
               </div>
-            )}
 
-            {!studentProfile?.deviceId && (
-              <button
-                onClick={handleRegisterDevice}
-                disabled={isRegisteringDevice}
-                className={`w-full h-14 rounded-2xl bg-blue-600 text-white font-bold text-lg shadow-lg shadow-blue-200 transition-all active:scale-95 ${isRegisteringDevice ? "opacity-75 cursor-not-allowed" : "hover:bg-blue-700 hover:shadow-xl"
-                  }`}
-              >
-                {isRegisteringDevice ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Registering...
-                  </div>
-                ) : (
-                  "Register This Device Now"
-                )}
-              </button>
-            )}
+              {studentProfile?.deviceId ? (
+                <div className="bg-amber-50 p-4 rounded-xl text-xs text-amber-700 font-bold border border-amber-100">
+                  Please contact the Administrator to reset your device link if you have a new phone or have lost your previous device.
+                </div>
+              ) : (
+                <div className="bg-blue-50 p-4 rounded-xl text-xs text-blue-700 font-medium font-outfit">
+                  Note: Once registered, your check-ins and permissions will be locked to this specific device.
+                </div>
+              )}
 
-            {studentProfile?.deviceId && (
-              <button
-                onClick={handleLogout}
-                className="w-full h-14 rounded-2xl bg-gray-100 text-gray-900 font-bold text-lg hover:bg-gray-200 transition-all active:scale-95"
-              >
-                Logout
-              </button>
-            )}
+              {!studentProfile?.deviceId && (
+                <button
+                  onClick={handleRegisterDevice}
+                  disabled={isRegisteringDevice}
+                  className={`w-full h-14 rounded-2xl bg-blue-600 text-white font-bold text-lg shadow-lg shadow-blue-200 transition-all active:scale-95 ${isRegisteringDevice ? "opacity-75 cursor-not-allowed" : "hover:bg-blue-700 hover:shadow-xl"
+                    }`}
+                >
+                  {isRegisteringDevice ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Registering...
+                    </div>
+                  ) : (
+                    "Register This Device Now"
+                  )}
+                </button>
+              )}
+
+              {studentProfile?.deviceId && (
+                <button
+                  onClick={handleLogout}
+                  className="w-full h-14 rounded-2xl bg-gray-100 text-gray-900 font-bold text-lg hover:bg-gray-200 transition-all active:scale-95"
+                >
+                  Logout
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Notification Popup */}
       {
@@ -1701,6 +1796,236 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
           </div>
         )
       }
+      {/* Payment Modal */}
+      {
+        false && showPaymentModal && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
+            <div className="bg-white rounded-3xl w-full max-w-lg max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+              <div className="p-6 border-b flex items-center justify-between bg-gray-50">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Hostel Fee Payment</h2>
+                  <p className="text-xs font-medium text-gray-500">Secure Direct Transfer Portal</p>
+                </div>
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                  title="Close"
+                >
+                  <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="overflow-y-auto p-6 space-y-6">
+                {/* Payment Method Selector */}
+                <div className="flex p-1 bg-gray-100 rounded-2xl">
+                  <button
+                    onClick={() => setPaymentMethod("upi")}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-tight transition-all ${paymentMethod === "upi" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                  >
+                    Pay via App (UPI)
+                  </button>
+                  <button
+                    onClick={() => setPaymentMethod("qr")}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-tight transition-all ${paymentMethod === "qr" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                  >
+                    Show QR Code
+                  </button>
+                </div>
+
+                {paymentMethod === "qr" ? (
+                  /* QR Code Display */
+                  <div className="flex flex-col items-center justify-center p-4 md:p-8 bg-white rounded-[40px] border-2 border-dashed border-gray-100 animate-in zoom-in-95 duration-300">
+                    {bankSettings?.bank?.qrImage ? (
+                      <div className="relative group perspective-1000">
+                        <div className="absolute -inset-10 bg-blue-100/40 rounded-full blur-3xl group-hover:bg-blue-200/40 transition-all duration-700 animate-pulse"></div>
+                        <img
+                          src={bankSettings.bank.qrImage}
+                          alt="Payment QR"
+                          className="relative w-72 h-72 md:w-[400px] md:h-[400px] object-contain bg-white p-2 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] transition-transform duration-500 group-hover:scale-[1.02]"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-72 h-72 md:w-[400px] md:h-[400px] bg-gray-50 rounded-3xl flex flex-col items-center justify-center text-center p-10 text-gray-400">
+                        <svg className="w-16 h-16 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v1m6 11h.01M9 20h6a2 2 0 002-2V6a2 2 0 00-2-2H9a2 2 0 00-2 2v12a2 2 0 002 2zM9 16h6" /></svg>
+                        <p className="text-sm font-black uppercase tracking-widest leading-tight opacity-40">No QR image provided</p>
+                      </div>
+                    )}
+                    <div className="mt-10 text-center">
+                      <p className="text-[11px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2">Selected Amount to Pay</p>
+                      <p className="text-4xl md:text-5xl font-black text-gray-900 leading-none tracking-tighter">₹{paymentForm.amount || "0"}</p>
+                    </div>
+                  </div>
+                ) : (
+                  /* Bank Details Card + UPI Button */
+                  <>
+                    <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden animate-in slide-in-from-left-4 duration-300">
+                      <div className="relative z-10 space-y-5">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-widest font-black opacity-80 mb-1">Official Bank Account</p>
+                            <h3 className="text-lg font-black leading-tight">{bankSettings?.bank?.accountName || "UNIVERSITY HOSTEL ACCOUNT"}</h3>
+                            <p className="text-[11px] font-bold opacity-70 mt-0.5">{bankSettings?.bank?.bankName || "National Bank of University"}</p>
+                          </div>
+                          <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/20">
+                            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M11.5 12c0 2.485-2.015 4.5-4.5 4.5S2.5 14.485 2.5 12 4.515 7.5 7 7.5s4.5 2.015 4.5 4.5zM12.5 12c0-2.485 2.015-4.5 4.5-4.5s4.5 2.015 4.5 4.5-2.015 4.5-4.5 4.5-4.5-2.015-4.5-4.5z" opacity=".5" /></svg>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-4 pt-2">
+                          <div>
+                            <p className="text-[10px] uppercase opacity-70 font-black tracking-widest">Account Number</p>
+                            <p className="text-sm font-mono font-black tracking-widest pt-0.5">{bankSettings?.bank?.accountNumber || "XXXXXXXXXXXX"}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase opacity-70 font-black tracking-widest">IFSC Code</p>
+                            <p className="text-sm font-mono font-black tracking-widest pt-0.5">{bankSettings?.bank?.ifscCode || "XXXX000XXXX"}</p>
+                          </div>
+                          <div className="col-span-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[10px] uppercase opacity-70 font-black tracking-widest">UPI ID</p>
+                              <span className="text-[10px] font-black text-blue-300 uppercase">One-tap Copy Available</span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(bankSettings?.bank?.upiId || "");
+                                alert("UPI ID Copied!");
+                              }}
+                              className="w-full mt-1.5 p-3 rounded-2xl bg-white/10 border border-white/10 text-left flex items-center justify-between group hover:bg-white/20 transition-all"
+                            >
+                              <span className="font-black text-xs">{bankSettings?.bank?.upiId || "university@upi"}</span>
+                              <svg className="w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V7m-4 4h8m-4-4v8" /></svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Decorative Card Design Elements */}
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+                      <div className="absolute bottom-0 left-0 w-32 h-32 bg-indigo-500/20 rounded-full -ml-16 -mb-16 blur-2xl"></div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Fastest Mobile Option</p>
+                      <a
+                        href={`upi://pay?pa=${bankSettings?.bank?.upiId || ""}&pn=${encodeURIComponent(bankSettings?.bank?.accountName || "University")}&cu=INR`}
+                        className="w-full h-16 bg-[#0070E0] text-white rounded-3xl flex items-center justify-center gap-4 shadow-xl shadow-blue-200 hover:bg-[#005bb5] transition-all active:scale-[0.98] group"
+                      >
+                        <div className="w-10 h-10 bg-white rounded-2xl flex items-center justify-center flex-shrink-0">
+                          <svg className="w-6 h-6 text-[#0070E0]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                        </div>
+                        <div className="flex flex-col items-start leading-tight">
+                          <span className="text-lg font-black tracking-tight">PAY NOW VIA UPI</span>
+                          <span className="text-[9px] font-bold opacity-80 uppercase tracking-widest">Auto-opens GPay, PhonePe, etc.</span>
+                        </div>
+                        <svg className="w-5 h-5 ml-1 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                      </a>
+                    </div>
+                  </>
+                )}
+
+                {/* Instructions Section */}
+                <div className="bg-orange-50/50 p-4 rounded-2xl border border-orange-100 flex gap-4">
+                  <div className="w-8 h-8 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600 flex-shrink-0">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  </div>
+                  <p className="text-[11px] text-orange-900 leading-relaxed font-medium">
+                    <strong className="block text-xs font-black uppercase tracking-tight mb-0.5">Payment Instruction:</strong>
+                    {bankSettings?.instructions || "Pay the fee exactly using any UPI app and submit your 12-digit UTR number here."}
+                  </p>
+                </div>
+
+                {/* Submission Form */}
+                <div className="space-y-4 pt-2 border-t border-dashed border-gray-100">
+                  <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 space-y-3">
+                    <label className="block text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] text-center">Enter Amount to Pay (Editable)</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-gray-400">₹</span>
+                      <input
+                        type="number"
+                        value={paymentForm.amount}
+                        onChange={(e) => setPaymentForm(prev => ({ ...prev, amount: e.target.value }))}
+                        className="w-full h-16 pl-10 pr-4 rounded-2xl border-2 border-blue-200 bg-white text-3xl font-black text-gray-900 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 text-center"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <p className="text-[9px] text-blue-500 font-bold text-center uppercase tracking-widest leading-tight">Installments Allowed: You can change this amount</p>
+                  </div>
+
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider pt-2">Complete Verification</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Transaction (UTR) Number</label>
+                      <input
+                        type="text"
+                        placeholder="12 digit number from GPay/PhonePe"
+                        value={paymentForm.utrNumber}
+                        onChange={(e) => setPaymentForm(prev => ({ ...prev, utrNumber: e.target.value.replace(/\D/g, '').slice(0, 12) }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Payment App Used</label>
+                      <select
+                        value={paymentForm.paymentSource}
+                        onChange={(e) => setPaymentForm(prev => ({ ...prev, paymentSource: e.target.value }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                      >
+                        <option value="GPay">Google Pay</option>
+                        <option value="PhonePe">PhonePe</option>
+                        <option value="Paytm">Paytm</option>
+                        <option value="NetBanking">Net Banking</option>
+                        <option value="Other">Other UPI</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handlePaymentSubmit}
+                    disabled={isSubmittingPayment || paymentForm.utrNumber.length < 8}
+                    className="w-full h-14 bg-blue-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isSubmittingPayment ? (
+                      <>
+                        <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      "Confirm & Submit Claim"
+                    )}
+                  </button>
+                </div>
+
+                {/* History List */}
+                {paymentHistory.length > 0 && (
+                  <div className="space-y-3 pt-6 border-t">
+                    <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Previous Submissions</h3>
+                    <div className="space-y-2">
+                      {paymentHistory.map((p) => (
+                        <div key={p._id} className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-bold text-gray-900">UTR: {p.utrNumber}</p>
+                            <p className="text-[10px] text-gray-500">{new Date(p.createdAt).toLocaleDateString()}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs font-bold text-gray-900">₹{p.amount}</p>
+                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${p.status === 'verified' ? 'bg-green-100 text-green-700' : p.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                              {p.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      }
       {/* Floating Toast Notification */}
       {
         showToast && (
@@ -1714,6 +2039,6 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
           </div>
         )
       }
-    </div >
+    </div>
   );
 }

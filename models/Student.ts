@@ -39,6 +39,9 @@ export interface IStudentBase {
 
   registrationId?: string;
   isProfileLocked?: boolean;
+  dynamicFields?: {
+    [key: string]: any;
+  };
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -176,6 +179,11 @@ const StudentSchema = new Schema<IStudent>(
     isProfileLocked: {
       type: Boolean,
       default: false,
+    },
+    dynamicFields: {
+      type: Map,
+      of: Schema.Types.Mixed,
+      default: {},
     },
   },
   {

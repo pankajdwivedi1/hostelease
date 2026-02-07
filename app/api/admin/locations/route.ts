@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
             success: true,
             message: "Location added successfully",
             location: { name, lat, lng, radius },
-            totalLocations: settings.hostelLocations.length
+            totalLocations: settings.hostelLocations?.length || 0
         });
     } catch (error: any) {
         console.error("Error adding location:", error);

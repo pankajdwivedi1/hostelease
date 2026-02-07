@@ -22,7 +22,12 @@ export async function GET(request: NextRequest) {
                 : defaultLocations,
             startTime: settings?.attendanceStartTime || "21:00",
             endTime: settings?.attendanceEndTime || "22:30",
-            registrationFieldsConfig: settings?.registrationFieldsConfig || {}
+            registrationFieldsConfig: settings?.registrationFieldsConfig || {},
+            formBuilderConfig: settings?.formBuilderConfig || [],
+            universityBankDetails: settings?.universityBankDetails || {},
+            hostelFeeAmount: settings?.hostelFeeAmount || 0,
+            paymentInstructions: settings?.paymentInstructions || "",
+            wardenPassword: settings?.wardenPassword || "warden456"
         });
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);
@@ -38,13 +43,26 @@ export async function POST(request: NextRequest) {
     try {
         await connectDB();
         const body = await request.json();
-        const { locations, startTime, endTime, registrationFieldsConfig } = body;
+        const {
+            locations,
+            startTime,
+            endTime,
+            registrationFieldsConfig,
+            formBuilderConfig,
+            universityBankDetails,
+            hostelFeeAmount,
+            paymentInstructions
+        } = body;
 
         const updateData: any = {};
         if (locations) updateData.hostelLocations = locations;
         if (startTime) updateData.attendanceStartTime = startTime;
         if (endTime) updateData.attendanceEndTime = endTime;
         if (registrationFieldsConfig) updateData.registrationFieldsConfig = registrationFieldsConfig;
+        if (formBuilderConfig) updateData.formBuilderConfig = formBuilderConfig;
+        if (universityBankDetails) updateData.universityBankDetails = universityBankDetails;
+        if (hostelFeeAmount !== undefined) updateData.hostelFeeAmount = hostelFeeAmount;
+        if (paymentInstructions !== undefined) updateData.paymentInstructions = paymentInstructions;
 
         const settings = await AdminSettings.findOneAndUpdate(
             {},

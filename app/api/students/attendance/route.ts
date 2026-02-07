@@ -35,14 +35,36 @@ export async function POST(request: NextRequest) {
         await connectDB();
 
         const body = await request.json();
-        const { studentId, lat, lng, deviceId } = body;
+        const { studentId, lat, lng, deviceId, wifiBSSID, verificationMethod } = body;
 
-        if (!studentId || lat === undefined || lng === undefined || !deviceId) {
+        console.log('📥 Attendance Request Received:', { studentId, hasWiFi: !!wifiBSSID, hasGPS: !!(lat !== undefined && lng !== undefined), deviceId });
+
+        // Basic required fields
+        if (!studentId) {
             return NextResponse.json(
-                { error: "Missing required fields" },
+                { error: "Student ID is missing. Please log in again." },
                 { status: 400 }
             );
         }
+
+        if (!deviceId) {
+            return NextResponse.json(
+                { error: "Device not registered. Please update your profile from the profile section to register this device first." },
+                { status: 400 }
+            );
+        }
+
+        // WiFi or GPS coordinates required (at least one)
+        const hasWiFi = wifiBSSID && wifiBSSID.trim().length > 0;
+        const hasGPS = lat !== undefined && lng !== undefined;
+
+        if (!hasWiFi && !hasGPS) {
+            return NextResponse.json(
+                { error: "Missing required fields. Provide either WiFi BSSID or GPS coordinates." },
+                { status: 400 }
+            );
+        }
+
 
         // 1. Fetch Student and Verify Device
         const student = await Student.findById(studentId);
@@ -85,6 +107,27 @@ export async function POST(request: NextRequest) {
             lastCacheUpdate = nowMs;
         }
 
+        // ⚡ NEW: WiFi BSSID Verification (Primary Method - FAST!)
+        let isLocationVerified = false;
+        let verifiedBy = '';
+
+        if (wifiBSSID) {
+            // Check if student's hostel has WiFi whitelist configured
+            const wifiWhitelist = adminSettings?.wifiWhitelist || [];
+            const studentHostelWifi = wifiWhitelist.find(
+                (wl: any) => wl.hostelName.toLowerCase() === student.hostelName.toLowerCase()
+            );
+
+            if (studentHostelWifi && studentHostelWifi.bssids.includes(wifiBSSID.toUpperCase())) {
+                isLocationVerified = true;
+                verifiedBy = 'wifi';
+                console.log(`✅ WiFi Verified: ${student.name} on ${studentHostelWifi.hostelName} WiFi (BSSID: ${wifiBSSID})`);
+            } else {
+                console.log(`⚠️ WiFi BSSID not whitelisted: ${wifiBSSID} for ${student.hostelName}`);
+                // WiFi failed, will try GPS fallback below
+            }
+        }
+
         // Use provided coordinates with their specific radii
         const defaultLocations = [
             { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" }, // Loc 1
@@ -94,6 +137,7 @@ export async function POST(request: NextRequest) {
 
         const hostelLocations = (adminSettings?.hostelLocations && adminSettings.hostelLocations.length > 0)
             ? adminSettings.hostelLocations
+
             : defaultLocations;
 
         // Check GPS Accuracy (New requirement)
@@ -128,32 +172,60 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Check if student is within any of the allowed circles
-        let isInsideAny = false;
-        let closestInfo = { distance: Infinity, radius: 0 };
-
-        for (const loc of hostelLocations) {
-            const dist = calculateDistance(lat, lng, loc.lat, loc.lng);
-            // Default to 100 if radius.radius is missing (though our schema now has it)
-            const allowedRadius = (loc as any).radius || 100;
-
-            // ⚡ IMPROVED: Account for GPS accuracy (Effective Distance)
-            if ((dist - bodyAccuracy) <= allowedRadius) {
-                isInsideAny = true;
-                break;
+        // ⚡ GPS FALLBACK: Only check GPS if WiFi verification failed
+        if (!isLocationVerified && lat !== undefined && lng !== undefined) {
+            // Check GPS Accuracy (New requirement)
+            const bodyAccuracy = Math.round(body.accuracy || 0);
+            if (bodyAccuracy !== undefined && bodyAccuracy > 200) {
+                return NextResponse.json(
+                    {
+                        error: "Waiting for better GPS signal... (Accuracy too low)",
+                        accuracy: bodyAccuracy
+                    },
+                    { status: 400 }
+                );
             }
-            if (dist < closestInfo.distance) {
-                closestInfo = { distance: dist, radius: allowedRadius };
+
+            // Check if student is within any of the allowed circles
+            let isInsideAny = false;
+            let closestInfo = { distance: Infinity, radius: 0 };
+
+            for (const loc of hostelLocations) {
+                const dist = calculateDistance(lat, lng, loc.lat, loc.lng);
+                // Default to 100 if radius.radius is missing (though our schema now has it)
+                const allowedRadius = (loc as any).radius || 100;
+
+                // ⚡ IMPROVED: Account for GPS accuracy (Effective Distance)
+                if ((dist - bodyAccuracy) <= allowedRadius) {
+                    isInsideAny = true;
+                    break;
+                }
+                if (dist < closestInfo.distance) {
+                    closestInfo = { distance: dist, radius: allowedRadius };
+                }
             }
+
+            if (!isInsideAny) {
+                return NextResponse.json(
+                    {
+                        error: "You are not in campus",
+                        distance: Math.round(closestInfo.distance),
+                        radius: closestInfo.radius,
+                    },
+                    { status: 400 }
+                );
+            }
+
+            // GPS verification passed
+            isLocationVerified = true;
+            verifiedBy = 'gps';
+            console.log(`✅ GPS Verified: ${student.name} at coordinates (${lat}, ${lng})`);
         }
 
-        if (!isInsideAny) {
+        // If neither WiFi nor GPS verified the location
+        if (!isLocationVerified) {
             return NextResponse.json(
-                {
-                    error: "You are not in campus",
-                    distance: Math.round(closestInfo.distance),
-                    radius: closestInfo.radius,
-                },
+                { error: "Unable to verify location. Please ensure GPS is enabled or you're on campus WiFi." },
                 { status: 400 }
             );
         }
@@ -172,7 +244,11 @@ export async function POST(request: NextRequest) {
             date: today,
             istTime: readableTime,
             istDate: readableDate,
-            location: { lat, lng, accuracy: bodyAccuracy },
+            location: {
+                lat: lat || 0,
+                lng: lng || 0,
+                accuracy: verifiedBy === 'gps' ? (body.accuracy || 0) : 0
+            },
             deviceId: deviceId,
             status: "present"
         });
@@ -180,8 +256,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
             {
                 success: true,
-                message: "Your attendance has been saved successfully ✔️",
+                message: verifiedBy === 'wifi'
+                    ? "✅ Attendance marked! Verified via Campus WiFi"
+                    : "✅ Attendance marked! Verified via GPS",
                 attendance: newAttendance,
+                verifiedBy: verifiedBy, // 'wifi' or 'gps'
+                wifiBSSID: verifiedBy === 'wifi' ? wifiBSSID : undefined
             },
             { status: 200 }
         );

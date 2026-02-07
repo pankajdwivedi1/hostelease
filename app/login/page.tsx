@@ -22,11 +22,14 @@ function LoginForm() {
   const [developerPassword, setDeveloperPassword] = useState("");
   const [developerLoading, setDeveloperLoading] = useState(false);
   const [showLogoutToast, setShowLogoutToast] = useState(false);
+  const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
+  const [selectedHostelId, setSelectedHostelId] = useState("");
 
   // For background animation mounting
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
+    fetchHostels();
     if (searchParams.get("logout") === "success") {
       setShowLogoutToast(true);
       setTimeout(() => setShowLogoutToast(false), 5000);
@@ -34,6 +37,18 @@ function LoginForm() {
       window.history.replaceState({}, '', '/login');
     }
   }, [searchParams]);
+
+  const fetchHostels = async () => {
+    try {
+      const response = await fetch("/api/hostels");
+      const data = await response.json();
+      if (data.hostels) {
+        setHostels(data.hostels);
+      }
+    } catch (error) {
+      console.error("Error fetching hostels:", error);
+    }
+  };
 
   const handleGoogleLogin = async () => {
     try {
@@ -62,7 +77,20 @@ function LoginForm() {
       }
     } catch (error: any) {
       console.error("Login error:", error);
-      setError(error.message || "Failed to sign in with Google");
+
+      let friendlyMessage = "Failed to sign in with Google. Please try again.";
+
+      if (error.code === 'auth/popup-closed-by-user') {
+        friendlyMessage = "The login popup was closed before completion. Please try again.";
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        friendlyMessage = "Login request cancelled. Please try again.";
+      } else if (error.code === 'auth/popup-blocked') {
+        friendlyMessage = "Login popup was blocked by your browser. Please allow popups for this site.";
+      } else if (error.code === 'auth/unauthorized-domain') {
+        friendlyMessage = "This domain is not authorized for authentication. Please contact the administrator.";
+      }
+
+      setError(friendlyMessage);
       setLoading(false);
     }
     // Note: Don't setLoading(false) on success - let the redirect handle it
@@ -122,8 +150,13 @@ function LoginForm() {
       return;
     }
 
+    if (!selectedHostelId) {
+      setError("Please select a hostel first");
+      return;
+    }
+
     if (!wardenPassword.trim()) {
-      setError("Please enter the warden password");
+      setError("Please enter the warden authentication key");
       return;
     }
 
@@ -136,7 +169,10 @@ function LoginForm() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ password: wardenPassword }),
+        body: JSON.stringify({
+          password: wardenPassword,
+          hostelId: selectedHostelId
+        }),
       });
 
       const data = await response.json();
@@ -147,6 +183,8 @@ function LoginForm() {
 
       if (data.success) {
         sessionStorage.setItem("userType", "warden");
+        sessionStorage.setItem("wardenHostelName", data.hostelName);
+        sessionStorage.setItem("authorizedHostels", JSON.stringify(data.authorizedHostels));
         router.push("/");
       }
     } catch (error: any) {
@@ -379,6 +417,31 @@ function LoginForm() {
                           <label className="mb-2 sm:mb-3 block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
                             {showAdminPassword ? "Dean Authentication Key" : showWardenPassword ? "Warden Authentication Key" : "Developer Override"}
                           </label>
+
+                          {showWardenPassword && (
+                            <div className="mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                              <select
+                                value={selectedHostelId}
+                                onChange={(e) => {
+                                  setSelectedHostelId(e.target.value);
+                                  setError("");
+                                }}
+                                className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:py-4 text-sm sm:text-base text-slate-900 appearance-none focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-medium"
+                              >
+                                <option value="" disabled>Select Your Hostel</option>
+                                {hostels.map(hostel => (
+                                  <option key={hostel._id} value={hostel._id}>
+                                    {hostel.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="mt-1.5 px-1 flex items-center gap-1.5">
+                                <div className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                                <span className="text-[10px] font-bold text-indigo-600/70 uppercase tracking-wider">Select hostel to proceed</span>
+                              </div>
+                            </div>
+                          )}
+
                           <div className="relative group">
                             <input
                               type="password"

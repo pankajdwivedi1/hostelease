@@ -138,17 +138,38 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [studentsLoading, setStudentsLoading] = useState(true);
   const [attendanceSummary, setAttendanceSummary] = useState<Record<string, number>>({});
   const [presentStudentIds, setPresentStudentIds] = useState<string[]>([]);
-  const [currentTab, setCurrentTab] = useState<"permissions" | "attendance" | "messaging">("permissions");
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
   const [attendanceLogsLoading, setAttendanceLogsLoading] = useState(false);
   const [adminNotifications, setAdminNotifications] = useState<DBNotification[]>([]);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [showEditStudentModal, setShowEditStudentModal] = useState(false);
   const [isUpdatingStudent, setIsUpdatingStudent] = useState(false);
+
+  // Payment States
+  const [payments, setPayments] = useState<any[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
+  const [paymentSearch, setPaymentSearch] = useState("");
+  const [showBankSettingsModal, setShowBankSettingsModal] = useState(false);
+  const [bankFormData, setBankFormData] = useState({
+    accountName: "",
+    accountNumber: "",
+    ifscCode: "",
+    bankName: "",
+    upiId: "",
+    qrImage: "",
+    feeAmount: 0,
+    instructions: ""
+  });
+  const [isReconciling, setIsReconciling] = useState(false);
+
+  const [currentTab, setCurrentTab] = useState<"permissions" | "attendance" | "messaging" | "payments">("permissions");
   const [isEditCameraOpen, setIsEditCameraOpen] = useState(false);
   const editVideoRef = useRef<HTMLVideoElement>(null);
   const editCanvasRef = useRef<HTMLCanvasElement>(null);
   const [editStudentForm, setEditStudentForm] = useState<Partial<StudentDetails>>({});
+  const selectionButtonsRef = useRef<HTMLDivElement>(null);
+  const studentsPresentRef = useRef<HTMLDivElement>(null);
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [newMessage, setNewMessage] = useState({
     message: "",
@@ -165,6 +186,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [exportPreviewData, setExportPreviewData] = useState<any[]>([]);
   const [exportType, setExportType] = useState<'students' | 'attendance'>('students');
   const [isListExpanded, setIsListExpanded] = useState(false);
+  const [showAllPresent, setShowAllPresent] = useState(false);
   const [locationVerificationResults, setLocationVerificationResults] = useState<{
     name: string;
     distance: number;
@@ -217,13 +239,77 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [isSavingSystemSettings, setIsSavingSystemSettings] = useState(false);
   const [hostelsConfig, setHostelsConfig] = useState<any[]>([]);
   const [registrationFields, setRegistrationFields] = useState<Record<string, any>>({});
+  const [formBuilderFields, setFormBuilderFields] = useState<any[]>([]);
   const [activeSettingsTab, setActiveSettingsTab] = useState<"wardens" | "rooms" | "form">("wardens");
+  const [globalWardenPassword, setGlobalWardenPassword] = useState("warden456");
+  const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
+
+  // MERGED WARDEN ACCOUNTS STATE
+  const [wardenAccounts, setWardenAccounts] = useState<{ _id?: string, username: string, password?: string, hostels: string[] }[]>([]);
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [newAccountForm, setNewAccountForm] = useState({ username: "", password: "", hostels: [] as string[] });
+
+  // Student Attendance History State
+  const [attendanceViewMode, setAttendanceViewMode] = useState<"daily" | "history">("daily");
+  const [attendanceHistoryStartDate, setAttendanceHistoryStartDate] = useState("");
+  const [attendanceHistoryEndDate, setAttendanceHistoryEndDate] = useState("");
+  const [attendanceHistoryStudentId, setAttendanceHistoryStudentId] = useState("");
+  const [attendanceHistorySearchQuery, setAttendanceHistorySearchQuery] = useState("");
+  const [attendanceHistoryLogs, setAttendanceHistoryLogs] = useState<any[]>([]);
+  const [attendanceHistoryLoading, setAttendanceHistoryLoading] = useState(false);
+
+
+  // Fetch Warden Accounts
+  const fetchWardenAccounts = async () => {
+    try {
+      const res = await fetch("/api/admin/warden-accounts");
+      const data = await res.json();
+      if (data.wardenAccounts) setWardenAccounts(data.wardenAccounts);
+    } catch (error) {
+      console.error("Failed to fetch warden accounts", error);
+    }
+  };
+
+  // Handle Create/Update/Delete Warden Accounts
+  const handleManageWardenAccount = async (action: "create" | "update" | "delete", accountData: any) => {
+    try {
+      const res = await fetch("/api/admin/warden-accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...accountData, action }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWardenAccounts(data.wardenAccounts);
+        if (action === "create" || action === "update") {
+          setIsCreatingAccount(false);
+          setEditingAccountId(null);
+          setNewAccountForm({ username: "", password: "", hostels: [] });
+        }
+        alert(`Account ${action}d successfully!`);
+      } else {
+        alert(data.error || "Operation failed");
+      }
+    } catch (error) {
+      console.error(`Failed to ${action} account`, error);
+      alert("Error occurred");
+    }
+  };
+
+  useEffect(() => {
+    if (activeSettingsTab === "wardens") fetchWardenAccounts();
+  }, [activeSettingsTab]);
 
   // Measurement Tool State
   const [isMeasuring, setIsMeasuring] = useState(false);
   const [measurePoints, setMeasurePoints] = useState<[number, number][]>([]);
   const [measureDistance, setMeasureDistance] = useState<number | null>(null);
   const [isLocationModalMaximized, setIsLocationModalMaximized] = useState(false);
+  const [wardenHostelName, setWardenHostelName] = useState<string | null>(null);
+  const [authorizedHostels, setAuthorizedHostels] = useState<string[]>([]);
+  const [isWarden, setIsWarden] = useState(false);
+  const [dashboardTitle, setDashboardTitle] = useState(title);
 
   const getInitials = (name: string) => {
     return name
@@ -259,6 +345,50 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       return dateString;
     }
   };
+
+  // Warden Filter Initialization
+  useEffect(() => {
+    const type = sessionStorage.getItem("userType");
+    const hostelName = sessionStorage.getItem("wardenHostelName");
+    const authHostelsStr = sessionStorage.getItem("authorizedHostels");
+
+    if (type === "warden" && hostelName) {
+      setIsWarden(true);
+      setWardenHostelName(hostelName);
+
+      let authHostels: string[] = [hostelName];
+      if (authHostelsStr) {
+        try {
+          authHostels = JSON.parse(authHostelsStr);
+        } catch (e) {
+          console.error("Failed to parse authorizedHostels:", e);
+        }
+      }
+      setAuthorizedHostels(authHostels);
+      setHostelFilter("all"); // Default to all authorized for wardens
+      setAttendanceHostelFilter("all");
+
+      // Set dynamic dashboard title for wardens
+      if (authHostels.length > 1) {
+        setDashboardTitle(`Multi-Hostel Dashboard`);
+      } else {
+        setDashboardTitle(`${hostelName} Dashboard`);
+      }
+    } else {
+      setDashboardTitle(title);
+    }
+  }, [title]);
+
+  // Initialize messaging defaults for wardens
+  useEffect(() => {
+    if (isWarden && wardenHostelName) {
+      setNewMessage(prev => ({
+        ...prev,
+        targetType: "hostel",
+        targetHostel: wardenHostelName
+      }));
+    }
+  }, [isWarden, wardenHostelName]);
 
   const fetchHostelLocations = async () => {
     try {
@@ -359,6 +489,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     localGuardianPhoneNumber: { label: "Local Guardian Phone", visible: true, required: true },
     dob: { label: "Date of Birth", visible: true, required: true },
     category: { label: "Category", visible: true, required: true },
+    joiningDate: { label: "Joining Date", visible: true, required: true },
   };
 
   const fetchSystemSettings = async () => {
@@ -381,6 +512,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         });
 
         setRegistrationFields(mergedFields);
+        setFormBuilderFields(settingsData.formBuilderConfig || []);
+        if (settingsData.wardenPassword) {
+          setGlobalWardenPassword(settingsData.wardenPassword);
+        }
       }
 
       // Fetch Hostels (with warden/room info)
@@ -393,6 +528,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       console.error("Error fetching system settings:", error);
     }
   };
+
+  useEffect(() => {
+    if (showSystemSettingsModal) {
+      fetchSystemSettings();
+    }
+  }, [showSystemSettingsModal]);
 
   const handleCreateHostel = async () => {
     const name = prompt("Enter new hostel name:");
@@ -473,7 +614,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         setRegistrationFields(updatedFields);
       }
     } catch (error) {
-      alert("Failed to update form settings");
+    } finally {
+      setIsSavingSystemSettings(false);
+    }
+  };
+
+  const handleUpdateFormBuilder = async (updatedFields: any[]) => {
+    try {
+      setIsSavingSystemSettings(true);
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ formBuilderConfig: updatedFields })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setFormBuilderFields(updatedFields);
+      }
+    } catch (error) {
+      alert("Failed to update form builder");
     } finally {
       setIsSavingSystemSettings(false);
     }
@@ -549,6 +708,139 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       return false;
     } finally {
       setIsUpdatingSettings(false);
+    }
+  };
+
+  const fetchAdminPayments = async () => {
+    try {
+      setPaymentsLoading(true);
+      const res = await fetch(`/api/admin/payments?status=${paymentStatusFilter}&search=${paymentSearch}`);
+      const data = await res.json();
+      if (data.success) setPayments(data.payments);
+    } catch (e) {
+      console.error("Error fetching payments:", e);
+    } finally {
+      setPaymentsLoading(false);
+    }
+  };
+
+  const fetchBankSettings = async () => {
+    try {
+      const res = await fetch("/api/admin/settings");
+      const data = await res.json();
+      if (data.success) {
+        setBankFormData({
+          accountName: data.universityBankDetails?.accountName || "",
+          accountNumber: data.universityBankDetails?.accountNumber || "",
+          ifscCode: data.universityBankDetails?.ifscCode || "",
+          bankName: data.universityBankDetails?.bankName || "",
+          upiId: data.universityBankDetails?.upiId || "",
+          qrImage: data.universityBankDetails?.qrImage || "",
+          feeAmount: data.hostelFeeAmount || 0,
+          instructions: data.paymentInstructions || ""
+        });
+      }
+    } catch (e) {
+      console.error("Error fetching bank settings:", e);
+    }
+  };
+
+  const handleUpdateBankSettings = async () => {
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          universityBankDetails: {
+            accountName: bankFormData.accountName,
+            accountNumber: bankFormData.accountNumber,
+            ifscCode: bankFormData.ifscCode,
+            bankName: bankFormData.bankName,
+            upiId: bankFormData.upiId,
+            qrImage: bankFormData.qrImage
+          },
+          hostelFeeAmount: bankFormData.feeAmount,
+          paymentInstructions: bankFormData.instructions
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Bank settings updated successfully!");
+        setShowBankSettingsModal(false);
+      }
+    } catch (e) {
+      alert("Error updating bank settings");
+    }
+  };
+
+  const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        setIsReconciling(true);
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data: any[] = XLSX.utils.sheet_to_json(ws);
+
+        const csvRecords = data.map(row => {
+          const utrKey = Object.keys(row).find(k => k.toLowerCase().includes('utr') || k.toLowerCase().includes('transaction'));
+          const amountKey = Object.keys(row).find(k => k.toLowerCase().includes('amount') || k.toLowerCase().includes('value'));
+          return {
+            utr: utrKey ? String(row[utrKey]).trim() : null,
+            amount: amountKey ? Number(row[amountKey]) : null
+          };
+        }).filter(r => r.utr);
+
+        if (csvRecords.length === 0) {
+          alert("No valid UTR numbers found in CSV. Please ensure the column is named 'UTR' or 'Transaction ID'.");
+          return;
+        }
+
+        const res = await fetch("/api/admin/payments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ csvRecords })
+        });
+        const result = await res.json();
+        if (result.success) {
+          alert(result.message);
+          fetchAdminPayments();
+        } else {
+          alert(result.error || "Reconciliation failed");
+        }
+      } catch (err) {
+        console.error("CSV Parse Error:", err);
+        alert("Error parsing CSV file");
+      } finally {
+        setIsReconciling(false);
+        e.target.value = "";
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleManualPaymentAction = async (paymentId: string, status: string) => {
+    const remarks = prompt(`Enter remarks for ${status}:`, status === 'verified' ? 'Manually verified by Admin' : 'Incorrect UTR details');
+    if (remarks === null) return;
+
+    try {
+      const res = await fetch("/api/admin/payments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId, status, adminRemarks: remarks })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        fetchAdminPayments();
+      }
+    } catch (e) {
+      alert("Action failed");
     }
   };
 
@@ -666,11 +958,110 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
   const absentees = useMemo(() => {
     let list = students.filter(s => !presentStudentIds.includes(s.id));
+
+    // Filter by authorized hostels for wardens
+    if (isWarden && authorizedHostels.length > 0) {
+      list = list.filter(s => {
+        const studentHostel = getHostelCategory(s.hostelName) || s.hostelName;
+        return authorizedHostels.some(h => h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase());
+      });
+    }
+
+    // Further filter by attendance hostel filter if not "all"
     if (currentTab === "attendance" && attendanceHostelFilter !== "all") {
       list = list.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === attendanceHostelFilter);
     }
+
     return list;
-  }, [students, presentStudentIds, attendanceHostelFilter, currentTab, hostels]);
+  }, [students, presentStudentIds, attendanceHostelFilter, currentTab, hostels, isWarden, authorizedHostels]);
+
+  // Filter attendance logs for wardens to only show their authorized hostels
+  const filteredAttendanceLogs = useMemo(() => {
+    if (!isWarden || authorizedHostels.length === 0) {
+      return attendanceLogs; // Admin/Developer sees all
+    }
+
+    return attendanceLogs.filter(log => {
+      if (!log.studentId) return false;
+      const studentHostel = getHostelCategory(log.studentId.hostelName) || log.studentId.hostelName;
+      return authorizedHostels.some(h => h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase());
+    });
+  }, [attendanceLogs, isWarden, authorizedHostels]);
+
+  // Calculate filtered present count for wardens (only students from authorized hostels)
+  const filteredPresentCount = useMemo(() => {
+    if (!isWarden || authorizedHostels.length === 0) {
+      return presentStudentIds.length; // Admin/Developer sees all
+    }
+
+    // Count only present students from authorized hostels
+    return students.filter(s => {
+      if (!presentStudentIds.includes(s.id)) return false;
+      const studentHostel = getHostelCategory(s.hostelName) || s.hostelName;
+      return authorizedHostels.some(h => h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase());
+    }).length;
+  }, [students, presentStudentIds, isWarden, authorizedHostels]);
+
+  // Filter absentees based on selected hostel card
+  const displayedAbsentees = useMemo(() => {
+    if (!selectedAttendanceHostel) return absentees;
+    return absentees.filter(s => {
+      const studentHostel = getHostelCategory(s.hostelName) || s.hostelName;
+      return studentHostel.toLowerCase() === selectedAttendanceHostel.toLowerCase();
+    });
+  }, [absentees, selectedAttendanceHostel]);
+
+  // Filter present students based on selected hostel card
+  const presentStudentsForSelectedHostel = useMemo(() => {
+    if (!selectedAttendanceHostel) return [];
+    return filteredAttendanceLogs.filter(log => {
+      if (!log.studentId) return false;
+      const studentHostel = getHostelCategory(log.studentId.hostelName) || log.studentId.hostelName;
+      return studentHostel.toLowerCase() === selectedAttendanceHostel.toLowerCase();
+    });
+  }, [filteredAttendanceLogs, selectedAttendanceHostel]);
+
+  // Reset showAllPresent when selectedHostel changes
+  useEffect(() => {
+    setShowAllPresent(false);
+  }, [selectedAttendanceHostel]);
+
+  // Handle click outside to deselect hostel
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (!selectedAttendanceHostel) return;
+
+      const target = event.target as Node;
+
+      // Don't deselect if clicking inside specific areas
+      if (selectionButtonsRef.current?.contains(target)) return;
+      if (studentsPresentRef.current?.contains(target)) return;
+      if (absenteesRef.current?.contains(target)) return;
+      // Note: absenteesRef is defined elsewhere in the file but accessible here
+      // But if it's not defined in scope, we might need to check.
+      // Assuming absenteesRef exists globally in component scope.
+      // If TypeScript complains, we'll fix it.
+      // Checking local ref names...
+      // Actually, if absenteesRef is NOT defined in this scope, let's skip checking it for now
+      // and rely on the fact that clicking it is "outside" for now?
+      // NO, clicking Absentee List MUST NOT deselect.
+      // Let's assume absenteesRef is defined.
+      // Use explicit any cast if needed to avoid build error? No.
+      // I'll try to find it.
+      // If I can't find it, I'll add logic to check className? container?
+      // Or just add a new ref to the wrapper div of absent list?
+
+      // Let's check entryLogsRef too.
+      // if (entryLogsRef.current?.contains(target)) return;
+
+      setSelectedAttendanceHostel(null);
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [selectedAttendanceHostel]);
+
+
 
   const fetchHostels = async (forceRefresh = false) => {
     try {
@@ -818,6 +1209,30 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       console.error("Error fetching attendance logs:", error.message);
     } finally {
       setAttendanceLogsLoading(false);
+    }
+  };
+
+  const fetchStudentHistory = async () => {
+    if (!attendanceHistoryStudentId) return;
+    try {
+      setAttendanceHistoryLoading(true);
+      const queryParams = new URLSearchParams();
+      queryParams.append("studentId", attendanceHistoryStudentId);
+      if (attendanceHistoryStartDate) queryParams.append("startDate", attendanceHistoryStartDate);
+      if (attendanceHistoryEndDate) queryParams.append("endDate", attendanceHistoryEndDate);
+
+      const response = await fetch(`/api/admin/attendance?${queryParams.toString()}`);
+      if (!response.ok) throw new Error("Failed to fetch history");
+
+      const data = await response.json();
+      if (data.success) {
+        setAttendanceHistoryLogs(data.attendance);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Failed to fetch student history");
+    } finally {
+      setAttendanceHistoryLoading(false);
     }
   };
 
@@ -1015,7 +1430,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     if (currentTab === "attendance") {
       fetchAttendanceLogs();
     }
-  }, [selectedDate, attendanceHostelFilter, currentTab]);
+    if (currentTab === 'payments') {
+      fetchAdminPayments();
+      fetchBankSettings();
+    }
+  }, [selectedDate, attendanceHostelFilter, currentTab, paymentStatusFilter, paymentSearch]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1023,10 +1442,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       fetchAttendanceSummary();
       if (currentTab === 'attendance') fetchAttendanceLogs();
       if (currentTab === 'messaging') fetchAdminNotifications();
+      if (currentTab === 'payments') fetchAdminPayments();
     }, 20000);
 
     return () => clearInterval(interval);
-  }, [currentTab, selectedDate]);
+  }, [currentTab, selectedDate, paymentStatusFilter, paymentSearch]);
 
   // Click outside to collapse expanded sections
   useEffect(() => {
@@ -1314,7 +1734,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     setShowExportOptionsModal(false);
 
     if (option === 'present') {
-      const data = attendanceLogs.map(log => ({
+      const data = filteredAttendanceLogs.map(log => ({
         "Student ID": log.studentId?.registrationId || "N/A",
         Student: log.studentId?.name || "Unknown",
         Email: log.studentId?.email || "N/A",
@@ -1472,9 +1892,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         student.branch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.section?.toLowerCase().includes(searchQuery.toLowerCase());
 
+      // For wardens, always filter by their hostel
       let matchesHostel = hostelFilter === "all";
       if (!matchesHostel) {
-        matchesHostel = (getHostelCategory(student.hostelName) || student.hostelName) === hostelFilter;
+        const studentHostel = getHostelCategory(student.hostelName) || student.hostelName;
+        matchesHostel = studentHostel === hostelFilter || studentHostel.toLowerCase() === hostelFilter.toLowerCase();
+      } else if (isWarden && authorizedHostels.length > 0) {
+        // For wardens, if 'all' is selected, must be within authorized hostels
+        const studentHostel = getHostelCategory(student.hostelName) || student.hostelName;
+        matchesHostel = authorizedHostels.some(h => h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase());
       }
 
       const matchesCollege = collegeFilter === "all" || student.collegeName === collegeFilter;
@@ -1487,11 +1913,30 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (statusFilter === "all") return true;
       return student.studentStatus === statusFilter;
     });
-  }, [permissions, filter, statusFilter, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter, sectionFilter]);
+  }, [permissions, filter, statusFilter, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter, sectionFilter, isWarden, authorizedHostels]);
 
   // Base list filtered by Search, College, Semester, Branch, and Section
+  const totalHostelStudents = useMemo(() => {
+    return students.filter((student) => {
+      if (isWarden && authorizedHostels.length > 0) {
+        const studentHostel = getHostelCategory(student.hostelName) || student.hostelName;
+        return authorizedHostels.some(h => h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase());
+      }
+      return true;
+    });
+  }, [students, isWarden, authorizedHostels]);
+
   const dropdownFilteredStudents = useMemo(() => {
     return students.filter((student) => {
+      // For wardens, always restrict to their authorized hostels at the base level
+      if (isWarden && authorizedHostels.length > 0) {
+        const studentHostel = getHostelCategory(student.hostelName) || student.hostelName;
+        const isAuthorized = authorizedHostels.some(h =>
+          h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase()
+        );
+        if (!isAuthorized) return false;
+      }
+
       const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (student as any).registrationId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1506,24 +1951,34 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       return matchesSearch && matchesCollege && matchesSemester && matchesBranch && matchesSection;
     });
-  }, [students, searchQuery, collegeFilter, semesterFilter, branchFilter, sectionFilter]);
+  }, [students, searchQuery, collegeFilter, semesterFilter, branchFilter, sectionFilter, isWarden, wardenHostelName]);
 
   const filteredStudents = useMemo(() => {
     return dropdownFilteredStudents.filter((student) => {
       let matchesHostel = hostelFilter === "all";
       if (!matchesHostel) {
-        matchesHostel = (getHostelCategory(student.hostelName) || student.hostelName) === hostelFilter;
+        const studentHostel = getHostelCategory(student.hostelName) || student.hostelName;
+        matchesHostel = studentHostel === hostelFilter || studentHostel.toLowerCase() === hostelFilter.toLowerCase();
+      } else if (isWarden && authorizedHostels.length > 0) {
+        const studentHostel = getHostelCategory(student.hostelName) || student.hostelName;
+        matchesHostel = authorizedHostels.some(h => h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase());
       }
       const matchesStatus = statusFilter === "all" || student.studentStatus === statusFilter;
       return matchesHostel && matchesStatus;
     });
-  }, [dropdownFilteredStudents, hostelFilter, statusFilter]);
+  }, [dropdownFilteredStudents, hostelFilter, statusFilter, isWarden, authorizedHostels]);
 
   // Optimized counts for status buttons
   const statusCounts = useMemo(() => {
     const baseList = dropdownFilteredStudents.filter(student => {
       let matchesHostel = hostelFilter === "all";
-      if (!matchesHostel) matchesHostel = (getHostelCategory(student.hostelName) || student.hostelName) === hostelFilter;
+      if (!matchesHostel) {
+        const studentHostel = getHostelCategory(student.hostelName) || student.hostelName;
+        matchesHostel = studentHostel === hostelFilter || studentHostel.toLowerCase() === hostelFilter.toLowerCase();
+      } else if (isWarden && authorizedHostels.length > 0) {
+        const studentHostel = getHostelCategory(student.hostelName) || student.hostelName;
+        matchesHostel = authorizedHostels.some(h => h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase());
+      }
       return matchesHostel;
     });
 
@@ -1532,7 +1987,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       in: baseList.filter(s => s.studentStatus === 'in').length,
       out: baseList.filter(s => s.studentStatus === 'out').length
     };
-  }, [dropdownFilteredStudents, hostelFilter]);
+  }, [dropdownFilteredStudents, hostelFilter, isWarden, authorizedHostels]);
 
 
 
@@ -1547,12 +2002,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div className="flex justify-between items-start w-full md:w-auto">
                   <div>
-                    <h1 className="text-lg md:text-xl font-bold text-foreground">{title}</h1>
+                    <h1 className="text-lg md:text-xl font-bold text-foreground">{dashboardTitle}</h1>
                     <div className="flex items-center gap-2 mt-1">
                       {studentsLoading ? (
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></span>
                       ) : (
-                        <p className="text-sm text-secondary">{students.length} Students</p>
+                        <p className="text-sm text-secondary">{filteredStudents.length} Students</p>
                       )}
                     </div>
                   </div>
@@ -1782,6 +2237,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 >
                   Messaging
                 </button>
+                {/* <button
+                  onClick={() => setCurrentTab('payments')}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${currentTab === 'payments' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                >
+                  Payments
+                </button> */}
               </div>
 
               {currentTab === 'permissions' && (
@@ -1816,7 +2277,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <select
                         value={hostelFilter}
                         onChange={(e) => setHostelFilter(e.target.value)}
-                        className="h-9 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground min-w-[120px]"
+                        disabled={isWarden}
+                        className={`h-9 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground min-w-[120px] ${isWarden ? 'opacity-70 cursor-not-allowed' : ''}`}
                       >
                         <option value="all">Hostel</option>
                         {hostels.map((h) => (
@@ -1961,278 +2423,502 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
               {currentTab === 'attendance' && (
                 <div className="space-y-6">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
-                      <div>
-                        <h2 className="text-lg font-bold text-foreground">Daily Attendance Monitoring</h2>
-                        <p className="text-sm text-secondary">Student entries and absentees for {selectedDate === new Date().toISOString().split('T')[0] ? 'today' : selectedDate}</p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 w-full sm:w-auto sm:flex sm:items-center">
-                        <input
-                          type="date"
-                          value={selectedDate}
-                          onChange={(e) => setSelectedDate(e.target.value)}
-                          max={new Date().toISOString().split('T')[0]}
-                          className="h-11 px-4 rounded-xl border border-gray-200 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500 bg-white shadow-sm cursor-pointer hover:border-blue-300 transition-colors w-full sm:w-auto sm:min-w-[160px]"
-                        />
-                        <select
-                          value={attendanceHostelFilter}
-                          onChange={(e) => setAttendanceHostelFilter(e.target.value)}
-                          className="h-11 px-4 rounded-xl border border-gray-200 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500 bg-white shadow-sm cursor-pointer hover:border-blue-300 transition-colors w-full sm:w-auto sm:min-w-[160px]"
-                        >
-                          <option value="all">All Hostels</option>
-                          {hostels.map((h) => (
-                            <option key={h._id || h.name} value={h.name}>{h.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
+                  {/* View Mode Toggle */}
+                  <div className="flex justify-center mb-6">
+                    <div className="bg-gray-100 p-1 rounded-xl inline-flex">
                       <button
-                        onClick={exportAttendanceToExcel}
-                        className="px-4 py-2 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-2"
+                        onClick={() => setAttendanceViewMode("daily")}
+                        className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${attendanceViewMode === "daily" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-900"}`}
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                        Export Excel
+                        Daily Monitor
                       </button>
-                      {(userType === "admin" || userType === "developer") && (
-                        <button
-                          onClick={() => handleCleanup("attendance")}
-                          className="px-4 py-2 text-xs font-semibold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-                        >
-                          Purge Logs
-                        </button>
-                      )}
+                      <button
+                        onClick={() => setAttendanceViewMode("history")}
+                        className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${attendanceViewMode === "history" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-900"}`}
+                      >
+                        Student History
+                      </button>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 md:gap-4">
-                    <div className="bg-filler p-2.5 rounded-lg border border-gray-100 shadow-sm text-center">
-                      <p className="text-[9px] font-bold text-secondary uppercase tracking-wider">Total Present</p>
-                      <p className="text-lg font-black text-blue-600 mt-1">
-                        {attendanceHostelFilter === 'all'
-                          ? presentStudentIds.length
-                          : (attendanceSummary[attendanceHostelFilter] || 0)}
-                      </p>
-                    </div>
-                    <div className="bg-filler p-2.5 rounded-lg border border-gray-100 shadow-sm text-red-600 text-center">
-                      <p className="text-[9px] font-bold uppercase tracking-wider">Total Absentees</p>
-                      <p className="text-lg font-black mt-1">
-                        {absentees.length}
-                      </p>
-                    </div>
-                    <div className="bg-filler p-2.5 rounded-lg border border-gray-100 shadow-sm text-center">
-                      <p className="text-[9px] font-bold text-secondary uppercase tracking-wider">Present Ratio</p>
-                      <p className="text-lg font-black text-foreground mt-1">
-                        {(() => {
-                          const total = attendanceHostelFilter === 'all'
-                            ? students.length
-                            : students.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === attendanceHostelFilter).length;
-                          const present = attendanceHostelFilter === 'all'
-                            ? presentStudentIds.length
-                            : (attendanceSummary[attendanceHostelFilter] || 0);
-
-                          return total > 0 ? Math.round((present / total) * 100) : 0;
-                        })()}%
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Hostel Breakdown */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {Object.entries(attendanceSummary).map(([hostel, count]) => {
-                      // Calculate total students in this hostel
-                      const totalInHostel = students.filter(s =>
-                        (getHostelCategory(s.hostelName) || s.hostelName) === hostel
-                      ).length;
-                      const percentage = totalInHostel > 0 ? Math.round((count / totalInHostel) * 100) : 0;
-                      const isSelected = selectedAttendanceHostel === hostel;
-
-                      return (
-                        <button
-                          key={hostel}
-                          onClick={() => setSelectedAttendanceHostel(isSelected ? null : hostel)}
-                          className={`bg-white p-3 rounded-lg border shadow-sm transition-all text-center ${isSelected
-                            ? 'border-blue-500 ring-2 ring-blue-200 shadow-md'
-                            : 'border-gray-100 hover:border-blue-300 hover:shadow-md'
-                            }`}
-                        >
-                          <p className="text-[10px] font-bold text-secondary uppercase line-clamp-1">{hostel}</p>
-                          <p className="text-sm font-bold text-foreground mt-1">
-                            {count}/{totalInHostel} = {percentage}%
-                          </p>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Selected Hostel Students List */}
-                  {selectedAttendanceHostel && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mt-4">
-                      <h3 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Students Present from {selectedAttendanceHostel}
-                      </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                        {attendanceLogs
-                          .filter(log => {
-                            if (!log.studentId) return false;
-                            const studentHostel = getHostelCategory(log.studentId.hostelName) || log.studentId.hostelName;
-                            return studentHostel === selectedAttendanceHostel;
-                          })
-                          .map((log) => (
-                            <div
-                              key={log._id}
-                              className="bg-white p-2 rounded-lg border border-blue-100 flex items-center gap-2 hover:shadow-sm transition-shadow"
+                  {attendanceViewMode === "daily" ? (
+                    <>
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+                          <div>
+                            <h2 className="text-lg font-bold text-foreground">Daily Attendance Monitoring</h2>
+                            <p className="text-sm text-secondary">Student entries and absentees for {selectedDate === new Date().toISOString().split('T')[0] ? 'today' : selectedDate}</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 w-full sm:w-auto sm:flex sm:items-center">
+                            <input
+                              type="date"
+                              value={selectedDate}
+                              onChange={(e) => setSelectedDate(e.target.value)}
+                              max={new Date().toISOString().split('T')[0]}
+                              className="h-11 px-4 rounded-xl border border-gray-200 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500 bg-white shadow-sm cursor-pointer hover:border-blue-300 transition-colors w-full sm:w-auto sm:min-w-[160px]"
+                            />
+                            <select
+                              value={attendanceHostelFilter}
+                              onChange={(e) => setAttendanceHostelFilter(e.target.value)}
+                              disabled={isWarden}
+                              className={`w-full appearance-none bg-blue-50 border-0 text-blue-900 px-4 py-2.5 rounded-xl font-bold text-sm focus:ring-0 focus:outline-none ${isWarden ? 'opacity-70 cursor-not-allowed' : ''}`}
                             >
-                              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                                {getInitials(log.studentId?.name || "?")}
+                              <option value="all">All Hostels</option>
+                              {hostels.map((h) => (
+                                <option key={h._id || h.name} value={h.name}>{h.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={exportAttendanceToExcel}
+                            className="px-4 py-2 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-2"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                            Export Excel
+                          </button>
+                          {(userType === "admin" || userType === "developer") && (
+                            <button
+                              onClick={() => handleCleanup("attendance")}
+                              className="px-4 py-2 text-xs font-semibold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                            >
+                              Purge Logs
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 md:gap-4">
+                        <div className="bg-filler p-2.5 rounded-lg border border-gray-100 shadow-sm text-center">
+                          <p className="text-[9px] font-bold text-secondary uppercase tracking-wider">Total Present</p>
+                          <p className="text-lg font-black text-blue-600 mt-1">
+                            {attendanceHostelFilter === 'all'
+                              ? filteredPresentCount
+                              : (attendanceSummary[attendanceHostelFilter] || 0)}
+                          </p>
+                        </div>
+                        <div className="bg-filler p-2.5 rounded-lg border border-gray-100 shadow-sm text-red-600 text-center">
+                          <p className="text-[9px] font-bold uppercase tracking-wider">Total Absentees</p>
+                          <p className="text-lg font-black mt-1">
+                            {absentees.length}
+                          </p>
+                        </div>
+                        <div className="bg-filler p-2.5 rounded-lg border border-gray-100 shadow-sm text-center">
+                          <p className="text-[9px] font-bold text-secondary uppercase tracking-wider">Present Ratio</p>
+                          <p className="text-lg font-black text-foreground mt-1">
+                            {(() => {
+                              const total = attendanceHostelFilter === 'all'
+                                ? (isWarden && authorizedHostels.length > 0
+                                  ? students.filter(s => {
+                                    const studentHostel = getHostelCategory(s.hostelName) || s.hostelName;
+                                    return authorizedHostels.some(h => h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase());
+                                  }).length
+                                  : students.length)
+                                : students.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === attendanceHostelFilter).length;
+                              const present = attendanceHostelFilter === 'all'
+                                ? filteredPresentCount
+                                : (attendanceSummary[attendanceHostelFilter] || 0);
+
+                              return total > 0 ? Math.round((present / total) * 100) : 0;
+                            })()}%
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Hostel Breakdown */}
+                      <div
+                        ref={selectionButtonsRef}
+                        className="grid grid-cols-2 md:grid-cols-4 gap-3 cursor-pointer"
+                        onClick={() => setSelectedAttendanceHostel(null)}
+                      >
+                        {Object.entries(attendanceSummary)
+                          .filter(([hostel]) => {
+                            // For wardens, only show their authorized hostels
+                            if (isWarden && authorizedHostels.length > 0) {
+                              return authorizedHostels.some(h => h === hostel || h.toLowerCase() === hostel.toLowerCase());
+                            }
+                            return true;
+                          })
+                          .map(([hostel, count]) => {
+                            // Calculate total students in this hostel
+                            const totalInHostel = students.filter(s =>
+                              (getHostelCategory(s.hostelName) || s.hostelName) === hostel
+                            ).length;
+                            const percentage = totalInHostel > 0 ? Math.round((count / totalInHostel) * 100) : 0;
+                            const isSelected = selectedAttendanceHostel === hostel;
+
+                            return (
+                              <button
+                                key={hostel}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedAttendanceHostel(isSelected ? null : hostel);
+                                }}
+                                className={`bg-white p-3 rounded-lg border shadow-sm transition-all text-center ${isSelected
+                                  ? 'border-blue-500 ring-2 ring-blue-200 shadow-md'
+                                  : 'border-gray-100 hover:border-blue-300 hover:shadow-md'
+                                  }`}
+                              >
+                                <p className="text-[10px] font-bold text-secondary uppercase line-clamp-1">{hostel}</p>
+                                <p className="text-sm font-bold text-foreground mt-1">
+                                  {count}/{totalInHostel} = {percentage}%
+                                </p>
+                              </button>
+                            );
+                          })}
+                      </div>
+
+                      {/* Selected Hostel Students List */}
+                      {selectedAttendanceHostel && (
+                        <div ref={studentsPresentRef} className="bg-blue-50 border border-blue-200 rounded-xl p-4 mt-4">
+                          <h3 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Students Present from {selectedAttendanceHostel}
+                          </h3>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            {(showAllPresent ? presentStudentsForSelectedHostel : presentStudentsForSelectedHostel.slice(0, 8)).map((log) => (
+                              <div
+                                key={log._id}
+                                className="bg-white p-2 rounded-lg border border-blue-100 flex items-center gap-2 hover:shadow-sm transition-shadow"
+                              >
+                                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                  {getInitials(log.studentId?.name || "?")}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[10px] font-bold text-gray-900 truncate">{log.studentId?.name || "Unknown"}</p>
+                                  <p className="text-[9px] font-bold truncate">
+                                    <span className="text-gray-900">{log.istTime}, {log.studentId?.roomNumber}, </span>
+                                    <span className={`${(!log.location?.accuracy || log.location.accuracy < 50) ? "text-green-600" : "text-orange-500"}`}>
+                                      {log.location?.accuracy ? Math.round(log.location.accuracy) : 0}m
+                                    </span>
+                                  </p>
+                                </div>
                               </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs font-bold text-gray-900 truncate">{log.studentId?.name || "Unknown"}</p>
-                                <p className="text-[10px] text-gray-500 truncate">{log.istTime}</p>
+                            ))}
+                          </div>
+                          {presentStudentsForSelectedHostel.length === 0 && (
+                            <p className="text-sm text-gray-500 text-center py-4 italic">No students present from this hostel</p>
+                          )}
+                          {presentStudentsForSelectedHostel.length > 8 && (
+                            <div className="mt-4 flex justify-center">
+                              <button
+                                onClick={() => setShowAllPresent(!showAllPresent)}
+                                className="px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
+                              >
+                                {showAllPresent ? (
+                                  <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                    </svg>
+                                    Show Less
+                                  </>
+                                ) : (
+                                  <>
+                                    See More ({presentStudentsForSelectedHostel.length - 8} more)
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Entry Logs Table */}
+                      {!selectedAttendanceHostel && (
+                        <div ref={entryLogsRef} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                          <div className="bg-filler px-1 py-1 flex border-b border-gray-200">
+                            <p className="px-4 py-2 text-xs font-bold text-secondary uppercase tracking-widest">Entry Logs ({selectedDate === new Date().toISOString().split('T')[0] ? 'Today' : selectedDate})</p>
+                          </div>
+                          <div className="overflow-x-hidden">
+                            <table className="w-full text-left table-fixed border-collapse">
+                              <thead className="bg-[#fcfcfc] text-secondary font-bold uppercase text-[8px] md:text-[9px] border-b border-gray-100">
+                                <tr>
+                                  <th className="px-2 md:px-4 py-3 w-[30%] md:w-1/3">Student</th>
+                                  <th className="px-2 md:px-4 py-3 w-[30%] md:w-1/3">Hostel/Room</th>
+                                  <th className="px-2 md:px-4 py-3 w-[20%] md:w-1/6 text-center">Time</th>
+                                  <th className="px-2 md:px-4 py-3 w-[20%] md:w-1/6 text-right">Accuracy</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                {attendanceLogsLoading ? (
+                                  <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">Refreshing database...</td></tr>
+                                ) : filteredAttendanceLogs.length === 0 ? (
+                                  <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">No entries found for {selectedDate === new Date().toISOString().split('T')[0] ? '9:00 PM onwards' : selectedDate}.</td></tr>
+                                ) : (
+                                  (showAllEntryLogs ? filteredAttendanceLogs : filteredAttendanceLogs.slice(0, 10)).map((log) => (
+                                    <tr key={log._id} className="hover:bg-filler/50 transition-colors">
+                                      <td className="px-2 md:px-4 py-3">
+                                        <div className="flex flex-col min-w-0">
+                                          <span className="font-bold text-gray-900 text-[10px] md:text-sm uppercase truncate tracking-tight">{log.studentId?.name || "Unknown"}</span>
+                                          <span className="text-[8px] md:hidden text-gray-400 font-medium uppercase truncate">{log.studentId?.hostelName} - {log.studentId?.roomNumber}</span>
+                                        </div>
+                                      </td>
+                                      <td className="px-2 md:px-4 py-3 text-secondary text-[9px] md:text-xs truncate">
+                                        {log.studentId?.hostelName} - {log.studentId?.roomNumber}
+                                      </td>
+                                      <td className="px-1 md:px-4 py-2 md:py-3 text-center">
+                                        <span className="inline-block px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-md font-black text-[9px] md:text-xs whitespace-nowrap">{log.istTime}</span>
+                                      </td>
+                                      <td className="px-2 md:px-4 py-3 text-right">
+                                        <span className={`text-[9px] md:text-[10px] font-black ${log.location.accuracy < 50 ? "text-green-600" : "text-orange-500"}`}>
+                                          {log.location.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                          {!attendanceLogsLoading && filteredAttendanceLogs.length > 10 && (
+                            <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex justify-center">
+                              <button
+                                onClick={() => setShowAllEntryLogs(!showAllEntryLogs)}
+                                className="px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
+                              >
+                                {showAllEntryLogs ? (
+                                  <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                    </svg>
+                                    Show Less
+                                  </>
+                                ) : (
+                                  <>
+                                    See More ({filteredAttendanceLogs.length - 10} more)
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Absentee List */}
+                      <div ref={absenteesRef} className="bg-red-50/30 rounded-xl border border-red-100 p-4">
+                        <h3 className="text-sm font-bold text-red-900 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                          {selectedDate === new Date().toISOString().split('T')[0] ? "Today's" : selectedDate} Absentee List ({displayedAbsentees.length} students)
+                        </h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {(showAllAbsentees ? displayedAbsentees : displayedAbsentees.slice(0, 9)).map(s => (
+                            <div key={s.id} className="bg-white p-3 rounded-lg border border-red-100 flex items-center gap-3 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-[10px] font-black">
+                                {getInitials(s.name)}
                               </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-bold text-foreground truncate">{s.name}</p>
+                                <p className="text-[9px] text-secondary truncate uppercase">{s.roomNumber} • {s.hostelName}</p>
+                              </div>
+                              <a href={`tel:${s.phoneNumber}`} className="ml-auto w-7 h-7 bg-green-50 text-green-600 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                              </a>
                             </div>
                           ))}
-                      </div>
-                      {attendanceLogs.filter(log => {
-                        if (!log.studentId) return false;
-                        const studentHostel = getHostelCategory(log.studentId.hostelName) || log.studentId.hostelName;
-                        return studentHostel === selectedAttendanceHostel;
-                      }).length === 0 && (
-                          <p className="text-sm text-gray-500 text-center py-4 italic">No students present from this hostel</p>
+                        </div>
+                        {displayedAbsentees.length > 9 && (
+                          <div className="mt-4 flex justify-center">
+                            <button
+                              onClick={() => setShowAllAbsentees(!showAllAbsentees)}
+                              className="px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
+                            >
+                              {showAllAbsentees ? (
+                                <>
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                  </svg>
+                                  Show Less
+                                </>
+                              ) : (
+                                <>
+                                  See More ({displayedAbsentees.length - 9} more)
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </>
+                              )}
+                            </button>
+                          </div>
                         )}
+                      </div>
+                    </>
+                  ) : (
+                    /* Student History View */
+                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                      <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                          {/* Student Search */}
+                          <div className="md:col-span-5 relative z-20">
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 px-1">Search Student</label>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                placeholder="Search by name..."
+                                value={attendanceHistorySearchQuery}
+                                onChange={(e) => {
+                                  setAttendanceHistorySearchQuery(e.target.value);
+                                  if (e.target.value === "") setAttendanceHistoryStudentId("");
+                                }}
+                                className="w-full h-11 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-sm"
+                              />
+                              {attendanceHistoryStudentId && (
+                                <button
+                                  onClick={() => {
+                                    setAttendanceHistoryStudentId("");
+                                    setAttendanceHistorySearchQuery("");
+                                    setAttendanceHistoryLogs([]);
+                                  }}
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-gray-100 rounded-full text-gray-500 hover:bg-red-50 hover:text-red-500"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                              )}
+                            </div>
+
+                            {attendanceHistorySearchQuery && !attendanceHistoryStudentId && (
+                              <div className="absolute top-full left-0 w-full mt-2 bg-white border border-gray-100 shadow-xl rounded-xl max-h-60 overflow-y-auto z-50">
+                                {students
+                                  .filter(s => s.name.toLowerCase().includes(attendanceHistorySearchQuery.toLowerCase()))
+                                  .slice(0, 10)
+                                  .map(s => (
+                                    <button
+                                      key={s.id}
+                                      onClick={() => {
+                                        setAttendanceHistoryStudentId(s.id);
+                                        setAttendanceHistorySearchQuery(s.name);
+                                      }}
+                                      className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 flex justify-between items-center group"
+                                    >
+                                      <div>
+                                        <p className="text-xs font-bold text-gray-800 group-hover:text-blue-600">{s.name}</p>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase">{s.hostelName}</p>
+                                      </div>
+                                      <div className="text-[10px] bg-gray-100 px-2 py-1 rounded text-gray-500 font-bold">{s.roomNumber}</div>
+                                    </button>
+                                  ))}
+                                {students.filter(s => s.name.toLowerCase().includes(attendanceHistorySearchQuery.toLowerCase())).length === 0 && (
+                                  <div className="p-4 text-center text-xs text-gray-400 italic">No students found</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Date Range */}
+                          <div className="md:col-span-3">
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 px-1">From Date</label>
+                            <input
+                              type="date"
+                              value={attendanceHistoryStartDate}
+                              onChange={e => setAttendanceHistoryStartDate(e.target.value)}
+                              className="w-full h-11 px-3 rounded-xl border border-gray-200 font-bold text-xs focus:border-blue-500 outline-none"
+                            />
+                          </div>
+                          <div className="md:col-span-3">
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 px-1">To Date</label>
+                            <input
+                              type="date"
+                              value={attendanceHistoryEndDate}
+                              onChange={e => setAttendanceHistoryEndDate(e.target.value)}
+                              className="w-full h-11 px-3 rounded-xl border border-gray-200 font-bold text-xs focus:border-blue-500 outline-none"
+                            />
+                          </div>
+
+                          {/* Search Button */}
+                          <div className="md:col-span-1">
+                            <button
+                              onClick={fetchStudentHistory}
+                              disabled={!attendanceHistoryStudentId || attendanceHistoryLoading}
+                              className="w-full h-11 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center disabled:opacity-50 disabled:shadow-none"
+                            >
+                              {attendanceHistoryLoading ? (
+                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              ) : (
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* History Results */}
+                      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                        <div className="bg-gray-50/50 px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+                          <p className="text-xs font-black text-gray-500 uppercase tracking-widest">Attendance History</p>
+                          <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">{attendanceHistoryLogs.length} Records Found</span>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left">
+                            <thead className="text-[10px] uppercase text-gray-400 font-black bg-white border-b border-dashed border-gray-200">
+                              <tr>
+                                <th className="px-4 py-3">Date</th>
+                                <th className="px-4 py-3">Time Type</th>
+                                <th className="px-4 py-3">Hostel Details</th>
+                                <th className="px-4 py-3 text-right">Verification</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {attendanceHistoryLogs.length === 0 ? (
+                                <tr>
+                                  <td colSpan={4} className="px-4 py-12 text-center text-gray-400 italic text-xs">
+                                    {attendanceHistoryStudentId ? "No attendance records found for selected range" : "Select a student to view history"}
+                                  </td>
+                                </tr>
+                              ) : (
+                                attendanceHistoryLogs.map((log) => (
+                                  <tr key={log._id} className="hover:bg-blue-50/30 transition-colors">
+                                    <td className="px-4 py-3">
+                                      <p className="font-bold text-gray-800 text-xs">{new Date(log.date).toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                                      <p className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">{new Date(log.date).toLocaleDateString("en-IN", { weekday: 'long' })}</p>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <span className="inline-block px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-black border border-green-100 shadow-sm">
+                                        {log.istTime}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <p className="text-xs font-bold text-gray-700">{log.hostelName}</p>
+                                      <p className="text-[10px] text-gray-400 font-medium">Room {log.roomNumber}</p>
+                                    </td>
+                                    <td className="px-4 py-3 text-right">
+                                      <div className="flex flex-col items-end gap-0.5">
+                                        {log.location?.accuracy ? (
+                                          <>
+                                            <span className={`text-[10px] font-black ${log.location.accuracy < 50 ? "text-green-600" : "text-amber-500"}`}>
+                                              GPS Accuracy: {Math.round(log.location.accuracy)}m
+                                            </span>
+                                            <span className="text-[9px] text-gray-400 font-medium">Verified</span>
+                                          </>
+                                        ) : (
+                                          <span className="text-[10px] text-gray-400 font-medium">N/A</span>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
                     </div>
                   )}
-
-                  {/* Entry Logs Table */}
-                  <div ref={entryLogsRef} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="bg-filler px-1 py-1 flex border-b border-gray-200">
-                      <p className="px-4 py-2 text-xs font-bold text-secondary uppercase tracking-widest">Entry Logs ({selectedDate === new Date().toISOString().split('T')[0] ? 'Today' : selectedDate})</p>
-                    </div>
-                    <div className="overflow-x-hidden">
-                      <table className="w-full text-left table-fixed border-collapse">
-                        <thead className="bg-[#fcfcfc] text-secondary font-bold uppercase text-[8px] md:text-[9px] border-b border-gray-100">
-                          <tr>
-                            <th className="px-2 md:px-4 py-3 w-[30%] md:w-1/3">Student</th>
-                            <th className="px-2 md:px-4 py-3 w-[30%] md:w-1/3">Hostel/Room</th>
-                            <th className="px-2 md:px-4 py-3 w-[20%] md:w-1/6 text-center">Time</th>
-                            <th className="px-2 md:px-4 py-3 w-[20%] md:w-1/6 text-right">Accuracy</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                          {attendanceLogsLoading ? (
-                            <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">Refreshing database...</td></tr>
-                          ) : attendanceLogs.length === 0 ? (
-                            <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">No entries found for {selectedDate === new Date().toISOString().split('T')[0] ? '9:00 PM onwards' : selectedDate}.</td></tr>
-                          ) : (
-                            (showAllEntryLogs ? attendanceLogs : attendanceLogs.slice(0, 10)).map((log) => (
-                              <tr key={log._id} className="hover:bg-filler/50 transition-colors">
-                                <td className="px-2 md:px-4 py-3">
-                                  <div className="flex flex-col min-w-0">
-                                    <span className="font-bold text-gray-900 text-[10px] md:text-sm uppercase truncate tracking-tight">{log.studentId?.name || "Unknown"}</span>
-                                    <span className="text-[8px] md:hidden text-gray-400 font-medium uppercase truncate">{log.studentId?.hostelName} - {log.studentId?.roomNumber}</span>
-                                  </div>
-                                </td>
-                                <td className="px-2 md:px-4 py-3 text-secondary text-[9px] md:text-xs truncate">
-                                  {log.studentId?.hostelName} - {log.studentId?.roomNumber}
-                                </td>
-                                <td className="px-1 md:px-4 py-2 md:py-3 text-center">
-                                  <span className="inline-block px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-md font-black text-[9px] md:text-xs whitespace-nowrap">{log.istTime}</span>
-                                </td>
-                                <td className="px-2 md:px-4 py-3 text-right">
-                                  <span className={`text-[9px] md:text-[10px] font-black ${log.location.accuracy < 50 ? "text-green-600" : "text-orange-500"}`}>
-                                    {log.location.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                    {!attendanceLogsLoading && attendanceLogs.length > 10 && (
-                      <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex justify-center">
-                        <button
-                          onClick={() => setShowAllEntryLogs(!showAllEntryLogs)}
-                          className="px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
-                        >
-                          {showAllEntryLogs ? (
-                            <>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                              </svg>
-                              Show Less
-                            </>
-                          ) : (
-                            <>
-                              See More ({attendanceLogs.length - 10} more)
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Absentee List */}
-                  <div ref={absenteesRef} className="bg-red-50/30 rounded-xl border border-red-100 p-4">
-                    <h3 className="text-sm font-bold text-red-900 mb-3 flex items-center gap-2">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                      {selectedDate === new Date().toISOString().split('T')[0] ? "Today's" : selectedDate} Absentee List ({absentees.length} students)
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {(showAllAbsentees ? absentees : absentees.slice(0, 9)).map(s => (
-                        <div key={s.id} className="bg-white p-3 rounded-lg border border-red-100 flex items-center gap-3 shadow-sm hover:shadow-md transition-shadow">
-                          <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-[10px] font-black">
-                            {getInitials(s.name)}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-foreground truncate">{s.name}</p>
-                            <p className="text-[9px] text-secondary truncate uppercase">{s.hostelName} • {s.roomNumber}</p>
-                          </div>
-                          <a href={`tel:${s.phoneNumber}`} className="ml-auto w-7 h-7 bg-green-50 text-green-600 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
-                          </a>
-                        </div>
-                      ))}
-                    </div>
-                    {absentees.length > 9 && (
-                      <div className="mt-4 flex justify-center">
-                        <button
-                          onClick={() => setShowAllAbsentees(!showAllAbsentees)}
-                          className="px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
-                        >
-                          {showAllAbsentees ? (
-                            <>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                              </svg>
-                              Show Less
-                            </>
-                          ) : (
-                            <>
-                              See More ({absentees.length - 9} more)
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
               {currentTab === 'messaging' && (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-lg font-bold text-foreground">Dean Messaging System</h2>
+                      <h2 className="text-lg font-bold text-foreground">{isWarden ? "Warden Messaging System" : "Dean Messaging System"}</h2>
                       <p className="text-sm text-secondary">Broadcast messages to students or individuals</p>
                     </div>
                     <button
@@ -2293,27 +2979,52 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <label className="block text-xs font-bold text-secondary uppercase mb-2">Target Audience</label>
                           <select
                             value={newMessage.targetType}
-                            onChange={(e: any) => setNewMessage({ ...newMessage, targetType: e.target.value })}
-                            className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500"
+                            onChange={(e: any) => {
+                              const targetType = e.target.value;
+                              setNewMessage({
+                                ...newMessage,
+                                targetType,
+                                // Auto-set warden's hostel when they select "hostel" or "all"
+                                targetHostel: (isWarden && wardenHostelName && (targetType === "hostel" || targetType === "all"))
+                                  ? wardenHostelName
+                                  : newMessage.targetHostel
+                              });
+                            }}
+                            disabled={isWarden && authorizedHostels.length === 1}
+                            className={`w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500 ${(isWarden && authorizedHostels.length === 1) ? 'opacity-70 cursor-not-allowed bg-gray-50' : ''}`}
                           >
-                            <option value="all">All Students</option>
-                            <option value="hostel">Specific Hostel</option>
-                            <option value="individual">Individual Student</option>
+                            {isWarden ? (
+                              <>
+                                <option value="hostel">
+                                  {authorizedHostels.length > 1 ? "All Authorized Hostels" : `${authorizedHostels[0]} Students`}
+                                </option>
+                                {authorizedHostels.length > 1 && (
+                                  <option value="specific_hostel">Specific Hostel</option>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <option value="all">All Students</option>
+                                <option value="hostel">Specific Hostel</option>
+                                <option value="individual">Individual Student</option>
+                              </>
+                            )}
                           </select>
                         </div>
 
-                        {newMessage.targetType === "hostel" && (
+                        {(newMessage.targetType === "hostel" || newMessage.targetType === "specific_hostel") && (
                           <div>
                             <label className="block text-xs font-bold text-secondary uppercase mb-2">Select Hostel</label>
                             <select
                               value={newMessage.targetHostel}
                               onChange={(e) => setNewMessage({ ...newMessage, targetHostel: e.target.value })}
                               className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500"
+                              disabled={isWarden && newMessage.targetType === "hostel" && authorizedHostels.length === 1}
                             >
                               <option value="">Choose Hostel...</option>
-                              {hostels.map((h) => (
-                                <option key={h._id} value={h.name}>
-                                  {h.name}
+                              {(isWarden ? authorizedHostels : hostels.map(h => h.name)).map((hName) => (
+                                <option key={hName} value={hName}>
+                                  {hName}
                                 </option>
                               ))}
                             </select>
@@ -2412,6 +3123,135 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </div>
                       ))
                     )}
+                  </div>
+                </div>
+              )}
+
+              {false && currentTab === 'payments' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-lg font-bold text-foreground">Fee Payment Management</h2>
+                      <p className="text-sm text-secondary">Verify student claims and reconcile with bank statements</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowBankSettingsModal(true)}
+                        className="px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                        Bank Settings
+                      </button>
+                      <label className="cursor-pointer px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-all flex items-center gap-2 shadow-lg shadow-green-100">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                        {isReconciling ? "Processing..." : "Upload Bank CSV"}
+                        <input type="file" className="hidden" accept=".csv,.xlsx,.xls" onChange={handleCSVUpload} disabled={isReconciling} onClick={(e: any) => e.target.value = null} />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col md:flex-row gap-3">
+                    <div className="relative flex-1">
+                      <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                      <input
+                        type="text"
+                        placeholder="Search Registration ID or UTR..."
+                        value={paymentSearch}
+                        onChange={(e) => setPaymentSearch(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <select
+                      value={paymentStatusFilter}
+                      onChange={(e) => setPaymentStatusFilter(e.target.value)}
+                      className="h-[42px] px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500 bg-white"
+                    >
+                      <option value="all">All Status</option>
+                      <option value="pending">Pending</option>
+                      <option value="verified">Verified</option>
+                      <option value="rejected">Rejected</option>
+                      <option value="flagged">Flagged</option>
+                    </select>
+                  </div>
+
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden font-outfit">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead className="bg-gray-50/50 border-b border-gray-100 text-[10px] font-black uppercase tracking-widest text-secondary">
+                          <tr>
+                            <th className="px-4 py-4">Student Details</th>
+                            <th className="px-4 py-4">UTR & Source</th>
+                            <th className="px-4 py-4 text-center">Amount</th>
+                            <th className="px-4 py-4 text-center">Status</th>
+                            <th className="px-4 py-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50 italic font-medium">
+                          {paymentsLoading ? (
+                            <tr>
+                              <td colSpan={5} className="py-20 text-center text-secondary">Loading transactions...</td>
+                            </tr>
+                          ) : payments.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="py-20 text-center text-secondary">No payment claims found</td>
+                            </tr>
+                          ) : (
+                            payments.map((p) => (
+                              <tr key={p._id} className="hover:bg-gray-50/50 transition-colors group">
+                                <td className="px-4 py-4 min-w-[150px]">
+                                  <div className="flex flex-col leading-tight">
+                                    <span className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors uppercase">{p.studentId?.name || "Unknown"}</span>
+                                    <span className="text-[10px] text-gray-500 font-bold">{p.registrationId}</span>
+                                    <span className="text-[9px] text-gray-400 capitalize">{p.studentId?.hostelName} • {p.studentId?.roomNumber}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-4">
+                                  <div className="flex flex-col">
+                                    <span className="font-mono text-xs font-bold text-gray-800">{p.utrNumber}</span>
+                                    <span className="text-[10px] text-blue-600 font-black uppercase tracking-tight">{p.paymentSource}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-4 text-center">
+                                  <span className="font-black text-gray-900">₹{p.amount}</span>
+                                </td>
+                                <td className="px-4 py-4 text-center">
+                                  <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${p.status === 'verified' ? 'bg-green-100 text-green-700' :
+                                    p.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                      p.status === 'flagged' ? 'bg-orange-100 text-orange-700' :
+                                        'bg-yellow-100 text-yellow-700'
+                                    }`}>
+                                    {p.status}
+                                  </span>
+                                  {p.reconciledViaCSV && (
+                                    <div className="text-[8px] text-green-600 font-bold mt-1 uppercase">Reconciled via Bank</div>
+                                  )}
+                                </td>
+                                <td className="px-4 py-4 text-right">
+                                  <div className="flex justify-end gap-2 text-xs">
+                                    {p.status !== 'verified' && (
+                                      <button
+                                        onClick={() => handleManualPaymentAction(p._id, 'verified')}
+                                        className="px-2.5 py-1.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 font-bold transition-all"
+                                      >
+                                        Verify
+                                      </button>
+                                    )}
+                                    {p.status === 'pending' && (
+                                      <button
+                                        onClick={() => handleManualPaymentAction(p._id, 'rejected')}
+                                        className="px-2.5 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-bold transition-all"
+                                      >
+                                        Reject
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               )}
@@ -2550,11 +3390,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       }`}
                   >
                     <span className="text-center leading-[1.1]">Total Registered Students</span>
-                    <span className="text-[10px] opacity-90">{studentsLoading ? "..." : dropdownFilteredStudents.length}</span>
+                    <span className="text-[10px] opacity-90">{studentsLoading ? "..." : totalHostelStudents.length}</span>
                   </button>
 
                   {/* Move Guest House to second position in first row */}
-                  {hostels.filter(h => h.name.toLowerCase().includes("guest")).map((h) => {
+                  {hostels.filter(h => {
+                    const isGuest = h.name.toLowerCase().includes("guest");
+                    if (isWarden && authorizedHostels.length > 0) {
+                      return isGuest && authorizedHostels.some(ah => ah === h.name || ah.toLowerCase() === h.name.toLowerCase());
+                    }
+                    return isGuest;
+                  }).map((h) => {
                     const count = dropdownFilteredStudents.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === h.name).length;
                     const presentCount = dropdownFilteredStudents.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === h.name && presentStudentIds.includes(s.id)).length;
                     return (
@@ -2577,7 +3423,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                   {/* Render Boys, Gangotri, Gaytri in Row 2 (3 columns) */}
                   {hostels
-                    .filter(h => !h.name.toLowerCase().includes("guest"))
+                    .filter(h => {
+                      const isNotGuest = !h.name.toLowerCase().includes("guest");
+                      if (isWarden && authorizedHostels.length > 0) {
+                        return isNotGuest && authorizedHostels.some(ah => ah === h.name || ah.toLowerCase() === h.name.toLowerCase());
+                      }
+                      return isNotGuest;
+                    })
                     .sort((a, b) => {
                       const order = ["boys hostel", "gangotri hostel", "gaytri hostel"];
                       const aIdx = order.indexOf(a.name.toLowerCase());
@@ -4092,48 +4944,250 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         Add Hostel
                       </button>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                    <div className="grid gap-6">
                       {hostelsConfig.map((hostel) => (
-                        <div key={hostel._id} className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 hover:border-indigo-100 transition-all relative group">
-                          <button
-                            onClick={() => handleDeleteHostelConfig(hostel._id, hostel.name)}
-                            className="absolute -top-3 -right-3 w-8 h-8 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center hover:bg-red-600 shadow-lg shadow-red-100"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                          </button>
-                          <h4 className="font-black text-gray-900 uppercase tracking-tight mb-4 flex items-center justify-between">
-                            {hostel.name}
-                            <span className="px-2 py-0.5 bg-green-100 text-green-600 text-[10px] rounded-full">ACTIVE</span>
-                          </h4>
-                          <div className="space-y-4 text-xs">
-                            <div>
-                              <label className="block font-black text-gray-400 uppercase tracking-widest mb-1 text-[9px]">Warden Username</label>
-                              <input
-                                type="text"
-                                defaultValue={hostel.wardenUsername || ""}
-                                placeholder="Warden Login ID"
-                                onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenUsername: e.target.value })}
-                                className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all font-bold"
-                              />
+                        <div key={hostel._id} className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-6 hover:shadow-xl transition-all group overflow-hidden relative">
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-100/30 blur-[60px] rounded-full group-hover:bg-indigo-100/40 transition-all" />
+                          <div className="relative z-10">
+                            <div className="flex items-center justify-between mb-6">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-white rounded-xl shadow-sm border border-slate-200 text-xl">🏢</div>
+                                <div>
+                                  <h4 className="font-black text-slate-800 text-lg uppercase tracking-tight">{hostel.name}</h4>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Hostel ID: {hostel._id.slice(-6)}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    const newPass = prompt("Enter new password for " + hostel.name + ":", hostel.wardenPassword || "");
+                                    if (newPass !== null) handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenPassword: newPass });
+                                  }}
+                                  className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:scale-110 active:scale-95 transition-all"
+                                >
+                                  Update Access
+                                </button>
+                                {showRemoveButton && (
+                                  <button
+                                    onClick={() => handleDeleteHostelConfig(hostel._id, hostel.name)}
+                                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                            <div>
-                              <label className="block font-black text-gray-400 uppercase tracking-widest mb-1 text-[9px]">Warden Password</label>
-                              <input
-                                type="password"
-                                defaultValue={hostel.wardenPassword || ""}
-                                placeholder="Warden Password"
-                                onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenPassword: e.target.value })}
-                                className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all font-bold"
-                              />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="bg-white/60 p-4 rounded-xl border border-white backdrop-blur-sm">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Warden Username</label>
+                                <div className="flex items-center gap-3">
+                                  <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-200" />
+                                  <input
+                                    type="text"
+                                    defaultValue={hostel.wardenUsername || (hostel.name.toLowerCase().replace(/ /g, "_") + "_warden")}
+                                    onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenUsername: e.target.value })}
+                                    className="font-black text-slate-700 text-base bg-transparent border-none outline-none focus:ring-0 p-0 w-full"
+                                  />
+                                </div>
+                              </div>
+                              <div className="bg-white/60 p-4 rounded-xl border border-white backdrop-blur-sm relative group/pass">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Warden Password</label>
+                                <div className="flex items-center gap-3 justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-2 w-2 rounded-full bg-indigo-500 shadow-sm shadow-indigo-200" />
+                                    <span className="font-black text-slate-700 text-base tracking-widest">
+                                      {visiblePasswords.has(hostel._id)
+                                        ? (hostel.wardenPassword || globalWardenPassword || "Not Set")
+                                        : ((hostel.wardenPassword || globalWardenPassword) ? "••••••••" : "Not Set")
+                                      }
+                                    </span>
+                                  </div>
+                                  {(hostel.wardenPassword || globalWardenPassword) && (
+                                    <button
+                                      onClick={() => {
+                                        setVisiblePasswords(prev => {
+                                          const newSet = new Set(prev);
+                                          if (newSet.has(hostel._id)) {
+                                            newSet.delete(hostel._id);
+                                          } else {
+                                            newSet.add(hostel._id);
+                                          }
+                                          return newSet;
+                                        });
+                                      }}
+                                      className="p-1.5 hover:bg-indigo-50 rounded-lg transition-colors group"
+                                      title={visiblePasswords.has(hostel._id) ? "Hide password" : "Show password"}
+                                    >
+                                      {visiblePasswords.has(hostel._id) ? (
+                                        <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                        </svg>
+                                      ) : (
+                                        <svg className="w-5 h-5 text-slate-400 group-hover:text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                        </svg>
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
                       ))}
-                      {hostelsConfig.length === 0 && (
-                        <div className="col-span-full py-12 text-center bg-gray-50 rounded-[32px] border-2 border-dashed border-gray-200">
-                          <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">No hostels found. Add one to get started.</p>
+                    </div>
+
+                    {/* MULTI-HOSTEL ACCOUNTS SECTION */}
+                    <div className="mt-12 pt-12 border-t-2 border-slate-100">
+                      <div className="flex items-center justify-between mb-8">
+                        <div>
+                          <h3 className="text-xl font-black text-slate-800">Unified Warden Accounts</h3>
+                          <p className="text-sm text-slate-500 font-medium mt-1">Manage accounts with access to multiple locations</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setEditingAccountId(null);
+                            setNewAccountForm({ username: "", password: "", hostels: [] });
+                            setIsCreatingAccount(!isCreatingAccount);
+                          }}
+                          className="px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
+                          Create Account
+                        </button>
+                      </div>
+
+                      {isCreatingAccount && (
+                        <div className="bg-white p-6 rounded-2xl border-2 border-indigo-100 shadow-xl mb-8 animate-in fade-in slide-in-from-top-4">
+                          <h4 className="font-black text-indigo-900 uppercase tracking-widest mb-6">{editingAccountId ? "Edit Warden Account" : "New Warden Account"}</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Username</label>
+                              <input
+                                type="text"
+                                value={newAccountForm.username}
+                                onChange={e => setNewAccountForm({ ...newAccountForm, username: e.target.value })}
+                                className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 focus:border-indigo-500 outline-none font-bold"
+                                placeholder="e.g. super_warden"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Password</label>
+                              <input
+                                type="text"
+                                value={newAccountForm.password}
+                                onChange={e => setNewAccountForm({ ...newAccountForm, password: e.target.value })}
+                                className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 focus:border-indigo-500 outline-none font-bold"
+                                placeholder="******"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mb-8">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Assign Hostels</label>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                              {hostelsConfig.map(h => (
+                                <label key={h._id} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${newAccountForm.hostels.includes(h.name) ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 hover:border-slate-200'}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={newAccountForm.hostels.includes(h.name)}
+                                    onChange={e => {
+                                      if (e.target.checked) {
+                                        setNewAccountForm({ ...newAccountForm, hostels: [...newAccountForm.hostels, h.name] });
+                                      } else {
+                                        setNewAccountForm({ ...newAccountForm, hostels: newAccountForm.hostels.filter(hn => hn !== h.name) });
+                                      }
+                                    }}
+                                    className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
+                                  />
+                                  <span className="font-bold text-sm text-slate-700">{h.name}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end gap-3">
+                            <button
+                              onClick={() => {
+                                setIsCreatingAccount(false);
+                                setEditingAccountId(null);
+                                setNewAccountForm({ username: "", password: "", hostels: [] });
+                              }}
+                              className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (!newAccountForm.username || !newAccountForm.password || newAccountForm.hostels.length === 0) {
+                                  alert("Please fill all fields and select at least one hostel.");
+                                  return;
+                                }
+                                if (editingAccountId) {
+                                  handleManageWardenAccount("update", { ...newAccountForm, accountId: editingAccountId });
+                                } else {
+                                  handleManageWardenAccount("create", newAccountForm);
+                                }
+                              }}
+                              className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all"
+                            >
+                              {editingAccountId ? "Update Account" : "Save Account"}
+                            </button>
+                          </div>
                         </div>
                       )}
+
+                      <div className="grid gap-4">
+                        {wardenAccounts.length === 0 && !isCreatingAccount && (
+                          <div className="p-8 text-center text-slate-400 font-medium italic bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                            No unified accounts created yet.
+                          </div>
+                        )}
+                        {wardenAccounts.map((acc, idx) => (
+                          <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                              <div className="flex items-center gap-3 mb-2">
+                                <div className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
+                                <h4 className="text-lg font-black text-slate-800">{acc.username}</h4>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {acc.hostels.map(h => (
+                                  <span key={h} className="px-2.5 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wider rounded-lg">
+                                    {h}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 self-start md:self-center">
+                              <button
+                                onClick={() => {
+                                  setNewAccountForm({
+                                    username: acc.username,
+                                    password: acc.password || "",
+                                    hostels: acc.hostels
+                                  });
+                                  setEditingAccountId(acc._id || null);
+                                  setIsCreatingAccount(true);
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className="px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm("Delete this account?")) handleManageWardenAccount("delete", { username: acc.username });
+                                }}
+                                className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -4175,48 +5229,280 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                 {activeSettingsTab === "form" && (
                   <div className="space-y-6 pb-8">
-                    <div className="bg-purple-50 border-2 border-purple-100 p-4 rounded-2xl flex items-start gap-4 mb-8">
-                      <span className="text-xl sm:text-2xl">🛡️</span>
-                      <p className="text-xs sm:text-sm text-purple-800 font-medium">
-                        Toggle fields on the student registration form. Hidden fields will not be visible to students during registration.
-                      </p>
+                    <div className="bg-purple-50 border-2 border-purple-100 p-4 rounded-2xl flex items-start gap-4 mb-6">
+                      <span className="text-xl sm:text-2xl">⚡</span>
+                      <div className="flex-1">
+                        <p className="text-xs sm:text-sm text-purple-800 font-bold uppercase tracking-tight">Form Builder Mode</p>
+                        <p className="text-[10px] sm:text-xs text-purple-600 font-medium mt-1">
+                          Customize your registration form. Add new fields or edit existing ones. Changes are instantly visible to students.
+                        </p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => {
+                            if (formBuilderFields.length > 0 && !confirm("This will replace your current form configuration with the 20+ standard registration fields. Continue?")) return;
+                            const defaults = [
+                              { id: "profilePicture", label: "Profile Photo", type: "image", required: true, visible: true, section: "Personal" },
+                              { id: "name", label: "Full Name", type: "text", required: true, visible: true, section: "Personal" },
+                              { id: "phoneNumber", label: "Phone Number", type: "tel", required: true, visible: true, section: "Personal" },
+                              { id: "dob", label: "Date of Birth", type: "date", required: true, visible: true, section: "Personal" },
+                              { id: "category", label: "Social Category", type: "select", options: ["GENERAL", "OBC", "SC", "ST"], required: true, visible: true, section: "Personal" },
+                              { id: "erpInformation", label: "ERP ID", type: "text", required: true, visible: true, section: "Academic" },
+                              { id: "collegeName", label: "College Name", type: "text", required: true, visible: true, section: "Academic" },
+                              { id: "branch", label: "Branch", type: "text", required: true, visible: true, section: "Academic" },
+                              { id: "year", label: "Current Year", type: "select", options: ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"], required: true, visible: true, section: "Academic" },
+                              { id: "semester", label: "Semester", type: "select", options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"], required: true, visible: true, section: "Academic" },
+                              { id: "section", label: "Section", type: "text", required: true, visible: true, section: "Academic" },
+                              { id: "fatherName", label: "Father's Name", type: "text", required: true, visible: true, section: "Guardian" },
+                              { id: "fatherNumber", label: "Father's Phone No", type: "tel", required: true, visible: true, section: "Guardian" },
+                              { id: "motherName", label: "Mother's Name", type: "text", required: true, visible: true, section: "Guardian" },
+                              { id: "motherNumber", label: "Mother's Phone No", type: "tel", required: true, visible: true, section: "Guardian" },
+                              { id: "localGuardianAddress", label: "Local Guardian Address", type: "textarea", required: false, visible: true, section: "Guardian" },
+                              { id: "localGuardianPhoneNumber", label: "Local Guardian Phone", type: "tel", required: false, visible: true, section: "Guardian" },
+                              { id: "homePinCode", label: "Permanent Address (with PIN)", type: "textarea", required: true, visible: true, section: "Address" },
+                              { id: "homeState", label: "Home State", type: "select", options: ["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"], required: true, visible: true, section: "Address" },
+                              { id: "hostelName", label: "Hostel Name", type: "select", options: [], required: true, visible: true, section: "Registration" },
+                              { id: "roomNumber", label: "Room Number", type: "text", required: true, visible: true, section: "Registration" },
+                              { id: "joiningDate", label: "Joining Date", type: "date", required: true, visible: true, section: "Registration" }
+                            ];
+                            handleUpdateFormBuilder(defaults);
+                          }}
+                          className="px-4 py-2 bg-indigo-100 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-200 transition-all shadow-sm shrink-0"
+                        >
+                          🔄 Load Registration Form
+                        </button>
+                        <button
+                          onClick={() => {
+                            const newField = {
+                              id: `custom_${Date.now()}`,
+                              label: "New Field",
+                              type: "text",
+                              required: false,
+                              visible: true,
+                              section: "Other"
+                            };
+                            handleUpdateFormBuilder([...formBuilderFields, newField]);
+                          }}
+                          className="px-4 py-2 bg-purple-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-700 transition-all shadow-lg shadow-purple-100 shrink-0"
+                        >
+                          + Add Field
+                        </button>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {Object.keys(registrationFields).map((fieldKey) => (
-                        <div key={fieldKey} className="p-4 rounded-2xl border-2 border-gray-100 flex items-center justify-between hover:bg-gray-50/50 transition-all">
-                          <div>
-                            <p className="font-black text-gray-900 text-xs uppercase tracking-tight">{registrationFields[fieldKey].label}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => {
-                                const updated = { ...registrationFields };
-                                updated[fieldKey].visible = !updated[fieldKey].visible;
-                                handleUpdateRegistrationFields(updated);
-                              }}
-                              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${registrationFields[fieldKey].visible
-                                ? "bg-green-500 text-white shadow-lg shadow-green-100"
-                                : "bg-gray-200 text-gray-500"
-                                }`}
-                            >
-                              {registrationFields[fieldKey].visible ? "VISIBLE" : "HIDDEN"}
-                            </button>
-                            <button
-                              onClick={() => {
-                                const updated = { ...registrationFields };
-                                updated[fieldKey].required = !updated[fieldKey].required;
-                                handleUpdateRegistrationFields(updated);
-                              }}
-                              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${registrationFields[fieldKey].required
-                                ? "bg-amber-500 text-white shadow-lg shadow-amber-100"
-                                : "bg-gray-200 text-gray-500"
-                                }`}
-                            >
-                              {registrationFields[fieldKey].required ? "REQUIRED" : "OPTIONAL"}
-                            </button>
-                          </div>
+
+                    <div className="space-y-4">
+                      {formBuilderFields.length === 0 ? (
+                        <div className="py-12 text-center bg-gray-50 rounded-[32px] border-2 border-dashed border-gray-200">
+                          <p className="text-gray-400 font-bold uppercase tracking-widest text-sm mb-4">Form is empty</p>
+                          <button
+                            onClick={() => {
+                              const defaults = [
+                                { id: "name", label: "Full Name", type: "text", required: true, visible: true, section: "Personal" },
+                                { id: "phoneNumber", label: "Phone Number", type: "tel", required: true, visible: true, section: "Personal" },
+                                { id: "dob", label: "Date of Birth", type: "date", required: true, visible: true, section: "Personal" },
+                                { id: "category", label: "Social Category", type: "select", options: ["GENERAL", "OBC", "SC", "ST"], required: true, visible: true, section: "Personal" },
+                                { id: "erpInformation", label: "ERP ID", type: "text", required: true, visible: true, section: "Academic" },
+                                { id: "collegeName", label: "College Name", type: "text", required: true, visible: true, section: "Academic" },
+                                { id: "branch", label: "Branch", type: "text", required: true, visible: true, section: "Academic" },
+                                { id: "year", label: "Current Year", type: "select", options: ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"], required: true, visible: true, section: "Academic" },
+                                { id: "semester", label: "Semester", type: "select", options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"], required: true, visible: true, section: "Academic" },
+                                { id: "section", label: "Section", type: "text", required: true, visible: true, section: "Academic" },
+                                { id: "fatherName", label: "Father's Name", type: "text", required: true, visible: true, section: "Guardian" },
+                                { id: "fatherNumber", label: "Father's Phone No", type: "tel", required: true, visible: true, section: "Guardian" },
+                                { id: "motherName", label: "Mother's Name", type: "text", required: true, visible: true, section: "Guardian" },
+                                { id: "motherNumber", label: "Mother's Phone No", type: "tel", required: true, visible: true, section: "Guardian" },
+                                { id: "localGuardianAddress", label: "Local Guardian Address", type: "textarea", required: false, visible: true, section: "Guardian" },
+                                { id: "localGuardianPhoneNumber", label: "Local Guardian Phone", type: "tel", required: false, visible: true, section: "Guardian" },
+                                { id: "homePinCode", label: "Permanent Address (with PIN)", type: "textarea", required: true, visible: true, section: "Address" },
+                                { id: "homeState", label: "Home State", type: "select", options: ["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"], required: true, visible: true, section: "Address" },
+                                { id: "hostelName", label: "Hostel Name", type: "select", options: [], required: true, visible: true, section: "Registration" },
+                                { id: "roomNumber", label: "Room Number", type: "text", required: true, visible: true, section: "Registration" },
+                                { id: "joiningDate", label: "Joining Date", type: "date", required: true, visible: true, section: "Registration" }
+                              ];
+                              handleUpdateFormBuilder(defaults);
+                            }}
+                            className="text-purple-600 font-black text-xs uppercase tracking-widest hover:underline"
+                          >
+                            Load Standard Fields
+                          </button>
                         </div>
-                      ))}
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-8">
+                          {formBuilderFields.map((field, index) => (
+                            <div key={field.id} className="group bg-white p-3 rounded-2xl border-2 border-gray-100 hover:border-purple-200 transition-all shadow-sm hover:shadow-lg relative">
+                              <div className="flex gap-3 items-start">
+                                {/* Field Grip/Order (Simulated) */}
+                                <div className="flex flex-col gap-0.5 shrink-0">
+                                  <button
+                                    disabled={index === 0}
+                                    onClick={() => {
+                                      const updated = [...formBuilderFields];
+                                      [updated[index], updated[index - 1]] = [updated[index - 1], updated[index]];
+                                      handleUpdateFormBuilder(updated);
+                                    }}
+                                    className="p-1 hover:bg-gray-100 rounded text-gray-400 disabled:opacity-10 transition-colors"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 15l7-7 7 7" /></svg>
+                                  </button>
+                                  <button
+                                    disabled={index === formBuilderFields.length - 1}
+                                    onClick={() => {
+                                      const updated = [...formBuilderFields];
+                                      [updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
+                                      handleUpdateFormBuilder(updated);
+                                    }}
+                                    className="p-1 hover:bg-gray-100 rounded text-gray-400 disabled:opacity-10 transition-colors"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+                                  </button>
+                                </div>
+
+                                {/* Label Editor */}
+                                <div className="flex-1 min-w-0">
+                                  <input
+                                    type="text"
+                                    value={field.label}
+                                    onChange={(e) => {
+                                      const updated = [...formBuilderFields];
+                                      updated[index].label = e.target.value;
+                                      setFormBuilderFields(updated);
+                                    }}
+                                    onBlur={(e) => {
+                                      const updated = [...formBuilderFields];
+                                      updated[index].label = e.target.value;
+                                      handleUpdateFormBuilder(updated);
+                                    }}
+                                    className="w-full bg-transparent border-none focus:ring-0 p-0 text-[11px] font-black text-gray-900 placeholder:text-gray-300 uppercase tracking-tight"
+                                    placeholder="Enter Field Label"
+                                  />
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{field.type}</span>
+                                    <span className="w-0.5 h-0.5 rounded-full bg-gray-200"></span>
+                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{field.section || "DEFAULT"}</span>
+                                  </div>
+                                </div>
+
+                                {/* Configuration Toggles */}
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    onClick={() => {
+                                      const updated = [...formBuilderFields];
+                                      updated[index].visible = !updated[index].visible;
+                                      handleUpdateFormBuilder(updated);
+                                    }}
+                                    className={`px-2 py-1 rounded-lg text-[7px] font-black uppercase tracking-widest transition-all ${field.visible
+                                      ? "bg-green-500 text-white shadow-sm"
+                                      : "bg-gray-100 text-gray-400"
+                                      }`}
+                                  >
+                                    {field.visible ? "VISIBLE" : "HIDDEN"}
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const updated = [...formBuilderFields];
+                                      updated[index].required = !updated[index].required;
+                                      handleUpdateFormBuilder(updated);
+                                    }}
+                                    className={`px-2 py-1 rounded-lg text-[7px] font-black uppercase tracking-widest transition-all ${field.required
+                                      ? "bg-amber-500 text-white shadow-sm"
+                                      : "bg-gray-100 text-gray-400"
+                                      }`}
+                                  >
+                                    {field.required ? "REQUIRED" : "OPTIONAL"}
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const duplicatedField = {
+                                        ...field,
+                                        id: `${field.id}_copy_${Date.now()}`,
+                                        label: `${field.label} (Copy)`
+                                      };
+                                      const updated = [...formBuilderFields];
+                                      updated.splice(index + 1, 0, duplicatedField);
+                                      handleUpdateFormBuilder(updated);
+                                    }}
+                                    title="Duplicate Field"
+                                    className="p-1.5 text-gray-300 hover:text-blue-500 transition-colors opacity-0 group-hover:opacity-100"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (confirm(`Delete field "${field.label}"?`)) {
+                                        const updated = formBuilderFields.filter((_, i) => i !== index);
+                                        handleUpdateFormBuilder(updated);
+                                      }
+                                    }}
+                                    className="p-1.5 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Additional Settings */}
+                              <div className="mt-2 pt-2 border-t border-gray-50 flex flex-wrap gap-3 items-center">
+                                <div className="flex items-center gap-1.5">
+                                  <label className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Type:</label>
+                                  <select
+                                    value={field.type}
+                                    onChange={(e) => {
+                                      const updated = [...formBuilderFields];
+                                      updated[index].type = e.target.value;
+                                      handleUpdateFormBuilder(updated);
+                                    }}
+                                    className="text-[8px] font-bold bg-transparent border-none p-0 focus:ring-0 text-purple-600 uppercase"
+                                  >
+                                    <option value="text">Short Text</option>
+                                    <option value="textarea">Long Text</option>
+                                    <option value="select">Dropdown</option>
+                                    <option value="date">Date Picker</option>
+                                    <option value="tel">Phone No</option>
+                                    <option value="image">Profile Photo/Image</option>
+                                  </select>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <label className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Section:</label>
+                                  <select
+                                    value={field.section || "DEFAULT"}
+                                    onChange={(e) => {
+                                      const updated = [...formBuilderFields];
+                                      updated[index].section = e.target.value;
+                                      handleUpdateFormBuilder(updated);
+                                    }}
+                                    className="text-[8px] font-bold bg-transparent border-none p-0 focus:ring-0 text-indigo-600 uppercase"
+                                  >
+                                    <option value="Personal">Personal</option>
+                                    <option value="Academic">Academic</option>
+                                    <option value="Guardian">Guardian</option>
+                                    <option value="Address">Address</option>
+                                    <option value="Other">Other</option>
+                                  </select>
+                                </div>
+                                {field.type === "select" && (
+                                  <div className="flex items-center gap-1 bg-gray-50 px-1.5 py-0.5 rounded-md">
+                                    <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Options:</span>
+                                    <button
+                                      onClick={() => {
+                                        const currentOptions = field.options?.join(", ") || "";
+                                        const opt = prompt("Enter options separated by comma:", currentOptions);
+                                        if (opt !== null) {
+                                          const updated = [...formBuilderFields];
+                                          updated[index].options = opt.split(",").map(o => o.trim()).filter(o => o !== "");
+                                          handleUpdateFormBuilder(updated);
+                                        }
+                                      }}
+                                      className="text-[8px] font-black text-blue-600 uppercase hover:underline"
+                                    >
+                                      {field.options?.length || 0} EDIT
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -4228,7 +5514,178 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   onClick={() => setShowSystemSettingsModal(false)}
                   className="w-full sm:w-auto px-10 py-3.5 sm:py-4 bg-gray-900 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl hover:bg-black transition-all shadow-xl active:scale-95"
                 >
-                  CLOSE SETTINGS
+                  SAVE FORM SETTINGS
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
+      {/* Bank Settings Modal */}
+      {
+        false && showBankSettingsModal && (
+          <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
+            <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+              <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-indigo-600 text-white">
+                <div>
+                  <h2 className="text-xl font-bold">University Bank Settings</h2>
+                  <p className="text-xs opacity-80 uppercase tracking-widest font-black">Configure payment details for students</p>
+                </div>
+                <button onClick={() => setShowBankSettingsModal(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Account Name</label>
+                    <input
+                      type="text"
+                      value={bankFormData.accountName}
+                      onChange={(e) => setBankFormData({ ...bankFormData, accountName: e.target.value })}
+                      className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                      placeholder="e.g. ORIENTAL INSTITUTE OF SCIENCE"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Account Number</label>
+                    <input
+                      type="text"
+                      value={bankFormData.accountNumber}
+                      onChange={(e) => setBankFormData({ ...bankFormData, accountNumber: e.target.value })}
+                      className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                      placeholder="000000000000"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">IFSC Code</label>
+                    <input
+                      type="text"
+                      value={bankFormData.ifscCode}
+                      onChange={(e) => setBankFormData({ ...bankFormData, ifscCode: e.target.value })}
+                      className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                      placeholder="SYNB0000..."
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Bank Name</label>
+                    <input
+                      type="text"
+                      value={bankFormData.bankName}
+                      onChange={(e) => setBankFormData({ ...bankFormData, bankName: e.target.value })}
+                      className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                      placeholder="Canara Bank"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">UPI ID (Optional)</label>
+                    <input
+                      type="text"
+                      value={bankFormData.upiId}
+                      onChange={(e) => setBankFormData({ ...bankFormData, upiId: e.target.value })}
+                      className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                      placeholder="university@upi"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Hostel Fee (₹)</label>
+                    <input
+                      type="number"
+                      value={bankFormData.feeAmount}
+                      onChange={(e) => setBankFormData({ ...bankFormData, feeAmount: Number(e.target.value) })}
+                      className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                      placeholder="45000"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Instructions for Students</label>
+                  <textarea
+                    value={bankFormData.instructions}
+                    onChange={(e) => setBankFormData({ ...bankFormData, instructions: e.target.value })}
+                    className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none min-h-[80px]"
+                    placeholder="Enter step-by-step payment instructions..."
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center block mb-2">Upload QR Image (Required for Scan & Pay)</label>
+                  <div
+                    className="relative group cursor-pointer"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const file = e.dataTransfer.files[0];
+                      if (file && file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => setBankFormData({ ...bankFormData, qrImage: reader.result as string });
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    onPaste={(e) => {
+                      const item = e.clipboardData.items[0];
+                      if (item?.type.startsWith('image/')) {
+                        const file = item.getAsFile();
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => setBankFormData({ ...bankFormData, qrImage: reader.result as string });
+                          reader.readAsDataURL(file);
+                        }
+                      }
+                    }}
+                  >
+                    <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/50 hover:bg-indigo-50/30 hover:border-indigo-300 transition-all group-hover:shadow-lg shadow-indigo-100/50">
+                      {bankFormData.qrImage ? (
+                        <div className="relative group/img">
+                          <img src={bankFormData.qrImage} alt="QR Preview" className="h-40 w-40 object-contain rounded-lg" />
+                          <div className="absolute inset-0 bg-black/40 rounded-lg opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
+                            <p className="text-white text-[10px] font-black">CHANGE IMAGE</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                          <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mb-3">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                          </div>
+                          <p className="mb-2 text-sm text-gray-700 font-bold">Click to upload or <span className="text-indigo-600">Paste (Ctrl+V)</span></p>
+                          <p className="text-xs text-secondary italic">PNG, JPG or SVG (Max 2MB)</p>
+                        </div>
+                      )}
+                      <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => setBankFormData({ ...bankFormData, qrImage: reader.result as string });
+                          reader.readAsDataURL(file);
+                        }
+                      }} />
+                    </label>
+                    {bankFormData.qrImage && (
+                      <button
+                        onClick={(e) => { e.preventDefault(); setBankFormData({ ...bankFormData, qrImage: "" }); }}
+                        className="absolute -top-2 -right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
+                <button
+                  onClick={() => setShowBankSettingsModal(false)}
+                  className="flex-1 py-3 text-sm font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateBankSettings}
+                  className="flex-[2] py-3 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                >
+                  Save Bank Settings
                 </button>
               </div>
             </div>

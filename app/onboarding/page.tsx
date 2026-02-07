@@ -16,34 +16,13 @@ export default function OnboardingPage() {
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
   const [hostelsLoading, setHostelsLoading] = useState(true);
 
-  const [formData, setFormData] = useState({
-    name: "",
-    phoneNumber: "",
-    erpInformation: "",
-    hostelName: "",
-    joiningDate: "",
-    roomNumber: "",
-    fatherName: "",
-    fatherNumber: "",
-    motherName: "",
-    motherNumber: "",
-    homePinCode: "",
-    homeState: "",
-    branch: "",
-    collegeName: "",
-    year: "",
-    semester: "",
-    section: "",
-    localGuardianAddress: "",
-    localGuardianPhoneNumber: "",
-    dob: "",
-    category: "",
-  });
+  const [formData, setFormData] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [isProfileLocked, setIsProfileLocked] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [formConfig, setFormConfig] = useState<Record<string, any>>({});
+  const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
 
   // Fetch hostels from API
   useEffect(() => {
@@ -70,6 +49,7 @@ export default function OnboardingPage() {
         const data = await response.json();
         if (data.success) {
           setFormConfig(data.registrationFieldsConfig || {});
+          setFormBuilderConfig(data.formBuilderConfig || []);
         }
       } catch (error) {
         console.error("Error fetching form config:", error);
@@ -89,27 +69,10 @@ export default function OnboardingPage() {
           const data = await response.json();
           if (data.student) {
             setFormData({
-              name: data.student.name || "",
-              phoneNumber: data.student.phoneNumber || "",
-              erpInformation: data.student.erpInformation || "",
-              hostelName: data.student.hostelName || "",
-              joiningDate: data.student.joiningDate ? new Date(data.student.joiningDate).toISOString().split("T")[0] : "",
-              roomNumber: data.student.roomNumber || "",
-              fatherName: data.student.fatherName || "",
-              fatherNumber: data.student.fatherNumber || "",
-              motherName: data.student.motherName || "",
-              motherNumber: data.student.motherNumber || "",
-              homePinCode: data.student.homePinCode || "",
-              homeState: data.student.homeState || "",
-              branch: data.student.branch || "",
-              collegeName: data.student.collegeName || "",
-              year: data.student.year || "",
-              semester: data.student.semester || "",
-              section: data.student.section || "",
-              localGuardianAddress: data.student.localGuardianAddress || "",
-              localGuardianPhoneNumber: data.student.localGuardianPhoneNumber || "",
+              ...data.student,
+              ...(data.student.dynamicFields || {}),
               dob: data.student.dob ? new Date(data.student.dob).toISOString().split("T")[0] : "",
-              category: data.student.category || "",
+              joiningDate: data.student.joiningDate ? new Date(data.student.joiningDate).toISOString().split("T")[0] : "",
             });
             if (data.student.profilePicture) {
               setCapturedImage(data.student.profilePicture);
@@ -132,44 +95,20 @@ export default function OnboardingPage() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    const isRequired = (field: string) => {
-      // Basic essential fields are always required
-      if (["name", "phoneNumber", "hostelName", "roomNumber", "joiningDate"].includes(field)) return true;
-      // If a field is visible, it is now considered required to ensure complete data collection
-      return formConfig[field]?.visible !== false;
-    };
-
-    const isVisible = (field: string) => {
-      if (["name", "phoneNumber", "hostelName", "roomNumber", "joiningDate"].includes(field)) return true;
-      return formConfig[field]?.visible !== false; // Default to visible if not in config
-    };
-
-    if (isVisible("name") && !formData.name.trim()) newErrors.name = "Name is required";
-    if (isVisible("phoneNumber") && !formData.phoneNumber.trim()) newErrors.phoneNumber = "Phone number is required";
-    if (isVisible("erpInformation") && isRequired("erpInformation") && !formData.erpInformation.trim()) newErrors.erpInformation = "ERP ID is required";
-    if (isVisible("hostelName") && !formData.hostelName.trim()) newErrors.hostelName = "Hostel name is required";
-    if (isVisible("joiningDate") && !formData.joiningDate.trim()) newErrors.joiningDate = "Hostel joining date is required";
-    if (isVisible("roomNumber") && !formData.roomNumber.trim()) newErrors.roomNumber = "Room number is required";
-
-    if (isVisible("fatherName") && isRequired("fatherName") && !formData.fatherName.trim()) newErrors.fatherName = "Father's name is required";
-    if (isVisible("fatherNumber") && isRequired("fatherNumber") && !formData.fatherNumber.trim()) newErrors.fatherNumber = "Father's number is required";
-    if (isVisible("motherName") && isRequired("motherName") && !formData.motherName.trim()) newErrors.motherName = "Mother's name is required";
-    if (isVisible("motherNumber") && isRequired("motherNumber") && !formData.motherNumber.trim()) newErrors.motherNumber = "Mother's number is required";
-    if (isVisible("homePinCode") && isRequired("homePinCode") && !formData.homePinCode.trim()) newErrors.homePinCode = "Address with pincode is required";
-    if (isVisible("homeState") && isRequired("homeState") && !formData.homeState) newErrors.homeState = "State is required";
-    if (isVisible("branch") && isRequired("branch") && !formData.branch) newErrors.branch = "Branch is required";
-    if (isVisible("collegeName") && isRequired("collegeName") && !formData.collegeName) newErrors.collegeName = "College Name is required";
-    if (isVisible("year") && isRequired("year") && !formData.year) newErrors.year = "Year is required";
-    if (isVisible("semester") && isRequired("semester") && !formData.semester) newErrors.semester = "Semester is required";
-    if (isVisible("section") && isRequired("section") && !formData.section) newErrors.section = "Section is required";
-    if (isVisible("localGuardianAddress") && isRequired("localGuardianAddress") && !formData.localGuardianAddress.trim()) newErrors.localGuardianAddress = "Local guardian address is required";
-    if (isVisible("localGuardianPhoneNumber") && isRequired("localGuardianPhoneNumber") && !formData.localGuardianPhoneNumber.trim()) newErrors.localGuardianPhoneNumber = "Local guardian phone number is required";
-    if (isVisible("dob") && isRequired("dob") && !formData.dob.trim()) newErrors.dob = "Date of birth is required";
-    if (isVisible("category") && isRequired("category") && !formData.category) newErrors.category = "Category is required";
-
-    if (!capturedImage) {
-      newErrors.profilePicture = "Profile picture is required. Please capture your photo.";
-    }
+    formBuilderConfig.forEach(field => {
+      if (field.visible && field.required) {
+        if (field.type === 'image') {
+          if (!capturedImage) {
+            newErrors[field.id] = `${field.label} is required`;
+          }
+        } else {
+          const value = (formData as any)[field.id];
+          if (!value || (typeof value === "string" && value.trim() === "")) {
+            newErrors[field.id] = `${field.label} is required`;
+          }
+        }
+      }
+    });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -255,6 +194,7 @@ export default function OnboardingPage() {
           dob: formData.dob,
           category: formData.category,
           deviceId: currentDeviceId, // Include deviceId in the payload
+          dynamicFields: formData, // Save all form data into dynamicFields for flexibility
         }),
       });
 
@@ -390,557 +330,137 @@ export default function OnboardingPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Camera Section */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-foreground">
-                Edit Profile Photo (Passport Size)
-              </label>
 
-              {!isCameraOpen && !capturedImage && (
-                <button
-                  type="button"
-                  onClick={startCamera}
-                  disabled={isProfileLocked}
-                  className="w-full py-3 rounded-lg border-2 border-dashed border-[#9CA3AF] text-secondary hover:border-foreground hover:text-foreground transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  Take Photo
-                </button>
-              )}
 
-              {isCameraOpen && (
-                <div className="relative rounded-lg overflow-hidden bg-black aspect-[4/3]">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
-                    <button
-                      type="button"
-                      onClick={stopCamera}
-                      className="px-4 py-2 rounded-full bg-red-600 text-white text-sm font-medium"
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
+              {formBuilderConfig.filter(f => f.visible).map((field) => (
+                <div key={field.id} className={field.type === 'image' || field.type === 'textarea' ? 'md:col-span-2' : ''}>
+                  <label htmlFor={field.id} className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 px-1">
+                    {field.label} {field.required && <span className="text-red-500">*</span>}
+                  </label>
+
+                  {field.type === "image" ? (
+                    <div className="space-y-2">
+                      {!isCameraOpen && !capturedImage && (
+                        <button
+                          type="button"
+                          onClick={startCamera}
+                          disabled={isProfileLocked}
+                          className="w-full py-4 rounded-xl border-2 border-dashed border-gray-200 text-gray-400 hover:border-blue-500 hover:text-blue-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          Capture Profile Photo
+                        </button>
+                      )}
+
+                      {isCameraOpen && (
+                        <div className="relative rounded-2xl overflow-hidden bg-black aspect-[4/3] shadow-2xl">
+                          <video
+                            ref={videoRef}
+                            autoPlay
+                            playsInline
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
+                            <button
+                              type="button"
+                              onClick={stopCamera}
+                              className="px-6 py-2 rounded-full bg-red-600 text-white text-xs font-bold shadow-lg"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={captureImage}
+                              className="px-6 py-2 rounded-full bg-white text-black text-xs font-bold shadow-lg"
+                            >
+                              Capture Photo
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {capturedImage && (
+                        <div className="relative w-32 h-40 mx-auto rounded-2xl overflow-hidden border-4 border-white shadow-xl">
+                          <img
+                            src={capturedImage}
+                            alt="Captured profile"
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            disabled={isProfileLocked}
+                            onClick={() => {
+                              setCapturedImage(null);
+                              startCamera();
+                            }}
+                            className="absolute bottom-2 right-2 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                      <canvas ref={canvasRef} className="hidden" />
+                    </div>
+                  ) : field.type === "select" ? (
+                    <select
+                      id={field.id}
+                      value={(formData as any)[field.id] || ""}
+                      onChange={(e) => handleChange(field.id, e.target.value)}
+                      disabled={isProfileLocked || (field.id === "hostelName" && hostelsLoading)}
+                      className={`w-full h-11 px-4 rounded-xl border-2 transition-all font-bold text-xs uppercase ${errors[field.id] ? "border-red-500 bg-red-50" : "border-gray-100 bg-gray-50/50 focus:border-blue-500 focus:bg-white"} outline-none`}
                     >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={captureImage}
-                      className="px-4 py-2 rounded-full bg-white text-black text-sm font-medium"
-                    >
-                      Capture
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {capturedImage && (
-                <div className="relative w-32 h-40 mx-auto rounded-lg overflow-hidden border border-[#9CA3AF]">
-                  <img
-                    src={capturedImage}
-                    alt="Captured profile"
-                    className="w-full h-full object-cover"
-                  />
-                  <button
-                    type="button"
-                    disabled={isProfileLocked}
-                    onClick={() => {
-                      setCapturedImage(null);
-                      startCamera();
-                    }}
-                    className="absolute bottom-1 right-1 p-1 bg-black/50 rounded-full text-white hover:bg-black/70 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-              <canvas ref={canvasRef} className="hidden" />
-              {errors.profilePicture && (
-                <p className="mt-1 text-sm text-red-600">{errors.profilePicture}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-foreground mb-2">
-                Full Name
-              </label>
-              <input
-                type="text"
-                id="name"
-                value={formData.name}
-                onChange={(e) => handleChange("name", e.target.value)}
-                placeholder="Enter your full name"
-                disabled={isProfileLocked}
-                className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.name ? "border-red-500" : "border-[#9CA3AF]"
-                  } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-              />
-              {errors.name && (
-                <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="phoneNumber" className="block text-sm font-medium text-foreground mb-2">
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  id="phoneNumber"
-                  value={formData.phoneNumber}
-                  onChange={(e) => handleChange("phoneNumber", e.target.value)}
-                  placeholder="Enter your phone number"
-                  disabled={isProfileLocked}
-                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.phoneNumber ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                />
-                {errors.phoneNumber && (
-                  <p className="mt-1 text-sm text-red-600">{errors.phoneNumber}</p>
-                )}
-              </div>
-
-              {formConfig.dob?.visible !== false && (
-                <div>
-                  <label htmlFor="dob" className="block text-sm font-medium text-foreground mb-2">
-                    Date of birth
-                  </label>
-                  <input
-                    type="date"
-                    id="dob"
-                    value={formData.dob}
-                    onChange={(e) => handleChange("dob", e.target.value)}
-                    disabled={isProfileLocked}
-                    className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.dob ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                  />
-                  {errors.dob && (
-                    <p className="mt-1 text-sm text-red-600">{errors.dob}</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {formConfig.category?.visible !== false && (
-                <div>
-                  <label htmlFor="category" className="block text-sm font-medium text-foreground mb-2">
-                    Category
-                  </label>
-                  <select
-                    id="category"
-                    value={formData.category}
-                    onChange={(e) => handleChange("category", e.target.value)}
-                    disabled={isProfileLocked}
-                    className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.category ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                  >
-                    <option value="">SELECT CATEGORY</option>
-                    {["GENERAL", "SC", "ST", "OBC"].map((opt) => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                  {errors.category && (
-                    <p className="mt-1 text-sm text-red-600">{errors.category}</p>
-                  )}
-                </div>
-              )}
-
-              {formConfig.erpInformation?.visible !== false && (
-                <div>
-                  <label htmlFor="erpInformation" className="block text-sm font-medium text-foreground mb-2">
-                    Enter your ERP ID
-                  </label>
-                  <input
-                    type="text"
-                    id="erpInformation"
-                    value={formData.erpInformation}
-                    onChange={(e) => handleChange("erpInformation", e.target.value)}
-                    placeholder="Enter your ERP information"
-                    disabled={isProfileLocked}
-                    className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.erpInformation ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                  />
-                  {errors.erpInformation && (
-                    <p className="mt-1 text-sm text-red-600">{errors.erpInformation}</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {formConfig.collegeName?.visible !== false && (
-                <div>
-                  <label htmlFor="collegeName" className="block text-sm font-medium text-foreground mb-2">
-                    College Name
-                  </label>
-                  <select
-                    id="collegeName"
-                    value={formData.collegeName}
-                    onChange={(e) => handleChange("collegeName", e.target.value)}
-                    disabled={isProfileLocked}
-                    className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.collegeName ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                  >
-                    <option value="">SELECT COLLEGE</option>
-                    {["OIST", "OCT", "OCP", "OPM", "OIPR"].map((opt) => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                  {errors.collegeName && (
-                    <p className="mt-1 text-sm text-red-600">{errors.collegeName}</p>
-                  )}
-                </div>
-              )}
-              <div>
-                <label htmlFor="hostelName" className="block text-sm font-medium text-foreground mb-2">
-                  Hostel Name
-                </label>
-                <select
-                  id="hostelName"
-                  value={formData.hostelName}
-                  onChange={(e) => handleChange("hostelName", e.target.value)}
-                  disabled={hostelsLoading || isProfileLocked}
-                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.hostelName ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  <option value="">{hostelsLoading ? "LOADING HOSTELS..." : "SELECT HOSTEL"}</option>
-                  {hostels.map((hostel) => (
-                    <option key={hostel._id} value={hostel.name.toUpperCase()}>
-                      {hostel.name.toUpperCase()}
-                    </option>
-                  ))}
-                </select>
-                {errors.hostelName && (
-                  <p className="mt-1 text-sm text-red-600">{errors.hostelName}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="joiningDate" className="block text-sm font-medium text-foreground mb-2">
-                  Hostel joining date
-                </label>
-                <input
-                  type="date"
-                  id="joiningDate"
-                  value={formData.joiningDate}
-                  onChange={(e) => handleChange("joiningDate", e.target.value)}
-                  placeholder="e.g. 01-01-2000"
-                  disabled={isProfileLocked}
-                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.joiningDate ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                />
-                {errors.joiningDate && (
-                  <p className="mt-1 text-sm text-red-600">{errors.joiningDate}</p>
-                )}
-              </div>
-              {formConfig.year?.visible !== false && (
-                <div>
-                  <label htmlFor="year" className="block text-sm font-medium text-foreground mb-2">
-                    Year
-                  </label>
-                  <select
-                    id="year"
-                    value={formData.year}
-                    onChange={(e) => handleChange("year", e.target.value)}
-                    disabled={isProfileLocked}
-                    className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.year ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                  >
-                    <option value="">SELECT YEAR</option>
-                    {["1st year", "2nd year", "3rd year", "4th year"].map((opt) => (
-                      <option key={opt} value={opt.toUpperCase()}>{opt.toUpperCase()}</option>
-                    ))}
-                  </select>
-                  {errors.year && (
-                    <p className="mt-1 text-sm text-red-600">{errors.year}</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {formConfig.semester?.visible !== false && (
-                <div>
-                  <label htmlFor="semester" className="block text-sm font-medium text-foreground mb-2">
-                    Semester
-                  </label>
-                  <select
-                    id="semester"
-                    value={formData.semester}
-                    onChange={(e) => handleChange("semester", e.target.value)}
-                    disabled={isProfileLocked}
-                    className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.semester ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                  >
-                    <option value="">SELECT SEMESTER</option>
-                    {["1st Sem", "2nd Sem", "3rd Sem", "4th Sem", "5th Sem", "6th Sem", "7th Sem", "8th Sem"].map((opt) => (
-                      <option key={opt} value={opt.toUpperCase()}>{opt.toUpperCase()}</option>
-                    ))}
-                  </select>
-                  {errors.semester && (
-                    <p className="mt-1 text-sm text-red-600">{errors.semester}</p>
-                  )}
-                </div>
-              )}
-              {formConfig.branch?.visible !== false && (
-                <div>
-                  <label htmlFor="branch" className="block text-sm font-medium text-foreground mb-2">
-                    Branch
-                  </label>
-                  <select
-                    id="branch"
-                    value={formData.branch}
-                    onChange={(e) => handleChange("branch", e.target.value)}
-                    disabled={isProfileLocked}
-                    className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.branch ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                  >
-                    <option value="">SELECT BRANCH</option>
-                    {["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"].map((opt) => (
-                      <option key={opt} value={opt.toUpperCase()}>{opt.toUpperCase()}</option>
-                    ))}
-                  </select>
-                  {errors.branch && (
-                    <p className="mt-1 text-sm text-red-600">{errors.branch}</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {formConfig.section?.visible !== false && (
-                <div>
-                  <label htmlFor="section" className="block text-sm font-medium text-foreground mb-2">
-                    Select section
-                  </label>
-                  <select
-                    id="section"
-                    value={formData.section}
-                    onChange={(e) => handleChange("section", e.target.value)}
-                    disabled={isProfileLocked}
-                    className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.section ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                  >
-                    <option value="">SELECT SECTION</option>
-                    {["A", "B", "C", "D", "E", "F"].map((opt) => (
-                      <option key={opt} value={opt.toUpperCase()}>{opt.toUpperCase()}</option>
-                    ))}
-                  </select>
-                  {errors.section && (
-                    <p className="mt-1 text-sm text-red-600">{errors.section}</p>
-                  )}
-                </div>
-              )}
-              <div>
-                <label htmlFor="roomNumber" className="block text-sm font-medium text-foreground mb-2">
-                  Room Number
-                </label>
-                <input
-                  type="text"
-                  id="roomNumber"
-                  value={formData.roomNumber}
-                  onChange={(e) => handleChange("roomNumber", e.target.value)}
-                  placeholder="Enter your room number"
-                  disabled={isProfileLocked}
-                  className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.roomNumber ? "border-red-500" : "border-[#9CA3AF]"
-                    } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                />
-                {errors.roomNumber && (
-                  <p className="mt-1 text-sm text-red-600">{errors.roomNumber}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {formConfig.fatherName?.visible !== false && (
-                <div>
-                  <label htmlFor="fatherName" className="block text-sm font-medium text-foreground mb-2">
-                    Father&apos;s Name
-                  </label>
-                  <input
-                    type="text"
-                    id="fatherName"
-                    value={formData.fatherName}
-                    onChange={(e) => handleChange("fatherName", e.target.value)}
-                    placeholder="Enter father&apos;s name"
-                    disabled={isProfileLocked}
-                    className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.fatherName ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                  />
-                  {errors.fatherName && (
-                    <p className="mt-1 text-sm text-red-600">{errors.fatherName}</p>
-                  )}
-                </div>
-              )}
-
-              {formConfig.fatherNumber?.visible !== false && (
-                <div>
-                  <label htmlFor="fatherNumber" className="block text-sm font-medium text-foreground mb-2">
-                    Father&apos;s Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    id="fatherNumber"
-                    value={formData.fatherNumber}
-                    onChange={(e) => handleChange("fatherNumber", e.target.value)}
-                    placeholder="Enter father&apos;s phone number"
-                    disabled={isProfileLocked}
-                    className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.fatherNumber ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                  />
-                  {errors.fatherNumber && (
-                    <p className="mt-1 text-sm text-red-600">{errors.fatherNumber}</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {formConfig.motherName?.visible !== false && (
-                <div>
-                  <label htmlFor="motherName" className="block text-sm font-medium text-foreground mb-2">
-                    Mother&apos;s Name
-                  </label>
-                  <input
-                    type="text"
-                    id="motherName"
-                    value={formData.motherName}
-                    onChange={(e) => handleChange("motherName", e.target.value)}
-                    placeholder="Enter mother&apos;s name"
-                    disabled={isProfileLocked}
-                    className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.motherName ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                  />
-                  {errors.motherName && (
-                    <p className="mt-1 text-sm text-red-600">{errors.motherName}</p>
-                  )}
-                </div>
-              )}
-
-              {formConfig.motherNumber?.visible !== false && (
-                <div>
-                  <label htmlFor="motherNumber" className="block text-sm font-medium text-foreground mb-2">
-                    Mother&apos;s Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    id="motherNumber"
-                    value={formData.motherNumber}
-                    onChange={(e) => handleChange("motherNumber", e.target.value)}
-                    placeholder="Enter mother&apos;s phone number"
-                    disabled={isProfileLocked}
-                    className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.motherNumber ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                  />
-                  {errors.motherNumber && (
-                    <p className="mt-1 text-sm text-red-600">{errors.motherNumber}</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {formConfig.homePinCode?.visible !== false && (
-                <div>
-                  <label htmlFor="homePinCode" className="block text-sm font-medium text-foreground mb-2">
-                    Permanent address with pincode
-                  </label>
-                  <input
-                    type="text"
-                    id="homePinCode"
-                    value={formData.homePinCode}
-                    onChange={(e) => handleChange("homePinCode", e.target.value)}
-                    placeholder="Enter permanent address with pincode"
-                    disabled={isProfileLocked}
-                    className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.homePinCode ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                  />
-                  {errors.homePinCode && (
-                    <p className="mt-1 text-sm text-red-600">{errors.homePinCode}</p>
-                  )}
-                </div>
-              )}
-
-              {formConfig.homeState?.visible !== false && (
-                <div>
-                  <label htmlFor="homeState" className="block text-sm font-medium text-foreground mb-2">
-                    State
-                  </label>
-                  <select
-                    id="homeState"
-                    value={formData.homeState}
-                    onChange={(e) => handleChange("homeState", e.target.value)}
-                    disabled={isProfileLocked}
-                    className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.homeState ? "border-red-500" : "border-[#9CA3AF]"
-                      } bg-white text-foreground text-xs uppercase focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
-                  >
-                    <option value="">SELECT STATE</option>
-                    {[
-                      "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
-                      "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", "Lakshadweep", "Delhi", "Puducherry", "Ladakh", "Jammu and Kashmir"
-                    ].sort().map((state) => (
-                      <option key={state} value={state.toUpperCase()}>{state.toUpperCase()}</option>
-                    ))}
-                  </select>
-                  {errors.homeState && (
-                    <p className="mt-1 text-sm text-red-600">{errors.homeState}</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="pt-2">
-              <div className="grid grid-cols-2 gap-4">
-                {formConfig.localGuardianAddress?.visible !== false && (
-                  <div>
-                    <label htmlFor="localGuardianAddress" className="block text-sm font-medium text-foreground mb-2">
-                      Local guardian address
-                    </label>
-                    <input
-                      type="text"
-                      id="localGuardianAddress"
-                      value={formData.localGuardianAddress}
-                      onChange={(e) => handleChange("localGuardianAddress", e.target.value)}
-                      placeholder="Enter local guardian address"
+                      <option value="">SELECT {field.label.toUpperCase()}</option>
+                      {field.id === "hostelName" ? (
+                        hostels.map((hostel: any) => (
+                          <option key={hostel._id} value={hostel.name.toUpperCase()}>
+                            {hostel.name.toUpperCase()}
+                          </option>
+                        ))
+                      ) : (
+                        field.options?.map((opt: string) => (
+                          <option key={opt} value={opt.toUpperCase()}>{opt.toUpperCase()}</option>
+                        ))
+                      )}
+                    </select>
+                  ) : field.type === "textarea" ? (
+                    <textarea
+                      id={field.id}
+                      value={(formData as any)[field.id] || ""}
+                      onChange={(e) => handleChange(field.id, e.target.value)}
+                      placeholder={`Enter ${field.label.toLowerCase()}`}
                       disabled={isProfileLocked}
-                      className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.localGuardianAddress ? "border-red-500" : "border-[#9CA3AF]"
-                        } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
+                      className={`w-full p-4 rounded-xl border-2 transition-all font-bold text-xs uppercase min-h-[80px] ${errors[field.id] ? "border-red-500 bg-red-50 font-medium" : "border-gray-100 bg-gray-50/50 focus:border-blue-500 focus:bg-white"} outline-none`}
                     />
-                    {errors.localGuardianAddress && (
-                      <p className="mt-1 text-sm text-red-600">{errors.localGuardianAddress}</p>
-                    )}
-                  </div>
-                )}
-                {formConfig.localGuardianPhoneNumber?.visible !== false && (
-                  <div>
-                    <label htmlFor="localGuardianPhoneNumber" className="block text-sm font-medium text-foreground mb-2">
-                      Local guardian Mobile
-                    </label>
+                  ) : (
                     <input
-                      type="tel"
-                      id="localGuardianPhoneNumber"
-                      value={formData.localGuardianPhoneNumber}
-                      onChange={(e) => handleChange("localGuardianPhoneNumber", e.target.value)}
-                      placeholder="Enter local guardian mobile number"
+                      type={field.type}
+                      id={field.id}
+                      value={(formData as any)[field.id] || ""}
+                      onChange={(e) => handleChange(field.id, e.target.value)}
+                      placeholder={`Enter ${field.label.toLowerCase()}`}
                       disabled={isProfileLocked}
-                      className={`w-full h-12 px-4 rounded-lg border border-solid ${errors.localGuardianPhoneNumber ? "border-red-500" : "border-[#9CA3AF]"
-                        } bg-white text-foreground text-xs uppercase placeholder:text-secondary placeholder:text-xs focus:outline-none focus:border-foreground disabled:bg-gray-50 disabled:text-gray-400`}
+                      className={`w-full h-11 px-4 rounded-xl border-2 transition-all font-bold text-xs uppercase ${errors[field.id] ? "border-red-500 bg-red-50 font-medium" : "border-gray-100 bg-gray-50/50 focus:border-blue-500 focus:bg-white"} outline-none`}
                     />
-                    {errors.localGuardianPhoneNumber && (
-                      <p className="mt-1 text-sm text-red-600">{errors.localGuardianPhoneNumber}</p>
-                    )}
-                  </div>
-                )}
-              </div>
+                  )}
+                  {errors[field.id] && (
+                    <p className="mt-1 text-[10px] text-red-600 font-black uppercase tracking-widest">{errors[field.id]}</p>
+                  )}
+                </div>
+              ))}
             </div>
+
+            {/* If formBuilderConfig is empty, show a fallback message */}
+            {formBuilderConfig.length === 0 && (
+              <div className="py-8 text-center text-secondary">
+                <p className="text-sm font-medium">Form configuration is loading...</p>
+              </div>
+            )}
 
 
             {Object.keys(errors).length > 0 && (

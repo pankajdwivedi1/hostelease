@@ -16,6 +16,7 @@ interface StudentInfo {
     registrationId: string;
     profilePicture?: string;
     studentStatus?: "in" | "out";
+    dynamicFields?: Record<string, any>;
 }
 
 export default function PublicStudentProfile() {
@@ -23,31 +24,40 @@ export default function PublicStudentProfile() {
     const registrationId = params.registrationId as string;
 
     const [student, setStudent] = useState<StudentInfo | null>(null);
+    const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const fetchStudentInfo = async () => {
+        const fetchData = async () => {
             try {
                 setLoading(true);
-                const response = await fetch(`/api/public/student/${registrationId}`);
-                const data = await response.json();
+                // Fetch student info
+                const studentRes = await fetch(`/api/public/student/${registrationId}`);
+                const studentData = await studentRes.json();
 
-                if (!response.ok || !data.success) {
-                    throw new Error(data.error || "Student not found");
+                if (!studentRes.ok || !studentData.success) {
+                    throw new Error(studentData.error || "Student not found");
                 }
 
-                setStudent(data.student);
+                setStudent(studentData.student);
+
+                // Fetch form builder config
+                const settingsRes = await fetch("/api/admin/settings");
+                const settingsData = await settingsRes.json();
+                if (settingsData.success) {
+                    setFormBuilderConfig(settingsData.formBuilderConfig || []);
+                }
             } catch (err: any) {
-                console.error("Error fetching student:", err);
-                setError(err.message || "Failed to load student information");
+                console.error("Error fetching data:", err);
+                setError(err.message || "Failed to load information");
             } finally {
                 setLoading(false);
             }
         };
 
         if (registrationId) {
-            fetchStudentInfo();
+            fetchData();
         }
     }, [registrationId]);
 
@@ -196,6 +206,30 @@ export default function PublicStudentProfile() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Additional Information */}
+                    {formBuilderConfig.filter(f => f.visible && !['name', 'email', 'phoneNumber', 'collegeName', 'branch', 'section', 'hostelName', 'roomNumber', 'erpInformation'].includes(f.id)).length > 0 && (
+                        <div className="border-t-2 border-gray-200 pt-4">
+                            <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <span className="text-lg">📋</span> Additional Details
+                            </h3>
+                            <div className="grid grid-cols-2 gap-3">
+                                {formBuilderConfig
+                                    .filter(f => f.visible && !['name', 'email', 'phoneNumber', 'collegeName', 'branch', 'section', 'hostelName', 'roomNumber', 'erpInformation'].includes(f.id))
+                                    .map((field) => {
+                                        const value = (student as any)[field.id] || student.dynamicFields?.[field.id] || "N/A";
+                                        const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? new Date(value).toLocaleDateString() : value;
+
+                                        return (
+                                            <div key={field.id} className="bg-gray-50 rounded-lg p-3">
+                                                <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">{field.label}</p>
+                                                <p className="text-sm font-black text-gray-900">{displayValue}</p>
+                                            </div>
+                                        );
+                                    })}
+                            </div>
+                        </div>
+                    )}
 
                 </div>
 
