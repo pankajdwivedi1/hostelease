@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, homePinCode, homeState, erpInformation, joiningDate, branch, collegeName, year, semester, section, localGuardianAddress, localGuardianPhoneNumber, dob, category, deviceId } = body;
+    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, homePinCode, homeState, erpInformation, joiningDate, branch, collegeName, year, semester, section, localGuardianAddress, localGuardianPhoneNumber, dob, category, deviceId, faceDescriptor } = body;
 
     if (!firebaseUID || !name || !email || !phoneNumber || !hostelName || !roomNumber) {
       return NextResponse.json(
@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
       localGuardianPhoneNumber: localGuardianPhoneNumber || "",
       dob: dob || "",
       category: category || "",
+      faceDescriptor: faceDescriptor || undefined,
     };
 
     if (deviceId) {
@@ -118,7 +119,7 @@ export async function GET(request: NextRequest) {
       if (minimal) {
         // ⚡ OPTIMIZED: Ultra-minimal selection for fastest login flow
         // Include dob and category to prevent profile completion modal from showing incorrectly
-        student = await Student.findOne({ firebaseUID }).select("_id firebaseUID name studentStatus deviceId dob category homeState section isProfileLocked");
+        student = await Student.findOne({ firebaseUID }).select("_id firebaseUID name studentStatus deviceId dob category homeState section isProfileLocked faceDescriptor");
       } else {
         student = await Student.findOne({ firebaseUID });
       }
@@ -160,9 +161,13 @@ export async function GET(request: NextRequest) {
 
     let query: any = {};
     if (search) {
+      // 🔍 BACKEND SEARCH: Only search required fields that always exist
+      // Optional fields (parent info, district, etc.) are searched on frontend via client-side filtering
       query.$or = [
         { name: { $regex: search, $options: "i" } },
         { email: { $regex: search, $options: "i" } },
+        { phoneNumber: { $regex: search, $options: "i" } },
+        { roomNumber: { $regex: search, $options: "i" } },
         { registrationId: { $regex: search, $options: "i" } },
       ];
     }
@@ -192,7 +197,10 @@ export async function GET(request: NextRequest) {
     const students = await studentsQuery;
     return NextResponse.json({ students }, { status: 200 });
   } catch (error: any) {
-    console.error("Error fetching students:", error);
+    console.error("❌ Error fetching students:");
+    console.error("Error message:", error.message);
+    console.error("Error stack:", error.stack);
+    console.error("Query that failed:", query);
     return NextResponse.json(
       { error: error.message || "Failed to fetch students" },
       { status: 500 }

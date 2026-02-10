@@ -17,6 +17,12 @@ export interface IAttendance extends Document {
     };
     deviceId: string;
     status: "present";
+    // Face matching fields (optional)
+    faceMatchPercentage?: number; // 0-100
+    faceMatchStatus?: "auto-approved" | "flagged" | "manual-override";
+    flaggedPhotoUrl?: string; // Only for flagged cases (match < 70%)
+    needsReview?: boolean;
+    isTest?: boolean;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -75,6 +81,31 @@ const AttendanceSchema = new Schema<IAttendance>(
             type: String,
             enum: ["present"],
             default: "present",
+        },
+        // Face matching fields
+        faceMatchPercentage: {
+            type: Number,
+            min: 0,
+            max: 100,
+            required: false,
+        },
+        faceMatchStatus: {
+            type: String,
+            enum: ["auto-approved", "flagged", "manual-override"],
+            required: false,
+        },
+        flaggedPhotoUrl: {
+            type: String,
+            required: false,
+        },
+        needsReview: {
+            type: Boolean,
+            default: false,
+        },
+        isTest: {
+            type: Boolean,
+            default: false,
+            index: true,
         },
     },
     {

@@ -6,12 +6,15 @@ import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
 import { useRef } from "react";
+import * as faceMatching from "@/lib/faceMatching";
 
 export default function OnboardingPage() {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
+  const [isCapturingDescriptor, setIsCapturingDescriptor] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
   const [hostelsLoading, setHostelsLoading] = useState(true);
@@ -194,6 +197,7 @@ export default function OnboardingPage() {
           dob: formData.dob,
           category: formData.category,
           deviceId: currentDeviceId, // Include deviceId in the payload
+          faceDescriptor: faceDescriptor || undefined, // NEW: Include face bio
           dynamicFields: formData, // Save all form data into dynamicFields for flexibility
         }),
       });
@@ -254,7 +258,7 @@ export default function OnboardingPage() {
     setIsCameraOpen(false);
   };
 
-  const captureImage = () => {
+  const captureImage = async () => {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -266,18 +270,39 @@ export default function OnboardingPage() {
       if (context) {
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // Initial quality
-        let quality = 0.9;
-        let dataUrl = canvas.toDataURL("image/jpeg", quality);
+        try {
+          setIsCapturingDescriptor(true);
 
-        // Compress to under 100KB
-        while (dataUrl.length > 137000 && quality > 0.1) { // ~100KB base64 length check
-          quality -= 0.1;
-          dataUrl = canvas.toDataURL("image/jpeg", quality);
+          // ⚡ ROBUST: Generate Face Descriptor during registration
+          await faceMatching.loadFaceApiModels();
+          const descriptor = await faceMatching.detectFace(canvas);
+
+          if (!descriptor) {
+            alert("No face detected! Please ensure your face is clearly visible in the camera before capturing.");
+            setIsCapturingDescriptor(false);
+            return;
+          }
+
+          setFaceDescriptor(Array.from(descriptor));
+
+          // Initial quality
+          let quality = 0.9;
+          let dataUrl = canvas.toDataURL("image/jpeg", quality);
+
+          // Compress to under 100KB
+          while (dataUrl.length > 137000 && quality > 0.1) { // ~100KB base64 length check
+            quality -= 0.1;
+            dataUrl = canvas.toDataURL("image/jpeg", quality);
+          }
+
+          setCapturedImage(dataUrl);
+          stopCamera();
+        } catch (err) {
+          console.error("Error generating face descriptor:", err);
+          alert("Face processing failed. Please try again with better lighting.");
+        } finally {
+          setIsCapturingDescriptor(false);
         }
-
-        setCapturedImage(dataUrl);
-        stopCamera();
       }
     }
   };

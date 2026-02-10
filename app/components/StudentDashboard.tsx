@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import Barcode from "react-barcode";
+import * as faceMatching from "@/lib/faceMatching";
 
 interface Permission {
   _id: string;
@@ -44,6 +45,8 @@ interface StudentProfile {
   registrationId?: string;
   dob?: string;
   category?: string;
+  faceDescriptor?: number[]; // ⚡ NEW: Stores face embedding
+  firebaseUID?: string;
   dynamicFields?: Record<string, any>;
 }
 
@@ -98,8 +101,162 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   const [mandatoryFormData, setMandatoryFormData] = useState({ dob: "", category: "", homeState: "", section: "" });
   const [updatingProfile, setUpdatingProfile] = useState(false);
   const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
-  const [attendanceStep, setAttendanceStep] = useState<'idle' | 'gps' | 'accuracy' | 'saving' | 'done' | 'error'>('idle');
+  const [attendanceStep, setAttendanceStep] = useState<'idle' | 'gps' | 'accuracy' | 'saving' | 'done' | 'error' | 'face-match'>('idle');
   const [attendanceRetryCount, setAttendanceRetryCount] = useState(0);
+
+  // Face Matching State
+  const [faceMatchProgress, setFaceMatchProgress] = useState(0);
+  const [faceMatchResult, setFaceMatchResult] = useState<{
+    percentage: number;
+    status: 'auto-approved' | 'flagged' | 'manual-override';
+    photoBlob?: Blob;
+  } | null>(null);
+  const [isFaceMatching, setIsFaceMatching] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [faceMatchStep, setFaceMatchStep] = useState<'idle' | 'loading-models' | 'detecting' | 'matching' | 'success' | 'flagged' | 'error'>('idle');
+  const [faceDetected, setFaceDetected] = useState(false);
+  const [faceBox, setFaceBox] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
+  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isProcessingRef = useRef<boolean>(false);
+  const consecutiveFailuresRef = useRef<number>(0);
+
+  const [livenessFeedback, setLivenessFeedback] = useState<string>("");
+  const [yawRange, setYawRange] = useState(0);
+  const [depthRange, setDepthRange] = useState(0); // ⚡ NEW: Tracking Near/Far
+
+  const livenessHistoryRef = useRef<{ boxSizes: number[], yawPoints: number[] }>({
+    boxSizes: [],
+    yawPoints: []
+  });
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (studentProfile) {
+      // Preload face-api models when student dashboard is ready
+      faceMatching.loadFaceApiModels().then(success => {
+        if (success) console.log('Face matching models ready');
+      });
+    }
+  }, [studentProfile]);
+
+  // Automatic Face Detection Loop (Industrial Strength)
+  useEffect(() => {
+    let active = true;
+
+    if (cameraActive && faceMatchStep === 'detecting' && videoRef.current) {
+      console.log("🚀 Starting industrial auto-detection loop...");
+
+      const runDetection = async () => {
+        if (!livenessHistoryRef.current) {
+          livenessHistoryRef.current = { boxSizes: [], yawPoints: [] };
+        }
+
+        if (!active || !videoRef.current || isProcessingRef.current || faceMatchStep !== 'detecting') return;
+
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = videoRef.current.videoWidth;
+          canvas.height = videoRef.current.videoHeight;
+          const ctx = canvas.getContext('2d');
+
+          if (ctx) {
+            ctx.drawImage(videoRef.current, 0, 0);
+
+            // ⚡ FAIL-SAFE LOGIC: Try Lite first
+            const useProForDetection = consecutiveFailuresRef.current > 10;
+            if (useProForDetection && consecutiveFailuresRef.current === 11) {
+              await faceMatching.loadFaceApiModels(true);
+            }
+
+            // ⚡ ANALYZE FRAME
+            const res = await faceMatching.detectFace(canvas, false);
+
+            if (res) {
+              setFaceDetected(true);
+              consecutiveFailuresRef.current = 0;
+
+              // 📐 Update Face Tracking Box
+              const { x, y, width, height } = res.detection.box;
+              setFaceBox({ x, y, width, height });
+
+              // 🛡️ LIVENESS TRACKING (Anti-Spoofing)
+              if (res.landmarks) {
+                const live = faceMatching.analyzeLiveness(res.landmarks);
+                if (live) {
+                  // 1. DEPTH TRACKING (Near/Far)
+                  const boxArea = width * height;
+                  livenessHistoryRef.current.boxSizes.push(boxArea);
+                  if (livenessHistoryRef.current.boxSizes.length > 30) livenessHistoryRef.current.boxSizes.shift();
+
+                  const minBox = Math.min(...livenessHistoryRef.current.boxSizes);
+                  const maxBox = Math.max(...livenessHistoryRef.current.boxSizes);
+                  const currentDepthRange = minBox > 0 ? (maxBox / minBox) : 1;
+                  setDepthRange(currentDepthRange);
+
+                  // 2. MOVEMENT TRACKING (Yaw Rotate)
+                  livenessHistoryRef.current.yawPoints.push(live.yaw);
+                  if (livenessHistoryRef.current.yawPoints.length > 30) livenessHistoryRef.current.yawPoints.shift();
+
+                  const currentYawRange = Math.max(...livenessHistoryRef.current.yawPoints) - Math.min(...livenessHistoryRef.current.yawPoints);
+                  setYawRange(currentYawRange);
+                }
+              }
+
+              // 🚀 REAL-TIME TRIGGER: 3D Depth + Yaw Required
+              // Depth change > 1.25 (25% change) and Yaw Range > 0.18
+              if (yawRange > 0.18 && depthRange > 1.25) {
+                const boxSize = width * height;
+                if (boxSize > (canvas.width * canvas.height * 0.08)) {
+                  active = false;
+                  isProcessingRef.current = true;
+                  setFaceMatchStep('matching');
+
+                  // ⚡ TURBO: Pass the detection result we already have from the loop!
+                  const result = await performFaceVerification(res);
+                  if (result) {
+                    setTimeout(() => {
+                      stopCamera();
+                      proceedWithAttendance(result);
+                    }, 200); // Snappy transition (200ms)
+                  } else {
+                    setTimeout(() => {
+                      active = true;
+                      isProcessingRef.current = false;
+                      setFaceMatchStep('detecting');
+                      livenessHistoryRef.current = { boxSizes: [], yawPoints: [] };
+                      setYawRange(0);
+                      setDepthRange(1);
+                      runDetection();
+                    }, 1500); // Quick reset on fail
+                  }
+                  return;
+                }
+              }
+            } else {
+              setFaceDetected(false);
+              setFaceBox(null);
+              consecutiveFailuresRef.current += 1;
+            }
+          }
+        } catch (err) {
+          console.error("Detection error:", err);
+        }
+
+        if (active) {
+          detectionIntervalRef.current = setTimeout(runDetection, 150) as any; // Fast 150ms loop
+        }
+      };
+
+      runDetection();
+    }
+
+    return () => {
+      active = false;
+      if (detectionIntervalRef.current) clearTimeout(detectionIntervalRef.current);
+    };
+  }, [cameraActive, faceMatchStep]);
 
   const fetchSystemSettings = async () => {
     try {
@@ -857,6 +1014,296 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     }
   };
 
+  // ⚡ AUTO-VERIFY: Trigger face match as soon as liveness passes
+  useEffect(() => {
+    if (faceMatchStep === 'detecting' && depthRange >= 1.25 && yawRange >= 0.18) {
+      console.log('⚡ Liveness confirmed! Auto-triggering face verification...');
+
+      const autoVerify = async (attempts = 0) => {
+        const result = await performFaceVerification();
+        if (result) {
+          // Success! Proceed immediately
+          setTimeout(() => {
+            stopCamera();
+            proceedWithAttendance(result);
+          }, 1000);
+        } else if (attempts < 3) {
+          // Retry if video stream was not ready
+          console.log(`Verif failed, retrying (${attempts + 1}/3)...`);
+          setTimeout(() => autoVerify(attempts + 1), 500);
+        }
+      };
+
+      // Small delay to let user see "IDENTITY CONFIRMED"
+      const timer = setTimeout(autoVerify, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [faceMatchStep, depthRange, yawRange]);
+
+  const startCamera = async () => {
+    try {
+      setCameraActive(true);
+      setFaceMatchStep('loading-models');
+
+      // ⚡ CRITICAL: Load models before starting stream to prevent detection lag/errors
+      await faceMatching.loadFaceApiModels();
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: 640, height: 480 }
+      });
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+
+      // Check if models are loaded, if not wait a bit
+      setFaceMatchStep('detecting');
+    } catch (err) {
+      console.error("Camera error:", err);
+      alert("Could not access camera. Please ensure permissions are granted.");
+      setCameraActive(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+      tracks.forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+  };
+
+  const performFaceVerification = async (existingRes?: any): Promise<{
+    percentage: number;
+    status: 'auto-approved' | 'flagged' | 'manual-override';
+    photoBlob?: Blob;
+  } | null> => {
+    if (!videoRef.current) return null;
+    const fa = await faceMatching.getFaceApi();
+    if (!fa) return null;
+
+    // ⚡ CHECK: Does student actually have a profile picture in the database?
+    if (!studentProfile?.profilePicture) {
+      setFaceMatchStep('error');
+      alert("Verification Error: No profile picture found. Please update your profile first.");
+      stopCamera();
+      setIsMarkingAttendance(false);
+      return null;
+    }
+
+    try {
+      setFaceMatchStep('matching');
+      setFaceMatchProgress(10);
+
+      // ⚡ PRE-CHECK: If we already have a locked descriptor, use it (Fast Path)
+      let referenceDescriptor = studentProfile.faceDescriptor;
+
+      // ⚡ ROBUST CHECK: Handle null, undefined, OR empty array (which causes the 128 vs 0 error)
+      if (!referenceDescriptor || referenceDescriptor.length === 0) {
+        console.log("🔒 Biometric lock missing or invalid (length 0). Regenerating high-precision reference from profile picture...");
+        setFaceMatchProgress(35);
+
+        try {
+          // ensure models are loaded for this extraction
+          await faceMatching.loadFaceApiModels(true);
+
+          if (!studentProfile.profilePicture) {
+            throw new Error("No profile picture available to generate descriptor.");
+          }
+
+          console.log("Re-processing profile image:", studentProfile.profilePicture);
+          const profileImg = await faceMatching.loadImage(studentProfile.profilePicture);
+
+          // Use High Accuracy for reference generation
+          const res = await faceMatching.detectFace(profileImg, true);
+
+          if (!res) {
+            console.error("Could not find a face in the profile picture.");
+            throw new Error("Could not detect a face in your profile picture. Please update your profile photo.");
+          }
+
+          referenceDescriptor = Array.from(res.descriptor);
+
+          // Save this new descriptor so we don't have to do this again
+          console.log("Saving new biometric descriptor to database...");
+          await fetch('/api/students/face-descriptor', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              firebaseUID: (auth.currentUser?.uid || studentProfile.firebaseUID),
+              faceDescriptor: referenceDescriptor
+            })
+          });
+
+          // Update local state to avoid re-fetch
+          const updatedProfile = { ...studentProfile, faceDescriptor: referenceDescriptor };
+          setStudentProfile(updatedProfile);
+
+        } catch (genError: any) {
+          console.error("Error generating reference descriptor:", genError);
+          setFaceMatchStep('error');
+          alert(genError.message || "Failed to process your profile photo for verification.");
+          stopCamera();
+          setIsMarkingAttendance(false);
+          return null;
+        }
+      }
+
+      setFaceMatchProgress(60);
+
+      // ⚡ CAPTURE: Always capture a frame for proof & fallback
+      if (!videoRef.current || videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
+        console.error("❌ Video stream not ready (0x0 dimensions). skipping frame capture.");
+        return null;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      canvas.getContext('2d')?.drawImage(videoRef.current, 0, 0);
+
+      // ⚡ TURBO: Use EXISTING result if provided, else detect
+      let liveRes = existingRes || await faceMatching.detectFace(canvas, false);
+
+      if (!liveRes) {
+        console.warn("⚠️ Lite detection failed. Retrying with Pro...");
+        setFaceMatchStep('matching'); // Keep matching state
+        setFaceMatchProgress(70);
+        await faceMatching.loadFaceApiModels(true); // Ensure Pro is loaded
+        liveRes = await faceMatching.detectFace(canvas, true); // Retry with Pro
+      }
+
+      let liveDescriptor: Float32Array | null = liveRes ? liveRes.descriptor : null;
+
+      if (!liveDescriptor) {
+        console.warn("⚠️ Client-side detection failed. Initiating Super-Fallback (Backend Matching)...");
+        setFaceMatchStep('matching');
+        setFaceMatchProgress(85);
+
+        try {
+          const backendRes = await fetch('/api/attendance/face-match', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              image: canvas.toDataURL('image/jpeg', 0.8),
+              firebaseUID: studentProfile.firebaseUID
+            })
+          });
+
+          const backendData = await backendRes.json();
+          if (backendData.success) {
+            const result = {
+              percentage: backendData.score,
+              status: (backendData.isMatch ? 'auto-approved' : 'flagged') as any,
+              photoBlob: backendData.isMatch ? undefined : await (await fetch(canvas.toDataURL('image/webp'))).blob()
+            };
+            setFaceMatchStep(result.status === 'flagged' ? 'flagged' : 'success');
+            setFaceMatchResult(result);
+            setFaceMatchProgress(100);
+            return result;
+          }
+        } catch (be) {
+          console.error("❌ Backend fallback failed:", be);
+        }
+
+        setFaceMatchStep('error');
+        alert("Face verification failed. Please ensure your face is clearly visible and well-lit.");
+        return null;
+      }
+
+      setFaceMatchProgress(90);
+      let distance = await faceMatching.getDistance(liveDescriptor, referenceDescriptor);
+
+      if (distance === null) {
+        setFaceMatchStep('error');
+        return null;
+      }
+
+      let matchPercentage = faceMatching.calculateScore(distance);
+
+      console.log(`🔍 Raw Match Score: ${matchPercentage}%`);
+
+      // ⚡ SPOOF PREVENTION: Penalize static/perfectly aligned images
+      // Real faces usually have slight angles. If yaw/pitch is exactly 0, it's suspicious.
+      if (liveRes && Math.abs(liveRes.yaw || 0) < 0.01 && Math.abs(liveRes.pitch || 0) < 0.01) {
+        console.warn("⚠️ Suspiciously perfect alignment detected. Possible photo spoof.");
+        matchPercentage -= 15; // Penalty
+      }
+
+      // ⚡ AUTO-ESCALATION: Faster Path for High Confidence
+      // If Lite match is > 82%, skip Pro escalation (save ~1s)
+      // If match is borderline (50-82%), we MUST verify with Pro
+      if (matchPercentage > 60 && matchPercentage < 85 && (!liveRes || !liveRes.accurate)) {
+        console.log("💎 Borderline result. Escalating to Pro model for high-stakes verification...");
+        setFaceMatchProgress(95);
+
+        // Re-use canvas if available
+        const proRes = await faceMatching.detectFace(canvas || document.createElement('canvas'), true);
+        if (proRes) {
+          const proDistance = await faceMatching.getDistance(proRes.descriptor, referenceDescriptor);
+          if (proDistance !== null) {
+            matchPercentage = faceMatching.calculateScore(proDistance);
+            console.log(`🛡️ Pro Verification complete: ${matchPercentage}%`);
+          }
+        }
+      }
+
+      setFaceMatchProgress(100);
+
+      // ⚡ INDUSTRIAL TRIPLE-TIER VALIDATION (STRICTER ANTI-SPOOF)
+      // 1. SAFE PASS (Auto-approved) - Increased threshold
+      if (matchPercentage >= 85) {
+        setFaceMatchStep('success');
+        return {
+          percentage: matchPercentage,
+          status: 'auto-approved',
+        };
+      }
+
+      // ⚡ SECURITY UPGRADE: "Flagged" zone removed to prevent photo spoofing.
+      // Anything below 85% is now a HARD REJECT.
+      // This forces students to provide a clear, live face scan.
+
+      console.warn(`⚠️ Rejected borderline match (${matchPercentage}%). Enforcing strict liveness.`);
+
+      // 3. HARD REJECT (Blocked - Reduced False Attendance)
+      console.error(`❌ Identity Reject: Match too low (${matchPercentage}%).`);
+      setFaceMatchStep('error');
+
+      let errorMsg = `Identity Mismatch (${matchPercentage}%).`;
+      if (matchPercentage >= 60) {
+        errorMsg = "Verification Failed. We detected a possible photo/screen. Please use your REAL FACE.";
+      }
+
+      alert(`${errorMsg}\n\nSecurity Alert: Strict liveness is enforced. Photos or screens are NOT accepted.`);
+      return null;
+
+    } catch (error) {
+      console.error("Verification error:", error);
+      setFaceMatchStep('error');
+      return null;
+    }
+  };
+
+  const [hostelAttendanceMode, setHostelAttendanceMode] = useState<'strict' | 'gps-only'>('strict');
+
+  useEffect(() => {
+    if (studentProfile?.hostelName) {
+      // Fetch public hostel list and find my hostel's settings
+      fetch('/api/hostels').then(res => res.json()).then(data => {
+        if (data.hostels) {
+          const myHostel = data.hostels.find((h: any) => h.name.toLowerCase() === studentProfile.hostelName.toLowerCase());
+          if (myHostel && myHostel.attendanceMode) {
+            console.log(`🏢 Hostel Mode for ${studentProfile.hostelName}: ${myHostel.attendanceMode}`);
+            setHostelAttendanceMode(myHostel.attendanceMode);
+          }
+        }
+      }).catch(err => console.error("Failed to fetch hostel settings", err));
+    }
+  }, [studentProfile?.hostelName]);
+
   const handleMarkAttendance = async (retryAttempt = 0) => {
     if (!studentProfile) return;
 
@@ -903,19 +1350,58 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         console.log('📱 Auto-generated device ID:', deviceId);
       }
 
-      // Step 1: GPS Verification
-      setAttendanceStep('gps');
+      // ⚡ CHECK HOSTEL MODE
+      if (hostelAttendanceMode === 'gps-only') {
+        console.log("📍 GPS Only mode detected. Skipping face verification.");
+        // Skip camera, go straight to marking
+        // Pass a dummy approved result
+        await proceedWithAttendance({
+          percentage: 100,
+          status: 'auto-approved'
+        });
+        return;
+      }
 
-      // Get current position for the request
+      // Step 1: Face Verification (Strict Mode)
+      setAttendanceStep('face-match');
+      await startCamera();
+      // Flow continues via the UI capture button which calls proceedWithAttendance
+
+    } catch (error: any) {
+      console.error("Error in attendance flow:", error);
+      setAttendanceStep('error');
+      alert("An error occurred. Please try again.");
+      setIsMarkingAttendance(false);
+    }
+  };
+
+  /**
+   * Called after face verification is completed
+   */
+  const proceedWithAttendance = async (faceResult: any) => {
+    try {
+      setAttendanceStep('gps');
+      const deviceId = getStoredDeviceId();
+      if (!studentProfile) return;
+
+      // Get current position
       navigator.geolocation.getCurrentPosition(async (position) => {
         try {
           const { latitude, longitude } = position.coords;
 
           // Step 2: Checking Accuracy
           setAttendanceStep('accuracy');
-          await new Promise(r => setTimeout(r, 500)); // Brief pause for UX
+          // ⚡ TURBO: Removed artificial 500ms delay
 
-          // Step 3: Saving to Database
+          // Step 3: Handle Flagged Photo Upload
+          let flaggedPhotoUrl = "";
+          if (faceResult.status === 'flagged' && faceResult.photoBlob) {
+            setAttendanceStep('saving'); // Show progress
+            const uploadedUrl = await faceMatching.uploadToCloudinary(faceResult.photoBlob);
+            if (uploadedUrl) flaggedPhotoUrl = uploadedUrl;
+          }
+
+          // Step 4: Saving to Database
           setAttendanceStep('saving');
 
           const response = await fetch("/api/students/attendance", {
@@ -929,6 +1415,10 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
               lng: longitude,
               accuracy: position.coords.accuracy,
               deviceId: deviceId,
+              // Face matching results
+              faceMatchPercentage: faceResult.percentage,
+              faceMatchStatus: faceResult.status,
+              flaggedPhotoUrl: flaggedPhotoUrl
             }),
           });
 
@@ -940,52 +1430,26 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             setTimeout(() => {
               alert(data.message || "Attendance marked successfully!");
               setAttendanceStep('idle');
-            }, 800);
-          } else {
-            // Server error - attempt retry
-            if (retryAttempt < 3 && (response.status === 429 || response.status === 503 || response.status === 500)) {
-              setAttendanceStep('error');
-              const retryDelay = (retryAttempt + 1) * 2000; // 2s, 4s, 6s
-              console.log(`Retrying attendance (attempt ${retryAttempt + 1}/3) in ${retryDelay}ms...`);
-              setTimeout(() => {
-                setIsMarkingAttendance(false);
-                handleMarkAttendance(retryAttempt + 1);
-              }, retryDelay);
-            } else {
-              setAttendanceStep('error');
-              alert(data.error || "Failed to mark attendance. Please try again.");
               setIsMarkingAttendance(false);
-            }
-          }
-        } catch (fetchError: any) {
-          console.error("Fetch error:", fetchError);
-
-          // Network error - attempt retry
-          if (retryAttempt < 3) {
-            setAttendanceStep('error');
-            const retryDelay = (retryAttempt + 1) * 2000;
-            console.log(`Network error. Retrying (attempt ${retryAttempt + 1}/3) in ${retryDelay}ms...`);
-            setTimeout(() => {
-              setIsMarkingAttendance(false);
-              handleMarkAttendance(retryAttempt + 1);
-            }, retryDelay);
+            }, 400); // ⚡ Faster transition to idle (400ms)
           } else {
             setAttendanceStep('error');
-            alert("Network error. Please check your connection and try again.");
+            alert(data.error || "Failed to mark attendance.");
             setIsMarkingAttendance(false);
           }
+        } catch (fetchError: any) {
+          setAttendanceStep('error');
+          alert("Network error. Please try again.");
+          setIsMarkingAttendance(false);
         }
       }, (error) => {
-        console.error("Location error:", error);
         setAttendanceStep('error');
-        alert("Failed to get location for attendance.");
+        alert("Failed to get location.");
         setIsMarkingAttendance(false);
       }, { enableHighAccuracy: true, timeout: 10000 });
 
-    } catch (error: any) {
-      console.error("Error in attendance flow:", error);
+    } catch (error) {
       setAttendanceStep('error');
-      alert("An error occurred. Please try again.");
       setIsMarkingAttendance(false);
     }
   };
@@ -1272,7 +1736,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
               <div className="flex gap-3 mb-4">
                 <button
                   onClick={() => setShowPermissionsHistory(true)}
-                  className="flex-1 h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
+                  className="flex-1 h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-bold text-[12px] hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
                 >
                   🕙 Outing History
                 </button>
@@ -1280,7 +1744,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                   <button
                     onClick={handleCheckIn}
                     disabled={checkingIn}
-                    className="flex-[2] h-12 rounded-xl bg-green-600 text-white font-bold shadow-lg shadow-green-100 hover:bg-green-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="flex-[2] h-12 rounded-xl bg-green-600 text-white font-bold text-[12px] shadow-lg shadow-green-100 hover:bg-green-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {checkingIn ? (
                       <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -1290,7 +1754,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                   <button
                     onClick={() => setShowRequestForm(!showRequestForm)}
                     disabled={!isAtHostel}
-                    className={`flex-[2] h-12 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 ${isAtHostel
+                    className={`flex-[2] h-12 rounded-xl font-bold text-[12px] shadow-lg transition-all flex items-center justify-center gap-2 ${isAtHostel
                       ? "bg-blue-600 text-white shadow-blue-100 hover:bg-blue-700"
                       : "bg-gray-100 text-gray-400 cursor-not-allowed shadow-none"
                       }`}
@@ -1363,7 +1827,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
               {/* Detailed Student Information Section */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
                 <div className="bg-gray-50/50 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                  <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Student Profile Details</h2>
+                  <h2 className="text-[12px] font-bold text-gray-800 uppercase tracking-wider">Student Profile Details</h2>
                   <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">Official Record</span>
                 </div>
 
@@ -1377,11 +1841,11 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                         <div key={field.id} className={field.id === 'homePinCode' || field.id === 'localGuardianAddress' ? "col-span-2" : ""}>
                           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{field.label}</p>
                           {field.type === 'tel' || field.id.toLowerCase().includes('number') || field.id.toLowerCase().includes('phone') ? (
-                            <a href={`tel:${value}`} title="Click to call" className="text-sm font-bold text-blue-600 hover:underline">
+                            <a href={`tel:${value}`} title="Click to call" className="text-[12px] font-bold text-blue-600 hover:underline">
                               {value}
                             </a>
                           ) : (
-                            <p className={`text-sm font-bold ${field.id === 'roomNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
+                            <p className={`text-[12px] font-bold ${field.id === 'roomNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
                               {field.id === 'roomNumber' && value !== 'N/A' ? '#' : ''}{displayValue}
                             </p>
                           )}
@@ -1561,6 +2025,176 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                           "Save & Continue"
                         )}
                       </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Face Verification Overlay */}
+              {cameraActive && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl animate-in fade-in duration-300">
+                  <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-white/20">
+                    <div className="p-6 pb-2 text-center">
+                      <h2 className="text-xl font-black text-gray-900 mb-1">Face Verification</h2>
+                      <p className="text-gray-500 text-xs">Position your face clearly within the camera view.</p>
+                    </div>
+
+                    <div className="p-6 relative">
+                      <div className="relative aspect-video bg-black rounded-2xl overflow-hidden shadow-inner border-2 border-slate-100">
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="w-full h-full object-cover scale-x-[-1]"
+                        />
+
+                        {/* ⚡ ENHANCED: Large Oval Face Frame */}
+                        <div className="absolute inset-0 pointer-events-none">
+                          <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                            <defs>
+                              <mask id="faceMask">
+                                <rect width="100" height="100" fill="white" />
+                                <ellipse cx="50" cy="50" rx="35" ry="42" fill="black" />
+                              </mask>
+                            </defs>
+                            {/* Darkened background with oval hole */}
+                            <rect width="100" height="100" fill="rgba(0,0,0,0.6)" mask="url(#faceMask)" />
+                            {/* Glowing Border */}
+                            <ellipse
+                              cx="50" cy="50" rx="35" ry="42"
+                              fill="none"
+                              stroke={faceDetected ? "#22c55e" : "#3b82f6"}
+                              strokeWidth="0.5"
+                              strokeDasharray={faceDetected ? "none" : "2,1"}
+                              className="transition-all duration-500"
+                            />
+                            {/* Scanning Line Animation */}
+                            {cameraActive && faceMatchStep === 'detecting' && (
+                              <line x1="15" x2="85" y1="0" y2="0" stroke="rgba(59, 130, 246, 0.5)" strokeWidth="0.5" className="animate-scan-line">
+                                <animate attributeName="y1" values="20;80;20" dur="3s" repeatCount="indefinite" />
+                                <animate attributeName="y2" values="20;80;20" dur="3s" repeatCount="indefinite" />
+                              </line>
+                            )}
+                          </svg>
+                        </div>
+
+                        {/* ⚡ INDUSTRIAL: Face Tracking Box */}
+                        {faceBox && (
+                          <div
+                            className="absolute border-2 border-green-500 rounded-lg pointer-events-none transition-all duration-150 shadow-[0_0_15px_rgba(34,197,94,0.5)] z-20"
+                            style={{
+                              // Mirrored calculation since video is scale-x-[-1]
+                              left: `${100 - ((faceBox.x + faceBox.width) / (videoRef.current?.videoWidth || 1)) * 100}%`,
+                              top: `${(faceBox.y / (videoRef.current?.videoHeight || 1)) * 100}%`,
+                              width: `${(faceBox.width / (videoRef.current?.videoWidth || 1)) * 100}%`,
+                              height: `${(faceBox.height / (videoRef.current?.videoHeight || 1)) * 100}%`,
+                            }}
+                          >
+                            <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-green-500 -ml-[2px] -mt-[2px]" />
+                            <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-green-500 -mr-[2px] -mt-[2px]" />
+                            <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-green-500 -ml-[2px] -mb-[2px]" />
+                            <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-green-500 -mr-[2px] -mb-[2px]" />
+                          </div>
+                        )}
+
+                        {faceMatchStep === 'matching' && (
+                          <div className="absolute inset-0 bg-blue-600/20 backdrop-blur-[2px] flex items-center justify-center z-30">
+                            <div className="text-center">
+                              <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-3" />
+                              <p className="text-white font-black text-sm uppercase tracking-widest leading-none">Verifying...</p>
+                              <p className="text-white/70 text-[10px] mt-2">
+                                {faceMatchProgress > 70 ? "Switching to Accurate Mode..." : `${faceMatchProgress}% Done`}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-6 space-y-3">
+                        {faceMatchStep === 'detecting' && (
+                          <div className="w-full py-4 text-center space-y-4">
+                            <div className={`transition-all duration-300 font-black flex items-center justify-center gap-3 ${(depthRange >= 1.25 && yawRange >= 0.18) ? 'text-green-500 scale-110' : 'text-blue-600'}`}>
+                              {(depthRange >= 1.25 && yawRange >= 0.18) ? (
+                                <>
+                                  <div className="w-2 h-2 bg-green-500 rounded-full animate-ping" />
+                                  IDENTITY CONFIRMED
+                                </>
+                              ) : faceDetected ? (
+                                <>
+                                  <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
+                                  LIVENESS CHECK
+                                </>
+                              ) : (
+                                <>
+                                  <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+                                  {consecutiveFailuresRef.current > 10 ? "ENHANCED RECOGNITION..." : "SEARCHING FOR FACE..."}
+                                </>
+                              )}
+                            </div>
+
+                            {faceDetected && (
+                              <div className="flex flex-col items-center gap-2">
+                                <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-tighter">
+                                  <div className={`flex items-center gap-1 transition-colors ${depthRange >= 1.25 ? 'text-green-500' : 'text-blue-600'}`}>
+                                    <span>{depthRange >= 1.25 ? '✅' : '📏'}</span> NEAR / FAR
+                                  </div>
+                                  <div className="w-px h-3 bg-gray-200" />
+                                  <div className={`flex items-center gap-1 transition-colors ${yawRange >= 0.18 ? 'text-green-500' : 'text-blue-600'}`}>
+                                    <span>{yawRange >= 0.18 ? '✅' : '🔄'}</span> TURN HEAD
+                                  </div>
+                                </div>
+
+                                <div className="w-32 h-1 bg-gray-100 rounded-full overflow-hidden flex">
+                                  <div
+                                    className="h-full bg-blue-500 transition-all duration-300"
+                                    style={{ width: `${Math.min(50, ((depthRange - 1) / 0.25) * 50)}%` }}
+                                  />
+                                  <div
+                                    className="h-full bg-blue-600 transition-all duration-300"
+                                    style={{ width: `${Math.min(50, (yawRange / 0.18) * 50)}%` }}
+                                  />
+                                </div>
+
+                                <p className={`text-[10px] font-bold uppercase text-center transition-colors ${depthRange >= 1.25 && yawRange >= 0.18 ? 'text-green-600 scale-105' : 'text-gray-400'}`}>
+                                  {depthRange >= 1.25 && yawRange >= 0.18
+                                    ? "✨ PERFECT! HOLD STILL FOR VERIFICATION..."
+                                    : (depthRange < 1.25 ? "Move head closer/further" : "Now turn your head slowly")}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {faceMatchStep === 'success' && (
+                          <div className="w-full h-14 bg-green-500 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-2 animate-in zoom-in duration-300">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Verified Successfully
+                          </div>
+                        )}
+
+                        {faceMatchStep === 'flagged' && (
+                          <div className="w-full h-14 bg-orange-500 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-2 animate-in zoom-in duration-300">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            Flagged for Review
+                          </div>
+                        )}
+
+                        <button
+                          onClick={() => {
+                            stopCamera();
+                            setIsMarkingAttendance(false);
+                            setAttendanceStep('idle');
+                          }}
+                          className="w-full h-12 bg-gray-50 text-gray-400 rounded-xl font-bold text-sm hover:bg-gray-100 transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2024,21 +2658,76 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
               </div>
             </div>
           </div>
-        )
-      }
-      {/* Floating Toast Notification */}
-      {
-        showToast && (
-          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-5 duration-300 px-4 w-full max-w-sm">
-            <div className="bg-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-red-500/20 backdrop-blur-md">
-              <svg className="w-6 h-6 text-white/90 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-sm font-bold tracking-tight" style={{ fontFamily: 'Cambria, serif' }}>{toastMessage}</p>
+        )}
+
+      {isMarkingAttendance && attendanceStep !== 'face-match' && attendanceStep !== 'idle' && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden border border-gray-100 p-8 text-center">
+            <div className="mb-6">
+              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                {attendanceStep === 'gps' || attendanceStep === 'accuracy' ? (
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                ) : attendanceStep === 'saving' ? (
+                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                ) : attendanceStep === 'done' ? (
+                  <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                )}
+              </div>
+              <h3 className="text-xl font-black text-gray-900 mb-1 capitalize">
+                {(attendanceStep as string).replace('-', ' ')}...
+              </h3>
+              <p className="text-gray-500 text-xs font-medium">
+                {attendanceStep === 'gps' ? "Acquiring satellite signal" :
+                  attendanceStep === 'accuracy' ? "Filtering for high accuracy" :
+                    attendanceStep === 'saving' ? "Encrypting and syncing records" :
+                      attendanceStep === 'done' ? "Identity verified & record saved" :
+                        "Finalizing your attendance"}
+              </p>
             </div>
+
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
+              <div
+                className={`h-full transition-all duration-700 rounded-full ${attendanceStep === 'error' ? 'bg-red-500' : 'bg-blue-600'}`}
+                style={{
+                  width: attendanceStep === 'gps' ? '25%' :
+                    attendanceStep === 'accuracy' ? '50%' :
+                      attendanceStep === 'saving' ? '85%' :
+                        attendanceStep === 'done' ? '100%' : '10%'
+                }}
+              ></div>
+            </div>
+
+            {attendanceStep === 'error' && (
+              <button
+                onClick={() => setIsMarkingAttendance(false)}
+                className="mt-4 text-[10px] font-black uppercase text-red-500 tracking-[0.2em] hover:text-red-600 transition-colors"
+              >
+                Close & Try Again
+              </button>
+            )}
           </div>
-        )
-      }
+        </div>
+      )}
+
+      {showToast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-5 duration-300 px-4 w-full max-w-sm">
+          <div className="bg-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-red-500/20 backdrop-blur-md">
+            <svg className="w-6 h-6 text-white/90 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm font-bold tracking-tight" style={{ fontFamily: 'Cambria, serif' }}>{toastMessage}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
 
         // Get counts grouped by raw hostelName for the selected date
         const summary = await Attendance.aggregate([
-            { $match: { date: date } },
+            { $match: { date: date, isTest: { $ne: true } } },
             { $group: { _id: "$hostelName", count: { $sum: 1 } } }
         ]);
 
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
         });
 
         // Also get the list of studentIds who marked attendance to highlight them in UI
-        const presentStudents = await Attendance.find({ date: date }).select("studentId");
+        const presentStudents = await Attendance.find({ date: date, isTest: { $ne: true } }).select("studentId");
         const presentStudentIds = presentStudents.map(a => a.studentId.toString());
 
         return NextResponse.json({

@@ -1,11 +1,11 @@
-import mongoose, { Schema, Model } from "mongoose";
+import mongoose, { Schema, Model, Document } from "mongoose";
 
-export interface IHostel {
-    _id?: string;
+export interface IHostel extends Document {
     name: string;
     totalRooms?: number;
     wardenUsername?: string;
     wardenPassword?: string;
+    attendanceMode: 'strict' | 'gps-only'; // New Setting
     createdAt?: Date;
     updatedAt?: Date;
 }
@@ -31,15 +31,16 @@ const HostelSchema: Schema = new Schema(
             type: String,
             required: false,
         },
+        attendanceMode: {
+            type: String,
+            enum: ['strict', 'gps-only'],
+            default: 'strict'
+        }
     },
     { timestamps: true }
 );
 
 // Prevent model overwrite warning in development
-if (process.env.NODE_ENV === "development") {
-    delete mongoose.models.Hostel;
-}
-
 const Hostel: Model<IHostel> =
     mongoose.models.Hostel || mongoose.model<IHostel>("Hostel", HostelSchema);
 

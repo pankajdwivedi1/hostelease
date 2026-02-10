@@ -13,7 +13,7 @@ export async function GET(request: Request) {
         const hostelName = searchParams.get("hostelName");
         const studentId = searchParams.get("studentId");
 
-        let query: any = {};
+        let query: any = { isTest: { $ne: true } };
 
         // Date Filtering Logic
         if (startDate && endDate) {

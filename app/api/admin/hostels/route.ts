@@ -23,17 +23,17 @@ export async function POST(request: NextRequest) {
     try {
         await connectDB();
         const body = await request.json();
-        const { id, name, totalRooms, wardenUsername, wardenPassword } = body;
+        const { id, name, totalRooms, wardenUsername, wardenPassword, attendanceMode } = body;
 
         let hostel;
         if (id) {
             hostel = await Hostel.findByIdAndUpdate(
                 id,
-                { name, totalRooms, wardenUsername, wardenPassword },
+                { name, totalRooms, wardenUsername, wardenPassword, attendanceMode },
                 { new: true }
             );
         } else {
-            hostel = await Hostel.create({ name, totalRooms, wardenUsername, wardenPassword });
+            hostel = await Hostel.create({ name, totalRooms, wardenUsername, wardenPassword, attendanceMode });
         }
 
         return NextResponse.json({ success: true, hostel });

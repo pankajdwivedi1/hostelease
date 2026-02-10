@@ -1,0 +1,20 @@
+// \u26a1 TURBO FIX: Add this to StudentDashboard.tsx after imports
+
+// Add this useEffect to auto-trigger verification when liveness confirms
+useEffect(() => {
+  // Auto-verify when IDENTITY is confirmed (both checks pass)
+  if (faceMatchStep === 'detecting' && depthRange >= 1.25 && yawRange >= 0.18) {
+    // Both liveness checks passed - auto trigger face matching
+    const autoVerifyTimer = setTimeout(async () => {
+      console.log('\u26a1 QUICK-FIRE: Auto-triggering face verification...');
+      const result = await performFaceVerification();
+      if (result) {
+        setFaceMatchResult(result);
+        // Automatically proceed to attendance marking
+        setTimeout(() => proceedWithAttendance(result), 200);
+      }
+    }, 500); // Small delay to show "IDENTITY CONFIRMED"
+    
+    return () => clearTimeout(autoVerifyTimer);
+  }
+}, [faceMatchStep, depthRange, yawRange]);

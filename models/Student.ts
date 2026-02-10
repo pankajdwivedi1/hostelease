@@ -36,9 +36,9 @@ export interface IStudentBase {
     timestamp: Date;
   };
   deviceId?: string;
-
   registrationId?: string;
   isProfileLocked?: boolean;
+  faceDescriptor?: number[]; // ⚡ NEW: Stores face embedding for faster matching
   dynamicFields?: {
     [key: string]: any;
   };
@@ -180,6 +180,10 @@ const StudentSchema = new Schema<IStudent>(
       type: Boolean,
       default: false,
     },
+    faceDescriptor: {
+      type: [Number],
+      default: undefined,
+    },
     dynamicFields: {
       type: Map,
       of: Schema.Types.Mixed,
@@ -192,10 +196,6 @@ const StudentSchema = new Schema<IStudent>(
 );
 
 // Prevent model overwrite warning in development
-if (process.env.NODE_ENV === "development") {
-  delete mongoose.models.Student;
-}
-
 const Student: Model<IStudent> =
   mongoose.models.Student || mongoose.model<IStudent>("Student", StudentSchema);
 

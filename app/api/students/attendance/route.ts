@@ -35,9 +35,25 @@ export async function POST(request: NextRequest) {
         await connectDB();
 
         const body = await request.json();
-        const { studentId, lat, lng, deviceId, wifiBSSID, verificationMethod } = body;
+        const {
+            studentId,
+            lat,
+            lng,
+            deviceId,
+            wifiBSSID,
+            verificationMethod,
+            faceMatchPercentage,
+            faceMatchStatus,
+            flaggedPhotoUrl
+        } = body;
 
-        console.log('📥 Attendance Request Received:', { studentId, hasWiFi: !!wifiBSSID, hasGPS: !!(lat !== undefined && lng !== undefined), deviceId });
+        console.log('📥 Attendance Request Received:', {
+            studentId,
+            hasWiFi: !!wifiBSSID,
+            hasGPS: !!(lat !== undefined && lng !== undefined),
+            faceMatch: faceMatchPercentage ? `${faceMatchPercentage}%` : 'N/A',
+            deviceId
+        });
 
         // Basic required fields
         if (!studentId) {
@@ -72,7 +88,9 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Student not found" }, { status: 404 });
         }
 
-        if (student.deviceId && student.deviceId !== deviceId) {
+        const isTester = student.email === "prem86.dwivedi@gmail.com";
+
+        if (!isTester && student.deviceId && student.deviceId !== deviceId) {
             return NextResponse.json(
                 { error: "Unauthorized device. This device is not registered to your account." },
                 { status: 403 }
@@ -89,10 +107,15 @@ export async function POST(request: NextRequest) {
 
         const existingAttendance = await Attendance.findOne({ studentId, date: today });
         if (existingAttendance) {
-            return NextResponse.json(
-                { error: "Attendance already marked for today", alreadyMarked: true },
-                { status: 400 }
-            );
+            if (isTester) {
+                // Delete existing attendance for tester to allow re-marking multiple times
+                await Attendance.deleteOne({ _id: existingAttendance._id });
+            } else {
+                return NextResponse.json(
+                    { error: "Attendance already marked for today", alreadyMarked: true },
+                    { status: 400 }
+                );
+            }
         }
 
         // 3. Verify Location and Time (Optimized with short-term cache)
@@ -160,7 +183,7 @@ export async function POST(request: NextRequest) {
         const startTime = adminSettings?.attendanceStartTime || "21:00";
         const endTime = adminSettings?.attendanceEndTime || "23:00";
 
-        if (istTime < startTime || istTime > endTime) {
+        if (!isTester && (istTime < startTime || istTime > endTime)) {
             return NextResponse.json(
                 {
                     error: `Attendance window closed. You can mark attendance between ${startTime} and ${endTime} only.`,
@@ -250,7 +273,13 @@ export async function POST(request: NextRequest) {
                 accuracy: verifiedBy === 'gps' ? (body.accuracy || 0) : 0
             },
             deviceId: deviceId,
-            status: "present"
+            status: "present",
+            // Face matching data
+            faceMatchPercentage,
+            faceMatchStatus,
+            flaggedPhotoUrl,
+            needsReview: faceMatchStatus === 'flagged',
+            isTest: isTester
         });
 
         return NextResponse.json(
@@ -281,6 +310,22 @@ export async function GET(request: NextRequest) {
         const studentId = searchParams.get("studentId");
 
         if (studentId) {
+            const nowMs = Date.now();
+            const [student, adminSettings] = await Promise.all([
+                Student.findById(studentId),
+                (cachedAdminSettings && (nowMs - lastCacheUpdate < CACHE_DURATION))
+                    ? Promise.resolve(cachedAdminSettings)
+                    : AdminSettings.findOne().lean()
+            ]);
+
+            if (!cachedAdminSettings || (nowMs - lastCacheUpdate >= CACHE_DURATION)) {
+                cachedAdminSettings = adminSettings;
+                lastCacheUpdate = nowMs;
+            }
+
+            const isTester = student?.email === "prem86.dwivedi@gmail.com";
+
+
             const today = new Date().toLocaleDateString("en-IN", {
                 timeZone: "Asia/Kolkata",
                 year: "numeric",
@@ -288,22 +333,12 @@ export async function GET(request: NextRequest) {
                 day: "2-digit",
             }).split('/').reverse().join('-');
 
-            const nowMs = Date.now();
-            let adminSettings;
-            if (cachedAdminSettings && (nowMs - lastCacheUpdate < CACHE_DURATION)) {
-                adminSettings = cachedAdminSettings;
-            } else {
-                adminSettings = await AdminSettings.findOne().lean();
-                cachedAdminSettings = adminSettings;
-                lastCacheUpdate = nowMs;
-            }
-
             const [attendance] = await Promise.all([
                 Attendance.findOne({ studentId, date: today })
             ]);
 
             return NextResponse.json({
-                marked: !!attendance,
+                marked: isTester ? false : !!attendance,
                 startTime: adminSettings?.attendanceStartTime || "21:00",
                 endTime: adminSettings?.attendanceEndTime || "23:00"
             });

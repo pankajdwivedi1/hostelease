@@ -51,6 +51,7 @@ interface SimplePermission {
 interface AttendanceLog {
   _id: string;
   studentId: {
+    _id: string;
     name: string;
     email: string;
     hostelName: string;
@@ -58,9 +59,16 @@ interface AttendanceLog {
     registrationId?: string;
   } | null;
   istTime: string;
+  istDate: string;
   location: {
+    lat: number;
+    lng: number;
     accuracy: number;
   };
+  faceMatchPercentage?: number;
+  faceMatchStatus?: "auto-approved" | "flagged" | "manual-override";
+  flaggedPhotoUrl?: string;
+  needsReview?: boolean;
 }
 
 interface DBNotification {
@@ -134,7 +142,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [semesterFilter, setSemesterFilter] = useState<string>("all");
   const [branchFilter, setBranchFilter] = useState<string>("all");
   const [sectionFilter, setSectionFilter] = useState<string>("all");
-  const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
+  const [hostels, setHostels] = useState<Array<{ _id: string; name: string; attendanceMode?: 'strict' | 'gps-only' }>>([]);
+  const [showHostelSettingsModal, setShowHostelSettingsModal] = useState(false);
+  const [updatingHostelId, setUpdatingHostelId] = useState<string | null>(null);
   const [studentsLoading, setStudentsLoading] = useState(true);
   const [attendanceSummary, setAttendanceSummary] = useState<Record<string, number>>({});
   const [presentStudentIds, setPresentStudentIds] = useState<string[]>([]);
@@ -164,6 +174,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [isReconciling, setIsReconciling] = useState(false);
 
   const [currentTab, setCurrentTab] = useState<"permissions" | "attendance" | "messaging" | "payments">("permissions");
+  const [reviewingLog, setReviewingLog] = useState<AttendanceLog | null>(null);
   const [isEditCameraOpen, setIsEditCameraOpen] = useState(false);
   const editVideoRef = useRef<HTMLVideoElement>(null);
   const editCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -841,6 +852,30 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (e) {
       alert("Action failed");
+    }
+  };
+
+  const handleUpdateHostelMode = async (hostelId: string, mode: 'strict' | 'gps-only') => {
+    try {
+      setUpdatingHostelId(hostelId);
+      const res = await fetch('/api/admin/hostels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: hostelId, attendanceMode: mode })
+      });
+
+      if (!res.ok) throw new Error("Failed to update");
+
+      const data = await res.json();
+      if (data.success) {
+        // Update local state
+        setHostels(prev => prev.map(h => h._id === hostelId ? { ...h, attendanceMode: mode } : h));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to update attendance mode");
+    } finally {
+      setUpdatingHostelId(null);
     }
   };
 
@@ -1885,12 +1920,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (!student) return false;
 
       const matchesStatus = filter === "all" || p.status === filter;
-      const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      // 🔍 UNIVERSAL SEARCH: Match against all fields from registration form  
+      const matchesSearch = searchQuery === "" ||
+        student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.phoneNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (student as any).registrationId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.semester?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.branch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.section?.toLowerCase().includes(searchQuery.toLowerCase());
+        student.section?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).fatherName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).fatherNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).motherName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).motherNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).homeState?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).homePinCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.roomNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).erpInformation?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).localGuardianAddress?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).localGuardianPhoneNumber?.toLowerCase().includes(searchQuery.toLowerCase());
 
       // For wardens, always filter by their hostel
       let matchesHostel = hostelFilter === "all";
@@ -1937,12 +1985,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (!isAuthorized) return false;
       }
 
-      const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      // 🔍 UNIVERSAL SEARCH: Match against all student fields from registration form
+      const matchesSearch = searchQuery === "" ||
+        student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.phoneNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (student as any).registrationId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.semester?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.branch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.section?.toLowerCase().includes(searchQuery.toLowerCase());
+        student.section?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.fatherName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.fatherNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.motherName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.motherNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.homeState?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.homePinCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.roomNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.erpInformation?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.localGuardianAddress?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.localGuardianPhoneNumber?.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesCollege = collegeFilter === "all" || student.collegeName === collegeFilter;
       const matchesSemester = semesterFilter === "all" || student.semester?.toUpperCase() === semesterFilter.toUpperCase();
@@ -2047,6 +2108,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-green-100 transition-all whitespace-nowrap"
                     >
                       ⏰ Set Attendance Time
+                    </button>
+                  )}
+                  {title === "Developer Dashboard" && (
+                    <button
+                      onClick={() => setShowHostelSettingsModal(true)}
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap"
+                    >
+                      🏢 Manage Hostels
                     </button>
                   )}
                   {title === "Developer Dashboard" && (
@@ -2336,7 +2405,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 <div className="flex-1 min-w-0">
                                   <div className="flex justify-between items-start gap-2">
                                     <div>
-                                      <p className="text-xs md:text-sm font-semibold text-foreground uppercase tracking-tight">{student.name}</p>
+                                      <p className="text-[11px] md:text-[13px] font-semibold text-foreground uppercase tracking-tight">{student.name}</p>
                                       <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-2 mt-0.5 md:mt-1 text-[9px] md:text-xs text-secondary font-medium">
                                         <span>{new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
                                         <span className="hidden md:inline">•</span>
@@ -2588,7 +2657,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   {getInitials(log.studentId?.name || "?")}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-[10px] font-bold text-gray-900 truncate">{log.studentId?.name || "Unknown"}</p>
+                                  <p className="text-[9px] font-bold text-gray-900 truncate">{log.studentId?.name || "Unknown"}</p>
                                   <p className="text-[9px] font-bold truncate">
                                     <span className="text-gray-900">{log.istTime}, {log.studentId?.roomNumber}, </span>
                                     <span className={`${(!log.location?.accuracy || log.location.accuracy < 50) ? "text-green-600" : "text-orange-500"}`}>
@@ -2639,10 +2708,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             <table className="w-full text-left table-fixed border-collapse">
                               <thead className="bg-[#fcfcfc] text-secondary font-bold uppercase text-[8px] md:text-[9px] border-b border-gray-100">
                                 <tr>
-                                  <th className="px-2 md:px-4 py-3 w-[30%] md:w-1/3">Student</th>
-                                  <th className="px-2 md:px-4 py-3 w-[30%] md:w-1/3">Hostel/Room</th>
-                                  <th className="px-2 md:px-4 py-3 w-[20%] md:w-1/6 text-center">Time</th>
-                                  <th className="px-2 md:px-4 py-3 w-[20%] md:w-1/6 text-right">Accuracy</th>
+                                  <th className="px-2 md:px-4 py-3 w-[30%] md:w-[35%]">Student</th>
+                                  <th className="px-2 md:px-4 py-3 w-[25%] md:w-[25%]">Hostel/Room</th>
+                                  <th className="px-2 md:px-4 py-3 w-[15%] md:w-[12%] text-center">Time</th>
+                                  <th className="px-2 md:px-4 py-3 w-[15%] md:w-[13%] text-center">Face</th>
+                                  <th className="px-2 md:px-4 py-3 w-[15%] md:w-[15%] text-right whitespace-nowrap">Dist / Acc</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-50">
@@ -2655,7 +2725,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     <tr key={log._id} className="hover:bg-filler/50 transition-colors">
                                       <td className="px-2 md:px-4 py-3">
                                         <div className="flex flex-col min-w-0">
-                                          <span className="font-bold text-gray-900 text-[10px] md:text-sm uppercase truncate tracking-tight">{log.studentId?.name || "Unknown"}</span>
+                                          <span className="font-bold text-gray-900 text-[9px] md:text-[13px] uppercase truncate tracking-tight">{log.studentId?.name || "Unknown"}</span>
                                           <span className="text-[8px] md:hidden text-gray-400 font-medium uppercase truncate">{log.studentId?.hostelName} - {log.studentId?.roomNumber}</span>
                                         </div>
                                       </td>
@@ -2665,10 +2735,42 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       <td className="px-1 md:px-4 py-2 md:py-3 text-center">
                                         <span className="inline-block px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-md font-black text-[9px] md:text-xs whitespace-nowrap">{log.istTime}</span>
                                       </td>
+                                      <td className="px-1 md:px-4 py-2 md:py-3 text-center">
+                                        {log.faceMatchPercentage !== undefined ? (
+                                          <button
+                                            onClick={() => log.faceMatchStatus === 'flagged' && setReviewingLog(log)}
+                                            disabled={log.faceMatchStatus !== 'flagged'}
+                                            className={`px-1.5 py-0.5 rounded-md text-[9px] md:text-[10px] font-black transition-all ${log.faceMatchStatus === 'flagged'
+                                              ? "bg-red-500 text-white animate-pulse cursor-pointer hover:bg-red-600 shadow-sm"
+                                              : (log.faceMatchStatus === 'manual-override'
+                                                ? "bg-amber-500 text-white"
+                                                : "bg-green-100 text-green-700")
+                                              }`}
+                                          >
+                                            {log.faceMatchPercentage}% {log.faceMatchStatus === 'flagged' && "🚩"}
+                                          </button>
+                                        ) : (
+                                          <span className="text-[9px] text-gray-300 font-black">---</span>
+                                        )}
+                                      </td>
                                       <td className="px-2 md:px-4 py-3 text-right">
-                                        <span className={`text-[9px] md:text-[10px] font-black ${log.location.accuracy < 50 ? "text-green-600" : "text-orange-500"}`}>
-                                          {log.location.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"}
-                                        </span>
+                                        <div className="flex flex-col items-end gap-0.5">
+                                          {(() => {
+                                            const hostel = hostelLocations.find(l => l.name.toLowerCase() === (getHostelCategory(log.studentId?.hostelName || "") || log.studentId?.hostelName || "").toLowerCase());
+                                            if (hostel && log.location?.lat) {
+                                              const dist = calculateDistance(log.location.lat, log.location.lng, hostel.lat, hostel.lng);
+                                              return (
+                                                <span className={`text-[9px] md:text-[10px] font-black ${dist < hostel.radius ? "text-blue-600" : "text-amber-600"}`}>
+                                                  {Math.round(dist)}m away
+                                                </span>
+                                              );
+                                            }
+                                            return null;
+                                          })()}
+                                          <span className={`text-[8px] md:text-[9px] font-bold ${log.location.accuracy < 50 ? "text-green-500" : "text-orange-400"}`}>
+                                            Acc: {log.location.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"}
+                                          </span>
+                                        </div>
                                       </td>
                                     </tr>
                                   ))
@@ -2716,7 +2818,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 {getInitials(s.name)}
                               </div>
                               <div className="min-w-0">
-                                <p className="text-[10px] font-bold text-foreground truncate">{s.name}</p>
+                                <p className="text-[9px] font-bold text-foreground truncate">{s.name}</p>
                                 <p className="text-[9px] text-secondary truncate uppercase">{s.roomNumber} • {s.hostelName}</p>
                               </div>
                               <a href={`tel:${s.phoneNumber}`} className="ml-auto w-7 h-7 bg-green-50 text-green-600 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors">
@@ -2762,7 +2864,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             <div className="relative">
                               <input
                                 type="text"
-                                placeholder="Search by name..."
+                                placeholder="Search anything... (name, phone, parent, district, room, etc.)"
                                 value={attendanceHistorySearchQuery}
                                 onChange={(e) => {
                                   setAttendanceHistorySearchQuery(e.target.value);
@@ -2890,16 +2992,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       <p className="text-[10px] text-gray-400 font-medium">Room {log.roomNumber}</p>
                                     </td>
                                     <td className="px-4 py-3 text-right">
-                                      <div className="flex flex-col items-end gap-0.5">
+                                      <div className="flex flex-col items-end gap-1">
+                                        {log.faceMatchPercentage !== undefined && (
+                                          <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${log.faceMatchStatus === 'flagged' ? 'bg-red-100 text-red-600' : (log.faceMatchStatus === 'manual-override' ? 'bg-amber-100 text-amber-600' : 'bg-green-50 text-green-600')}`}>
+                                            Face: {log.faceMatchPercentage}%
+                                          </span>
+                                        )}
                                         {log.location?.accuracy ? (
-                                          <>
-                                            <span className={`text-[10px] font-black ${log.location.accuracy < 50 ? "text-green-600" : "text-amber-500"}`}>
-                                              GPS Accuracy: {Math.round(log.location.accuracy)}m
-                                            </span>
-                                            <span className="text-[9px] text-gray-400 font-medium">Verified</span>
-                                          </>
+                                          <span className={`text-[10px] font-black ${log.location.accuracy < 50 ? "text-green-600" : "text-amber-500"}`}>
+                                            GPS: {Math.round(log.location.accuracy)}m
+                                          </span>
                                         ) : (
-                                          <span className="text-[10px] text-gray-400 font-medium">N/A</span>
+                                          <span className="text-[9px] text-gray-400 font-medium">No GPS</span>
                                         )}
                                       </div>
                                     </td>
@@ -3261,7 +3365,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <button
-                    onClick={() => setShowAllStudents(false)}
+                    onClick={() => {
+                      setShowAllStudents(false);
+                      setSearchQuery(""); // Clear search when going back
+                    }}
                     className="w-10 h-10 rounded-full border border-solid border-[#9CA3AF] bg-white text-foreground flex items-center justify-center transition-colors hover:bg-filler flex-shrink-0"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3293,7 +3400,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
                   <input
                     type="text"
-                    placeholder="Search by name..."
+                    placeholder="Search anything... (name, phone, parent, district, room, etc.)"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
@@ -3529,7 +3636,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 <div className="flex-1 min-w-0">
                                   <div className="flex justify-between items-start">
                                     <div className="pr-2">
-                                      <h3 className="text-[12px] font-bold text-gray-900 leading-tight group-hover:text-blue-600 transition-colors">{student.name}</h3>
+                                      <h3 className="text-[11px] font-bold text-gray-900 leading-tight group-hover:text-blue-600 transition-colors">{student.name}</h3>
                                       <p className="text-[10px] text-gray-500 mt-0.5 truncate">{student.email}</p>
                                     </div>
                                     <span className={`flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${student.studentStatus === 'out' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
@@ -4739,6 +4846,119 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         )
       }
 
+      {/* Face Verification Review Modal */}
+      {reviewingLog && (
+        <div className="fixed inset-0 z-[150] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2rem] w-full max-w-2xl shadow-2xl overflow-hidden border border-white/20 flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black text-gray-900 tracking-tight">Review Flagged Face Match</h3>
+                <p className="text-xs text-red-500 font-bold uppercase tracking-widest mt-1">Found only {reviewingLog.faceMatchPercentage}% match</p>
+              </div>
+              <button
+                onClick={() => setReviewingLog(null)}
+                className="w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+              >
+                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Profile Photo */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Profile Photo</span>
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[9px] font-black uppercase">Registered</span>
+                  </div>
+                  <div className="aspect-square rounded-2xl overflow-hidden bg-gray-100 border-2 border-dashed border-gray-200 shadow-inner">
+                    {students.find(s => s.id === reviewingLog.studentId?._id)?.profilePicture ? (
+                      <img
+                        src={students.find(s => s.id === reviewingLog.studentId?._id)?.profilePicture}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-300">No Photo</div>
+                    )}
+                  </div>
+                  <p className="text-center font-bold text-sm text-gray-900">{reviewingLog.studentId?.name}</p>
+                </div>
+
+                {/* Flagged Photo */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Attendance Photo</span>
+                    <span className="px-2 py-0.5 bg-red-50 text-red-600 rounded text-[9px] font-black uppercase">Suspicious</span>
+                  </div>
+                  <div className="aspect-square rounded-2xl overflow-hidden bg-gray-100 border-2 border-red-200 shadow-xl shadow-red-100/50">
+                    {reviewingLog.flaggedPhotoUrl ? (
+                      <img
+                        src={reviewingLog.flaggedPhotoUrl}
+                        alt="Flagged"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-300">No Photo Saved</div>
+                    )}
+                  </div>
+                  <p className="text-center font-bold text-sm text-red-600">{reviewingLog.istTime} @ {reviewingLog.studentId?.hostelName}</p>
+                </div>
+              </div>
+
+              <div className="mt-8 bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-gray-900">Review Decision Required</h4>
+                    <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                      This entry was flagged because the face matching score ({reviewingLog.faceMatchPercentage}%) fell below the 70% confidence threshold. Please verify if the person in the attendance photo is indeed <strong>{reviewingLog.studentId?.name}</strong>.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t bg-gray-50 flex gap-4">
+              <button
+                onClick={() => setReviewingLog(null)}
+                className="flex-1 py-4 rounded-2xl border border-gray-200 bg-white text-gray-600 font-bold hover:bg-gray-100 transition-all shadow-sm"
+              >
+                Close Review
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm("Are you sure you want to manually approve this attendance?")) return;
+                  try {
+                    const res = await fetch("/api/admin/attendance/verify", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        attendanceId: reviewingLog._id,
+                        status: "manual-override"
+                      })
+                    });
+                    if (res.ok) {
+                      alert("Attendance approved manually.");
+                      setReviewingLog(null);
+                      fetchAttendanceLogs();
+                    }
+                  } catch (e) {
+                    alert("Verification failed");
+                  }
+                }}
+                className="flex-[2] py-4 rounded-2xl bg-green-600 text-white font-black hover:bg-green-700 transition-all shadow-lg shadow-green-100 flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                Approve Attendance
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Attendance Time Settings Modal */}
       {
         showAttendanceTimeModal && (
@@ -5692,6 +5912,103 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           </div>
         )
       }
+
+      {showHostelSettingsModal && (
+        <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-4 md:p-6 border-b flex justify-between items-center bg-gray-50/50">
+              <div>
+                <h3 className="font-black text-gray-800 text-lg md:text-xl tracking-tight">🏢 Hostel Attendance Settings</h3>
+                <p className="text-xs text-secondary mt-1 font-bold uppercase tracking-wide">Configure Security Level Per Hostel</p>
+              </div>
+              <button
+                onClick={() => setShowHostelSettingsModal(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 md:p-6 overflow-y-auto flex-1 space-y-6 bg-gray-50/30">
+              {/* Info Box */}
+              <div className="bg-blue-50/80 p-4 rounded-xl border border-blue-100 flex gap-3">
+                <div className="shrink-0 text-2xl">ℹ️</div>
+                <div>
+                  <h4 className="font-bold text-blue-900 text-sm uppercase tracking-wide mb-1">How Modes Work</h4>
+                  <div className="space-y-1 text-xs text-blue-800 leading-relaxed font-medium">
+                    <p>🔒 <strong className="font-black">STRICT MODE (Recommended):</strong> Student must be INSIDE hostel (GPS) <span className="underline">AND</span> verify live FACE.</p>
+                    <p>📍 <strong className="font-black">GPS ONLY:</strong> Student only needs to be inside hostel. No camera required. Useful for broken cameras or quick attendance.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {hostels.length === 0 && (
+                  <div className="text-center py-8 text-gray-400 font-bold text-sm bg-white rounded-xl border border-dashed">
+                    No hostels found. Add hostels via database or script first.
+                  </div>
+                )}
+
+                {hostels.map(hostel => {
+                  const isGpsOnly = hostel.attendanceMode === 'gps-only';
+                  const isLoading = updatingHostelId === hostel._id;
+
+                  return (
+                    <div key={hostel._id} className="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <h4 className="font-black text-gray-800 text-base">{hostel.name}</h4>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span className="text-[10px] uppercase font-black tracking-widest text-gray-400">Current Status:</span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wide border ${isGpsOnly
+                            ? 'bg-amber-50 text-amber-600 border-amber-100'
+                            : 'bg-green-50 text-green-600 border-green-100'
+                            }`}>
+                            {isGpsOnly ? '⚠️ GPS ONLY' : '🔒 STRICT SECURE'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex bg-gray-50 p-1 rounded-lg border border-gray-200 self-start sm:self-auto">
+                        <button
+                          disabled={isLoading}
+                          onClick={() => handleUpdateHostelMode(hostel._id, 'strict')}
+                          className={`px-4 py-2 rounded-md text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2 ${!isGpsOnly
+                            ? 'bg-white text-green-600 shadow-sm ring-1 ring-black/5 scale-[1.02]'
+                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                            }`}
+                        >
+                          {isLoading && !isGpsOnly && <span className="animate-spin">⏳</span>}
+                          Strict
+                        </button>
+                        <button
+                          disabled={isLoading}
+                          onClick={() => handleUpdateHostelMode(hostel._id, 'gps-only')}
+                          className={`px-4 py-2 rounded-md text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2 ${isGpsOnly
+                            ? 'bg-white text-amber-600 shadow-sm ring-1 ring-black/5 scale-[1.02]'
+                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                            }`}
+                        >
+                          {isLoading && isGpsOnly && <span className="animate-spin">⏳</span>}
+                          GPS Only
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="p-4 border-t bg-gray-50 flex justify-end">
+              <button
+                onClick={() => setShowHostelSettingsModal(false)}
+                className="px-6 py-2.5 bg-gray-800 text-white text-xs font-bold uppercase tracking-wider rounded-xl hover:bg-gray-900 transition-colors shadow-lg shadow-gray-200"
+              >
+                Close Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div >
   );
 }
