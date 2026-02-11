@@ -1397,6 +1397,11 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       }
 
       // 3. Registration (First time or recovery)
+
+      // ⚡ USER INSTRUCTION: Encourage Face/Finger over PIN
+      const userAgreed = confirm("⚠️ SETUP BIOMETRICS\n\nFor the fastest attendance, please use your Face ID or Fingerprint.\n\nAvoiding PIN/Pattern will prevent delays.\n\nClick OK to scan now.");
+      if (!userAgreed) return false;
+
       const result: any = await navigator.credentials.create({
         publicKey: {
           challenge,
@@ -1407,7 +1412,11 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             displayName: studentProfile?.name || "Student User"
           },
           pubKeyCredParams: [{ alg: -7, type: "public-key" }, { alg: -257, type: "public-key" }],
-          authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },
+          authenticatorSelection: {
+            authenticatorAttachment: "platform",
+            userVerification: "required",
+            requireResidentKey: false
+          },
           timeout: 60000,
           attestation: "direct"
         }
@@ -1423,7 +1432,10 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       return false;
     } catch (error: any) {
       console.error("Biometric Error:", error);
-      alert("Biometric verification failed or cancelled. Please try again.");
+      // Don't alert if user just cancelled (NotAllowedError)
+      if (error.name !== "NotAllowedError") {
+        alert("Biometric verification failed. Please try again or check your device settings.");
+      }
       return false;
     }
   };
