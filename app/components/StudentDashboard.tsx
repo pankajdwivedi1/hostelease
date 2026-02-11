@@ -865,15 +865,15 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
     setIsLocationChecking(true);
     setGpsLockStatus('locking');
-    setLockProgress(0);
+    setLockProgress(10);
     setGpsAccuracy(null);
-    console.log("Starting High-Speed Location Lock...");
 
     let watchId: number | null = null;
     let isCompleted = false;
     let bestPosition: GeolocationPosition | null = null;
-    let lockTimer: NodeJS.Timeout | null = null;
+    let optimizationTimer: NodeJS.Timeout | null = null;
 
+    // Helper to finish verification
     const performVerification = (position: GeolocationPosition) => {
       const { accuracy, latitude, longitude } = position.coords;
 
@@ -913,65 +913,103 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       }
     };
 
-    const cleanup = () => {
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-      if (lockTimer !== null) clearTimeout(lockTimer);
-    };
-
-    const finishLock = () => {
-      if (isCompleted || !bestPosition) return;
+    const finish = (pos: GeolocationPosition) => {
+      if (isCompleted) return;
       isCompleted = true;
-      const finalPosition = bestPosition;
-      cleanup();
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      if (optimizationTimer !== null) clearTimeout(optimizationTimer);
 
       setGpsLockStatus('locked');
       setLockProgress(100);
 
+      // Instant UI transition
       setTimeout(() => {
         setIsLocationChecking(false);
-        performVerification(finalPosition);
-      }, 500);
+        performVerification(pos);
+      }, 100);
     };
 
-    // Hard limit: 15 seconds if absolutely no signal
-    const hardTimeoutId = setTimeout(() => {
+    // 2. Fallback: WiFi/Cell (Low Accuracy) - Only if GPS completely fails
+    const tryWifiFallback = () => {
+      if (isCompleted) return;
+      console.log("📶 GPS timed out, trying WiFi/Cell fallback...");
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => finish(pos),
+        (err) => {
+          if (isCompleted) return;
+          console.error("WiFi Fallback failed:", err);
+
+          // CRITICAL: Even if everything fails, if we had a "bestPosition" from GPS earlier, USE IT.
+          if (bestPosition) {
+            console.log("Using cached best position despite final error");
+            finish(bestPosition);
+          } else {
+            isCompleted = true;
+            setIsLocationChecking(false);
+            setGpsLockStatus('error');
+            alert("Could not detect location. Please enable Location Services & WiFi.");
+          }
+        },
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 }
+      );
+    };
+
+    // 1. Primary: High Accuracy GPS
+    console.log("🚀 Starting GPS Lock (High Accuracy)...");
+
+    // SAFETY TIMEOUT: Force a decision after 6 seconds (User wants < 8s)
+    const masterTimeout = setTimeout(() => {
       if (!isCompleted) {
-        isCompleted = true;
-        cleanup();
-        setIsLocationChecking(false);
-        setGpsLockStatus('error');
-        alert("Location Error: Please ensure GPS is enabled and try again.");
+        if (bestPosition) {
+          console.log("⏱️ Time limit reached. Using best available GPS signal.");
+          finish(bestPosition);
+        } else {
+          tryWifiFallback();
+        }
       }
-    }, 15000);
+    }, 6000);
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
         if (isCompleted) return;
 
-        const { accuracy } = position.coords;
-        setGpsAccuracy(Math.round(accuracy));
+        const acc = position.coords.accuracy;
+        setGpsAccuracy(Math.round(acc));
 
-        // Use the first location immediately as bestPosition
-        if (!bestPosition) {
+        // Always update best available
+        if (!bestPosition || acc < bestPosition.coords.accuracy) {
           bestPosition = position;
-          // Start a 2.5 second "refinement" buffer as soon as we get the FIRST data
-          lockTimer = setTimeout(finishLock, 2500);
-          setLockProgress(40);
-        } else if (accuracy < bestPosition.coords.accuracy) {
-          bestPosition = position;
-          setLockProgress((prev) => Math.min(95, prev + 15));
+          setLockProgress((p) => Math.min(90, p + 15));
         }
 
-        // If accuracy is already very good (<50m), don't wait for the buffer
-        if (accuracy <= 50) {
-          clearTimeout(hardTimeoutId);
-          finishLock();
+        // ⚡ INSTANT ACCEPT: < 50m
+        if (acc <= 50) {
+          finish(position);
+          return;
+        }
+
+        // ⚡ QUICK ACCEPT: < 150m (Solves the 104m sticking issue)
+        // Wait just 1.5s to see if it gets better, then take it.
+        if (acc <= 200 && !optimizationTimer) {
+          setLockProgress(75);
+          optimizationTimer = setTimeout(() => {
+            if (!isCompleted) finish(bestPosition || position);
+          }, 1500);
         }
       },
-      (error) => {
-        console.warn("GPS Lock Search:", error.message);
+      (err) => {
+        console.warn("GPS Watch Error:", err);
+        // Don't fail immediately on minor errors, wait for masterTimeout
+        // unless it's a PERMISSION_DENIED
+        if (err.code === 1) { // Permission Denied
+          if (masterTimeout) clearTimeout(masterTimeout);
+          isCompleted = true;
+          setIsLocationChecking(false);
+          alert("Location permission denied. Please enable location permissions.");
+        }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
     );
   };
 
@@ -1049,7 +1087,11 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       await faceMatching.loadFaceApiModels();
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: 640, height: 480 }
+        video: {
+          facingMode: 'user',
+          aspectRatio: { ideal: 1 },
+          width: { ideal: 1080 }
+        }
       });
 
       if (videoRef.current) {
@@ -1384,69 +1426,86 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       const deviceId = getStoredDeviceId();
       if (!studentProfile) return;
 
-      // Get current position
-      navigator.geolocation.getCurrentPosition(async (position) => {
-        try {
-          const { latitude, longitude } = position.coords;
-
-          // Step 2: Checking Accuracy
-          setAttendanceStep('accuracy');
-          // ⚡ TURBO: Removed artificial 500ms delay
-
-          // Step 3: Handle Flagged Photo Upload
-          let flaggedPhotoUrl = "";
-          if (faceResult.status === 'flagged' && faceResult.photoBlob) {
-            setAttendanceStep('saving'); // Show progress
-            const uploadedUrl = await faceMatching.uploadToCloudinary(faceResult.photoBlob);
-            if (uploadedUrl) flaggedPhotoUrl = uploadedUrl;
-          }
-
-          // Step 4: Saving to Database
-          setAttendanceStep('saving');
-
-          const response = await fetch("/api/students/attendance", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
+      // ⚡ FAST LOCATION STRATEGY (User Requested):
+      // 1. Try High Accuracy (GPS) for 5s
+      // 2. Fallback to Low Accuracy (WiFi/Cell) immediately on error/timeout
+      const getLocationFast = (): Promise<GeolocationPosition> => {
+        return new Promise((resolve, reject) => {
+          // Attempt 1: GPS (Strict)
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve(pos),
+            (err) => {
+              console.warn("GPS mark failed/timeout, switching to WiFi...", err);
+              // Attempt 2: WiFi/Cell (Fast Fallback)
+              navigator.geolocation.getCurrentPosition(
+                (pos) => resolve(pos),
+                (err2) => reject(err2),
+                { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
+              );
             },
-            body: JSON.stringify({
-              studentId: studentProfile._id,
-              lat: latitude,
-              lng: longitude,
-              accuracy: position.coords.accuracy,
-              deviceId: deviceId,
-              // Face matching results
-              faceMatchPercentage: faceResult.percentage,
-              faceMatchStatus: faceResult.status,
-              flaggedPhotoUrl: flaggedPhotoUrl
-            }),
-          });
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+          );
+        });
+      };
 
-          const data = await response.json();
+      try {
+        const position = await getLocationFast();
+        const { latitude, longitude } = position.coords;
 
-          if (response.ok) {
-            setAttendanceStep('done');
-            setIsAttendanceMarked(true);
-            setTimeout(() => {
-              alert(data.message || "Attendance marked successfully!");
-              setAttendanceStep('idle');
-              setIsMarkingAttendance(false);
-            }, 400); // ⚡ Faster transition to idle (400ms)
-          } else {
-            setAttendanceStep('error');
-            alert(data.error || "Failed to mark attendance.");
+        // Step 2: Checking Accuracy
+        setAttendanceStep('accuracy');
+
+        // Step 3: Handle Flagged Photo Upload
+        let flaggedPhotoUrl = "";
+        if (faceResult.status === 'flagged' && faceResult.photoBlob) {
+          setAttendanceStep('saving'); // Show progress
+          const uploadedUrl = await faceMatching.uploadToCloudinary(faceResult.photoBlob);
+          if (uploadedUrl) flaggedPhotoUrl = uploadedUrl;
+        }
+
+        // Step 4: Saving to Database
+        setAttendanceStep('saving');
+
+        const response = await fetch("/api/students/attendance", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            studentId: studentProfile._id,
+            lat: latitude,
+            lng: longitude,
+            accuracy: position.coords.accuracy,
+            deviceId: deviceId,
+            // Face matching results
+            faceMatchPercentage: faceResult.percentage,
+            faceMatchStatus: faceResult.status,
+            flaggedPhotoUrl: flaggedPhotoUrl
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          setAttendanceStep('done');
+          setIsAttendanceMarked(true);
+          setTimeout(() => {
+            alert(data.message || "Attendance marked successfully!");
+            setAttendanceStep('idle');
             setIsMarkingAttendance(false);
-          }
-        } catch (fetchError: any) {
+          }, 400);
+        } else {
           setAttendanceStep('error');
-          alert("Network error. Please try again.");
+          alert(data.error || "Failed to mark attendance.");
           setIsMarkingAttendance(false);
         }
-      }, (error) => {
+
+      } catch (error) {
+        console.error("Location/Attendance Error:", error);
         setAttendanceStep('error');
-        alert("Failed to get location.");
+        alert("Location failed. Please enable WiFi/Location services and try again.");
         setIsMarkingAttendance(false);
-      }, { enableHighAccuracy: true, timeout: 10000 });
+      }
 
     } catch (error) {
       setAttendanceStep('error');
@@ -1838,7 +1897,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                       const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? formatDate(value) : value;
 
                       return (
-                        <div key={field.id} className={field.id === 'homePinCode' || field.id === 'localGuardianAddress' ? "col-span-2" : ""}>
+                        <div key={field.id} className={['homePinCode', 'localGuardianAddress', 'permanentAddress'].includes(field.id) ? "md:col-span-2" : ""}>
                           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{field.label}</p>
                           {field.type === 'tel' || field.id.toLowerCase().includes('number') || field.id.toLowerCase().includes('phone') ? (
                             <a href={`tel:${value}`} title="Click to call" className="text-[12px] font-bold text-blue-600 hover:underline">
@@ -2039,8 +2098,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                       <p className="text-gray-500 text-xs">Position your face clearly within the camera view.</p>
                     </div>
 
-                    <div className="p-6 relative">
-                      <div className="relative aspect-video bg-black rounded-2xl overflow-hidden shadow-inner border-2 border-slate-100">
+                    <div className="p-5 relative">
+                      <div className="relative aspect-square bg-black rounded-2xl overflow-hidden shadow-inner border-2 border-slate-100">
                         <video
                           ref={videoRef}
                           autoPlay

@@ -248,6 +248,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   // System Settings - New Features
   const [showSystemSettingsModal, setShowSystemSettingsModal] = useState(false);
   const [isSavingSystemSettings, setIsSavingSystemSettings] = useState(false);
+  const [showDBExportModal, setShowDBExportModal] = useState(false);
+  const [isExportingDB, setIsExportingDB] = useState(false);
   const [hostelsConfig, setHostelsConfig] = useState<any[]>([]);
   const [registrationFields, setRegistrationFields] = useState<Record<string, any>>({});
   const [formBuilderFields, setFormBuilderFields] = useState<any[]>([]);
@@ -646,6 +648,38 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       alert("Failed to update form builder");
     } finally {
       setIsSavingSystemSettings(false);
+    }
+  };
+
+  const handleDBExport = async (format: "json" | "csv" | "xlsx") => {
+    try {
+      setIsExportingDB(true);
+      const response = await fetch(`/api/developer/export-data?format=${format}`);
+
+      if (!response.ok) throw new Error("Export failed");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      // For CSV/XLSX, the API returns .xlsx unless we change it. Let's use the extension matching the format.
+      // API returns .xlsx for 'xlsx' and 'csv' (as workbook).
+      // But if format is csv, we might want zip? No, API returns XLSX logic for CSV too currently.
+      // Wait, API implementation for CSV/XLSX uses XLSX.write with appropriate type in buffer.
+      // So filename extension matters.
+      // Let's rely on Content-Disposition header if possible, but manual download attribute is safer.
+      const extension = format === 'json' ? 'json' : (format === 'csv' ? 'csv' : 'xlsx');
+      a.download = `hostelease_db_dump_${new Date().toISOString().split('T')[0]}.${extension}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setShowDBExportModal(false);
+    } catch (e) {
+      console.error(e);
+      alert("Failed to export database");
+    } finally {
+      setIsExportingDB(false);
     }
   };
 
@@ -2124,6 +2158,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap"
                     >
                       🔑 Change Password
+                    </button>
+                  )}
+                  {title === "Developer Dashboard" && (
+                    <button
+                      onClick={() => setShowDBExportModal(true)}
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-emerald-100 transition-all whitespace-nowrap"
+                    >
+                      💾 Export DB
                     </button>
                   )}
                   {title === "Developer Dashboard" && (
@@ -5170,28 +5212,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <div key={hostel._id} className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-6 hover:shadow-xl transition-all group overflow-hidden relative">
                           <div className="absolute top-0 right-0 w-32 h-32 bg-blue-100/30 blur-[60px] rounded-full group-hover:bg-indigo-100/40 transition-all" />
                           <div className="relative z-10">
-                            <div className="flex items-center justify-between mb-6">
-                              <div className="flex items-center gap-3">
-                                <div className="p-2.5 bg-white rounded-xl shadow-sm border border-slate-200 text-xl">🏢</div>
-                                <div>
-                                  <h4 className="font-black text-slate-800 text-lg uppercase tracking-tight">{hostel.name}</h4>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                              <div className="flex items-center gap-3 w-full">
+                                <div className="p-2.5 bg-white rounded-xl shadow-sm border border-slate-200 text-xl shrink-0">🏢</div>
+                                <div className="min-w-0 flex-1">
+                                  <h4 className="font-black text-slate-800 text-lg uppercase tracking-tight truncate">{hostel.name}</h4>
                                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Hostel ID: {hostel._id.slice(-6)}</p>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 w-full sm:w-auto">
                                 <button
                                   onClick={() => {
                                     const newPass = prompt("Enter new password for " + hostel.name + ":", hostel.wardenPassword || "");
                                     if (newPass !== null) handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenPassword: newPass });
                                   }}
-                                  className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:scale-110 active:scale-95 transition-all"
+                                  className="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:scale-110 active:scale-95 transition-all text-center"
                                 >
                                   Update Access
                                 </button>
                                 {showRemoveButton && (
                                   <button
                                     onClick={() => handleDeleteHostelConfig(hostel._id, hostel.name)}
-                                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
                                   >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                   </button>
@@ -5449,15 +5491,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                 {activeSettingsTab === "form" && (
                   <div className="space-y-6 pb-8">
-                    <div className="bg-purple-50 border-2 border-purple-100 p-4 rounded-2xl flex items-start gap-4 mb-6">
-                      <span className="text-xl sm:text-2xl">⚡</span>
-                      <div className="flex-1">
-                        <p className="text-xs sm:text-sm text-purple-800 font-bold uppercase tracking-tight">Form Builder Mode</p>
-                        <p className="text-[10px] sm:text-xs text-purple-600 font-medium mt-1">
-                          Customize your registration form. Add new fields or edit existing ones. Changes are instantly visible to students.
-                        </p>
+                    <div className="bg-purple-50 border-2 border-purple-100 p-4 rounded-2xl flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-6">
+                      <div className="flex items-start gap-4 flex-1 w-full">
+                        <span className="text-xl sm:text-2xl mt-1">⚡</span>
+                        <div className="flex-1">
+                          <p className="text-xs sm:text-sm text-purple-800 font-bold uppercase tracking-tight">Form Builder Mode</p>
+                          <p className="text-[10px] sm:text-xs text-purple-600 font-medium mt-1">
+                            Customize your registration form. Add new fields or edit existing ones. Changes are instantly visible to students.
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex gap-2 shrink-0">
+                      <div className="flex gap-2 w-full sm:w-auto sm:shrink-0 grid grid-cols-2 sm:flex">
                         <button
                           onClick={() => {
                             if (formBuilderFields.length > 0 && !confirm("This will replace your current form configuration with the 20+ standard registration fields. Continue?")) return;
@@ -5487,9 +5531,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             ];
                             handleUpdateFormBuilder(defaults);
                           }}
-                          className="px-4 py-2 bg-indigo-100 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-200 transition-all shadow-sm shrink-0"
+                          className="px-4 py-2 bg-indigo-100 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-200 transition-all shadow-sm w-full sm:w-auto"
                         >
-                          🔄 Load Registration Form
+                          🔄 Load Form
                         </button>
                         <button
                           onClick={() => {
@@ -5503,7 +5547,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             };
                             handleUpdateFormBuilder([...formBuilderFields, newField]);
                           }}
-                          className="px-4 py-2 bg-purple-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-700 transition-all shadow-lg shadow-purple-100 shrink-0"
+                          className="px-4 py-2 bg-purple-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-700 transition-all shadow-lg shadow-purple-100 w-full sm:w-auto"
                         >
                           + Add Field
                         </button>
@@ -6005,6 +6049,79 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               >
                 Close Settings
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Database Export Modal */}
+      {showDBExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
+              <h3 className="font-bold text-gray-800">Export Database</h3>
+              <button onClick={() => setShowDBExportModal(false)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600 mb-4">
+                Select the format to download all database collections.
+                <br />
+                <span className="text-xs text-gray-400 italic">Includes Students, Attendance, Permissions, Settings, etc.</span>
+              </p>
+
+              <div className="grid gap-3">
+                <button
+                  onClick={() => handleDBExport('json')}
+                  disabled={isExportingDB}
+                  className="w-full flex items-center justify-between p-3 rounded-xl border border-gray-200 hover:bg-blue-50 hover:border-blue-200 transition-all group disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
+                      { }J{ }
+                    </div>
+                    <div className="text-left">
+                      <span className="block text-sm font-bold text-gray-800 group-hover:text-blue-700">JSON Format</span>
+                      <span className="block text-[10px] text-gray-500">Best for backup & migration (Raw Data)</span>
+                    </div>
+                  </div>
+                  {isExportingDB && <span className="animate-spin text-blue-600">⏳</span>}
+                </button>
+
+                <button
+                  onClick={() => handleDBExport('xlsx')}
+                  disabled={isExportingDB}
+                  className="w-full flex items-center justify-between p-3 rounded-xl border border-gray-200 hover:bg-green-50 hover:border-green-200 transition-all group disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-green-100 text-green-600 flex items-center justify-center font-bold text-xs">
+                      { }X{ }
+                    </div>
+                    <div className="text-left">
+                      <span className="block text-sm font-bold text-gray-800 group-hover:text-green-700">Excel (XLSX)</span>
+                      <span className="block text-[10px] text-gray-500">Readable spreadsheet with multiple sheets</span>
+                    </div>
+                  </div>
+                  {isExportingDB && <span className="animate-spin text-green-600">⏳</span>}
+                </button>
+
+                <button
+                  onClick={() => handleDBExport('csv')}
+                  disabled={isExportingDB}
+                  className="w-full flex items-center justify-between p-3 rounded-xl border border-gray-200 hover:bg-orange-50 hover:border-orange-200 transition-all group disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xs">
+                      { }C{ }
+                    </div>
+                    <div className="text-left">
+                      <span className="block text-sm font-bold text-gray-800 group-hover:text-orange-700">CSV Format</span>
+                      <span className="block text-[10px] text-gray-500">Students List Only (Flat File)</span>
+                    </div>
+                  </div>
+                  {isExportingDB && <span className="animate-spin text-orange-600">⏳</span>}
+                </button>
+              </div>
             </div>
           </div>
         </div>

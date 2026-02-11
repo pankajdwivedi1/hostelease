@@ -47,7 +47,7 @@ async function loadServerModels() {
 export async function POST(request: NextRequest) {
     try {
         // Dynamic imports for runtime-only modules
-        const { connectDB } = await import("@/lib/mongodb");
+        const { default: connectDB } = await import("@/lib/mongodb");
         const { default: Student } = await import("@/models/Student");
 
         await connectDB();
