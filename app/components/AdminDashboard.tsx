@@ -142,7 +142,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [semesterFilter, setSemesterFilter] = useState<string>("all");
   const [branchFilter, setBranchFilter] = useState<string>("all");
   const [sectionFilter, setSectionFilter] = useState<string>("all");
-  const [hostels, setHostels] = useState<Array<{ _id: string; name: string; attendanceMode?: 'strict' | 'gps-only' }>>([]);
+  const [hostels, setHostels] = useState<Array<{ _id: string; name: string; attendanceMode?: 'strict' | 'gps-only' | 'biometric' }>>([]);
   const [showHostelSettingsModal, setShowHostelSettingsModal] = useState(false);
   const [updatingHostelId, setUpdatingHostelId] = useState<string | null>(null);
   const [studentsLoading, setStudentsLoading] = useState(true);
@@ -5240,7 +5240,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 )}
                               </div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                               <div className="bg-white/60 p-4 rounded-xl border border-white backdrop-blur-sm">
                                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Warden Username</label>
                                 <div className="flex items-center gap-3">
@@ -5293,6 +5293,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       )}
                                     </button>
                                   )}
+                                </div>
+                              </div>
+                              <div className="bg-white/60 p-4 rounded-xl border border-white backdrop-blur-sm group/mode">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Attendance Mode</label>
+                                <div className="flex items-center gap-3">
+                                  <div className={`h-2 w-2 rounded-full shadow-sm ${hostel.attendanceMode === 'biometric' ? 'bg-purple-500 shadow-purple-200' : hostel.attendanceMode === 'gps-only' ? 'bg-blue-500 shadow-blue-200' : 'bg-orange-500 shadow-orange-200'}`} />
+                                  <select
+                                    value={hostel.attendanceMode || 'strict'}
+                                    onChange={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, attendanceMode: e.target.value })}
+                                    className="font-black text-slate-700 text-sm bg-transparent border-none outline-none focus:ring-0 p-0 w-full uppercase cursor-pointer"
+                                  >
+                                    <option value="strict">Strict (GPS + Face)</option>
+                                    <option value="gps-only">GPS Only</option>
+                                    <option value="biometric">Biometric (Device)</option>
+                                  </select>
                                 </div>
                               </div>
                             </div>
@@ -5980,8 +5995,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <div>
                   <h4 className="font-bold text-blue-900 text-sm uppercase tracking-wide mb-1">How Modes Work</h4>
                   <div className="space-y-1 text-xs text-blue-800 leading-relaxed font-medium">
-                    <p>🔒 <strong className="font-black">STRICT MODE (Recommended):</strong> Student must be INSIDE hostel (GPS) <span className="underline">AND</span> verify live FACE.</p>
-                    <p>📍 <strong className="font-black">GPS ONLY:</strong> Student only needs to be inside hostel. No camera required. Useful for broken cameras or quick attendance.</p>
+                    <p>🔒 <strong className="font-black">STRICT MODE (Camera):</strong> GPS + Live Camera Photo Match.</p>
+                    <p>📍 <strong className="font-black">GPS ONLY:</strong> GPS check only. Fastest, no biometric/camera.</p>
+                    <p>👆 <strong className="font-black">BIOMETRIC (New):</strong> GPS + Device Face/Fingerprint (WebAuthn). Most Secure.</p>
                   </div>
                 </div>
               </div>
@@ -6003,37 +6019,50 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <h4 className="font-black text-gray-800 text-base">{hostel.name}</h4>
                         <div className="flex items-center gap-2 mt-1.5">
                           <span className="text-[10px] uppercase font-black tracking-widest text-gray-400">Current Status:</span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wide border ${isGpsOnly
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wide border ${hostel.attendanceMode === 'gps-only'
                             ? 'bg-amber-50 text-amber-600 border-amber-100'
-                            : 'bg-green-50 text-green-600 border-green-100'
+                            : hostel.attendanceMode === 'biometric'
+                              ? 'bg-blue-50 text-blue-600 border-blue-100'
+                              : 'bg-green-50 text-green-600 border-green-100'
                             }`}>
-                            {isGpsOnly ? '⚠️ GPS ONLY' : '🔒 STRICT SECURE'}
+                            {hostel.attendanceMode === 'gps-only' ? '⚠️ GPS ONLY' : hostel.attendanceMode === 'biometric' ? '👆 BIOMETRIC' : '📸 CAMERA'}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex bg-gray-50 p-1 rounded-lg border border-gray-200 self-start sm:self-auto">
-                        <button
-                          disabled={isLoading}
-                          onClick={() => handleUpdateHostelMode(hostel._id, 'strict')}
-                          className={`px-4 py-2 rounded-md text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2 ${!isGpsOnly
-                            ? 'bg-white text-green-600 shadow-sm ring-1 ring-black/5 scale-[1.02]'
-                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                            }`}
-                        >
-                          {isLoading && !isGpsOnly && <span className="animate-spin">⏳</span>}
-                          Strict
-                        </button>
+                      <div className="flex bg-gray-50 p-1 rounded-lg border border-gray-200 self-start sm:self-auto flex-wrap gap-1">
                         <button
                           disabled={isLoading}
                           onClick={() => handleUpdateHostelMode(hostel._id, 'gps-only')}
-                          className={`px-4 py-2 rounded-md text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2 ${isGpsOnly
+                          title="GPS Check Only"
+                          className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${hostel.attendanceMode === 'gps-only'
                             ? 'bg-white text-amber-600 shadow-sm ring-1 ring-black/5 scale-[1.02]'
                             : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
                             }`}
                         >
-                          {isLoading && isGpsOnly && <span className="animate-spin">⏳</span>}
-                          GPS Only
+                          {isLoading && hostel.attendanceMode === 'gps-only' ? '⏳' : '📍'} GPS Only
+                        </button>
+                        <button
+                          disabled={isLoading}
+                          onClick={() => handleUpdateHostelMode(hostel._id, 'biometric')}
+                          title="GPS + Device Biometrics"
+                          className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${hostel.attendanceMode === 'biometric'
+                            ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5 scale-[1.02]'
+                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                            }`}
+                        >
+                          {isLoading && hostel.attendanceMode === 'biometric' ? '⏳' : '👆'} Bio-Auth
+                        </button>
+                        <button
+                          disabled={isLoading}
+                          onClick={() => handleUpdateHostelMode(hostel._id, 'strict')}
+                          title="GPS + Camera Photo"
+                          className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${(!hostel.attendanceMode || hostel.attendanceMode === 'strict')
+                            ? 'bg-white text-green-600 shadow-sm ring-1 ring-black/5 scale-[1.02]'
+                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                            }`}
+                        >
+                          {isLoading && (!hostel.attendanceMode || hostel.attendanceMode === 'strict') ? '⏳' : '📸'} Camera
                         </button>
                       </div>
                     </div>

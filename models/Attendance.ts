@@ -19,7 +19,7 @@ export interface IAttendance extends Document {
     status: "present";
     // Face matching fields (optional)
     faceMatchPercentage?: number; // 0-100
-    faceMatchStatus?: "auto-approved" | "flagged" | "manual-override";
+    faceMatchStatus?: "auto-approved" | "flagged" | "manual-override" | "biometric-verified";
     flaggedPhotoUrl?: string; // Only for flagged cases (match < 70%)
     needsReview?: boolean;
     isTest?: boolean;
@@ -91,7 +91,7 @@ const AttendanceSchema = new Schema<IAttendance>(
         },
         faceMatchStatus: {
             type: String,
-            enum: ["auto-approved", "flagged", "manual-override"],
+            enum: ["auto-approved", "flagged", "manual-override", "biometric-verified"],
             required: false,
         },
         flaggedPhotoUrl: {

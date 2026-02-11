@@ -1329,7 +1329,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     }
   };
 
-  const [hostelAttendanceMode, setHostelAttendanceMode] = useState<'strict' | 'gps-only'>('strict');
+  const [hostelAttendanceMode, setHostelAttendanceMode] = useState<'strict' | 'gps-only' | 'biometric'>('strict');
 
   useEffect(() => {
     if (studentProfile?.hostelName) {
@@ -1345,6 +1345,88 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       }).catch(err => console.error("Failed to fetch hostel settings", err));
     }
   }, [studentProfile?.hostelName]);
+
+  // ⚡ BIOMETRIC HELPER (WebAuthn)
+  const performBiometricCheck = async (): Promise<boolean> => {
+    try {
+      if (!window.PublicKeyCredential) {
+        alert("Your device does not support Biometric/Face ID verification.");
+        return false;
+      }
+
+      // 🔒 SECURE CONTEXT CHECK
+      if (!window.isSecureContext) {
+        alert("SECURITY ERROR: Biometrics only apply on HTTPS connections.\n\nYou are currently on HTTP(" + window.location.hostname + ").\n\nFor testing: Use 'ngrok' or 'localhost'.\nFor production: Use a secure domain.");
+        return false;
+      }
+
+      // 🚫 IP ADDRESS BLOCK (WebAuthn specific)
+      // WebAuthn spec forbids IP addresses as RP IDs. It MUST be a domain name or localhost.
+      const isIpAddress = /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(window.location.hostname);
+      if (isIpAddress) {
+        alert("CONFIGURATION ERROR: Biometric security forbids using IP Addresses (" + window.location.hostname + ").\n\nYou MUST use a domain name.\n\n✅ WORKING EXAMPLES:\n- localhost\n- my-app.vercel.app\n- 85a3-203.ngrok-free.app\n\n❌ WILL FAIL:\n- 192.168.x.x");
+        return false;
+      }
+
+      // 1. Get Challenge
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
+
+      // 2. Check for existing credential to avoid creating duplicates
+      const storedCredId = localStorage.getItem(`bio_cred_${studentProfile?._id}`);
+
+      if (storedCredId) {
+        try {
+          // Try Authentication first
+          const result = await navigator.credentials.get({
+            publicKey: {
+              challenge,
+              rpId: window.location.hostname,
+              userVerification: "required",
+              allowCredentials: [{
+                id: Uint8Array.from(atob(storedCredId), c => c.charCodeAt(0)),
+                type: "public-key"
+              }]
+            }
+          });
+          if (result) return true;
+        } catch (e) {
+          console.log("Biometric Auth failed, trying registration fallback...", e);
+          // Fall through to registration
+        }
+      }
+
+      // 3. Registration (First time or recovery)
+      const result: any = await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: "Hostelease Attendance", id: window.location.hostname },
+          user: {
+            id: new Uint8Array(16),
+            name: studentProfile?.email || "Student",
+            displayName: studentProfile?.name || "Student User"
+          },
+          pubKeyCredParams: [{ alg: -7, type: "public-key" }, { alg: -257, type: "public-key" }],
+          authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },
+          timeout: 60000,
+          attestation: "direct"
+        }
+      });
+
+      if (result) {
+        // Save ID for next time (Simple Base64 storage)
+        const idStr = btoa(String.fromCharCode(...new Uint8Array(result.rawId)));
+        localStorage.setItem(`bio_cred_${studentProfile?._id}`, idStr);
+        return true;
+      }
+
+      return false;
+    } catch (error: any) {
+      console.error("Biometric Error:", error);
+      alert("Biometric verification failed or cancelled. Please try again.");
+      return false;
+    }
+  };
 
   const handleMarkAttendance = async (retryAttempt = 0) => {
     if (!studentProfile) return;
@@ -1395,12 +1477,23 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       // ⚡ CHECK HOSTEL MODE
       if (hostelAttendanceMode === 'gps-only') {
         console.log("📍 GPS Only mode detected. Skipping face verification.");
-        // Skip camera, go straight to marking
-        // Pass a dummy approved result
-        await proceedWithAttendance({
-          percentage: 100,
-          status: 'auto-approved'
-        });
+        await proceedWithAttendance({ percentage: 100, status: 'auto-approved' });
+        return;
+      }
+
+      // ⚡ BIOMETRIC MODE
+      if (hostelAttendanceMode === 'biometric') {
+        console.log("👆 Biometric mode detected. Triggering WebAuthn...");
+        setAttendanceStep('face-match'); // Reuse UI state for "Verifying..."
+
+        const isVerified = await performBiometricCheck();
+
+        if (isVerified) {
+          await proceedWithAttendance({ percentage: 100, status: 'biometric-verified' });
+        } else {
+          setIsMarkingAttendance(false);
+          setAttendanceStep('idle');
+        }
         return;
       }
 

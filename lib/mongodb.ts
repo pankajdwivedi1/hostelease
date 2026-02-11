@@ -67,9 +67,9 @@ async function connectDB() {
     socketTimeoutMS: 45000,
     family: 4,
 
-    // ⚡ CONCURRENCY: Higher pool for dev to handle polling
-    maxPoolSize: isProduction ? 10 : 10,
-    minPoolSize: 2,
+    // ⚡ CONCURRENCY: Ultra-conservative pool for M0 tier
+    maxPoolSize: 2,
+    minPoolSize: 1,
     maxIdleTimeMS: 10000,
 
     retryWrites: true,

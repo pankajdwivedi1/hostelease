@@ -5,7 +5,7 @@ export interface IHostel extends Document {
     totalRooms?: number;
     wardenUsername?: string;
     wardenPassword?: string;
-    attendanceMode: 'strict' | 'gps-only'; // New Setting
+    attendanceMode: 'strict' | 'gps-only' | 'biometric'; // New Setting
     createdAt?: Date;
     updatedAt?: Date;
 }
@@ -33,7 +33,7 @@ const HostelSchema: Schema = new Schema(
         },
         attendanceMode: {
             type: String,
-            enum: ['strict', 'gps-only'],
+            enum: ['strict', 'gps-only', 'biometric'],
             default: 'strict'
         }
     },
