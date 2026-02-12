@@ -248,11 +248,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   // System Settings - New Features
   const [showSystemSettingsModal, setShowSystemSettingsModal] = useState(false);
   const [isSavingSystemSettings, setIsSavingSystemSettings] = useState(false);
+  const [showChangePreviewModal, setShowChangePreviewModal] = useState(false);
+  const [pendingFormBuilderChanges, setPendingFormBuilderChanges] = useState<any[] | null>(null);
   const [showDBExportModal, setShowDBExportModal] = useState(false);
   const [isExportingDB, setIsExportingDB] = useState(false);
   const [hostelsConfig, setHostelsConfig] = useState<any[]>([]);
   const [registrationFields, setRegistrationFields] = useState<Record<string, any>>({});
   const [formBuilderFields, setFormBuilderFields] = useState<any[]>([]);
+  const [savedFormBuilderConfig, setSavedFormBuilderConfig] = useState<any[]>([]); // ⚡ NEW: Reference for Diff
   const [activeSettingsTab, setActiveSettingsTab] = useState<"wardens" | "rooms" | "form">("wardens");
   const [globalWardenPassword, setGlobalWardenPassword] = useState("warden456");
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
@@ -525,7 +528,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         });
 
         setRegistrationFields(mergedFields);
+        setRegistrationFields(mergedFields);
         setFormBuilderFields(settingsData.formBuilderConfig || []);
+        setSavedFormBuilderConfig(settingsData.formBuilderConfig || []); // ⚡ NEW: Save reference
         if (settingsData.wardenPassword) {
           setGlobalWardenPassword(settingsData.wardenPassword);
         }
@@ -632,17 +637,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const handleUpdateFormBuilder = async (updatedFields: any[]) => {
+  const confirmUpdateFormBuilder = async () => {
+    if (!pendingFormBuilderChanges) return;
+
     try {
       setIsSavingSystemSettings(true);
       const res = await fetch("/api/admin/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formBuilderConfig: updatedFields })
+        body: JSON.stringify({ formBuilderConfig: pendingFormBuilderChanges })
       });
       const data = await res.json();
       if (data.success) {
-        setFormBuilderFields(updatedFields);
+        setFormBuilderFields(pendingFormBuilderChanges);
+        setSavedFormBuilderConfig(pendingFormBuilderChanges); // ⚡ NEW: Update reference on save
+        setShowChangePreviewModal(false);
+        setPendingFormBuilderChanges(null);
+        alert("Configuration updated successfully!");
       }
     } catch (error) {
       alert("Failed to update form builder");
@@ -650,6 +661,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       setIsSavingSystemSettings(false);
     }
   };
+
+  const handleUpdateFormBuilder = (updatedFields: any[]) => {
+    setPendingFormBuilderChanges(updatedFields);
+    setShowChangePreviewModal(true);
+  };
+
 
   const handleDBExport = async (format: "json" | "csv" | "xlsx") => {
     try {
@@ -889,7 +906,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const handleUpdateHostelMode = async (hostelId: string, mode: 'strict' | 'gps-only') => {
+  const handleUpdateHostelMode = async (hostelId: string, mode: 'strict' | 'gps-only' | 'biometric') => {
     try {
       setUpdatingHostelId(hostelId);
       const res = await fetch('/api/admin/hostels', {
@@ -4788,7 +4805,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     </div>
 
                     <div className="col-span-full">
-                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Permanent Address (with PIN)</label>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Permanent Address </label>
                       <input
                         type="text"
                         value={editStudentForm.homePinCode || ""}
@@ -5527,20 +5544,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               { id: "dob", label: "Date of Birth", type: "date", required: true, visible: true, section: "Personal" },
                               { id: "category", label: "Social Category", type: "select", options: ["GENERAL", "OBC", "SC", "ST"], required: true, visible: true, section: "Personal" },
                               { id: "erpInformation", label: "ERP ID", type: "text", required: true, visible: true, section: "Academic" },
-                              { id: "collegeName", label: "College Name", type: "text", required: true, visible: true, section: "Academic" },
-                              { id: "branch", label: "Branch", type: "text", required: true, visible: true, section: "Academic" },
+                              { id: "collegeName", label: "College Name", type: "select", options: ["OIST", "OCT", "OCP", "OPM", "OIPR"], required: true, visible: true, section: "Academic" },
+                              { id: "branch", label: "Branch", type: "select", options: ["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"], required: true, visible: true, section: "Academic" },
                               { id: "year", label: "Current Year", type: "select", options: ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"], required: true, visible: true, section: "Academic" },
                               { id: "semester", label: "Semester", type: "select", options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"], required: true, visible: true, section: "Academic" },
-                              { id: "section", label: "Section", type: "text", required: true, visible: true, section: "Academic" },
+                              { id: "section", label: "Section", type: "select", options: ["A", "B", "C", "D", "E", "F"], required: true, visible: true, section: "Academic" },
                               { id: "fatherName", label: "Father's Name", type: "text", required: true, visible: true, section: "Guardian" },
                               { id: "fatherNumber", label: "Father's Phone No", type: "tel", required: true, visible: true, section: "Guardian" },
                               { id: "motherName", label: "Mother's Name", type: "text", required: true, visible: true, section: "Guardian" },
                               { id: "motherNumber", label: "Mother's Phone No", type: "tel", required: true, visible: true, section: "Guardian" },
                               { id: "localGuardianAddress", label: "Local Guardian Address", type: "textarea", required: false, visible: true, section: "Guardian" },
                               { id: "localGuardianPhoneNumber", label: "Local Guardian Phone", type: "tel", required: false, visible: true, section: "Guardian" },
-                              { id: "homePinCode", label: "Permanent Address (with PIN)", type: "textarea", required: true, visible: true, section: "Address" },
                               { id: "homeState", label: "Home State", type: "select", options: ["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"], required: true, visible: true, section: "Address" },
-                              { id: "hostelName", label: "Hostel Name", type: "select", options: [], required: true, visible: true, section: "Registration" },
+                              { id: "homePinCode", label: "Permanent Address", type: "textarea", required: true, visible: true, section: "Address" },
+                              { id: "hostelName", label: "Hostel Name", type: "select", options: hostels.map(h => h.name), required: true, visible: true, section: "Registration" },
+                              { id: "floorNumber", label: "Floor Number", type: "select", options: ["GND FLOOR", "1ST FLOOR", "2ND FLOOR", "3RD FLOOR", "4TH FLOOR"], required: true, visible: true, section: "Registration" },
                               { id: "roomNumber", label: "Room Number", type: "text", required: true, visible: true, section: "Registration" },
                               { id: "joiningDate", label: "Joining Date", type: "date", required: true, visible: true, section: "Registration" }
                             ];
@@ -5581,20 +5599,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 { id: "dob", label: "Date of Birth", type: "date", required: true, visible: true, section: "Personal" },
                                 { id: "category", label: "Social Category", type: "select", options: ["GENERAL", "OBC", "SC", "ST"], required: true, visible: true, section: "Personal" },
                                 { id: "erpInformation", label: "ERP ID", type: "text", required: true, visible: true, section: "Academic" },
-                                { id: "collegeName", label: "College Name", type: "text", required: true, visible: true, section: "Academic" },
-                                { id: "branch", label: "Branch", type: "text", required: true, visible: true, section: "Academic" },
+                                { id: "collegeName", label: "College Name", type: "select", options: ["OIST", "OCT", "OCP", "OPM", "OIPR"], required: true, visible: true, section: "Academic" },
+                                { id: "branch", label: "Branch", type: "select", options: ["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"], required: true, visible: true, section: "Academic" },
                                 { id: "year", label: "Current Year", type: "select", options: ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"], required: true, visible: true, section: "Academic" },
                                 { id: "semester", label: "Semester", type: "select", options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"], required: true, visible: true, section: "Academic" },
-                                { id: "section", label: "Section", type: "text", required: true, visible: true, section: "Academic" },
+                                { id: "section", label: "Section", type: "select", options: ["A", "B", "C", "D", "E", "F"], required: true, visible: true, section: "Academic" },
                                 { id: "fatherName", label: "Father's Name", type: "text", required: true, visible: true, section: "Guardian" },
                                 { id: "fatherNumber", label: "Father's Phone No", type: "tel", required: true, visible: true, section: "Guardian" },
                                 { id: "motherName", label: "Mother's Name", type: "text", required: true, visible: true, section: "Guardian" },
                                 { id: "motherNumber", label: "Mother's Phone No", type: "tel", required: true, visible: true, section: "Guardian" },
                                 { id: "localGuardianAddress", label: "Local Guardian Address", type: "textarea", required: false, visible: true, section: "Guardian" },
                                 { id: "localGuardianPhoneNumber", label: "Local Guardian Phone", type: "tel", required: false, visible: true, section: "Guardian" },
-                                { id: "homePinCode", label: "Permanent Address (with PIN)", type: "textarea", required: true, visible: true, section: "Address" },
                                 { id: "homeState", label: "Home State", type: "select", options: ["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"], required: true, visible: true, section: "Address" },
-                                { id: "hostelName", label: "Hostel Name", type: "select", options: [], required: true, visible: true, section: "Registration" },
+                                { id: "homePinCode", label: "Permanent Address", type: "textarea", required: true, visible: true, section: "Address" },
+                                { id: "hostelName", label: "Hostel Name", type: "select", options: hostels.map(h => h.name), required: true, visible: true, section: "Registration" },
+                                { id: "floorNumber", label: "Floor Number", type: "select", options: ["GND FLOOR", "1ST FLOOR", "2ND FLOOR", "3RD FLOOR", "4TH FLOOR"], required: true, visible: true, section: "Registration" },
                                 { id: "roomNumber", label: "Room Number", type: "text", required: true, visible: true, section: "Registration" },
                                 { id: "joiningDate", label: "Joining Date", type: "date", required: true, visible: true, section: "Registration" }
                               ];
@@ -5643,12 +5662,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     value={field.label}
                                     onChange={(e) => {
                                       const updated = [...formBuilderFields];
-                                      updated[index].label = e.target.value;
+                                      updated[index] = { ...updated[index], label: e.target.value };
                                       setFormBuilderFields(updated);
                                     }}
                                     onBlur={(e) => {
+                                      // Trigger modal only on blur (finish editing)
                                       const updated = [...formBuilderFields];
-                                      updated[index].label = e.target.value;
+                                      updated[index] = { ...updated[index], label: e.target.value };
                                       handleUpdateFormBuilder(updated);
                                     }}
                                     className="w-full bg-transparent border-none focus:ring-0 p-0 text-[11px] font-black text-gray-900 placeholder:text-gray-300 uppercase tracking-tight"
@@ -5789,6 +5809,44 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
               {/* Modal Footer */}
               <div className="p-4 sm:p-8 border-t border-gray-100 bg-gray-50/50 flex items-center justify-end">
+                <button
+                  onClick={() => {
+                    if (confirm("This will overwrite your current form configuration with the standard template (including Floor Number). Are you sure?")) {
+                      const DEFAULT_CONFIG = [
+                        { id: "profilePicture", label: "Profile Photo", type: "image", section: "Personal", required: true, visible: true },
+                        { id: "name", label: "Full Name", type: "text", section: "Personal", required: true, visible: true },
+                        { id: "phoneNumber", label: "Phone Number", type: "tel", section: "Personal", required: true, visible: true },
+                        { id: "dob", label: "Date of Birth", type: "date", section: "Personal", required: true, visible: true },
+                        { id: "category", label: "Social Category", type: "select", section: "Personal", required: true, visible: true, options: ["GENERAL", "OBC", "SC", "ST"] },
+
+                        { id: "erpInformation", label: "ERP ID", type: "text", section: "Academic", required: true, visible: true },
+                        { id: "collegeName", label: "College Name", type: "select", section: "Academic", required: true, visible: true, options: ["OIST", "OCT", "OIM", "Pharmacy", "MCA"] },
+                        { id: "branch", label: "Branch", type: "select", section: "Academic", required: true, visible: true, options: ["CSE", "AIML", "DS", "IT", "EC", "EX", "ME", "CE", "AU"] },
+                        { id: "year", label: "Current Year", type: "select", section: "Academic", required: true, visible: true, options: ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"] },
+                        { id: "semester", label: "Semester", type: "select", section: "Academic", required: true, visible: true, options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"] },
+                        { id: "section", label: "Section", type: "select", section: "Academic", required: true, visible: true, options: ["A", "B", "C", "D", "E"] },
+
+                        { id: "fatherName", label: "Father's Name", type: "text", section: "Guardian", required: true, visible: true },
+                        { id: "fatherNumber", label: "Father's Phone No", type: "tel", section: "Guardian", required: true, visible: true },
+                        { id: "motherName", label: "Mother's Name", type: "text", section: "Guardian", required: true, visible: true },
+                        { id: "motherNumber", label: "Mother's Phone No", type: "tel", section: "Guardian", required: true, visible: true },
+                        { id: "localGuardianAddress", label: "Local Guardian Address", type: "textarea", section: "Guardian", required: true, visible: true },
+                        { id: "localGuardianPhoneNumber", label: "Local Guardian Phone", type: "tel", section: "Guardian", required: true, visible: true },
+
+                        { id: "homeState", label: "Home State", type: "select", section: "Address", required: true, visible: true, options: ["Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"] },
+                        { id: "joiningDate", label: "Joining Date", type: "date", section: "Other", required: true, visible: true },
+
+                        // NEW FIELD
+                        { id: "floorNumber", label: "Floor Number", type: "select", section: "Accommodation", required: true, visible: true, options: ["Ground Floor", "1st Floor", "2nd Floor", "3rd Floor", "4th Floor", "5th Floor"] }
+                      ];
+
+                      handleUpdateFormBuilder(DEFAULT_CONFIG);
+                    }
+                  }}
+                  className="w-full sm:w-auto px-6 py-3.5 sm:py-4 bg-gray-100 text-gray-500 font-bold text-xs uppercase tracking-[0.1em] rounded-2xl hover:bg-gray-200 transition-all mr-auto"
+                >
+                  ⚠ Reset to Defaults
+                </button>
                 <button
                   onClick={() => setShowSystemSettingsModal(false)}
                   className="w-full sm:w-auto px-10 py-3.5 sm:py-4 bg-gray-900 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl hover:bg-black transition-all shadow-xl active:scale-95"
@@ -6151,6 +6209,165 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   {isExportingDB && <span className="animate-spin text-orange-600">⏳</span>}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change Preview Modal */}
+      {showChangePreviewModal && pendingFormBuilderChanges && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-5xl h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 mb-1">Review Configuration Changes</h2>
+                <p className="text-sm text-gray-500">Please review the differences before saving everything to the database.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowChangePreviewModal(false);
+                  setPendingFormBuilderChanges(null);
+                }}
+                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto p-6 bg-gray-50/30">
+              <div className="grid grid-cols-2 gap-8 h-full">
+                {/* Original */}
+                <div className="flex flex-col h-full">
+                  <div className="mb-4 font-black text-xs text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                    Current / Original
+                  </div>
+                  <div className="flex-1 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 p-4 overflow-y-auto space-y-3">
+                    {savedFormBuilderConfig.length === 0 ? (
+                      <p className="text-gray-400 italic text-sm text-center py-10">No existing configuration</p>
+                    ) : (
+                      savedFormBuilderConfig.map((field, i) => (
+                        <div key={field.id || i} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm opacity-60 grayscale">
+                          <div className="flex justify-between items-start mb-1">
+                            <span className="font-bold text-xs text-gray-800">{field.label}</span>
+                            <span className="text-[10px] font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">{field.type}</span>
+                          </div>
+                          <div className="flex gap-2 text-[10px] text-gray-400">
+                            <span>ID: {field.id}</span>
+                            <span>•</span>
+                            <span>{field.required ? 'Required*' : 'Optional'}</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* New */}
+                <div className="flex flex-col h-full">
+                  <div className="mb-4 font-black text-xs text-blue-600 uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                    New / Pending Save
+                  </div>
+                  <div className="flex-1 bg-blue-50/30 rounded-2xl border-2 border-blue-100 p-4 overflow-y-auto space-y-3 shadow-inner">
+                    {pendingFormBuilderChanges.map((field, i) => {
+                      // 🔍 DETECT CHANGES (Compare against SAVED config, not current working copy)
+                      const originalIndex = savedFormBuilderConfig.findIndex(f => f.id === field.id);
+                      const originalField = originalIndex !== -1 ? savedFormBuilderConfig[originalIndex] : null;
+
+                      let isChanged = false;
+                      let changeType = 'unchanged';
+
+                      if (!originalField) {
+                        isChanged = true;
+                        changeType = 'new';
+                      } else {
+                        // Check for ANY modification
+                        if (
+                          originalIndex !== i || // Order changed
+                          originalField.label !== field.label ||
+                          originalField.required !== field.required ||
+                          originalField.type !== field.type ||
+                          JSON.stringify(originalField.options) !== JSON.stringify(field.options)
+                        ) {
+                          isChanged = true;
+                          changeType = 'modified';
+                        }
+                      }
+
+                      return (
+                        <div
+                          key={field.id || i}
+                          className={`bg-white p-3 rounded-xl border-l-4 shadow-sm relative overflow-hidden group hover:shadow-md transition-all ${isChanged
+                            ? 'border-emerald-500 ring-2 ring-emerald-100 bg-emerald-50/10' // 🟢 Green for changes
+                            : 'border-blue-200 opacity-60 grayscale-[0.3]' // 🔵 Faded for unchanged
+                            }`}
+                        >
+                          {isChanged && (
+                            <div className="absolute top-2 right-2 flex gap-1">
+                              {changeType === 'new' && <span className="bg-emerald-500 text-white text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow-sm">NEW</span>}
+                              {changeType === 'modified' && <span className="bg-emerald-500 text-white text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow-sm">UPDATED</span>}
+                            </div>
+                          )}
+
+                          <div className="flex justify-between items-start mb-1">
+                            <span className={`font-bold text-xs ${isChanged ? 'text-emerald-600' : 'text-gray-900'}`}>{field.label}</span>
+                            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${field.type === 'select' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                              {field.type}
+                            </span>
+                          </div>
+                          <div className="flex gap-2 text-[10px] text-gray-500 mb-2">
+                            <span className="font-mono text-gray-400">{field.id}</span>
+                            <span className="text-gray-300">•</span>
+                            <span className={field.required ? "text-red-500 font-bold" : "text-gray-400"}>{field.required ? 'Required*' : 'Optional'}</span>
+                          </div>
+                          {field.options && field.options.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-gray-50 grid grid-cols-2 gap-1">
+                              {field.options.slice(0, 6).map((opt: string) => (
+                                <span key={opt} className="text-[9px] bg-gray-50 px-1.5 py-0.5 rounded text-gray-500 truncate border border-gray-100">
+                                  {opt}
+                                </span>
+                              ))}
+                              {field.options.length > 6 && (
+                                <span className="text-[9px] text-gray-400 px-1 italic">+{field.options.length - 6} more...</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                    }
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-100 bg-white flex justify-end gap-3 z-10">
+              <button
+                onClick={() => {
+                  setShowChangePreviewModal(false);
+                  setPendingFormBuilderChanges(null);
+                }}
+                className="px-6 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmUpdateFormBuilder}
+                disabled={isSavingSystemSettings}
+                className="px-8 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex items-center gap-2"
+              >
+                {isSavingSystemSettings ? (
+                  <>
+                    <span className="animate-spin">⏳</span> Saving...
+                  </>
+                ) : (
+                  <>
+                    <span>Confirm & Save Changes</span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

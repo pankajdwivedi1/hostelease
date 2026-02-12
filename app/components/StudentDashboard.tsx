@@ -40,6 +40,7 @@ interface StudentProfile {
   localGuardianPhoneNumber?: string;
   localGuardianAddress?: string;
   section?: string;
+  floorNumber?: string; // ⚡ NEW
   homeState?: string;
   deviceId?: string;
   registrationId?: string;
@@ -97,12 +98,14 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     lng: number;
   }[]>([]);
   const [lastCheckAccuracy, setLastCheckAccuracy] = useState<number | null>(null);
+  const [missingRequiredFields, setMissingRequiredFields] = useState<string[]>([]); // ⚡ NEW: Track missing fields
   const [showMandatoryUpdate, setShowMandatoryUpdate] = useState(false);
   const [mandatoryFormData, setMandatoryFormData] = useState({ dob: "", category: "", homeState: "", section: "" });
   const [updatingProfile, setUpdatingProfile] = useState(false);
   const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
   const [attendanceStep, setAttendanceStep] = useState<'idle' | 'gps' | 'accuracy' | 'saving' | 'done' | 'error' | 'face-match'>('idle');
   const [attendanceRetryCount, setAttendanceRetryCount] = useState(0);
+  const [isWifiFallback, setIsWifiFallback] = useState(false);
 
   // Face Matching State
   const [faceMatchProgress, setFaceMatchProgress] = useState(0);
@@ -622,6 +625,29 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                 studentStatus: fullData.student.studentStatus || "in"
               };
               setStudentProfile(fullStudentData);
+
+              // ⚡ NEW: Check for Missing Required Fields (Strict Mode)
+              if (formBuilderConfig && formBuilderConfig.length > 0) {
+                const missing: string[] = [];
+                formBuilderConfig.forEach(field => {
+                  // Skip images (complex checks)
+                  if (field.visible && field.required && field.type !== 'image') {
+                    const val = (fullStudentData as any)[field.id] || fullStudentData.dynamicFields?.[field.id];
+                    // Check for null, undefined, or empty string
+                    if (!val || (typeof val === 'string' && val.trim() === '')) {
+                      missing.push(field.label);
+                    }
+                  }
+                });
+
+                if (missing.length > 0) {
+                  console.log("⚠️ Missing Fields Detected:", missing);
+                  setMissingRequiredFields(missing);
+                  setShowProfile(true); // Force open profile
+                  setToastMessage(`Action Required: Please update your profile.`);
+                  setShowToast(true);
+                }
+              }
             }
           } catch (error) {
             console.error("Error loading full profile:", error);
@@ -865,6 +891,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
     setIsLocationChecking(true);
     setGpsLockStatus('locking');
+    setIsWifiFallback(false);
     setLockProgress(10);
     setGpsAccuracy(null);
 
@@ -933,6 +960,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     const tryWifiFallback = () => {
       if (isCompleted) return;
       console.log("📶 GPS timed out, trying WiFi/Cell fallback...");
+      setIsWifiFallback(true);
+      setLockProgress(50); // Reset progress for visual feedback
 
       navigator.geolocation.getCurrentPosition(
         (pos) => finish(pos),
@@ -2382,8 +2411,12 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                       </div>
                     </div>
 
-                    <h3 className="text-xl font-black text-gray-900 mb-2">Locking GPS...</h3>
-                    <p className="text-gray-500 text-sm mb-6 font-medium">Connecting to satellites for high accuracy attendance</p>
+                    <h3 className="text-xl font-black text-gray-900 mb-2">
+                      {isWifiFallback ? "Switching to WiFi..." : "Locking GPS..."}
+                    </h3>
+                    <p className="text-gray-500 text-sm mb-6 font-medium">
+                      {isWifiFallback ? "GPS weak. Using network-based location..." : "Connecting to satellites for high accuracy attendance"}
+                    </p>
 
                     <div className="space-y-4">
                       <div className="flex items-center justify-between px-1">
@@ -2401,9 +2434,11 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                       </div>
 
                       <p className="text-[11px] text-gray-400 font-bold italic animate-bounce">
-                        {gpsAccuracy && gpsAccuracy > 300
-                          ? "📍 Move closer to a window for faster lock"
-                          : "Please wait, filtering network signal..."}
+                        {isWifiFallback
+                          ? "📶 Scanning nearby networks..."
+                          : (gpsAccuracy && gpsAccuracy > 300
+                            ? "📍 Move closer to a window for faster lock"
+                            : "Please wait, filtering network signal...")}
                       </p>
                     </div>
 
@@ -2421,8 +2456,14 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             <>
               <div className="flex items-center gap-4 mb-6">
                 <button
-                  onClick={() => setShowProfile(false)}
-                  className="w-10 h-10 rounded-full border border-solid border-[#9CA3AF] bg-white text-foreground flex items-center justify-center transition-colors hover:bg-filler flex-shrink-0"
+                  onClick={() => {
+                    if (missingRequiredFields.length > 0) {
+                      alert("Please update your profile details (Missing: " + missingRequiredFields.join(", ") + ") before closing.");
+                      return;
+                    }
+                    setShowProfile(false);
+                  }}
+                  className={`w-10 h-10 rounded-full border border-solid border-[#9CA3AF] bg-white text-foreground flex items-center justify-center transition-colors hover:bg-filler flex-shrink-0 ${missingRequiredFields.length > 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -2434,6 +2475,33 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
               </div>
 
               <div className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-4 md:p-6">
+
+                {/* ⚡ MANDATORY UPDATE WARNING */}
+                {missingRequiredFields.length > 0 && (
+                  <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg shadow-sm animate-pulse">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <h3 className="text-sm font-bold text-red-800 uppercase tracking-wide">Action Required</h3>
+                        <p className="text-sm text-red-700 mt-1">
+                          You must update your profile to continue. <br />
+                          <span className="font-bold">Missing Fields:</span> {missingRequiredFields.join(", ")}
+                        </p>
+                        <button
+                          onClick={() => router.push('/onboarding')}
+                          className="mt-3 px-4 py-2 bg-red-600 text-white text-xs font-bold uppercase rounded-lg shadow hover:bg-red-700 transition-colors"
+                        >
+                          Update Profile Now &rarr;
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-4">
                   <div className="flex flex-col items-center gap-3 md:gap-4">
                     <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0">
@@ -2476,7 +2544,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
-                    {formBuilderConfig.filter(f => f.visible).map((field) => {
+                    {formBuilderConfig.filter(f => f.visible && f.type !== 'image').map((field) => {
                       const value = (studentProfile as any)[field.id] || studentProfile.dynamicFields?.[field.id] || "N/A";
                       const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? formatDate(value) : value;
 

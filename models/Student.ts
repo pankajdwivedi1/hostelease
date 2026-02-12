@@ -29,6 +29,7 @@ export interface IStudentBase {
   localGuardianAddress?: string;
   localGuardianPhoneNumber?: string;
   section?: string;
+  floorNumber?: string; // NEW
   lastCheckInLocation?: {
     lat: number;
     lng: number;
@@ -149,6 +150,10 @@ const StudentSchema = new Schema<IStudent>(
       required: false,
     },
     section: {
+      type: String,
+      required: false,
+    },
+    floorNumber: {
       type: String,
       required: false,
     },

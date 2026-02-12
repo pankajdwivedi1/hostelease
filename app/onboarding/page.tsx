@@ -106,8 +106,25 @@ export default function OnboardingPage() {
           }
         } else {
           const value = (formData as any)[field.id];
+
+          // Basic Empty Check
           if (!value || (typeof value === "string" && value.trim() === "")) {
             newErrors[field.id] = `${field.label} is required`;
+          }
+
+          // STRICT: Validate Select Options (Force user to pick valid option if current data is invalid/legacy)
+          else if (field.type === 'select') {
+            if (field.id === 'hostelName') {
+              const isValidHostel = hostels.some(h => h.name.toUpperCase() === value.toUpperCase());
+              if (!isValidHostel) {
+                newErrors[field.id] = `Please select a valid ${field.label}`;
+              }
+            } else if (field.options && field.options.length > 0) {
+              const isValidOption = field.options.some((opt: string) => opt.toUpperCase() === value.toUpperCase());
+              if (!isValidOption) {
+                newErrors[field.id] = `Please select a valid ${field.label}`;
+              }
+            }
           }
         }
       }
@@ -192,6 +209,7 @@ export default function OnboardingPage() {
           year: formData.year,
           semester: formData.semester,
           section: formData.section,
+          floorNumber: formData.floorNumber, // NEW
           localGuardianAddress: formData.localGuardianAddress,
           localGuardianPhoneNumber: formData.localGuardianPhoneNumber,
           dob: formData.dob,
@@ -283,7 +301,7 @@ export default function OnboardingPage() {
             return;
           }
 
-          setFaceDescriptor(Array.from(descriptor));
+          setFaceDescriptor(Array.from(descriptor.descriptor));
 
           // Initial quality
           let quality = 0.9;

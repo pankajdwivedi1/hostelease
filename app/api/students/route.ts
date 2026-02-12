@@ -7,11 +7,11 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, homePinCode, homeState, erpInformation, joiningDate, branch, collegeName, year, semester, section, localGuardianAddress, localGuardianPhoneNumber, dob, category, deviceId, faceDescriptor } = body;
+    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, homePinCode, homeState, erpInformation, joiningDate, branch, collegeName, year, semester, section, localGuardianAddress, localGuardianPhoneNumber, dob, category, deviceId, faceDescriptor, floorNumber } = body;
 
-    if (!firebaseUID || !name || !email || !phoneNumber || !hostelName || !roomNumber) {
+    if (!firebaseUID || !name || !email || !phoneNumber || !hostelName || !roomNumber || !branch || !collegeName || !year || !semester || !section || !floorNumber || !dob || !category || !homeState || !homePinCode || !fatherName || !fatherNumber || !motherName || !motherNumber || !erpInformation || !joiningDate) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Please fill all required fields marked with *" },
         { status: 400 }
       );
     }
@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
       year: year || "",
       semester: semester || "",
       section: section || "",
+      floorNumber: floorNumber || "",
       localGuardianAddress: localGuardianAddress || "",
       localGuardianPhoneNumber: localGuardianPhoneNumber || "",
       dob: dob || "",
@@ -104,7 +105,10 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// ⚡ OPTIMIZED: Modern connection pooling for Next.js to prevent "buffering timed out" errors
+
 export async function GET(request: NextRequest) {
+  let query: any = {};
   try {
     await connectDB();
 
@@ -159,7 +163,6 @@ export async function GET(request: NextRequest) {
 
     const light = searchParams.get("light") === "true"; // ⚡ OPTIMIZATION: Exclude heavy fields
 
-    let query: any = {};
     if (search) {
       // 🔍 BACKEND SEARCH: Only search required fields that always exist
       // Optional fields (parent info, district, etc.) are searched on frontend via client-side filtering
