@@ -48,6 +48,7 @@ interface StudentProfile {
   category?: string;
   faceDescriptor?: number[]; // ⚡ NEW: Stores face embedding
   firebaseUID?: string;
+  attendanceMode?: "default" | "strict" | "gps-only" | "biometric"; // ⚡ NEW: Override
   dynamicFields?: Record<string, any>;
 }
 
@@ -1361,6 +1362,14 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   const [hostelAttendanceMode, setHostelAttendanceMode] = useState<'strict' | 'gps-only' | 'biometric'>('strict');
 
   useEffect(() => {
+    // ⚡ PRIORITY 1: Student Individual Override
+    if (studentProfile?.attendanceMode && studentProfile.attendanceMode !== 'default') {
+      console.log(`👤 Student Override Active: ${studentProfile.attendanceMode}`);
+      setHostelAttendanceMode(studentProfile.attendanceMode);
+      return;
+    }
+
+    // ⚡ PRIORITY 2: Hostel Global Settings
     if (studentProfile?.hostelName) {
       // Fetch public hostel list and find my hostel's settings
       fetch('/api/hostels').then(res => res.json()).then(data => {
@@ -1373,7 +1382,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         }
       }).catch(err => console.error("Failed to fetch hostel settings", err));
     }
-  }, [studentProfile?.hostelName]);
+  }, [studentProfile?.hostelName, studentProfile?.attendanceMode]);
 
   // ⚡ BIOMETRIC HELPER (WebAuthn)
   const performBiometricCheck = async (): Promise<boolean> => {

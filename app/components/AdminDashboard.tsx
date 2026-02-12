@@ -114,6 +114,7 @@ interface StudentDetails {
   registrationId?: string;
   isProfileLocked?: boolean;
   deviceId?: string;
+  attendanceMode?: "default" | "strict" | "gps-only" | "biometric";
   permissions: SimplePermission[];
 }
 
@@ -138,6 +139,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [hostelFilter, setHostelFilter] = useState<string>("all");
+  const [updatingAttendanceMode, setUpdatingAttendanceMode] = useState(false);
+  const [showAttendanceModeSelector, setShowAttendanceModeSelector] = useState(false);
   const [collegeFilter, setCollegeFilter] = useState<string>("all");
   const [semesterFilter, setSemesterFilter] = useState<string>("all");
   const [branchFilter, setBranchFilter] = useState<string>("all");
@@ -1713,6 +1716,32 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       alert(error.message || "Failed to delete student. Please try again.");
     } finally {
       setDeletingStudentId(null);
+    }
+  };
+
+  const handleUpdateAttendanceMode = async (studentId: string, mode: "default" | "strict" | "gps-only" | "biometric") => {
+    try {
+      setUpdatingAttendanceMode(true);
+      const response = await fetch(`/api/students/${studentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attendanceMode: mode }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update mode");
+
+      // Update local state
+      setStudents(prev => prev.map(s => s.id === studentId ? { ...s, attendanceMode: mode } : s));
+      if (selectedStudent?.id === studentId) {
+        setSelectedStudent(prev => prev ? { ...prev, attendanceMode: mode } : null);
+      }
+      setShowAttendanceModeSelector(false);
+      alert(`Attendance Mode Updated to: ${mode}`);
+    } catch (error) {
+      console.error("Error updating attendance mode:", error);
+      alert("Failed to update attendance mode");
+    } finally {
+      setUpdatingAttendanceMode(false);
     }
   };
 
@@ -4000,7 +4029,53 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               </div>
 
               {showRemoveButton && (
-                <div className="grid grid-cols-3 sm:flex sm:justify-end gap-2 md:gap-3 mt-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-4">
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowAttendanceModeSelector(!showAttendanceModeSelector)}
+                      className="w-full h-full flex flex-col sm:flex-row items-center justify-center text-center gap-1 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl border-2 border-indigo-600 text-indigo-600 font-bold transition-all hover:bg-indigo-50 text-[10px] sm:text-sm"
+                    >
+                      <span className="text-base sm:text-lg">
+                        {(!selectedStudent.attendanceMode || selectedStudent.attendanceMode === 'default') ? '🛡️' :
+                          selectedStudent.attendanceMode === 'gps-only' ? '📍' :
+                            selectedStudent.attendanceMode === 'biometric' ? '👆' : '📸'}
+                      </span>
+                      <span className="leading-tight">
+                        {(!selectedStudent.attendanceMode || selectedStudent.attendanceMode === 'default') ? 'Security' :
+                          selectedStudent.attendanceMode === 'gps-only' ? 'GPS Only' :
+                            selectedStudent.attendanceMode === 'biometric' ? 'Biometric' : 'Strict'}
+                      </span>
+                    </button>
+                    {showAttendanceModeSelector && (
+                      <div className="absolute bottom-full left-0 mb-2 w-48 bg-white rounded-xl shadow-2xl border border-gray-100 p-1.5 z-50 flex flex-col gap-1 animate-in zoom-in-95 duration-200 origin-bottom-left">
+                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-2 py-1">Set Attendance Mode</div>
+                        <button
+                          onClick={() => handleUpdateAttendanceMode(selectedStudent.id, 'default')}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${(!selectedStudent.attendanceMode || selectedStudent.attendanceMode === 'default') ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50 text-gray-600'}`}
+                        >
+                          <span>🛡️</span> Default (Hostel)
+                        </button>
+                        <button
+                          onClick={() => handleUpdateAttendanceMode(selectedStudent.id, 'gps-only')}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${selectedStudent.attendanceMode === 'gps-only' ? 'bg-amber-50 text-amber-700' : 'hover:bg-gray-50 text-gray-600'}`}
+                        >
+                          <span>📍</span> GPS Only
+                        </button>
+                        <button
+                          onClick={() => handleUpdateAttendanceMode(selectedStudent.id, 'biometric')}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${selectedStudent.attendanceMode === 'biometric' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-600'}`}
+                        >
+                          <span>👆</span> Biometric
+                        </button>
+                        <button
+                          onClick={() => handleUpdateAttendanceMode(selectedStudent.id, 'strict')}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${selectedStudent.attendanceMode === 'strict' ? 'bg-green-50 text-green-700' : 'hover:bg-gray-50 text-gray-600'}`}
+                        >
+                          <span>📸</span> Camera (Strict)
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <button
                     onClick={() => handleResetDeviceID(selectedStudent.id)}
                     className="flex flex-col sm:flex-row items-center justify-center text-center gap-1 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl border-2 border-amber-600 text-amber-600 font-bold transition-all hover:bg-amber-50 text-[10px] sm:text-sm"
@@ -5257,7 +5332,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 )}
                               </div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div className="bg-white/60 p-4 rounded-xl border border-white backdrop-blur-sm">
                                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Warden Username</label>
                                 <div className="flex items-center gap-3">
@@ -5310,21 +5385,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       )}
                                     </button>
                                   )}
-                                </div>
-                              </div>
-                              <div className="bg-white/60 p-4 rounded-xl border border-white backdrop-blur-sm group/mode">
-                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Attendance Mode</label>
-                                <div className="flex items-center gap-3">
-                                  <div className={`h-2 w-2 rounded-full shadow-sm ${hostel.attendanceMode === 'biometric' ? 'bg-purple-500 shadow-purple-200' : hostel.attendanceMode === 'gps-only' ? 'bg-blue-500 shadow-blue-200' : 'bg-orange-500 shadow-orange-200'}`} />
-                                  <select
-                                    value={hostel.attendanceMode || 'strict'}
-                                    onChange={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, attendanceMode: e.target.value })}
-                                    className="font-black text-slate-700 text-sm bg-transparent border-none outline-none focus:ring-0 p-0 w-full uppercase cursor-pointer"
-                                  >
-                                    <option value="strict">Strict (GPS + Face)</option>
-                                    <option value="gps-only">GPS Only</option>
-                                    <option value="biometric">Biometric (Device)</option>
-                                  </select>
                                 </div>
                               </div>
                             </div>

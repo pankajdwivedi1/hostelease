@@ -45,6 +45,7 @@ export interface IStudentBase {
   };
   createdAt?: Date;
   updatedAt?: Date;
+  attendanceMode?: "default" | "strict" | "gps-only" | "biometric"; // ⚡ NEW: Override for student
 }
 
 export type IStudent = IStudentBase;
@@ -194,6 +195,11 @@ const StudentSchema = new Schema<IStudent>(
       of: Schema.Types.Mixed,
       default: {},
     },
+    attendanceMode: {
+      type: String,
+      enum: ["default", "strict", "gps-only", "biometric"],
+      default: "default",
+    },
   },
   {
     timestamps: true,
@@ -201,6 +207,10 @@ const StudentSchema = new Schema<IStudent>(
 );
 
 // Prevent model overwrite warning in development
+if (process.env.NODE_ENV === "development") {
+  delete mongoose.models.Student;
+}
+
 const Student: Model<IStudent> =
   mongoose.models.Student || mongoose.model<IStudent>("Student", StudentSchema);
 
