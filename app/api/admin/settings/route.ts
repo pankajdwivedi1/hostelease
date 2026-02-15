@@ -29,7 +29,9 @@ export async function GET(request: NextRequest) {
             paymentInstructions: settings?.paymentInstructions || "",
             isPaymentEnabled: settings?.isPaymentEnabled || false,
             wardenPassword: settings?.wardenPassword || "warden456",
-            adminPassword: settings?.adminPassword || "pankajdwivedi81"
+            adminPassword: settings?.adminPassword || "pankajdwivedi81",
+            overlapRadius: settings?.overlapRadius || false,
+            prioritizeAssignedHostel: settings?.prioritizeAssignedHostel || false
         });
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);
@@ -54,7 +56,9 @@ export async function POST(request: NextRequest) {
             universityBankDetails,
             hostelFeeAmount,
             paymentInstructions,
-            isPaymentEnabled
+            isPaymentEnabled,
+            overlapRadius,
+            prioritizeAssignedHostel
         } = body;
 
         const updateData: any = {};
@@ -67,6 +71,8 @@ export async function POST(request: NextRequest) {
         if (hostelFeeAmount !== undefined) updateData.hostelFeeAmount = hostelFeeAmount;
         if (paymentInstructions !== undefined) updateData.paymentInstructions = paymentInstructions;
         if (isPaymentEnabled !== undefined) updateData.isPaymentEnabled = isPaymentEnabled;
+        if (overlapRadius !== undefined) updateData.overlapRadius = overlapRadius;
+        if (prioritizeAssignedHostel !== undefined) updateData.prioritizeAssignedHostel = prioritizeAssignedHostel;
 
         const settings = await AdminSettings.findOneAndUpdate(
             {},

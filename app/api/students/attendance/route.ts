@@ -118,6 +118,15 @@ export async function POST(request: NextRequest) {
             day: "2-digit",
         }).split('/').reverse().join('-'); // YYYY-MM-DD
 
+        // 🚀 BULK QUEUE SYSTEM: Check if student is already in memory queue
+        const { checkQueue, queueAttendance } = await import("@/lib/attendanceQueue");
+        if (checkQueue(studentId, today)) {
+            return NextResponse.json(
+                { error: "Attendance already marked for today (Processing...)", alreadyMarked: true },
+                { status: 400 }
+            );
+        }
+
         const existingAttendance = await Attendance.findOne({ studentId, date: today });
         if (existingAttendance) {
             if (isTester) {
@@ -173,20 +182,10 @@ export async function POST(request: NextRequest) {
 
         const hostelLocations = (adminSettings?.hostelLocations && adminSettings.hostelLocations.length > 0)
             ? adminSettings.hostelLocations
-
             : defaultLocations;
 
-        // Check GPS Accuracy (New requirement)
+        // Check GPS Accuracy
         const bodyAccuracy = Math.round(body.accuracy || 0);
-        if (bodyAccuracy !== undefined && bodyAccuracy > 200) {
-            return NextResponse.json(
-                {
-                    error: "Waiting for better GPS signal... (Accuracy too low)",
-                    accuracy: bodyAccuracy
-                },
-                { status: 400 }
-            );
-        }
 
         // Check Time Window (IST)
         const now = new Date();
@@ -210,8 +209,6 @@ export async function POST(request: NextRequest) {
 
         // ⚡ GPS FALLBACK: Only check GPS if WiFi verification failed
         if (!isLocationVerified && lat !== undefined && lng !== undefined) {
-            // Check GPS Accuracy (New requirement)
-            const bodyAccuracy = Math.round(body.accuracy || 0);
             if (bodyAccuracy !== undefined && bodyAccuracy > 200) {
                 return NextResponse.json(
                     {
@@ -228,14 +225,25 @@ export async function POST(request: NextRequest) {
 
             for (const loc of hostelLocations) {
                 const dist = calculateDistance(lat, lng, loc.lat, loc.lng);
-                // Default to 100 if radius.radius is missing (though our schema now has it)
-                const allowedRadius = (loc as any).radius || 100;
 
-                // ⚡ IMPROVED: Account for GPS accuracy (Effective Distance)
-                if ((dist - bodyAccuracy) <= allowedRadius) {
+                // ⚡ DEVELOPER CONFIG: Radius Overlap (+20m if enabled)
+                const allowedRadius = ((loc as any).radius || 100) + (adminSettings?.overlapRadius ? 20 : 0);
+
+                const isInside = (dist - bodyAccuracy) <= allowedRadius;
+
+                // ⚡ DEVELOPER CONFIG: Prioritize Assigned Hostel
+                let isMatchValid = isInside;
+                if (adminSettings?.prioritizeAssignedHostel) {
+                    const isAssigned = student.hostelName?.toLowerCase().includes(loc.name.toLowerCase()) ||
+                        loc.name.toLowerCase().includes(student.hostelName?.toLowerCase() || "");
+                    isMatchValid = isInside && isAssigned;
+                }
+
+                if (isMatchValid) {
                     isInsideAny = true;
                     break;
                 }
+
                 if (dist < closestInfo.distance) {
                     closestInfo = { distance: dist, radius: allowedRadius };
                 }
@@ -266,12 +274,12 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 4. Save Attendance
+        // 4. Queue Attendance (🚀 Optimized for M0)
         const nowIST = new Date();
         const readableTime = nowIST.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
         const readableDate = nowIST.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric" }).split('/').join('-');
 
-        const newAttendance = await Attendance.create({
+        const attendanceData = {
             studentId: student._id,
             firebaseUID: student.firebaseUID,
             name: student.name,
@@ -286,23 +294,25 @@ export async function POST(request: NextRequest) {
                 accuracy: verifiedBy === 'gps' ? (body.accuracy || 0) : 0
             },
             deviceId: deviceId,
-            status: "present",
-            // Face matching data
+            status: "present" as const,
             faceMatchPercentage,
             faceMatchStatus,
             flaggedPhotoUrl,
             needsReview: faceMatchStatus === 'flagged',
             isTest: isTester
-        });
+        };
+
+        // Add to Bulk Queue
+        await queueAttendance(attendanceData);
 
         return NextResponse.json(
             {
                 success: true,
                 message: verifiedBy === 'wifi'
-                    ? "✅ Attendance marked! Verified via Campus WiFi"
-                    : "✅ Attendance marked! Verified via GPS",
-                attendance: newAttendance,
-                verifiedBy: verifiedBy, // 'wifi' or 'gps'
+                    ? "✅ Attendance queued! Verified via Campus WiFi"
+                    : "✅ Attendance queued! Verified via GPS",
+                attendance: attendanceData,
+                verifiedBy: verifiedBy,
                 wifiBSSID: verifiedBy === 'wifi' ? wifiBSSID : undefined
             },
             { status: 200 }

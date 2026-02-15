@@ -51,6 +51,8 @@ export interface IAdminSettings {
     bssids: string[]; // Array of WiFi router MAC addresses (BSSIDs)
     description?: string;
   }[];
+  overlapRadius?: boolean; // ⚡ NEW: Slighly overlap the radii to account for GPS jitter
+  prioritizeAssignedHostel?: boolean; // ⚡ NEW: Filter list to prioritize assigned hostel
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -196,6 +198,14 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
           description: "Gangotri Hostel WiFi Routers (All Floors)"
         }
       ]
+    },
+    overlapRadius: {
+      type: Boolean,
+      default: false
+    },
+    prioritizeAssignedHostel: {
+      type: Boolean,
+      default: false
     },
 
   },

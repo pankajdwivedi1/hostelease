@@ -275,9 +275,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [registrationFields, setRegistrationFields] = useState<Record<string, any>>({});
   const [formBuilderFields, setFormBuilderFields] = useState<any[]>([]);
   const [savedFormBuilderConfig, setSavedFormBuilderConfig] = useState<any[]>([]); // ⚡ NEW: Reference for Diff
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"rooms" | "form" | "password" | "bank" | "system">("password");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"rooms" | "form" | "password" | "bank" | "system" | "audit">("password");
   const [globalWardenPassword, setGlobalWardenPassword] = useState("warden456");
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
+  const [overlapRadius, setOverlapRadius] = useState(false); // ⚡ NEW
+  const [prioritizeAssignedHostel, setPrioritizeAssignedHostel] = useState(false); // ⚡ NEW
+
+  // Audit States
+  const [auditResults, setAuditResults] = useState<any[]>([]);
+  const [isAuditing, setIsAuditing] = useState(false);
+  const [activeAuditType, setActiveAuditType] = useState<"phone" | "regid" | "gibberish" | null>(null);
 
   // MERGED WARDEN ACCOUNTS STATE
   const [wardenAccounts, setWardenAccounts] = useState<{ _id?: string, username: string, password?: string, hostels: string[] }[]>([]);
@@ -583,6 +590,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (settingsData.bankDetails) {
           setBankFormData(prev => ({ ...prev, ...settingsData.bankDetails }));
         }
+        if (settingsData.overlapRadius !== undefined) setOverlapRadius(settingsData.overlapRadius);
+        if (settingsData.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(settingsData.prioritizeAssignedHostel);
       }
 
       // Fetch Hostels (with warden/room info)
@@ -601,6 +610,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       fetchSystemSettings();
     }
   }, [showSystemSettingsModal]);
+
+  const handleToggleDeveloperSetting = async (key: string, value: boolean) => {
+    try {
+      setIsUpdatingSettings(true);
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [key]: value })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (key === 'overlapRadius') setOverlapRadius(value);
+        if (key === 'prioritizeAssignedHostel') setPrioritizeAssignedHostel(value);
+      }
+    } catch (error) {
+      alert("Failed to update setting");
+    } finally {
+      setIsUpdatingSettings(false);
+    }
+  };
 
   const handleCreateHostel = async () => {
     const name = prompt("Enter new hostel name:");
@@ -789,6 +818,30 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       alert("Failed to export database");
     } finally {
       setIsExportingDB(false);
+    }
+  };
+
+  const handleAudit = async (type: "duplicates-phone" | "duplicates-regid" | "gibberish-names") => {
+    try {
+      setIsAuditing(true);
+      setAuditResults([]);
+      // Extract middle part or whole for type
+      const typeLabel = type.includes('phone') ? 'phone' : (type.includes('regid') ? 'regid' : 'gibberish');
+      setActiveAuditType(typeLabel as any);
+
+      const response = await fetch(`/api/developer/audit?type=${type}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setAuditResults(data.data);
+      } else {
+        alert(data.error || "Audit failed");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error performing audit");
+    } finally {
+      setIsAuditing(false);
     }
   };
 
@@ -2894,11 +2947,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             <table className="w-full text-left table-fixed border-collapse">
                               <thead className="bg-[#fcfcfc] text-secondary font-bold uppercase text-[8px] md:text-[9px] border-b border-gray-100">
                                 <tr>
-                                  <th className="px-2 md:px-4 py-3 w-[30%] md:w-[35%]">Student</th>
-                                  <th className="px-2 md:px-4 py-3 w-[25%] md:w-[25%]">Hostel/Room</th>
-                                  <th className="px-2 md:px-4 py-3 w-[15%] md:w-[12%] text-center">Time</th>
-                                  <th className="px-2 md:px-4 py-3 w-[15%] md:w-[13%] text-center">Face</th>
-                                  <th className="px-2 md:px-4 py-3 w-[15%] md:w-[15%] text-right whitespace-nowrap">Dist / Acc</th>
+                                  <th className="px-2 md:px-4 py-3 w-[50%] md:w-[35%]">Student</th>
+                                  <th className="px-2 md:px-4 py-3 w-[25%] md:w-[25%] hidden md:table-cell">Hostel/Room</th>
+                                  <th className="px-2 md:px-4 py-3 w-[25%] md:w-[12%] text-center">Time</th>
+                                  <th className="px-2 md:px-4 py-3 w-[15%] md:w-[13%] text-center hidden md:table-cell">Face</th>
+                                  <th className="px-2 md:px-4 py-3 w-[25%] md:w-[15%] text-right whitespace-nowrap">Dist / Acc</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-50">
@@ -2912,16 +2965,29 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       <td className="px-2 md:px-4 py-3">
                                         <div className="flex flex-col min-w-0">
                                           <span className="font-bold text-gray-900 text-[9px] md:text-[13px] uppercase truncate tracking-tight">{log.studentId?.name || "Unknown"}</span>
-                                          <span className="text-[8px] md:hidden text-gray-400 font-medium uppercase truncate">{log.studentId?.hostelName} - {log.studentId?.roomNumber}</span>
+                                          <div className="md:hidden flex items-center gap-1.5 mt-0.5">
+                                            <span
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (log.faceMatchStatus === 'flagged') setReviewingLog(log);
+                                              }}
+                                              className={`text-[8px] font-bold uppercase truncate px-1 rounded-sm ${log.faceMatchStatus === 'flagged' ? 'bg-red-50 text-red-600 animate-pulse cursor-pointer' :
+                                                log.faceMatchStatus === 'manual-override' ? 'bg-amber-50 text-amber-600' : 'text-gray-400'
+                                                }`}
+                                            >
+                                              {log.studentId?.hostelName} - {log.studentId?.roomNumber}
+                                              {log.faceMatchPercentage !== undefined && ` • ${log.faceMatchPercentage}% Match ${log.faceMatchStatus === 'flagged' ? '🚩' : ''}`}
+                                            </span>
+                                          </div>
                                         </div>
                                       </td>
-                                      <td className="px-2 md:px-4 py-3 text-secondary text-[9px] md:text-xs truncate">
+                                      <td className="px-2 md:px-4 py-3 text-secondary text-[9px] md:text-xs truncate hidden md:table-cell">
                                         {log.studentId?.hostelName} - {log.studentId?.roomNumber}
                                       </td>
                                       <td className="px-1 md:px-4 py-2 md:py-3 text-center">
                                         <span className="inline-block px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-md font-black text-[9px] md:text-xs whitespace-nowrap">{log.istTime}</span>
                                       </td>
-                                      <td className="px-1 md:px-4 py-2 md:py-3 text-center">
+                                      <td className="px-1 md:px-4 py-2 md:py-3 text-center hidden md:table-cell">
                                         {log.faceMatchPercentage !== undefined ? (
                                           <button
                                             onClick={() => log.faceMatchStatus === 'flagged' && setReviewingLog(log)}
@@ -3148,9 +3214,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <table className="w-full text-left">
                             <thead className="text-[10px] uppercase text-gray-400 font-black bg-white border-b border-dashed border-gray-200">
                               <tr>
-                                <th className="px-4 py-3">Date</th>
-                                <th className="px-4 py-3">Time Type</th>
-                                <th className="px-4 py-3">Hostel Details</th>
+                                <th className="px-4 py-3">Date & Hostel</th>
+                                <th className="px-4 py-3 text-center">Time</th>
+                                <th className="px-4 py-3 hidden md:table-cell">Hostel Details</th>
                                 <th className="px-4 py-3 text-right">Verification</th>
                               </tr>
                             </thead>
@@ -3166,14 +3232,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   <tr key={log._id} className="hover:bg-blue-50/30 transition-colors">
                                     <td className="px-4 py-3">
                                       <p className="font-bold text-gray-800 text-xs">{new Date(log.date).toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                                      <p className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">{new Date(log.date).toLocaleDateString("en-IN", { weekday: 'long' })}</p>
+                                      <div className="md:hidden flex flex-col mt-0.5">
+                                        <p className="text-[9px] text-gray-400 font-bold uppercase truncate">{log.hostelName}</p>
+                                        <p className="text-[9px] text-gray-400 font-medium">ROOM {log.roomNumber}</p>
+                                      </div>
                                     </td>
-                                    <td className="px-4 py-3">
-                                      <span className="inline-block px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-black border border-green-100 shadow-sm">
+                                    <td className="px-4 py-3 text-center">
+                                      <span className="inline-block px-1.5 py-0.5 bg-green-50 text-green-700 rounded-lg text-[10px] md:text-xs font-black border border-green-100 shadow-sm">
                                         {log.istTime}
                                       </span>
                                     </td>
-                                    <td className="px-4 py-3">
+                                    <td className="px-4 py-3 hidden md:table-cell">
                                       <p className="text-xs font-bold text-gray-700">{log.hostelName}</p>
                                       <p className="text-[10px] text-gray-400 font-medium">Room {log.roomNumber}</p>
                                     </td>
@@ -5410,23 +5479,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               </div>
 
               {/* Modal Tabs */}
-              <div className="flex p-1 bg-gray-100/30 gap-1 mx-4 sm:mx-8 mt-4 sm:mt-6 rounded-xl overflow-x-hidden overflow-y-hidden no-scrollbar">
+              <div className="flex p-1.5 bg-slate-100/50 gap-1 mx-2 sm:mx-8 mt-4 sm:mt-6 rounded-2xl border border-slate-200/50">
                 {[
                   { id: "rooms", label: "Rooms", icon: "🏠" },
-                  { id: "form", label: "Reg Form", icon: "📝" },
-                  { id: "password", label: "Password", icon: "🔑" },
-                  { id: "system", label: "System", icon: "⚙️" }
+                  { id: "form", label: "Form", icon: "📝" },
+                  { id: "password", label: "Pass", icon: "🔑" },
+                  { id: "system", label: "System", icon: "⚙️" },
+                  { id: "audit", label: "Audit", icon: "🔍" }
                 ].map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveSettingsTab(tab.id as any)}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest transition-all whitespace-nowrap ${activeSettingsTab === tab.id
-                      ? "bg-white text-indigo-600 shadow-sm"
-                      : "text-gray-500 hover:text-gray-700 hover:bg-white/50"
+                    className={`flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all duration-200 ${activeSettingsTab === tab.id
+                      ? "bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200/50"
+                      : "text-slate-400 hover:text-slate-600"
                       }`}
                   >
-                    <span className="text-sm sm:text-lg">{tab.icon}</span>
-                    {tab.label}
+                    <span className="text-sm sm:text-lg mb-0.5">{tab.icon}</span>
+                    <span className="text-[7px] sm:text-[10px] font-black uppercase tracking-tighter sm:tracking-widest">
+                      {tab.label}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -5788,6 +5860,53 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </button>
                     </div>
 
+                    <div className="w-full h-0.5 bg-gray-100/50 my-2"></div>
+
+                    {/* ⚡ NEW: Developer Settings Toggles */}
+                    <div className="space-y-3">
+                      <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Slightly Overlap the Radii</h3>
+                            <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Accounts for GPS Jitter (+20m offset)</p>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={overlapRadius}
+                            onChange={(e) => handleToggleDeveloperSetting('overlapRadius', e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                      </div>
+
+                      <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-purple-100 transition-all">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Filter the List</h3>
+                            <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Prioritize student's assigned hostel</p>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={prioritizeAssignedHostel}
+                            onChange={(e) => handleToggleDeveloperSetting('prioritizeAssignedHostel', e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                        </label>
+                      </div>
+                    </div>
+
                     <div className="w-full h-0.5 bg-gray-100 my-6"></div>
 
                     <div className="bg-indigo-50 border-2 border-indigo-100 p-4 rounded-2xl flex items-start gap-4 mb-4">
@@ -5961,7 +6080,137 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         Update Bank Configuration
                       </button>
                     </div>
+                  </div>
+                )}
 
+                {activeSettingsTab === "audit" && (
+                  <div className="space-y-6">
+                    <div className="bg-orange-50 border-2 border-orange-100 p-4 rounded-2xl flex items-start gap-4 mb-4">
+                      <span className="text-xl sm:text-2xl">🔍</span>
+                      <p className="text-xs sm:text-sm text-orange-800 font-medium">
+                        Analyze your student data to find duplicates, invalid entries, and keyboard-mashed names.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                      <button
+                        onClick={() => handleAudit("duplicates-phone")}
+                        disabled={isAuditing}
+                        className="p-3 sm:p-6 bg-white border-2 border-slate-100 rounded-2xl hover:border-indigo-500 hover:shadow-xl transition-all group flex flex-col items-center text-center gap-2 sm:gap-3"
+                      >
+                        <div className="w-8 h-8 sm:w-12 sm:h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                        </div>
+                        <span className="text-[7px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest text-slate-900">Duplicate Phones</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleAudit("duplicates-regid")}
+                        disabled={isAuditing}
+                        className="p-3 sm:p-6 bg-white border-2 border-slate-100 rounded-2xl hover:border-purple-500 hover:shadow-xl transition-all group flex flex-col items-center text-center gap-2 sm:gap-3"
+                      >
+                        <div className="w-8 h-8 sm:w-12 sm:h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 012-2h2a2 2 0 012 2v1m-4 0h4m-7 6h6m-6 3h6m-6 3h6" /></svg>
+                        </div>
+                        <span className="text-[7px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest text-slate-900">Duplicate Reg IDs</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleAudit("gibberish-names")}
+                        disabled={isAuditing}
+                        className="p-3 sm:p-6 bg-white border-2 border-slate-100 rounded-2xl hover:border-orange-500 hover:shadow-xl transition-all group flex flex-col items-center text-center gap-2 sm:gap-3"
+                      >
+                        <div className="w-8 h-8 sm:w-12 sm:h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                        </div>
+                        <span className="text-[7px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest text-slate-900">Invalid Names</span>
+                      </button>
+                    </div>
+
+                    {isAuditing && (
+                      <div className="py-12 flex flex-col items-center justify-center gap-4">
+                        <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest animate-pulse">Running Deep Scan...</p>
+                      </div>
+                    )}
+
+                    {!isAuditing && auditResults.length > 0 && (
+                      <div className="mt-8 space-y-4">
+                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest px-1">Potential Issues Found ({auditResults.length})</h4>
+                        <div className="space-y-3">
+                          {auditResults.map((result, idx) => (
+                            <div key={idx} className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 overflow-hidden">
+                              {result.students ? (
+                                <div>
+                                  <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-2">
+                                    <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-[10px] font-black uppercase tracking-widest">Duplicate: {result._id}</span>
+                                    <span className="text-[10px] font-bold text-slate-400">{result.count} ENTRIES</span>
+                                  </div>
+                                  <div className="space-y-2">
+                                    {result.students.map((s: any, sIdx: number) => (
+                                      <div key={sIdx} className="bg-white p-3 rounded-xl border border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-200 transition-all">
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-black text-slate-800 uppercase truncate">{s.name}</p>
+                                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{s.hostel} • {s.regId || s.phone || s.id.slice(-6)}</p>
+                                        </div>
+                                        <button
+                                          onClick={() => {
+                                            const student = students.find(std => std.id === s.id);
+                                            if (student) {
+                                              setSelectedStudent(student);
+                                              setShowSystemSettingsModal(false);
+                                            } else {
+                                              setShowSystemSettingsModal(false);
+                                              setSearchQuery(s.name);
+                                            }
+                                          }}
+                                          className="text-[9px] font-black text-indigo-600 uppercase hover:underline shrink-0 ml-4"
+                                        >
+                                          View Info
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-between">
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-black text-red-600 uppercase truncate">{result.name}</p>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{result.hostelName} • {result.phoneNumber}</p>
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      const studentId = result.id || result._id;
+                                      const student = students.find(std => std.id === studentId);
+                                      if (student) {
+                                        setSelectedStudent(student);
+                                        setShowSystemSettingsModal(false);
+                                      } else {
+                                        setShowSystemSettingsModal(false);
+                                        setSearchQuery(result.name);
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-colors"
+                                  >
+                                    Review Entry
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {!isAuditing && auditResults.length === 0 && activeAuditType && (
+                      <div className="py-12 text-center">
+                        <div className="w-16 h-16 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                        </div>
+                        <p className="text-sm font-black text-slate-800 uppercase tracking-widest">No issues found!</p>
+                        <p className="text-xs text-slate-500 font-medium mt-1">Your data looks clean for this category.</p>
+                      </div>
+                    )}
                   </div>
                 )}
                 {activeSettingsTab === "password" && (

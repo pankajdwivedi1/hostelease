@@ -60,13 +60,20 @@ async function connectDB() {
     process.env.VERCEL === '1' ||
     process.env.VERCEL_ENV === 'production';
 
+  // 🛡️ M0 PRODUCTION OPTIMIZED SETTINGS
   const opts = {
     bufferCommands: false,
+    maxPoolSize: isProduction ? 5 : 2,      // Low pool size for M0 (Limit is 500)
+    minPoolSize: 1,                        // Maintain at least 1 connection
+    serverSelectionTimeoutMS: 5000,        // Fail fast if DB is down
+    socketTimeoutMS: 45000,                // Close idle sockets
+    family: 4                              // Force IPv4 if needed
   };
 
-  console.log(`🔄 [${new Date().toLocaleTimeString()}] Connecting to MongoDB...`);
+  console.log(`🔄 [${new Date().toLocaleTimeString()}] Connecting to MongoDB (Pool: ${opts.maxPoolSize})...`);
+
   cached.promise = mongoose.connect(MONGO_URL as string, opts).then((m) => {
-    console.log('✅ MongoDB Ready');
+    console.log('✅ MongoDB Ready (Optimized Pool)');
     return m;
   });
 
@@ -74,6 +81,7 @@ async function connectDB() {
     cached.conn = await cached.promise;
   } catch (e) {
     cached.promise = null;
+    console.error('❌ MongoDB Connection Error:', e);
     throw e;
   }
 

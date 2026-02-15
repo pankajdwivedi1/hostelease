@@ -114,6 +114,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   const [attendanceStep, setAttendanceStep] = useState<'idle' | 'gps' | 'accuracy' | 'saving' | 'done' | 'error' | 'face-match'>('idle');
   const [attendanceRetryCount, setAttendanceRetryCount] = useState(0);
   const [isWifiFallback, setIsWifiFallback] = useState(false);
+  const [overlapRadius, setOverlapRadius] = useState(false); // ⚡ NEW
+  const [prioritizeAssignedHostel, setPrioritizeAssignedHostel] = useState(false); // ⚡ NEW
 
   // Face Matching State
   const [faceMatchProgress, setFaceMatchProgress] = useState(0);
@@ -282,6 +284,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
           console.log(`🕒 Syncing Attendance Window: ${data.startTime} - ${data.endTime}`);
           setAttendanceWindow({ start: data.startTime, end: data.endTime });
         }
+        if (data.overlapRadius !== undefined) setOverlapRadius(data.overlapRadius);
+        if (data.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(data.prioritizeAssignedHostel);
       }
     } catch (e) {
       console.error("Error fetching system settings:", e);
@@ -907,15 +911,29 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
       const results = locationsToTest.map((loc: any) => {
         const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
-        const isVerified = dist <= loc.radius;
-        if (isVerified) {
+
+        // ⚡ DEVELOPER CONFIG: Radius Overlap
+        const effectiveRadius = overlapRadius ? (loc.radius + 20) : loc.radius;
+
+        const isVerified = dist <= effectiveRadius;
+
+        // ⚡ DEVELOPER CONFIG: Prioritize Assigned Hostel
+        // If prioritizeAssignedHostel is on, we only consider it a match if it's the student's assigned hostel
+        const isAssignedHostel = studentProfile?.hostelName?.toLowerCase().includes(loc.name.toLowerCase()) ||
+          loc.name.toLowerCase().includes(studentProfile?.hostelName?.toLowerCase() || "");
+
+        const validMatch = prioritizeAssignedHostel ? (isVerified && isAssignedHostel) : isVerified;
+
+        if (validMatch) {
           isInsideAny = true;
           matchedLocation = { ...loc, distance: dist };
         }
+
         if (dist < closestInfo.distance) {
-          closestInfo = { distance: dist, radius: loc.radius, name: loc.name };
+          // If filtering is on, still track the closest but maybe emphasize assigned if failed
+          closestInfo = { distance: dist, radius: effectiveRadius, name: loc.name };
         }
-        return { ...loc, distance: dist, isVerified };
+        return { ...loc, distance: dist, isVerified: validMatch };
       });
 
       setLocationVerificationResults(results);
