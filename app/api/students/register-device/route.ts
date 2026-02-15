@@ -46,7 +46,16 @@ export async function POST(request: NextRequest) {
         // Update student with deviceId
         const student = await Student.findByIdAndUpdate(
             studentId,
-            { deviceId },
+            {
+                deviceId,
+                $push: {
+                    deviceHistory: {
+                        deviceId: deviceId,
+                        action: "registered",
+                        timestamp: new Date()
+                    }
+                }
+            },
             { new: true }
         );
 

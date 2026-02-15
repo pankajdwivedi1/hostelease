@@ -61,22 +61,10 @@ async function connectDB() {
     process.env.VERCEL_ENV === 'production';
 
   const opts = {
-    bufferCommands: false, // ⚡ CRITICAL: Disable buffering to find errors fast
-    serverSelectionTimeoutMS: 15000,
-    connectTimeoutMS: 15000,
-    socketTimeoutMS: 45000,
-    family: 4,
-
-    // ⚡ CONCURRENCY: Ultra-conservative pool for M0 tier
-    maxPoolSize: 2,
-    minPoolSize: 1,
-    maxIdleTimeMS: 10000,
-
-    retryWrites: true,
-    retryReads: true,
+    bufferCommands: false,
   };
 
-  console.log(`🔄 New MongoDB connection (pool: ${opts.maxPoolSize})...`);
+  console.log(`🔄 [${new Date().toLocaleTimeString()}] Connecting to MongoDB...`);
   cached.promise = mongoose.connect(MONGO_URL as string, opts).then((m) => {
     console.log('✅ MongoDB Ready');
     return m;

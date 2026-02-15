@@ -100,8 +100,9 @@ export function calculateScore(distance: number): number {
  * Detect face in an image
  */
 export async function detectFace(
-    imageElement: HTMLImageElement | HTMLCanvasElement,
-    accurate: boolean = false
+    imageElement: HTMLImageElement | HTMLCanvasElement | HTMLVideoElement,
+    accurate: boolean = false,
+    withDescriptor: boolean = true
 ) {
     try {
         const fa = await getFaceApi();
@@ -111,45 +112,38 @@ export async function detectFace(
         const ready = await loadFaceApiModels(accurate);
         if (!ready) return null;
 
-        // ⚡ CRITICAL: Validate input dimensions to prevent constructor errors
-        if (imageElement instanceof HTMLImageElement) {
+        // ⚡ CRITICAL: Validate input dimensions
+        if (!(imageElement instanceof HTMLVideoElement)) {
             if (!imageElement.width || !imageElement.height || imageElement.width === 0 || imageElement.height === 0) {
-                console.warn("⚠️ DetectFace skipped: Invalid image dimensions", imageElement.width, imageElement.height);
-                return null;
-            }
-        } else if (imageElement instanceof HTMLCanvasElement) {
-            if (!imageElement.width || !imageElement.height || imageElement.width === 0 || imageElement.height === 0) {
-                console.warn("⚠️ DetectFace skipped: Invalid canvas dimensions", imageElement.width, imageElement.height);
                 return null;
             }
         }
 
-        let detection;
+        let task: any;
         if (accurate) {
-            // 💎 PRO DETECTION: High accuracy (SSD Mobilenet)
-            detection = await fa
-                .detectSingleFace(imageElement, new fa.SsdMobilenetv1Options({ minConfidence: 0.5 }))
-                .withFaceLandmarks(true) // ⚡ ENABLE LANDMARKS FOR LIVENESS
-                .withFaceDescriptor();
+            task = fa.detectSingleFace(imageElement, new fa.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+                .withFaceLandmarks(true);
         } else {
-            // ⚡ LITE DETECTION: High speed (Tiny)
             const options = new fa.TinyFaceDetectorOptions({
-                inputSize: 512,
-                scoreThreshold: 0.1
+                inputSize: 320, // Optimized size for speed
+                scoreThreshold: 0.5
             });
-
-            detection = await fa
-                .detectSingleFace(imageElement, options)
-                .withFaceLandmarks(true)
-                .withFaceDescriptor();
+            task = fa.detectSingleFace(imageElement, options)
+                .withFaceLandmarks(true);
         }
+
+        if (withDescriptor) {
+            task = task.withFaceDescriptor();
+        }
+
+        const detection = await task;
 
         if (!detection) return null;
 
         return {
-            descriptor: detection.descriptor,
-            detection: detection.detection, // Contains box
-            landmarks: detection.landmarks, // ⚡ NEW: Full 68-point landmarks
+            descriptor: withDescriptor ? detection.descriptor : null,
+            detection: detection.detection,
+            landmarks: detection.landmarks,
             accurate: accurate
         };
     } catch (error) {
@@ -233,7 +227,7 @@ export function analyzeLiveness(landmarks: any) {
     const rightEAR = calculateEAR(rightEye);
     const avgEAR = (leftEAR + rightEAR) / 2.0;
 
-    const isBlinking = avgEAR < 0.18; // ⚡ Hardened: More strict to prevent false triggers
+    const isBlinking = avgEAR < 0.22; // ⚡ Adjusted: 0.22 is more reliable for various camera qualities
 
     // Head Pose Estimation (Yaw/Tilt)
     const nose = landmarks.getNose();

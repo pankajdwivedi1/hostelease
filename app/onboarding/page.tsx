@@ -16,6 +16,9 @@ export default function OnboardingPage() {
   const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
   const [isCapturingDescriptor, setIsCapturingDescriptor] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isFaceProcessing, setIsFaceProcessing] = useState(false);
+  const [faceError, setFaceError] = useState<string | null>(null);
+  const [isFaceInFrame, setIsFaceInFrame] = useState(false);
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
   const [hostelsLoading, setHostelsLoading] = useState(true);
 
@@ -147,7 +150,10 @@ export default function OnboardingPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isProfileLocked || !validateForm() || !user) return;
+    if (isProfileLocked || isFaceProcessing || faceError || !validateForm() || !user) {
+      if (faceError) alert("Please recapture your photo: " + faceError);
+      return;
+    }
 
     try {
       setLoading(true);
@@ -259,6 +265,8 @@ export default function OnboardingPage() {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        // ⚡ PRE-LOAD: Start loading AI models as soon as camera opens
+        faceMatching.loadFaceApiModels();
       }
     } catch (err) {
       console.error("Error accessing camera:", err);
@@ -274,7 +282,46 @@ export default function OnboardingPage() {
       videoRef.current.srcObject = null;
     }
     setIsCameraOpen(false);
+    setIsFaceInFrame(false);
   };
+
+  // ⚡ LIVE FACE GUARD: Check for face continuously when camera is open
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    let lastYaw: number | null = null;
+    let hasDetectedLiveness = false;
+
+    if (isCameraOpen && videoRef.current) {
+      interval = setInterval(async () => {
+        if (videoRef.current && videoRef.current.readyState === 4) {
+          const res = await faceMatching.detectFace(videoRef.current, false, false);
+
+          if (!res) {
+            setIsFaceInFrame(false);
+            hasDetectedLiveness = false;
+            lastYaw = null;
+            return;
+          }
+
+          const liveness = faceMatching.analyzeLiveness(res.landmarks);
+          if (liveness) {
+            // 🛡️ ANTI-SPOOF: Check for Blink or Head Movement
+            const yawChange = lastYaw !== null ? Math.abs(liveness.yaw - lastYaw) : 0;
+
+            if (liveness.isBlinking || yawChange > 0.10) {
+              hasDetectedLiveness = true;
+            }
+
+            lastYaw = liveness.yaw;
+          }
+
+          setIsFaceInFrame(hasDetectedLiveness);
+        }
+      }, 100); // Check every 100ms (Much faster to catch blinks)
+    }
+
+    return () => clearInterval(interval);
+  }, [isCameraOpen]);
 
   const captureImage = async () => {
     if (videoRef.current && canvasRef.current) {
@@ -288,40 +335,49 @@ export default function OnboardingPage() {
       if (context) {
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        try {
-          setIsCapturingDescriptor(true);
+        // 1. INSTANT FEEDBACK: Generate dataUrl and close camera immediately
+        let quality = 0.9;
+        let dataUrl = canvas.toDataURL("image/jpeg", quality);
 
-          // ⚡ ROBUST: Generate Face Descriptor during registration
-          await faceMatching.loadFaceApiModels();
-          const descriptor = await faceMatching.detectFace(canvas);
-
-          if (!descriptor) {
-            alert("No face detected! Please ensure your face is clearly visible in the camera before capturing.");
-            setIsCapturingDescriptor(false);
-            return;
-          }
-
-          setFaceDescriptor(Array.from(descriptor.descriptor));
-
-          // Initial quality
-          let quality = 0.9;
-          let dataUrl = canvas.toDataURL("image/jpeg", quality);
-
-          // Compress to under 100KB
-          while (dataUrl.length > 137000 && quality > 0.1) { // ~100KB base64 length check
-            quality -= 0.1;
-            dataUrl = canvas.toDataURL("image/jpeg", quality);
-          }
-
-          setCapturedImage(dataUrl);
-          stopCamera();
-        } catch (err) {
-          console.error("Error generating face descriptor:", err);
-          alert("Face processing failed. Please try again with better lighting.");
-        } finally {
-          setIsCapturingDescriptor(false);
+        // Compress to under 100KB
+        while (dataUrl.length > 137000 && quality > 0.1) {
+          quality -= 0.1;
+          dataUrl = canvas.toDataURL("image/jpeg", quality);
         }
+
+        setCapturedImage(dataUrl);
+        setFaceError(null);
+        stopCamera();
+
+        // 2. BACKGROUND THINKING: Process descriptor without blocking the UI
+        processFaceInBackground(canvas);
       }
+    }
+  };
+
+  const processFaceInBackground = async (canvas: HTMLCanvasElement) => {
+    try {
+      setIsFaceProcessing(true);
+      setFaceDescriptor(null); // Clear previous
+
+      // Ensure models are loaded
+      await faceMatching.loadFaceApiModels();
+      const descriptor = await faceMatching.detectFace(canvas);
+
+      if (!descriptor) {
+        setFaceError("No face detected! Please capture again.");
+        setCapturedImage(null); // Force retake
+        return;
+      }
+
+      setFaceDescriptor(Array.from(descriptor.descriptor));
+      console.log("✅ Background Face Scan Complete");
+    } catch (err) {
+      console.error("Error generating face descriptor:", err);
+      setFaceError("Face processing failed. Try again with better lighting.");
+      setCapturedImage(null);
+    } finally {
+      setIsFaceProcessing(false);
     }
   };
 
@@ -407,6 +463,15 @@ export default function OnboardingPage() {
                             playsInline
                             className="w-full h-full object-cover"
                           />
+
+                          {/* Live Status HUD */}
+                          <div className="absolute top-4 left-0 right-0 flex justify-center">
+                            <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg transition-all ${isFaceInFrame ? 'bg-green-500 text-white' : 'bg-orange-500 text-white animate-pulse'}`}>
+                              <span className={`w-2 h-2 rounded-full ${isFaceInFrame ? 'bg-white' : 'bg-white/50 animate-ping'}`}></span>
+                              {isFaceInFrame ? 'Live Human Verified' : 'Blink Eyes to Verify'}
+                            </div>
+                          </div>
+
                           <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
                             <button
                               type="button"
@@ -418,7 +483,8 @@ export default function OnboardingPage() {
                             <button
                               type="button"
                               onClick={captureImage}
-                              className="px-6 py-2 rounded-full bg-white text-black text-xs font-bold shadow-lg"
+                              disabled={!isFaceInFrame}
+                              className={`px-6 py-2 rounded-full text-xs font-bold shadow-lg transition-all ${isFaceInFrame ? 'bg-white text-black scale-110' : 'bg-gray-400 text-gray-200 opacity-50 cursor-not-allowed'}`}
                             >
                               Capture Photo
                             </button>
@@ -431,22 +497,47 @@ export default function OnboardingPage() {
                           <img
                             src={capturedImage}
                             alt="Captured profile"
-                            className="w-full h-full object-cover"
+                            className={`w-full h-full object-cover ${isFaceProcessing ? 'opacity-50 grayscale' : ''}`}
                           />
+                          {isFaceProcessing && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20">
+                              <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                              <span className="text-[8px] text-white font-bold mt-2 uppercase tracking-tight">Scanning...</span>
+                            </div>
+                          )}
+                          {!isFaceProcessing && faceDescriptor && (
+                            <div className="absolute top-2 left-2 bg-green-500 rounded-full p-1 shadow-lg border border-white">
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                          )}
                           <button
                             type="button"
-                            disabled={isProfileLocked}
+                            disabled={isProfileLocked || isFaceProcessing}
                             onClick={() => {
                               setCapturedImage(null);
+                              setFaceDescriptor(null);
+                              setFaceError(null);
                               startCamera();
                             }}
-                            className="absolute bottom-2 right-2 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+                            className="absolute bottom-2 right-2 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors disabled:opacity-0"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
                           </button>
                         </div>
+                      )}
+                      {!isFaceProcessing && faceDescriptor && (
+                        <p className="text-center text-[9px] text-green-600 font-black uppercase mt-2 tracking-widest flex items-center justify-center gap-1">
+                          <span className="w-1 h-1 bg-green-600 rounded-full"></span>
+                          Image Successfully captured
+                          <span className="w-1 h-1 bg-green-600 rounded-full"></span>
+                        </p>
+                      )}
+                      {faceError && (
+                        <p className="text-center text-[10px] text-red-600 font-bold uppercase mt-2">{faceError}</p>
                       )}
                       <canvas ref={canvasRef} className="hidden" />
                     </div>
@@ -522,10 +613,10 @@ export default function OnboardingPage() {
               {!isProfileLocked && (
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || isFaceProcessing}
                   className="flex-[2] h-12 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? "Saving..." : "Save your details"}
+                  {loading ? "Saving..." : isFaceProcessing ? "Scanning Face..." : "Save your details"}
                 </button>
               )}
             </div>

@@ -27,7 +27,9 @@ export async function GET(request: NextRequest) {
             universityBankDetails: settings?.universityBankDetails || {},
             hostelFeeAmount: settings?.hostelFeeAmount || 0,
             paymentInstructions: settings?.paymentInstructions || "",
-            wardenPassword: settings?.wardenPassword || "warden456"
+            isPaymentEnabled: settings?.isPaymentEnabled || false,
+            wardenPassword: settings?.wardenPassword || "warden456",
+            adminPassword: settings?.adminPassword || "pankajdwivedi81"
         });
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);
@@ -51,7 +53,8 @@ export async function POST(request: NextRequest) {
             formBuilderConfig,
             universityBankDetails,
             hostelFeeAmount,
-            paymentInstructions
+            paymentInstructions,
+            isPaymentEnabled
         } = body;
 
         const updateData: any = {};
@@ -63,6 +66,7 @@ export async function POST(request: NextRequest) {
         if (universityBankDetails) updateData.universityBankDetails = universityBankDetails;
         if (hostelFeeAmount !== undefined) updateData.hostelFeeAmount = hostelFeeAmount;
         if (paymentInstructions !== undefined) updateData.paymentInstructions = paymentInstructions;
+        if (isPaymentEnabled !== undefined) updateData.isPaymentEnabled = isPaymentEnabled;
 
         const settings = await AdminSettings.findOneAndUpdate(
             {},

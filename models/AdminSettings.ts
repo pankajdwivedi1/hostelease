@@ -45,6 +45,7 @@ export interface IAdminSettings {
   };
   hostelFeeAmount?: number;
   paymentInstructions?: string;
+  isPaymentEnabled?: boolean; // ⚡ NEW: Global Payment Switch
   wifiWhitelist?: {
     hostelName: string;
     bssids: string[]; // Array of WiFi router MAC addresses (BSSIDs)
@@ -161,6 +162,10 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
     paymentInstructions: {
       type: String,
       default: "Please pay the fee and upload your UTR number for verification.",
+    },
+    isPaymentEnabled: {
+      type: Boolean,
+      default: false, // Default to disabled
     },
     wifiWhitelist: {
       type: [{

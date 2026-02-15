@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
       if (minimal) {
         // ⚡ OPTIMIZED: Ultra-minimal selection for fastest login flow
         // Include dob and category to prevent profile completion modal from showing incorrectly
-        student = await Student.findOne({ firebaseUID }).select("_id firebaseUID name studentStatus deviceId dob category homeState section isProfileLocked faceDescriptor attendanceMode");
+        student = await Student.findOne({ firebaseUID }).select("_id firebaseUID name studentStatus deviceId dob category homeState section isProfileLocked faceDescriptor attendanceMode webAuthnCredentials deviceResetCount");
       } else {
         student = await Student.findOne({ firebaseUID });
       }

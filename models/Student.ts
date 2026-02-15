@@ -40,12 +40,25 @@ export interface IStudentBase {
   registrationId?: string;
   isProfileLocked?: boolean;
   faceDescriptor?: number[]; // ⚡ NEW: Stores face embedding for faster matching
+  webAuthnCredentials?: {
+    credentialID: string;
+    publicKey: string;
+    counter: number;
+    transports?: string[];
+    createdAt: Date;
+  }[]; // ⚡ NEW: Stores persistent biometric keys
   dynamicFields?: {
     [key: string]: any;
   };
   createdAt?: Date;
   updatedAt?: Date;
   attendanceMode?: "default" | "strict" | "gps-only" | "biometric"; // ⚡ NEW: Override for student
+  deviceResetCount?: number;
+  deviceHistory?: {
+    deviceId: string;
+    action: "registered" | "reset";
+    timestamp: Date;
+  }[];
 }
 
 export type IStudent = IStudentBase;
@@ -195,11 +208,27 @@ const StudentSchema = new Schema<IStudent>(
       of: Schema.Types.Mixed,
       default: {},
     },
+    webAuthnCredentials: [{
+      credentialID: String,
+      publicKey: String,
+      counter: Number,
+      transports: [String],
+      createdAt: { type: Date, default: Date.now }
+    }],
     attendanceMode: {
       type: String,
       enum: ["default", "strict", "gps-only", "biometric"],
       default: "default",
     },
+    deviceResetCount: {
+      type: Number,
+      default: 0,
+    },
+    deviceHistory: [{
+      deviceId: String,
+      action: { type: String, enum: ["registered", "reset"] },
+      timestamp: { type: Date, default: Date.now }
+    }],
   },
   {
     timestamps: true,

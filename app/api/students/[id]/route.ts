@@ -65,16 +65,48 @@ export async function PATCH(
 ) {
   try {
     await connectDB();
-    const { id: studentId } = await params;
+    // ⚡ NEXT.js 15+ Compatibility: params is a Promise
+    const resolvedParams = await (params as any);
+    const studentId = resolvedParams.id;
     const body = await request.json();
+    console.log(`PATCH Action [${body.action || "update"}] for student: ${studentId}`);
 
     if (!studentId) {
       return NextResponse.json({ error: "Student ID is required" }, { status: 400 });
     }
 
+    let updateQuery: any;
+
+    if (body.action === "resetDevice") {
+      const student = await Student.findById(studentId);
+      const oldDeviceId = student?.deviceId;
+
+      updateQuery = {
+        $set: {
+          deviceId: "",
+          webAuthnCredentials: []
+        },
+        $inc: { deviceResetCount: 1 }
+      };
+
+      if (oldDeviceId) {
+        updateQuery.$push = {
+          deviceHistory: {
+            deviceId: oldDeviceId,
+            action: "reset",
+            timestamp: new Date()
+          }
+        };
+      }
+    } else {
+      // Check if the body already contains MongoDB operators
+      const hasOperators = Object.keys(body).some(key => key.startsWith('$'));
+      updateQuery = hasOperators ? body : { $set: body };
+    }
+
     const updatedStudent = await Student.findByIdAndUpdate(
       studentId,
-      { $set: body },
+      updateQuery,
       { new: true }
     );
 
@@ -84,9 +116,9 @@ export async function PATCH(
 
     return NextResponse.json({ success: true, student: updatedStudent }, { status: 200 });
   } catch (error: any) {
-    console.error("Error updating student:", error);
+    console.error("❌ BACKEND PATCH ERROR:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to update student" },
+      { error: error.message || "Internal Server Error during PATCH" },
       { status: 500 }
     );
   }

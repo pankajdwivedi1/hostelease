@@ -114,7 +114,20 @@ interface StudentDetails {
   registrationId?: string;
   isProfileLocked?: boolean;
   deviceId?: string;
+  deviceResetCount?: number;
+  deviceHistory?: {
+    deviceId: string;
+    action: "registered" | "reset";
+    timestamp: string;
+  }[];
   attendanceMode?: "default" | "strict" | "gps-only" | "biometric";
+  webAuthnCredentials?: {
+    credentialID: string;
+    publicKey: string;
+    counter: number;
+    transports?: string[];
+    createdAt: string;
+  }[];
   permissions: SimplePermission[];
 }
 
@@ -172,7 +185,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     upiId: "",
     qrImage: "",
     feeAmount: 0,
-    instructions: ""
+    instructions: "",
+    isPaymentEnabled: false
   });
   const [isReconciling, setIsReconciling] = useState(false);
 
@@ -247,6 +261,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
 
   // System Settings - New Features
   const [showSystemSettingsModal, setShowSystemSettingsModal] = useState(false);
@@ -259,7 +275,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [registrationFields, setRegistrationFields] = useState<Record<string, any>>({});
   const [formBuilderFields, setFormBuilderFields] = useState<any[]>([]);
   const [savedFormBuilderConfig, setSavedFormBuilderConfig] = useState<any[]>([]); // ⚡ NEW: Reference for Diff
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"wardens" | "rooms" | "form">("wardens");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"rooms" | "form" | "password" | "bank" | "system">("password");
   const [globalWardenPassword, setGlobalWardenPassword] = useState("warden456");
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
 
@@ -317,7 +333,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   useEffect(() => {
-    if (activeSettingsTab === "wardens") fetchWardenAccounts();
+    if (activeSettingsTab === "password") fetchWardenAccounts();
   }, [activeSettingsTab]);
 
   // Measurement Tool State
@@ -491,6 +507,30 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
+  const handleChangePassword = async () => {
+    try {
+      setIsUpdatingPassword(true);
+      const res = await fetch("/api/admin/passwords", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword, type: "dean" })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setNewPassword("");
+        alert("Administrator password updated successfully!");
+      } else {
+        alert(data.error || "Failed to update password");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error updating password");
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
   const DEFAULT_REGISTRATION_FIELDS = {
     erpInformation: { label: "ERP ID", visible: true, required: true },
     fatherName: { label: "Father's Name", visible: true, required: true },
@@ -536,6 +576,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         setSavedFormBuilderConfig(settingsData.formBuilderConfig || []); // ⚡ NEW: Save reference
         if (settingsData.wardenPassword) {
           setGlobalWardenPassword(settingsData.wardenPassword);
+        }
+        if (settingsData.adminPassword) {
+          setNewPassword(settingsData.adminPassword);
+        }
+        if (settingsData.bankDetails) {
+          setBankFormData(prev => ({ ...prev, ...settingsData.bankDetails }));
         }
       }
 
@@ -598,6 +644,49 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (error) {
       alert("Failed to delete hostel");
+    } finally {
+      setIsSavingSystemSettings(false);
+    }
+  };
+
+  const handleUpdateBankSettings = async () => {
+    try {
+      setIsSavingSystemSettings(true);
+
+      const payload = {
+        universityBankDetails: {
+          accountName: bankFormData.accountName,
+          accountNumber: bankFormData.accountNumber,
+          ifscCode: bankFormData.ifscCode,
+          bankName: bankFormData.bankName,
+          upiId: bankFormData.upiId,
+          qrImage: bankFormData.qrImage
+        },
+        hostelFeeAmount: bankFormData.feeAmount,
+        paymentInstructions: bankFormData.instructions,
+        isPaymentEnabled: bankFormData.isPaymentEnabled
+      };
+
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Bank settings configuration updated successfully! Students can now see updated payment details.");
+        // await fetchSystemSettings(); // Was this existing? Or maybe meant fetchBankSettings?
+        // Let's stick to what was there or what makes sense. The original had fetchSystemSettings but usually we fetch bank settings.
+        // Let's call fetchBankSettings() if it exists, or just log success.
+        // Looking at context, fetchSystemSettings might not exist or might be confusing. 
+        // I will check if fetchBankSettings is available. Yes it is.
+        await fetchBankSettings();
+      } else {
+        alert(data.error || "Failed to update bank settings");
+      }
+    } catch (error) {
+      console.error("Error updating bank settings:", error);
+      alert("Error occurred while saving settings.");
     } finally {
       setIsSavingSystemSettings(false);
     }
@@ -802,7 +891,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           upiId: data.universityBankDetails?.upiId || "",
           qrImage: data.universityBankDetails?.qrImage || "",
           feeAmount: data.hostelFeeAmount || 0,
-          instructions: data.paymentInstructions || ""
+          instructions: data.paymentInstructions || "",
+          isPaymentEnabled: data.isPaymentEnabled || false
         });
       }
     } catch (e) {
@@ -810,33 +900,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const handleUpdateBankSettings = async () => {
-    try {
-      const res = await fetch("/api/admin/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          universityBankDetails: {
-            accountName: bankFormData.accountName,
-            accountNumber: bankFormData.accountNumber,
-            ifscCode: bankFormData.ifscCode,
-            bankName: bankFormData.bankName,
-            upiId: bankFormData.upiId,
-            qrImage: bankFormData.qrImage
-          },
-          hostelFeeAmount: bankFormData.feeAmount,
-          paymentInstructions: bankFormData.instructions
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert("Bank settings updated successfully!");
-        setShowBankSettingsModal(false);
-      }
-    } catch (e) {
-      alert("Error updating bank settings");
-    }
-  };
+
 
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -912,10 +976,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const handleUpdateHostelMode = async (hostelId: string, mode: 'strict' | 'gps-only' | 'biometric') => {
     try {
       setUpdatingHostelId(hostelId);
+      const hostelToUpdate = hostels.find(h => h._id === hostelId);
+      if (!hostelToUpdate) throw new Error("Hostel not found");
+
       const res = await fetch('/api/admin/hostels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: hostelId, attendanceMode: mode })
+        body: JSON.stringify({
+          ...hostelToUpdate,
+          id: hostelId,
+          attendanceMode: mode
+        })
       });
 
       if (!res.ok) throw new Error("Failed to update");
@@ -928,6 +999,31 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     } catch (e) {
       console.error(e);
       alert("Failed to update attendance mode");
+    } finally {
+      setUpdatingHostelId(null);
+    }
+  };
+
+  const handleSyncAllStudents = async (hostelName: string) => {
+    if (!confirm(`Are you sure you want to reset all students in '${hostelName}' to use the Hostel Default mode? \n\nThis will remove any individual overrides (like GPS Only or Biometric) set for specific students.`)) return;
+
+    try {
+      setUpdatingHostelId('syncing');
+      const res = await fetch('/api/admin/hostels/reset-student-modes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hostelName })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to sync students");
     } finally {
       setUpdatingHostelId(null);
     }
@@ -1236,6 +1332,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           studentStatus: s.studentStatus || "in",
           registrationId: s.registrationId,
           isProfileLocked: s.isProfileLocked || false,
+          deviceId: s.deviceId,
+          webAuthnCredentials: s.webAuthnCredentials || [],
+          deviceResetCount: s.deviceResetCount || 0,
+          deviceHistory: s.deviceHistory || [],
+          attendanceMode: s.attendanceMode || "default",
           permissions: []
         }));
         setStudents(formattedStudents);
@@ -1752,20 +1853,38 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const response = await fetch(`/api/students/${studentId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId: "" })
+        body: JSON.stringify({ action: "resetDevice" })
       });
 
-      if (!response.ok) throw new Error("Failed to reset device ID");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to reset device ID on server");
+      }
+
+      // Update local state immediately for instant feedback
+      if (selectedStudent && selectedStudent.id === studentId) {
+        setSelectedStudent({
+          ...selectedStudent,
+          deviceId: "",
+          webAuthnCredentials: [],
+          deviceResetCount: (selectedStudent.deviceResetCount || 0) + 1,
+          deviceHistory: [
+            ...(selectedStudent.deviceHistory || []),
+            ...(selectedStudent.deviceId ? [{
+              deviceId: selectedStudent.deviceId,
+              action: "reset" as const,
+              timestamp: new Date().toISOString()
+            }] : [])
+          ]
+        });
+      }
 
       alert("Device registration reset successfully!");
-      // Refresh local state
-      if (selectedStudent && selectedStudent.id === studentId) {
-        setSelectedStudent({ ...selectedStudent, deviceId: "" });
-      }
-      await fetchStudents(true);
-    } catch (error) {
+      // 🔄 BACKGROUND REFRESH: Let it happen in the background
+      fetchStudents(true);
+    } catch (error: any) {
       console.error("Error resetting device ID:", error);
-      alert("Failed to reset device ID. Please try again.");
+      alert(`Failed to reset device ID: ${error.message || "Unknown error"}. Please try again.`);
     }
   };
 
@@ -1929,6 +2048,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             homeState: data.student.homeState,
             studentStatus: data.student.studentStatus || "in",
             registrationId: data.student.registrationId,
+            deviceId: data.student.deviceId,
+            webAuthnCredentials: data.student.webAuthnCredentials || [],
+            deviceResetCount: data.student.deviceResetCount || 0,
+            deviceHistory: data.student.deviceHistory || [],
+            attendanceMode: data.student.attendanceMode || "default",
           };
         }
       } catch (e) {
@@ -2198,14 +2322,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       🏢 Manage Hostels
                     </button>
                   )}
-                  {title === "Developer Dashboard" && (
-                    <button
-                      onClick={() => setShowPasswordResetModal(true)}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap"
-                    >
-                      🔑 Change Password
-                    </button>
-                  )}
+
                   {title === "Developer Dashboard" && (
                     <button
                       onClick={() => setShowDBExportModal(true)}
@@ -2214,26 +2331,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       💾 Export DB
                     </button>
                   )}
-                  {title === "Developer Dashboard" && (
-                    <button
-                      onClick={() => handleBulkProfileLock(true)}
-                      disabled={isUpdatingSettings}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-red-100 transition-all disabled:opacity-50 whitespace-nowrap"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                      Lock All
-                    </button>
-                  )}
-                  {title === "Developer Dashboard" && (
-                    <button
-                      onClick={() => handleBulkProfileLock(false)}
-                      disabled={isUpdatingSettings}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-blue-100 transition-all disabled:opacity-50 whitespace-nowrap"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
-                      Unlock All
-                    </button>
-                  )}
+
                   <button
                     onClick={() => setShowAllStudents(true)}
                     className="flex-1 md:flex-none px-4 py-2 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 text-sm whitespace-nowrap"
@@ -4111,6 +4209,59 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
               )}
 
+              <div className="mb-6 bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">🛡️</span>
+                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tight">Secure Device Info</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Device Status</p>
+                    <div className="flex items-center gap-1.5">
+                      <div className={`w-2 h-2 rounded-full ${(selectedStudent.deviceId || (selectedStudent.webAuthnCredentials && selectedStudent.webAuthnCredentials.length > 0)) ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                      <p className={`text-xs font-bold ${(selectedStudent.deviceId || (selectedStudent.webAuthnCredentials && selectedStudent.webAuthnCredentials.length > 0)) ? 'text-green-700' : 'text-red-700'}`}>
+                        {(selectedStudent.deviceId || (selectedStudent.webAuthnCredentials && selectedStudent.webAuthnCredentials.length > 0)) ? 'Linked & Verified' : 'Not Registered'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Device Changes</p>
+                    <p className="text-xs font-bold text-slate-700">
+                      {selectedStudent.deviceResetCount || 0} Times Reset
+                    </p>
+                  </div>
+                  <div className="col-span-2 space-y-1 pt-1 border-t border-slate-200/50">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hardware ID Token</p>
+                    <p className="text-[10px] font-medium text-slate-500 font-mono break-all line-clamp-1">
+                      {selectedStudent.deviceId || (selectedStudent.webAuthnCredentials?.[0]?.credentialID) || 'No unique key saved in database'}
+                    </p>
+                  </div>
+
+                  {selectedStudent.deviceHistory && selectedStudent.deviceHistory.length > 0 && (
+                    <div className="col-span-2 space-y-2 mt-1 pt-2 border-t border-slate-200/50">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Device Log (Change History)</p>
+                      <div className="max-h-32 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                        {selectedStudent.deviceHistory.map((history, idx) => (
+                          <div key={idx} className="bg-white p-2 rounded-xl border border-slate-200/60 shadow-sm flex flex-col gap-1 hover:border-blue-200 transition-colors">
+                            <div className="flex items-center justify-between">
+                              <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest ${history.action === 'registered' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'}`}>
+                                {history.action === 'registered' ? 'NEW LINK' : 'RESET LOG'}
+                              </span>
+                              <span className="text-[8px] font-bold text-slate-400">
+                                {new Date(history.timestamp).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                              </span>
+                            </div>
+                            <p className="text-[9px] font-mono text-slate-600 break-all leading-tight">
+                              <span className="text-slate-400 mr-1">{idx + 1}.</span> {history.deviceId}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <h3 className="text-base font-semibold text-foreground mb-4">Permission History</h3>
                 {selectedStudent.permissions.length === 0 ? (
@@ -5261,9 +5412,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               {/* Modal Tabs */}
               <div className="flex p-1 bg-gray-100/30 gap-1 mx-4 sm:mx-8 mt-4 sm:mt-6 rounded-xl overflow-x-hidden overflow-y-hidden no-scrollbar">
                 {[
-                  { id: "wardens", label: "Wardens", icon: "👮" },
                   { id: "rooms", label: "Rooms", icon: "🏠" },
-                  { id: "form", label: "Reg Form", icon: "📝" }
+                  { id: "form", label: "Reg Form", icon: "📝" },
+                  { id: "password", label: "Password", icon: "🔑" },
+                  { id: "system", label: "System", icon: "⚙️" }
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -5281,270 +5433,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
               {/* Modal Body */}
               <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar">
-                {activeSettingsTab === "wardens" && (
-                  <div className="space-y-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-                      <div className="bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl flex items-start gap-4 flex-1">
-                        <span className="text-xl sm:text-2xl">💡</span>
-                        <p className="text-xs sm:text-sm text-blue-800 font-medium">
-                          Map individual wardens to each hostel. They can only see students from their assigned hostel.
-                        </p>
-                      </div>
-                      <button
-                        onClick={handleCreateHostel}
-                        className="w-full sm:w-auto px-6 py-3.5 sm:py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
-                        Add Hostel
-                      </button>
-                    </div>
-
-                    <div className="grid gap-6">
-                      {hostelsConfig.map((hostel) => (
-                        <div key={hostel._id} className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-6 hover:shadow-xl transition-all group overflow-hidden relative">
-                          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-100/30 blur-[60px] rounded-full group-hover:bg-indigo-100/40 transition-all" />
-                          <div className="relative z-10">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                              <div className="flex items-center gap-3 w-full">
-                                <div className="p-2.5 bg-white rounded-xl shadow-sm border border-slate-200 text-xl shrink-0">🏢</div>
-                                <div className="min-w-0 flex-1">
-                                  <h4 className="font-black text-slate-800 text-lg uppercase tracking-tight truncate">{hostel.name}</h4>
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Hostel ID: {hostel._id.slice(-6)}</p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 w-full sm:w-auto">
-                                <button
-                                  onClick={() => {
-                                    const newPass = prompt("Enter new password for " + hostel.name + ":", hostel.wardenPassword || "");
-                                    if (newPass !== null) handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenPassword: newPass });
-                                  }}
-                                  className="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:scale-110 active:scale-95 transition-all text-center"
-                                >
-                                  Update Access
-                                </button>
-                                {showRemoveButton && (
-                                  <button
-                                    onClick={() => handleDeleteHostelConfig(hostel._id, hostel.name)}
-                                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
-                                  >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="bg-white/60 p-4 rounded-xl border border-white backdrop-blur-sm">
-                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Warden Username</label>
-                                <div className="flex items-center gap-3">
-                                  <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-200" />
-                                  <input
-                                    type="text"
-                                    defaultValue={hostel.wardenUsername || (hostel.name.toLowerCase().replace(/ /g, "_") + "_warden")}
-                                    onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenUsername: e.target.value })}
-                                    className="font-black text-slate-700 text-base bg-transparent border-none outline-none focus:ring-0 p-0 w-full"
-                                  />
-                                </div>
-                              </div>
-                              <div className="bg-white/60 p-4 rounded-xl border border-white backdrop-blur-sm relative group/pass">
-                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Warden Password</label>
-                                <div className="flex items-center gap-3 justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <div className="h-2 w-2 rounded-full bg-indigo-500 shadow-sm shadow-indigo-200" />
-                                    <span className="font-black text-slate-700 text-base tracking-widest">
-                                      {visiblePasswords.has(hostel._id)
-                                        ? (hostel.wardenPassword || globalWardenPassword || "Not Set")
-                                        : ((hostel.wardenPassword || globalWardenPassword) ? "••••••••" : "Not Set")
-                                      }
-                                    </span>
-                                  </div>
-                                  {(hostel.wardenPassword || globalWardenPassword) && (
-                                    <button
-                                      onClick={() => {
-                                        setVisiblePasswords(prev => {
-                                          const newSet = new Set(prev);
-                                          if (newSet.has(hostel._id)) {
-                                            newSet.delete(hostel._id);
-                                          } else {
-                                            newSet.add(hostel._id);
-                                          }
-                                          return newSet;
-                                        });
-                                      }}
-                                      className="p-1.5 hover:bg-indigo-50 rounded-lg transition-colors group"
-                                      title={visiblePasswords.has(hostel._id) ? "Hide password" : "Show password"}
-                                    >
-                                      {visiblePasswords.has(hostel._id) ? (
-                                        <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                                        </svg>
-                                      ) : (
-                                        <svg className="w-5 h-5 text-slate-400 group-hover:text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                        </svg>
-                                      )}
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* MULTI-HOSTEL ACCOUNTS SECTION */}
-                    <div className="mt-12 pt-12 border-t-2 border-slate-100">
-                      <div className="flex items-center justify-between mb-8">
-                        <div>
-                          <h3 className="text-xl font-black text-slate-800">Unified Warden Accounts</h3>
-                          <p className="text-sm text-slate-500 font-medium mt-1">Manage accounts with access to multiple locations</p>
-                        </div>
-                        <button
-                          onClick={() => {
-                            setEditingAccountId(null);
-                            setNewAccountForm({ username: "", password: "", hostels: [] });
-                            setIsCreatingAccount(!isCreatingAccount);
-                          }}
-                          className="px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg flex items-center gap-2"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
-                          Create Account
-                        </button>
-                      </div>
-
-                      {isCreatingAccount && (
-                        <div className="bg-white p-6 rounded-2xl border-2 border-indigo-100 shadow-xl mb-8 animate-in fade-in slide-in-from-top-4">
-                          <h4 className="font-black text-indigo-900 uppercase tracking-widest mb-6">{editingAccountId ? "Edit Warden Account" : "New Warden Account"}</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                            <div>
-                              <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Username</label>
-                              <input
-                                type="text"
-                                value={newAccountForm.username}
-                                onChange={e => setNewAccountForm({ ...newAccountForm, username: e.target.value })}
-                                className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 focus:border-indigo-500 outline-none font-bold"
-                                placeholder="e.g. super_warden"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Password</label>
-                              <input
-                                type="text"
-                                value={newAccountForm.password}
-                                onChange={e => setNewAccountForm({ ...newAccountForm, password: e.target.value })}
-                                className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 focus:border-indigo-500 outline-none font-bold"
-                                placeholder="******"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="mb-8">
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Assign Hostels</label>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                              {hostelsConfig.map(h => (
-                                <label key={h._id} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${newAccountForm.hostels.includes(h.name) ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 hover:border-slate-200'}`}>
-                                  <input
-                                    type="checkbox"
-                                    checked={newAccountForm.hostels.includes(h.name)}
-                                    onChange={e => {
-                                      if (e.target.checked) {
-                                        setNewAccountForm({ ...newAccountForm, hostels: [...newAccountForm.hostels, h.name] });
-                                      } else {
-                                        setNewAccountForm({ ...newAccountForm, hostels: newAccountForm.hostels.filter(hn => hn !== h.name) });
-                                      }
-                                    }}
-                                    className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
-                                  />
-                                  <span className="font-bold text-sm text-slate-700">{h.name}</span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="flex justify-end gap-3">
-                            <button
-                              onClick={() => {
-                                setIsCreatingAccount(false);
-                                setEditingAccountId(null);
-                                setNewAccountForm({ username: "", password: "", hostels: [] });
-                              }}
-                              className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (!newAccountForm.username || !newAccountForm.password || newAccountForm.hostels.length === 0) {
-                                  alert("Please fill all fields and select at least one hostel.");
-                                  return;
-                                }
-                                if (editingAccountId) {
-                                  handleManageWardenAccount("update", { ...newAccountForm, accountId: editingAccountId });
-                                } else {
-                                  handleManageWardenAccount("create", newAccountForm);
-                                }
-                              }}
-                              className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all"
-                            >
-                              {editingAccountId ? "Update Account" : "Save Account"}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="grid gap-4">
-                        {wardenAccounts.length === 0 && !isCreatingAccount && (
-                          <div className="p-8 text-center text-slate-400 font-medium italic bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-                            No unified accounts created yet.
-                          </div>
-                        )}
-                        {wardenAccounts.map((acc, idx) => (
-                          <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div>
-                              <div className="flex items-center gap-3 mb-2">
-                                <div className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
-                                <h4 className="text-lg font-black text-slate-800">{acc.username}</h4>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {acc.hostels.map(h => (
-                                  <span key={h} className="px-2.5 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wider rounded-lg">
-                                    {h}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 self-start md:self-center">
-                              <button
-                                onClick={() => {
-                                  setNewAccountForm({
-                                    username: acc.username,
-                                    password: acc.password || "",
-                                    hostels: acc.hostels
-                                  });
-                                  setEditingAccountId(acc._id || null);
-                                  setIsCreatingAccount(true);
-                                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                                }}
-                                className="px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (confirm("Delete this account?")) handleManageWardenAccount("delete", { username: acc.username });
-                                }}
-                                className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {activeSettingsTab === "rooms" && (
                   <div className="space-y-6">
@@ -5865,54 +5753,585 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     </div>
                   </div>
                 )}
-              </div>
 
-              {/* Modal Footer */}
-              <div className="p-4 sm:p-8 border-t border-gray-100 bg-gray-50/50 flex items-center justify-end">
-                <button
-                  onClick={() => {
-                    if (confirm("This will overwrite your current form configuration with the standard template (including Floor Number). Are you sure?")) {
-                      const DEFAULT_CONFIG = [
-                        { id: "profilePicture", label: "Profile Photo", type: "image", section: "Personal", required: true, visible: true },
-                        { id: "name", label: "Full Name", type: "text", section: "Personal", required: true, visible: true },
-                        { id: "phoneNumber", label: "Phone Number", type: "tel", section: "Personal", required: true, visible: true },
-                        { id: "dob", label: "Date of Birth", type: "date", section: "Personal", required: true, visible: true },
-                        { id: "category", label: "Social Category", type: "select", section: "Personal", required: true, visible: true, options: ["GENERAL", "OBC", "SC", "ST"] },
+                {activeSettingsTab === "system" && (
+                  <div className="space-y-6">
+                    <div className="bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl flex items-start gap-4 mb-4">
+                      <span className="text-xl sm:text-2xl">⚙️</span>
+                      <p className="text-xs sm:text-sm text-slate-800 font-medium">
+                        Global system controls. Manage student access and payments here.
+                      </p>
+                    </div>
 
-                        { id: "erpInformation", label: "ERP ID", type: "text", section: "Academic", required: true, visible: true },
-                        { id: "collegeName", label: "College Name", type: "select", section: "Academic", required: true, visible: true, options: ["OIST", "OCT", "OIM", "Pharmacy", "MCA"] },
-                        { id: "branch", label: "Branch", type: "select", section: "Academic", required: true, visible: true, options: ["CSE", "AIML", "DS", "IT", "EC", "EX", "ME", "CE", "AU"] },
-                        { id: "year", label: "Current Year", type: "select", section: "Academic", required: true, visible: true, options: ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"] },
-                        { id: "semester", label: "Semester", type: "select", section: "Academic", required: true, visible: true, options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"] },
-                        { id: "section", label: "Section", type: "select", section: "Academic", required: true, visible: true, options: ["A", "B", "C", "D", "E"] },
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <button
+                        onClick={() => handleBulkProfileLock(true)}
+                        disabled={isUpdatingSettings}
+                        className="flex flex-col items-center justify-center gap-3 p-6 bg-red-50 text-red-700 border-2 border-red-100 rounded-2xl hover:bg-red-100 transition-all font-black uppercase tracking-widest text-xs shadow-sm hover:shadow-lg disabled:opacity-50 group text-center"
+                      >
+                        <div className="p-3 bg-red-200 rounded-full text-red-700 mb-1 group-hover:scale-110 transition-transform shadow-sm">
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                        </div>
+                        Lock All Profiles
+                        <span className="text-[9px] text-red-500/70 font-bold normal-case block mt-1">Prevents all students from editing their profiles</span>
+                      </button>
+                      <button
+                        onClick={() => handleBulkProfileLock(false)}
+                        disabled={isUpdatingSettings}
+                        className="flex flex-col items-center justify-center gap-3 p-6 bg-blue-50 text-blue-700 border-2 border-blue-100 rounded-2xl hover:bg-blue-100 transition-all font-black uppercase tracking-widest text-xs shadow-sm hover:shadow-lg disabled:opacity-50 group text-center"
+                      >
+                        <div className="p-3 bg-blue-200 rounded-full text-blue-700 mb-1 group-hover:scale-110 transition-transform shadow-sm">
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+                        </div>
+                        Unlock All Profiles
+                        <span className="text-[9px] text-blue-500/70 font-bold normal-case block mt-1">Allows students to update their details</span>
+                      </button>
+                    </div>
 
-                        { id: "fatherName", label: "Father's Name", type: "text", section: "Guardian", required: true, visible: true },
-                        { id: "fatherNumber", label: "Father's Phone No", type: "tel", section: "Guardian", required: true, visible: true },
-                        { id: "motherName", label: "Mother's Name", type: "text", section: "Guardian", required: true, visible: true },
-                        { id: "motherNumber", label: "Mother's Phone No", type: "tel", section: "Guardian", required: true, visible: true },
-                        { id: "localGuardianAddress", label: "Local Guardian Address", type: "textarea", section: "Guardian", required: true, visible: true },
-                        { id: "localGuardianPhoneNumber", label: "Local Guardian Phone", type: "tel", section: "Guardian", required: true, visible: true },
+                    <div className="w-full h-0.5 bg-gray-100 my-6"></div>
 
-                        { id: "homeState", label: "Home State", type: "select", section: "Address", required: true, visible: true, options: ["Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"] },
-                        { id: "joiningDate", label: "Joining Date", type: "date", section: "Other", required: true, visible: true },
+                    <div className="bg-indigo-50 border-2 border-indigo-100 p-4 rounded-2xl flex items-start gap-4 mb-4">
+                      <span className="text-xl sm:text-2xl">💰</span>
+                      <p className="text-xs sm:text-sm text-indigo-800 font-medium">
+                        Configure university bank details and payment settings. Enable students to make payments directly.
+                      </p>
+                    </div>
 
-                        // NEW FIELD
-                        { id: "floorNumber", label: "Floor Number", type: "select", section: "Accommodation", required: true, visible: true, options: ["Ground Floor", "1st Floor", "2nd Floor", "3rd Floor", "4th Floor", "5th Floor"] }
-                      ];
+                    {/* Global Payment Toggle */}
+                    <div className="bg-white p-4 rounded-2xl border-2 border-indigo-100 flex items-center justify-between shadow-sm">
+                      <div>
+                        <h3 className="text-sm font-black text-indigo-900 uppercase tracking-wide">Enable Student Payments</h3>
+                        <p className="text-xs text-indigo-700/80 font-medium mt-0.5">Allow students to view payment details and make transactions</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={bankFormData.isPaymentEnabled}
+                          onChange={(e) => {
+                            const updated = { ...bankFormData, isPaymentEnabled: e.target.checked };
+                            setBankFormData(updated);
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                      </label>
+                    </div>
 
-                      handleUpdateFormBuilder(DEFAULT_CONFIG);
-                    }
-                  }}
-                  className="w-full sm:w-auto px-6 py-3.5 sm:py-4 bg-gray-100 text-gray-500 font-bold text-xs uppercase tracking-[0.1em] rounded-2xl hover:bg-gray-200 transition-all mr-auto"
-                >
-                  ⚠ Reset to Defaults
-                </button>
-                <button
-                  onClick={() => setShowSystemSettingsModal(false)}
-                  className="w-full sm:w-auto px-10 py-3.5 sm:py-4 bg-gray-900 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl hover:bg-black transition-all shadow-xl active:scale-95"
-                >
-                  SAVE FORM SETTINGS
-                </button>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Account Name</label>
+                        <input
+                          type="text"
+                          value={bankFormData.accountName}
+                          onChange={(e) => setBankFormData({ ...bankFormData, accountName: e.target.value })}
+                          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                          placeholder="e.g. ORIENTAL INSTITUTE OF SCIENCE"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Account Number</label>
+                        <input
+                          type="text"
+                          value={bankFormData.accountNumber}
+                          onChange={(e) => setBankFormData({ ...bankFormData, accountNumber: e.target.value })}
+                          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                          placeholder="000000000000"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">IFSC Code</label>
+                        <input
+                          type="text"
+                          value={bankFormData.ifscCode}
+                          onChange={(e) => setBankFormData({ ...bankFormData, ifscCode: e.target.value })}
+                          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                          placeholder="SYNB0000..."
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Bank Name</label>
+                        <input
+                          type="text"
+                          value={bankFormData.bankName}
+                          onChange={(e) => setBankFormData({ ...bankFormData, bankName: e.target.value })}
+                          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                          placeholder="Canara Bank"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">UPI ID (Optional)</label>
+                        <input
+                          type="text"
+                          value={bankFormData.upiId}
+                          onChange={(e) => setBankFormData({ ...bankFormData, upiId: e.target.value })}
+                          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                          placeholder="university@upi"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Hostel Fee (₹)</label>
+                        <input
+                          type="number"
+                          value={bankFormData.feeAmount}
+                          onChange={(e) => setBankFormData({ ...bankFormData, feeAmount: Number(e.target.value) })}
+                          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                          placeholder="45000"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Instructions for Students</label>
+                      <textarea
+                        value={bankFormData.instructions}
+                        onChange={(e) => setBankFormData({ ...bankFormData, instructions: e.target.value })}
+                        className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none min-h-[80px]"
+                        placeholder="Enter step-by-step payment instructions..."
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center block mb-2">Upload QR Image (Required for Scan & Pay)</label>
+                      <div
+                        className="relative group cursor-pointer"
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const file = e.dataTransfer.files[0];
+                          if (file && file.type.startsWith('image/')) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => setBankFormData({ ...bankFormData, qrImage: reader.result as string });
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        onPaste={(e) => {
+                          const item = e.clipboardData.items[0];
+                          if (item?.type.startsWith('image/')) {
+                            const file = item.getAsFile();
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => setBankFormData({ ...bankFormData, qrImage: reader.result as string });
+                              reader.readAsDataURL(file);
+                            }
+                          }
+                        }}
+                      >
+                        <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/50 hover:bg-indigo-50/30 hover:border-indigo-300 transition-all group-hover:shadow-lg shadow-indigo-100/50">
+                          {bankFormData.qrImage ? (
+                            <div className="relative group/img">
+                              <img src={bankFormData.qrImage} alt="QR Preview" className="h-40 w-40 object-contain rounded-lg" />
+                              <div className="absolute inset-0 bg-black/40 rounded-lg opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
+                                <p className="text-white text-[10px] font-black">CHANGE IMAGE</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                              <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mb-3">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                              </div>
+                              <p className="mb-2 text-sm text-gray-700 font-bold">Click to upload or <span className="text-indigo-600">Paste (Ctrl+V)</span></p>
+                              <p className="text-xs text-secondary italic">PNG, JPG or SVG (Max 2MB)</p>
+                            </div>
+                          )}
+                          <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => setBankFormData({ ...bankFormData, qrImage: reader.result as string });
+                              reader.readAsDataURL(file);
+                            }
+                          }} />
+                        </label>
+                        {bankFormData.qrImage && (
+                          <button
+                            onClick={(e) => { e.preventDefault(); setBankFormData({ ...bankFormData, qrImage: "" }); }}
+                            className="absolute -top-2 -right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-4">
+                      <button
+                        onClick={handleUpdateBankSettings}
+                        className="px-8 py-3 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
+                      >
+                        Update Bank Configuration
+                      </button>
+                    </div>
+
+                  </div>
+                )}
+                {activeSettingsTab === "password" && (
+                  <div className="space-y-12">
+                    {/* 1. Admin Password Section */}
+                    <div className="space-y-6">
+                      <div className="bg-purple-50 border-2 border-purple-100 p-4 rounded-2xl flex items-start gap-4">
+                        <span className="text-xl sm:text-2xl">🔑</span>
+                        <p className="text-xs sm:text-sm text-purple-800 font-medium">
+                          Change the dean password. This will update the login credentials for the Dean account.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30">
+                          <div className="space-y-4">
+                            <h4 className="font-black text-gray-900 uppercase tracking-tight mb-4">Dean Credentials</h4>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">New Password</label>
+                            <div className="relative">
+                              <input
+                                type={showPassword ? "text" : "password"}
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                autoComplete="new-password"
+                                className="w-full p-4 rounded-2xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-purple-500 focus:shadow-lg focus:shadow-purple-100 transition-all pr-12"
+                                placeholder="••••••••"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-4 top-4 text-gray-400 hover:text-purple-600 transition-colors"
+                              >
+                                {showPassword ? (
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                                ) : (
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                )}
+                              </button>
+                            </div>
+                            <button
+                              onClick={handleChangePassword}
+                              disabled={!newPassword || newPassword.length < 6}
+                              className="w-full py-3 bg-purple-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-purple-700 transition-colors shadow-lg shadow-purple-200 disabled:opacity-50 disabled:shadow-none"
+                            >
+                              Update Password
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="w-full h-0.5 bg-slate-100"></div>
+
+                    {/* 2. Warden Management Section (Moved from Wardens Tab) */}
+                    <div className="space-y-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                        <div className="bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl flex items-start gap-4 flex-1">
+                          <span className="text-xl sm:text-2xl">👮</span>
+                          <div className="flex-1">
+                            <h3 className="text-sm font-black text-blue-900 uppercase tracking-wide mb-1">Warden Management</h3>
+                            <p className="text-xs sm:text-sm text-blue-800 font-medium">
+                              Map individual wardens to each hostel. They can only see students from their assigned hostel.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={handleCreateHostel}
+                          className="w-full sm:w-auto px-6 py-3.5 sm:py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
+                          Add Hostel
+                        </button>
+                      </div>
+
+                      <div className="grid gap-6">
+                        {hostelsConfig.map((hostel) => (
+                          <div key={hostel._id} className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-6 hover:shadow-xl transition-all group overflow-hidden relative">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-100/30 blur-[60px] rounded-full group-hover:bg-indigo-100/40 transition-all" />
+                            <div className="relative z-10">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                                <div className="flex items-center gap-3 w-full">
+                                  <div className="p-2.5 bg-white rounded-xl shadow-sm border border-slate-200 text-xl shrink-0">🏢</div>
+                                  <div className="min-w-0 flex-1">
+                                    <h4 className="font-black text-slate-800 text-lg uppercase tracking-tight truncate">{hostel.name}</h4>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Hostel ID: {hostel._id.slice(-6)}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 w-full sm:w-auto">
+                                  <button
+                                    onClick={() => {
+                                      const newPass = prompt("Enter new password for " + hostel.name + ":", hostel.wardenPassword || "");
+                                      if (newPass !== null) handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenPassword: newPass });
+                                    }}
+                                    className="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:scale-110 active:scale-95 transition-all text-center"
+                                  >
+                                    Update Access
+                                  </button>
+                                  {showRemoveButton && (
+                                    <button
+                                      onClick={() => handleDeleteHostelConfig(hostel._id, hostel.name)}
+                                      className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                                    >
+                                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="bg-white/60 p-4 rounded-xl border border-white backdrop-blur-sm">
+                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Warden Username</label>
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-200" />
+                                    <input
+                                      type="text"
+                                      defaultValue={hostel.wardenUsername || (hostel.name.toLowerCase().replace(/ /g, "_") + "_warden")}
+                                      onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenUsername: e.target.value })}
+                                      className="font-black text-slate-700 text-base bg-transparent border-none outline-none focus:ring-0 p-0 w-full"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="bg-white/60 p-4 rounded-xl border border-white backdrop-blur-sm relative group/pass">
+                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Warden Password</label>
+                                  <div className="flex items-center gap-3 justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-2 w-2 rounded-full bg-indigo-500 shadow-sm shadow-indigo-200" />
+                                      <span className="font-black text-slate-700 text-base tracking-widest">
+                                        {visiblePasswords.has(hostel._id)
+                                          ? (hostel.wardenPassword || globalWardenPassword || "Not Set")
+                                          : ((hostel.wardenPassword || globalWardenPassword) ? "••••••••" : "Not Set")
+                                        }
+                                      </span>
+                                    </div>
+                                    {(hostel.wardenPassword || globalWardenPassword) && (
+                                      <button
+                                        onClick={() => {
+                                          setVisiblePasswords(prev => {
+                                            const newSet = new Set(prev);
+                                            if (newSet.has(hostel._id)) {
+                                              newSet.delete(hostel._id);
+                                            } else {
+                                              newSet.add(hostel._id);
+                                            }
+                                            return newSet;
+                                          });
+                                        }}
+                                        className="p-1.5 hover:bg-indigo-50 rounded-lg transition-colors group"
+                                        title={visiblePasswords.has(hostel._id) ? "Hide password" : "Show password"}
+                                      >
+                                        {visiblePasswords.has(hostel._id) ? (
+                                          <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                          </svg>
+                                        ) : (
+                                          <svg className="w-5 h-5 text-slate-400 group-hover:text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                          </svg>
+                                        )}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* MULTI-HOSTEL ACCOUNTS SECTION */}
+                      <div className="mt-12 pt-12 border-t-2 border-slate-100">
+                        <div className="flex items-center justify-between mb-8">
+                          <div>
+                            <h3 className="text-xl font-black text-slate-800">Unified Warden Accounts</h3>
+                            <p className="text-sm text-slate-500 font-medium mt-1">Manage accounts with access to multiple locations</p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setEditingAccountId(null);
+                              setNewAccountForm({ username: "", password: "", hostels: [] });
+                              setIsCreatingAccount(!isCreatingAccount);
+                            }}
+                            className="px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg flex items-center gap-2"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
+                            Create Account
+                          </button>
+                        </div>
+
+                        {isCreatingAccount && (
+                          <div className="bg-white p-6 rounded-2xl border-2 border-indigo-100 shadow-xl mb-8 animate-in fade-in slide-in-from-top-4">
+                            <h4 className="font-black text-indigo-900 uppercase tracking-widest mb-6">{editingAccountId ? "Edit Warden Account" : "New Warden Account"}</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Username</label>
+                                <input
+                                  type="text"
+                                  value={newAccountForm.username}
+                                  onChange={e => setNewAccountForm({ ...newAccountForm, username: e.target.value })}
+                                  className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 focus:border-indigo-500 outline-none font-bold"
+                                  placeholder="e.g. super_warden"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Password</label>
+                                <input
+                                  type="text"
+                                  value={newAccountForm.password}
+                                  onChange={e => setNewAccountForm({ ...newAccountForm, password: e.target.value })}
+                                  className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 focus:border-indigo-500 outline-none font-bold"
+                                  placeholder="******"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="mb-8">
+                              <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Assign Hostels</label>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {hostelsConfig.map(h => (
+                                  <label key={h._id} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${newAccountForm.hostels.includes(h.name) ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 hover:border-slate-200'}`}>
+                                    <input
+                                      type="checkbox"
+                                      checked={newAccountForm.hostels.includes(h.name)}
+                                      onChange={e => {
+                                        if (e.target.checked) {
+                                          setNewAccountForm({ ...newAccountForm, hostels: [...newAccountForm.hostels, h.name] });
+                                        } else {
+                                          setNewAccountForm({ ...newAccountForm, hostels: newAccountForm.hostels.filter(hn => hn !== h.name) });
+                                        }
+                                      }}
+                                      className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <span className="font-bold text-sm text-slate-700">{h.name}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3">
+                              <button
+                                onClick={() => {
+                                  setIsCreatingAccount(false);
+                                  setEditingAccountId(null);
+                                  setNewAccountForm({ username: "", password: "", hostels: [] });
+                                }}
+                                className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (!newAccountForm.username || !newAccountForm.password || newAccountForm.hostels.length === 0) {
+                                    alert("Please fill all fields and select at least one hostel.");
+                                    return;
+                                  }
+                                  if (editingAccountId) {
+                                    handleManageWardenAccount("update", { ...newAccountForm, accountId: editingAccountId });
+                                  } else {
+                                    handleManageWardenAccount("create", newAccountForm);
+                                  }
+                                }}
+                                className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all"
+                              >
+                                {editingAccountId ? "Update Account" : "Save Account"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="grid gap-4">
+                          {wardenAccounts.length === 0 && !isCreatingAccount && (
+                            <div className="p-8 text-center text-slate-400 font-medium italic bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                              No unified accounts created yet.
+                            </div>
+                          )}
+                          {wardenAccounts.map((acc, idx) => (
+                            <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                              <div>
+                                <div className="flex items-center gap-3 mb-2">
+                                  <div className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
+                                  <h4 className="text-lg font-black text-slate-800">{acc.username}</h4>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {acc.hostels.map(h => (
+                                    <span key={h} className="px-2.5 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wider rounded-lg">
+                                      {h}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 self-start md:self-center">
+                                <button
+                                  onClick={() => {
+                                    setNewAccountForm({
+                                      username: acc.username,
+                                      password: acc.password || "",
+                                      hostels: acc.hostels
+                                    });
+                                    setEditingAccountId(acc._id || null);
+                                    setIsCreatingAccount(true);
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                  }}
+                                  className="px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (confirm("Delete this account?")) handleManageWardenAccount("delete", { username: acc.username });
+                                  }}
+                                  className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Modal Footer */}
+                {activeSettingsTab === "form" && (
+                  <div className="p-4 sm:p-8 border-t border-gray-100 bg-gray-50/50 flex items-center justify-end">
+                    <button
+                      onClick={() => {
+                        if (confirm("This will overwrite your current form configuration with the standard template (including Floor Number). Are you sure?")) {
+                          const DEFAULT_CONFIG = [
+                            { id: "profilePicture", label: "Profile Photo", type: "image", section: "Personal", required: true, visible: true },
+                            { id: "name", label: "Full Name", type: "text", section: "Personal", required: true, visible: true },
+                            { id: "phoneNumber", label: "Phone Number", type: "tel", section: "Personal", required: true, visible: true },
+                            { id: "dob", label: "Date of Birth", type: "date", section: "Personal", required: true, visible: true },
+                            { id: "category", label: "Social Category", type: "select", section: "Personal", required: true, visible: true, options: ["GENERAL", "OBC", "SC", "ST"] },
+
+                            { id: "erpInformation", label: "ERP ID", type: "text", section: "Academic", required: true, visible: true },
+                            { id: "collegeName", label: "College Name", type: "select", section: "Academic", required: true, visible: true, options: ["OIST", "OCT", "OIM", "Pharmacy", "MCA"] },
+                            { id: "branch", label: "Branch", type: "select", section: "Academic", required: true, visible: true, options: ["CSE", "AIML", "DS", "IT", "EC", "EX", "ME", "CE", "AU"] },
+                            { id: "year", label: "Current Year", type: "select", section: "Academic", required: true, visible: true, options: ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"] },
+                            { id: "semester", label: "Semester", type: "select", section: "Academic", required: true, visible: true, options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"] },
+                            { id: "section", label: "Section", type: "select", section: "Academic", required: true, visible: true, options: ["A", "B", "C", "D", "E"] },
+
+                            { id: "fatherName", label: "Father's Name", type: "text", section: "Guardian", required: true, visible: true },
+                            { id: "fatherNumber", label: "Father's Phone No", type: "tel", section: "Guardian", required: true, visible: true },
+                            { id: "motherName", label: "Mother's Name", type: "text", section: "Guardian", required: true, visible: true },
+                            { id: "motherNumber", label: "Mother's Phone No", type: "tel", section: "Guardian", required: true, visible: true },
+                            { id: "localGuardianAddress", label: "Local Guardian Address", type: "textarea", section: "Guardian", required: true, visible: true },
+                            { id: "localGuardianPhoneNumber", label: "Local Guardian Phone", type: "tel", section: "Guardian", required: true, visible: true },
+
+                            { id: "homeState", label: "Home State", type: "select", section: "Address", required: true, visible: true, options: ["Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"] },
+                            { id: "joiningDate", label: "Joining Date", type: "date", section: "Other", required: true, visible: true },
+
+                            // NEW FIELD
+                            { id: "floorNumber", label: "Floor Number", type: "select", section: "Accommodation", required: true, visible: true, options: ["Ground Floor", "1st Floor", "2nd Floor", "3rd Floor", "4th Floor", "5th Floor"] }
+                          ];
+
+                          handleUpdateFormBuilder(DEFAULT_CONFIG);
+                        }
+                      }}
+                      className="w-full sm:w-auto px-6 py-3.5 sm:py-4 bg-gray-100 text-gray-500 font-bold text-xs uppercase tracking-[0.1em] rounded-2xl hover:bg-gray-200 transition-all mr-auto"
+                    >
+                      ⚠ Reset to Defaults
+                    </button>
+                    <button
+                      onClick={() => setShowSystemSettingsModal(false)}
+                      className="w-full sm:w-auto px-10 py-3.5 sm:py-4 bg-gray-900 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl hover:bg-black transition-all shadow-xl active:scale-95"
+                    >
+                      SAVE FORM SETTINGS
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -5920,7 +6339,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
       {/* Bank Settings Modal */}
       {
-        false && showBankSettingsModal && (
+        showBankSettingsModal && (
           <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
             <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
               <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-indigo-600 text-white">
@@ -5934,6 +6353,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* ⚡ NEW: Global Payment Toggle */}
+                <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-black text-indigo-900 uppercase tracking-wide">Enable Student Payments</h3>
+                    <p className="text-xs text-indigo-700/80 font-medium mt-0.5">Allow students to view payment details and make transactions</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={bankFormData.isPaymentEnabled}
+                      onChange={(e) => setBankFormData({ ...bankFormData, isPaymentEnabled: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Account Name</label>
@@ -6146,6 +6582,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             {hostel.attendanceMode === 'gps-only' ? '⚠️ GPS ONLY' : hostel.attendanceMode === 'biometric' ? '👆 BIOMETRIC' : '📸 CAMERA'}
                           </span>
                         </div>
+                        <button
+                          onClick={() => handleSyncAllStudents(hostel.name)}
+                          disabled={updatingHostelId === 'syncing'}
+                          className="mt-2 text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-1 group"
+                        >
+                          🔄 Force Sync All Students to this Mode
+                        </button>
                       </div>
 
                       <div className="flex bg-gray-50 p-1 rounded-lg border border-gray-200 self-start sm:self-auto flex-wrap gap-1">

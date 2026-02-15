@@ -90,11 +90,24 @@ export async function POST(request: NextRequest) {
 
         const isTester = student.email === "prem86.dwivedi@gmail.com";
 
-        if (!isTester && student.deviceId && student.deviceId !== deviceId) {
-            return NextResponse.json(
-                { error: "Unauthorized device. This device is not registered to your account." },
-                { status: 403 }
-            );
+        if (!isTester) {
+            const hasLegacyDevice = student.deviceId && student.deviceId.trim() !== "";
+            const webAuthnCredentials = student.webAuthnCredentials || [];
+
+            const isLegacyMatch = hasLegacyDevice && student.deviceId === deviceId;
+            const isWebAuthnMatch = webAuthnCredentials.some(cred => cred.credentialID === deviceId);
+
+            if (!isLegacyMatch && !isWebAuthnMatch) {
+                // If it's a biometric verification but the ID doesn't match DB
+                const errorMsg = webAuthnCredentials.length > 0
+                    ? "Unauthorized device. Your biometric key does not match the one linked to your account in our database."
+                    : "Unauthorized device. This device is not registered to your account.";
+
+                return NextResponse.json(
+                    { error: errorMsg },
+                    { status: 403 }
+                );
+            }
         }
 
         // 2. Check for existing attendance today (IST Date)
