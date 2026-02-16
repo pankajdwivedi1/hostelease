@@ -3,6 +3,7 @@ import connectDB from "@/lib/mongodb";
 import Student from "@/models/Student";
 import Attendance from "@/models/Attendance";
 import AdminSettings from "@/models/AdminSettings";
+import { checkRateLimit } from "@/lib/requestLimiter";
 
 // Cache for AdminSettings to reduce DB load during peak times
 let cachedAdminSettings: any = null;
@@ -63,6 +64,19 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // 🔥 RATE LIMIT CHECK: Prevent connection exhaustion during peak times
+        const { allowed, retryAfter } = checkRateLimit(studentId);
+        if (!allowed) {
+            return NextResponse.json(
+                {
+                    error: "Too many requests. Please try again in a moment.",
+                    retryAfter: Math.ceil(retryAfter / 1000), // Convert to seconds
+                    waitSeconds: Math.ceil(retryAfter / 1000)
+                },
+                { status: 429, headers: { 'Retry-After': Math.ceil(retryAfter / 1000).toString() } }
+            );
+        }
+
         if (!deviceId) {
             return NextResponse.json(
                 { error: "Device not registered. Please update your profile from the profile section to register this device first." },
@@ -82,8 +96,9 @@ export async function POST(request: NextRequest) {
         }
 
 
-        // 1. Fetch Student and Verify Device
-        const student = await Student.findById(studentId);
+        // 1. Fetch Student and Verify Device (⚡ Optimized: Select only needed fields)
+        // ✅ IMPROVED: Include roomNumber for verification
+        const student = await Student.findById(studentId).lean().select('deviceId firebaseUID email hostelName roomNumber webAuthnCredentials');
         if (!student) {
             return NextResponse.json({ error: "Student not found" }, { status: 404 });
         }
@@ -97,7 +112,14 @@ export async function POST(request: NextRequest) {
             const isLegacyMatch = hasLegacyDevice && student.deviceId === deviceId;
             const isWebAuthnMatch = webAuthnCredentials.some(cred => cred.credentialID === deviceId);
 
+            // ✅ FIX: Added logging for device validation debugging
             if (!isLegacyMatch && !isWebAuthnMatch) {
+                console.log(`⚠️ Device Mismatch for student ${student.email}:`, {
+                    providedDevice: deviceId,
+                    legacyDevice: student.deviceId || 'none',
+                    biometricCount: webAuthnCredentials.length
+                });
+                
                 // If it's a biometric verification but the ID doesn't match DB
                 const errorMsg = webAuthnCredentials.length > 0
                     ? "Unauthorized device. Your biometric key does not match the one linked to your account in our database."
@@ -127,7 +149,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const existingAttendance = await Attendance.findOne({ studentId, date: today });
+        const existingAttendance = await Attendance.findOne({ studentId, date: today }).lean();
         if (existingAttendance) {
             if (isTester) {
                 // Delete existing attendance for tester to allow re-marking multiple times
@@ -163,12 +185,16 @@ export async function POST(request: NextRequest) {
                 (wl: any) => wl.hostelName.toLowerCase() === student.hostelName.toLowerCase()
             );
 
-            if (studentHostelWifi && studentHostelWifi.bssids.includes(wifiBSSID.toUpperCase())) {
+            // ✅ FIX: Normalize WiFi BSSID to uppercase for consistent comparison
+            const normalizedBSSID = wifiBSSID.toUpperCase().trim();
+            const storedBSSIDs = studentHostelWifi?.bssids?.map((b: string) => b.toUpperCase().trim()) || [];
+
+            if (studentHostelWifi && storedBSSIDs.includes(normalizedBSSID)) {
                 isLocationVerified = true;
                 verifiedBy = 'wifi';
-                console.log(`✅ WiFi Verified: ${student.name} on ${studentHostelWifi.hostelName} WiFi (BSSID: ${wifiBSSID})`);
+                console.log(`✅ WiFi Verified: ${student.name} on ${studentHostelWifi.hostelName} WiFi (BSSID: ${normalizedBSSID})`);
             } else {
-                console.log(`⚠️ WiFi BSSID not whitelisted: ${wifiBSSID} for ${student.hostelName}`);
+                console.log(`⚠️ WiFi BSSID not whitelisted: ${normalizedBSSID} for ${student.hostelName}`);
                 // WiFi failed, will try GPS fallback below
             }
         }
@@ -184,8 +210,9 @@ export async function POST(request: NextRequest) {
             ? adminSettings.hostelLocations
             : defaultLocations;
 
-        // Check GPS Accuracy
+        // ✅ FIX: Improved GPS Accuracy Handling
         const bodyAccuracy = Math.round(body.accuracy || 0);
+        const GPS_ACCURACY_THRESHOLD = 300; // Increased from 200m to 300m for better compatibility
 
         // Check Time Window (IST)
         const now = new Date();
@@ -209,11 +236,13 @@ export async function POST(request: NextRequest) {
 
         // ⚡ GPS FALLBACK: Only check GPS if WiFi verification failed
         if (!isLocationVerified && lat !== undefined && lng !== undefined) {
-            if (bodyAccuracy !== undefined && bodyAccuracy > 200) {
+            // ✅ FIX: Improved accuracy check - allow up to 300m instead of 200m
+            if (bodyAccuracy !== undefined && bodyAccuracy > GPS_ACCURACY_THRESHOLD) {
                 return NextResponse.json(
                     {
-                        error: "Waiting for better GPS signal... (Accuracy too low)",
-                        accuracy: bodyAccuracy
+                        error: `Waiting for better GPS signal... (Current accuracy: ${bodyAccuracy}m, needed: <${GPS_ACCURACY_THRESHOLD}m)`,
+                        accuracy: bodyAccuracy,
+                        requiredAccuracy: GPS_ACCURACY_THRESHOLD
                     },
                     { status: 400 }
                 );
@@ -335,7 +364,7 @@ export async function GET(request: NextRequest) {
         if (studentId) {
             const nowMs = Date.now();
             const [student, adminSettings] = await Promise.all([
-                Student.findById(studentId),
+                Student.findById(studentId).lean().select('email hostelName'),
                 (cachedAdminSettings && (nowMs - lastCacheUpdate < CACHE_DURATION))
                     ? Promise.resolve(cachedAdminSettings)
                     : AdminSettings.findOne().lean()
@@ -357,7 +386,7 @@ export async function GET(request: NextRequest) {
             }).split('/').reverse().join('-');
 
             const [attendance] = await Promise.all([
-                Attendance.findOne({ studentId, date: today })
+                Attendance.findOne({ studentId, date: today }).lean()
             ]);
 
             return NextResponse.json({

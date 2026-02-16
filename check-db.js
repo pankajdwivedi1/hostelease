@@ -1,7 +1,12 @@
+require('dotenv').config({ path: '.env.local' });
 const mongoose = require('mongoose');
 
 async function checkConnection() {
-    const url = 'mongodb+srv://pankaj:pankajdwivedi81@cluster0.pqvmg4l.mongodb.net/?retryWrites=true&w=majority';
+    const url = process.env.MONGODB_URL;
+    if (!url) {
+        console.error('❌ ERROR: MONGODB_URL not found in .env.local');
+        process.exit(1);
+    }
     console.log("Connecting...");
 
     try {

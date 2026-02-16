@@ -17,6 +17,12 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const format = searchParams.get("format") || "json";
 
+        // ✅ FIX: Add safety limits to prevent memory exhaustion
+        const STUDENT_LIMIT = 5000;
+        const ATTENDANCE_LIMIT = 50000;
+        const PERMISSION_LIMIT = 10000;
+        const TRANSACTION_LIMIT = 10000;
+
         // Fetch using lean() to avoid hydration
         // 🚨 CRITICAL OPTIMIZATION: EXCLUDE BIG FIELDS (IMAGES)
         // profilePicture, faceDescriptor, flaggedPhotoUrl can be huge
@@ -29,13 +35,13 @@ export async function GET(request: NextRequest) {
             notifications,
             transactions
         ] = await Promise.all([
-            Student.find({}, '-profilePicture -faceDescriptor -__v').lean(),
-            Attendance.find({}, '-flaggedPhotoUrl -__v').limit(50000).lean(), // Safety limit just in case
-            Permission.find({}, '-__v').lean(),
+            Student.find({}, '-profilePicture -faceDescriptor -__v').lean().limit(STUDENT_LIMIT),
+            Attendance.find({}, '-flaggedPhotoUrl -__v').limit(ATTENDANCE_LIMIT).lean(),
+            Permission.find({}, '-__v').lean().limit(PERMISSION_LIMIT),
             AdminSettings.find({}, '-__v').lean(),
             Hostel.find({}, '-__v').lean(),
             Notification.find({}, '-__v').lean(),
-            Transaction.find({}, '-__v').lean()
+            Transaction.find({}, '-__v').lean().limit(TRANSACTION_LIMIT)
         ]);
 
         if (format === "json") {
@@ -46,7 +52,22 @@ export async function GET(request: NextRequest) {
                 adminSettings,
                 hostels,
                 notifications,
-                transactions
+                transactions,
+                export: {
+                    timestamp: new Date().toISOString(),
+                    totalRecords: {
+                        students: students.length,
+                        attendance: attendance.length,
+                        permissions: permissions.length,
+                        transactions: transactions.length
+                    },
+                    limits: {
+                        students: STUDENT_LIMIT,
+                        attendance: ATTENDANCE_LIMIT,
+                        permissions: PERMISSION_LIMIT,
+                        transactions: TRANSACTION_LIMIT
+                    }
+                }
             };
 
             // Check if encoding fails (circular structure, etc.) - JSON.stringify might throw

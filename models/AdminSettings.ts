@@ -51,6 +51,11 @@ export interface IAdminSettings {
     bssids: string[]; // Array of WiFi router MAC addresses (BSSIDs)
     description?: string;
   }[];
+  // ✅ NEW FIX #13: Hostel prefix mapping for registration ID generation
+  hostelPrefixMap?: {
+    hostelName: string;
+    prefix: string;
+  }[];
   overlapRadius?: boolean; // ⚡ NEW: Slighly overlap the radii to account for GPS jitter
   prioritizeAssignedHostel?: boolean; // ⚡ NEW: Filter list to prioritize assigned hostel
   createdAt?: Date;
@@ -168,6 +173,19 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
     isPaymentEnabled: {
       type: Boolean,
       default: false, // Default to disabled
+    },
+    // ✅ NEW FIX #13: Configurable hostel prefix mapping
+    hostelPrefixMap: {
+      type: [{
+        hostelName: String,
+        prefix: String
+      }],
+      default: [
+        { hostelName: "Guest House Boys Hostel", prefix: "GUEST" },
+        { hostelName: "Boys Hostel", prefix: "BOYS" },
+        { hostelName: "Gangotri Hostel", prefix: "GANGOTRI" },
+        { hostelName: "Gaytri Hostel", prefix: "GAYTRI" }
+      ]
     },
     wifiWhitelist: {
       type: [{

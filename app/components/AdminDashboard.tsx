@@ -92,6 +92,7 @@ interface StudentDetails {
   phoneNumber: string;
   hostelName: string;
   roomNumber: string;
+  floorNumber?: string;
   profilePicture?: string;
   fatherName?: string;
   fatherNumber?: string;
@@ -2094,6 +2095,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             motherName: data.student.motherName,
             motherNumber: data.student.motherNumber,
             homePinCode: data.student.homePinCode,
+            floorNumber: data.student.floorNumber,
             erpInformation: data.student.erpInformation,
             joiningDate: data.student.joiningDate,
             localGuardianAddress: data.student.localGuardianAddress,
@@ -2135,6 +2137,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           motherName: "",
           motherNumber: "",
           homePinCode: "",
+          floorNumber: "",
           erpInformation: "",
           joiningDate: "",
           branch: "",
@@ -3906,6 +3909,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">
                                       Room {student.roomNumber}
                                     </span>
+                                    {student.floorNumber && (
+                                      <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">
+                                        {student.floorNumber}
+                                      </span>
+                                    )}
                                     <a
                                       href={`tel:${student.phoneNumber}`}
                                       onClick={(e) => e.stopPropagation()}
@@ -4090,6 +4098,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <p className="text-[12px] text-gray-900 font-semibold leading-tight">
                         {getHostelCategory(selectedStudent.hostelName) || selectedStudent.hostelName} <span className="text-gray-400 font-light mx-1">|</span> Room {selectedStudent.roomNumber}
                       </p>
+                      {selectedStudent.floorNumber && (
+                        <p className="text-[10px] text-gray-500 mt-0.5 font-bold">Floor: <span className="text-gray-900">{selectedStudent.floorNumber}</span></p>
+                      )}
                       {selectedStudent.category && (
                         <p className="text-[10px] text-blue-600 font-bold mt-0.5 uppercase">Category: {selectedStudent.category}</p>
                       )}

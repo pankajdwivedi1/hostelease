@@ -1,8 +1,14 @@
+require('dotenv').config({ path: '.env.local' });
 const mongoose = require('mongoose');
 
 async function checkStudents() {
     try {
-        await mongoose.connect('mongodb+srv://pankaj:pankajdwivedi81@cluster0.pqvmg4l.mongodb.net/?retryWrites=true&w=majority');
+        const url = process.env.MONGODB_URL;
+        if (!url) {
+            console.error('❌ ERROR: MONGODB_URL not found in .env.local');
+            process.exit(1);
+        }
+        await mongoose.connect(url);
         const Student = mongoose.model('Student', new mongoose.Schema({
             name: String,
             hostelName: String,

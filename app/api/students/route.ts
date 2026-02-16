@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import Student from "@/models/Student";
+import AdminSettings from "@/models/AdminSettings";
+import { validators, validateStudentRegistration } from "@/lib/validation";
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,28 +11,64 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, homePinCode, homeState, erpInformation, joiningDate, branch, collegeName, year, semester, section, localGuardianAddress, localGuardianPhoneNumber, dob, category, deviceId, faceDescriptor, floorNumber } = body;
 
-    if (!firebaseUID || !name || !email || !phoneNumber || !hostelName || !roomNumber || !branch || !collegeName || !year || !semester || !section || !floorNumber || !dob || !category || !homeState || !homePinCode || !fatherName || !fatherNumber || !motherName || !motherNumber || !erpInformation || !joiningDate) {
+    // ✅ NEW: Input validation & sanitization
+    const validation = validateStudentRegistration(body);
+    if (!validation.valid) {
       return NextResponse.json(
-        { error: "Please fill all required fields marked with *" },
+        { error: "Validation failed", details: validation.errors },
         { status: 400 }
       );
     }
 
-    const existingStudent = await Student.findOne({ firebaseUID });
+    // ✅ NEW FIX #10: Reduce required fields to 5 core fields only
+    // Only mandatory: firebaseUID, email, phoneNumber, hostelName, roomNumber
+    if (!firebaseUID || !email || !phoneNumber || !hostelName || !roomNumber) {
+      return NextResponse.json(
+        { error: "Missing required fields: firebaseUID, email, phoneNumber, hostelName, roomNumber" },
+        { status: 400 }
+      );
+    }
+
+    const existingStudent = await Student.findOne({ firebaseUID }).lean();
+    
+    // ✅ NEW: Check for duplicate phone numbers
+    if (!existingStudent) {
+      const phoneExists = await Student.findOne({ phoneNumber: phoneNumber.trim() }).lean();
+      if (phoneExists) {
+        return NextResponse.json(
+          { error: "This phone number is already registered with another account" },
+          { status: 409 }
+        );
+      }
+    }
+    
+    // ✅ NEW: Check for duplicate email
+    if (!existingStudent) {
+      const emailExists = await Student.findOne({ email: email.toLowerCase().trim() }).lean();
+      if (emailExists) {
+        return NextResponse.json(
+          { error: "This email is already registered with another account" },
+          { status: 409 }
+        );
+      }
+    }
+    
     let registrationId = existingStudent?.registrationId;
 
     if (!registrationId) {
-      const hostelPrefixes: { [key: string]: string } = {
-        "Guest House Boys Hostel": "GUEST",
-        "Boys Hostel": "BOYS",
-        "Gangotri Hostel": "GANGOTRI",
-        "Gaytri Hostel": "GAYTRI"
-      };
+      // ✅ NEW FIX #13: Load hostel prefix mapping from AdminSettings (configurable)
+      const adminSettings = await AdminSettings.findOne().lean();
+      let hostelPrefixMap = adminSettings?.hostelPrefixMap || [
+        { hostelName: "Guest House Boys Hostel", prefix: "GUEST" },
+        { hostelName: "Boys Hostel", prefix: "BOYS" },
+        { hostelName: "Gangotri Hostel", prefix: "GANGOTRI" },
+        { hostelName: "Gaytri Hostel", prefix: "GAYTRI" }
+      ];
 
       let prefix = "STUDENT";
-      for (const [hName, p] of Object.entries(hostelPrefixes)) {
-        if (hostelName.toLowerCase().includes(hName.toLowerCase())) {
-          prefix = p;
+      for (const mapping of hostelPrefixMap) {
+        if (hostelName.toLowerCase().includes(mapping.hostelName.toLowerCase())) {
+          prefix = mapping.prefix;
           break;
         }
       }
@@ -51,41 +89,43 @@ export async function POST(request: NextRequest) {
       registrationId = `${prefix}-${String(nextNumber).padStart(4, '0')}`;
     }
 
+    // ✅ NEW: Sanitize inputs before storing
     const updateData: any = {
-      firebaseUID,
-      name,
-      email,
-      phoneNumber,
-      hostelName,
-      roomNumber,
+      firebaseUID: firebaseUID.trim(),
+      email: validators.sanitizeEmail(email),
+      phoneNumber: validators.sanitizePhoneNumber(phoneNumber),
+      hostelName: validators.sanitizeInput(hostelName),
+      roomNumber: String(roomNumber).trim(),
       registrationId,
-      profilePicture: profilePicture || "",
       studentStatus: "in",
-      fatherName: fatherName || "",
-      fatherNumber: fatherNumber || "",
-      motherName: motherName || "",
-      motherNumber: motherNumber || "",
-      homePinCode: homePinCode || "",
-      homeState: homeState || "",
-      erpInformation: erpInformation || "",
-      joiningDate: joiningDate ? new Date(joiningDate) : undefined,
-      branch: branch || "",
-      collegeName: collegeName || "",
-      year: year || "",
-      semester: semester || "",
-      section: section || "",
-      floorNumber: floorNumber || "",
-      localGuardianAddress: localGuardianAddress || "",
-      localGuardianPhoneNumber: localGuardianPhoneNumber || "",
-      dob: dob || "",
-      category: category || "",
-      faceDescriptor: faceDescriptor || undefined,
+      // ✅ OPTIONAL FIELDS: Only include if provided
+      ...(name && { name: validators.sanitizeInput(name) }),
+      ...(profilePicture && { profilePicture }),
+      ...(fatherName && { fatherName: validators.sanitizeInput(fatherName) }),
+      ...(fatherNumber && { fatherNumber: validators.sanitizePhoneNumber(fatherNumber) }),
+      ...(motherName && { motherName: validators.sanitizeInput(motherName) }),
+      ...(motherNumber && { motherNumber: validators.sanitizePhoneNumber(motherNumber) }),
+      ...(homePinCode && { homePinCode: validators.sanitizePhoneNumber(homePinCode) }),
+      ...(homeState && { homeState: validators.sanitizeInput(homeState) }),
+      ...(erpInformation && { erpInformation: validators.sanitizeInput(erpInformation) }),
+      ...(joiningDate && { joiningDate: new Date(joiningDate) }),
+      ...(branch && { branch: validators.sanitizeInput(branch) }),
+      ...(collegeName && { collegeName: validators.sanitizeInput(collegeName) }),
+      ...(year && { year: String(year) }),
+      ...(semester && { semester: String(semester) }),
+      ...(section && { section: validators.sanitizeInput(section) }),
+      ...(floorNumber && { floorNumber: String(floorNumber) }),
+      ...(localGuardianAddress && { localGuardianAddress: validators.sanitizeInput(localGuardianAddress) }),
+      ...(localGuardianPhoneNumber && { localGuardianPhoneNumber: validators.sanitizePhoneNumber(localGuardianPhoneNumber) }),
+      ...(dob && { dob }),
+      ...(category && { category: validators.sanitizeInput(category) }),
+      ...(faceDescriptor && { faceDescriptor }),
     };
 
     if (deviceId) {
       // Admin-Only Reset Rule: Only set deviceId if student doesn't have one yet
       if (!existingStudent || !existingStudent.deviceId || existingStudent.deviceId.trim() === "") {
-        updateData.deviceId = deviceId;
+        updateData.deviceId = validators.isValidDeviceId(deviceId) ? deviceId : undefined;
       }
     }
 

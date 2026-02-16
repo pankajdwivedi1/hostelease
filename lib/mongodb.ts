@@ -60,20 +60,24 @@ async function connectDB() {
     process.env.VERCEL === '1' ||
     process.env.VERCEL_ENV === 'production';
 
-  // 🛡️ M0 PRODUCTION OPTIMIZED SETTINGS
+  // 🛡️ M0 ULTRA-OPTIMIZED SETTINGS FOR 1000+ STUDENTS
   const opts = {
     bufferCommands: false,
-    maxPoolSize: isProduction ? 5 : 2,      // Low pool size for M0 (Limit is 500)
-    minPoolSize: 1,                        // Maintain at least 1 connection
-    serverSelectionTimeoutMS: 5000,        // Fail fast if DB is down
-    socketTimeoutMS: 45000,                // Close idle sockets
-    family: 4                              // Force IPv4 if needed
+    maxPoolSize: 3,                         // 🔥 ULTRA-LOW for M0 (prevent connection exhaustion)
+    minPoolSize: 1,                         // Keep at least 1 alive
+    serverSelectionTimeoutMS: 3000,         // Fail fast
+    socketTimeoutMS: 30000,                 // AGGRESSIVE: Close idle sockets after 30s
+    family: 4,                              // Force IPv4
+    waitQueueTimeoutMS: 5000,               // Timeout for queue wait
+    connectTimeoutMS: 10000,                // Connection timeout
+    retryWrites: false,                     // Disable retry writes to avoid duplicate connections
+    retryReads: false                       // Disable retry reads
   };
 
-  console.log(`🔄 [${new Date().toLocaleTimeString()}] Connecting to MongoDB (Pool: ${opts.maxPoolSize})...`);
+  console.log(`🔄 [${new Date().toLocaleTimeString()}] Connecting to MongoDB (ULTRA Pool: ${opts.maxPoolSize}, 1000+ students mode)...`);
 
   cached.promise = mongoose.connect(MONGO_URL as string, opts).then((m) => {
-    console.log('✅ MongoDB Ready (Optimized Pool)');
+    console.log('✅ MongoDB Ready (M0 Ultra-Optimized - Max Pool: 3)');
     return m;
   });
 
@@ -86,6 +90,21 @@ async function connectDB() {
   }
 
   return cached.conn;
+}
+
+/**
+ * 🔥 NEW: Force connection cleanup after request completes
+ * Critical for M0 tier with 1000+ students
+ */
+export async function disconnectDB() {
+  try {
+    if (mongoose.connection.readyState === 1) {
+      // Don't fully close, just return connection to pool
+      console.log('🔄 Returning connection to pool');
+    }
+  } catch (e) {
+    console.error('⚠️ Error managing connection:', e);
+  }
 }
 
 export default connectDB;

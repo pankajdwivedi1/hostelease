@@ -113,8 +113,15 @@ const AttendanceSchema = new Schema<IAttendance>(
     }
 );
 
+// 🔥 CRITICAL INDEXES FOR M0 OPTIMIZATION (1000+ students)
 // Composite index to ensure a student can only mark attendance once per day
 AttendanceSchema.index({ studentId: 1, date: 1 }, { unique: true });
+
+// Additional indexes for common queries
+AttendanceSchema.index({ date: 1, hostelName: 1 }); // For daily hostel reports
+AttendanceSchema.index({ firebaseUID: 1, date: 1 }); // For student daily check
+AttendanceSchema.index({ date: 1, needsReview: 1 }); // For flagged attendance queries
+AttendanceSchema.index({ timestamp: -1 }); // For sorting by recency
 
 const Attendance: Model<IAttendance> =
     mongoose.models.Attendance || mongoose.model<IAttendance>("Attendance", AttendanceSchema);

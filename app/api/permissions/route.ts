@@ -74,7 +74,8 @@ export async function GET(request: NextRequest) {
 
     const permissions = await Permission.find(query)
       .populate("studentId", studentFields)
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();  // ✅ FIX: Added .lean() for faster queries
 
     return NextResponse.json({ permissions }, { status: 200 });
   } catch (error: any) {

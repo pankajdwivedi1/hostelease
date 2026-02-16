@@ -31,17 +31,34 @@ async function initializeFaceAPI() {
 async function loadServerModels() {
     if (modelsLoaded) return;
 
-    const api = await initializeFaceAPI();
-    const modelPath = path.join(process.cwd(), 'public', 'models');
+    try {
+        const api = await initializeFaceAPI();
+        const modelPath = path.join(process.cwd(), 'public', 'models');
 
-    await Promise.all([
-        api.nets.ssdMobilenetv1.loadFromDisk(modelPath),
-        api.nets.faceLandmark68Net.loadFromDisk(modelPath),
-        api.nets.faceRecognitionNet.loadFromDisk(modelPath),
-    ]);
+        // ✅ FIX: Add error handling for model loading
+        const modelLoadPromises = [
+            api.nets.ssdMobilenetv1.loadFromDisk(modelPath).catch((e: any) => {
+                console.error('❌ Failed to load SSD Mobilenet model:', e.message);
+                throw new Error('Face detection model failed to load');
+            }),
+            api.nets.faceLandmark68Net.loadFromDisk(modelPath).catch((e: any) => {
+                console.error('❌ Failed to load Face Landmark model:', e.message);
+                throw new Error('Face landmark model failed to load');
+            }),
+            api.nets.faceRecognitionNet.loadFromDisk(modelPath).catch((e: any) => {
+                console.error('❌ Failed to load Face Recognition model:', e.message);
+                throw new Error('Face recognition model failed to load');
+            })
+        ];
 
-    modelsLoaded = true;
-    console.log("💎 Server-Side Face Models Loaded (SSD Accuracy)");
+        await Promise.all(modelLoadPromises);
+        modelsLoaded = true;
+        console.log("💎 Server-Side Face Models Loaded (SSD Accuracy)");
+    } catch (error: any) {
+        modelsLoaded = false;
+        console.error('❌ Critical: Face models failed to load:', error.message);
+        throw error;
+    }
 }
 
 export async function POST(request: NextRequest) {
@@ -57,47 +74,79 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Missing image or student identification" }, { status: 400 });
         }
 
-        const api = await initializeFaceAPI();
-        await loadServerModels();
+        // ✅ FIX: Wrap face model loading in try-catch
+        try {
+            const api = await initializeFaceAPI();
+            await loadServerModels();
 
-        // 1. Convert Base64 to Buffer
-        const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+            // 1. Convert Base64 to Buffer
+            const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
 
-        // 2. Decode Image using canvas
-        const img = await api.fetchImage(`data:image/jpeg;base64,${base64Data}`);
+            // 2. Decode Image using canvas
+            // ✅ FIX: Add error handling for image decoding
+            let img;
+            try {
+                img = await api.fetchImage(`data:image/jpeg;base64,${base64Data}`);
+            } catch (imgError: any) {
+                console.error('❌ Failed to decode image:', imgError.message);
+                return NextResponse.json({ 
+                    success: false, 
+                    message: "Invalid image format. Please provide a valid JPEG or PNG image" 
+                }, { status: 400 });
+            }
 
-        // 3. Detect Face on Server (High Accuracy Mode)
-        const detection = await api
-            .detectSingleFace(img as any)
-            .withFaceLandmarks()
-            .withFaceDescriptor();
+            // 3. Detect Face on Server (High Accuracy Mode)
+            // ✅ FIX: Add error handling for face detection
+            let detection;
+            try {
+                detection = await api
+                    .detectSingleFace(img as any)
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
+            } catch (detectionError: any) {
+                console.error('❌ Face detection failed:', detectionError.message);
+                return NextResponse.json({ 
+                    success: false, 
+                    message: "Face detection service temporarily unavailable" 
+                }, { status: 503 });
+            }
 
-        if (!detection) {
-            return NextResponse.json({ success: false, message: "No face detected by server" });
+            if (!detection) {
+                return NextResponse.json({ 
+                    success: false, 
+                    message: "No face detected. Please take a clear photo with your face visible" 
+                }, { status: 400 });
+            }
+
+            // 4. Fetch Student's Locked Descriptor (⚡ Optimized: Select only face descriptor)
+            const student = await Student.findOne({ firebaseUID }).lean().select('faceDescriptor name');
+            if (!student || !student.faceDescriptor) {
+                return NextResponse.json({ error: "Student profile or face lock-in not found" }, { status: 404 });
+            }
+
+            // 5. Compare
+            const distance = api.euclideanDistance(
+                detection.descriptor,
+                new Float32Array(student.faceDescriptor)
+            );
+
+            // Score Formula (Standard 0.6 cutoff)
+            const score = Math.round(Math.max(0, Math.min(100, 115 - (distance * 75))));
+
+            return NextResponse.json({
+                success: true,
+                distance,
+                score,
+                isMatch: score >= 70,
+                message: score >= 70 ? "Identity Verified" : "Identity Mismatch"
+            });
+        } catch (modelError: any) {
+            console.error('❌ Face recognition system error:', modelError.message);
+            return NextResponse.json({
+                success: false,
+                message: "Face recognition service is temporarily unavailable. Please try again later."
+            }, { status: 503 });
         }
-
-        // 4. Fetch Student's Locked Descriptor
-        const student = await Student.findOne({ firebaseUID });
-        if (!student || !student.faceDescriptor) {
-            return NextResponse.json({ error: "Student profile or face lock-in not found" }, { status: 404 });
-        }
-
-        // 5. Compare
-        const distance = api.euclideanDistance(
-            detection.descriptor,
-            new Float32Array(student.faceDescriptor)
-        );
-
-        // Score Formula (Standard 0.6 cutoff)
-        const score = Math.round(Math.max(0, Math.min(100, 115 - (distance * 75))));
-
-        return NextResponse.json({
-            success: true,
-            distance,
-            score,
-            isMatch: score >= 70,
-            message: score >= 70 ? "Identity Verified" : "Identity Mismatch"
-        });
 
     } catch (error: any) {
         console.error("❌ Backend Face Match Error:", error);
