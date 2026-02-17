@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
                     legacyDevice: student.deviceId || 'none',
                     biometricCount: webAuthnCredentials.length
                 });
-                
+
                 // If it's a biometric verification but the ID doesn't match DB
                 const errorMsg = webAuthnCredentials.length > 0
                     ? "Unauthorized device. Your biometric key does not match the one linked to your account in our database."
@@ -140,15 +140,7 @@ export async function POST(request: NextRequest) {
             day: "2-digit",
         }).split('/').reverse().join('-'); // YYYY-MM-DD
 
-        // 🚀 BULK QUEUE SYSTEM: Check if student is already in memory queue
-        const { checkQueue, queueAttendance } = await import("@/lib/attendanceQueue");
-        if (checkQueue(studentId, today)) {
-            return NextResponse.json(
-                { error: "Attendance already marked for today (Processing...)", alreadyMarked: true },
-                { status: 400 }
-            );
-        }
-
+        // Check for existing attendance in database
         const existingAttendance = await Attendance.findOne({ studentId, date: today }).lean();
         if (existingAttendance) {
             if (isTester) {
@@ -303,7 +295,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 4. Queue Attendance (🚀 Optimized for M0)
+        // 4. Save Attendance Immediately (Fixed from Queue System)
         const nowIST = new Date();
         const readableTime = nowIST.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
         const readableDate = nowIST.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric" }).split('/').join('-');
@@ -331,15 +323,18 @@ export async function POST(request: NextRequest) {
             isTest: isTester
         };
 
-        // Add to Bulk Queue
-        await queueAttendance(attendanceData);
+        // ✅ CRITICAL FIX: Save immediately instead of queuing
+        // Queue system was unreliable in Next.js serverless environment
+        await Attendance.create(attendanceData);
+
+        console.log(`✅ Attendance saved immediately for ${student.name} (${student.hostelName})`);
 
         return NextResponse.json(
             {
                 success: true,
                 message: verifiedBy === 'wifi'
-                    ? "✅ Attendance queued! Verified via Campus WiFi"
-                    : "✅ Attendance queued! Verified via GPS",
+                    ? "✅ Attendance saved! Verified via Campus WiFi"
+                    : "✅ Attendance saved! Verified via GPS",
                 attendance: attendanceData,
                 verifiedBy: verifiedBy,
                 wifiBSSID: verifiedBy === 'wifi' ? wifiBSSID : undefined

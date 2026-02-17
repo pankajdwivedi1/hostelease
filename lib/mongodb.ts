@@ -60,18 +60,18 @@ async function connectDB() {
     process.env.VERCEL === '1' ||
     process.env.VERCEL_ENV === 'production';
 
-  // 🛡️ M0 ULTRA-OPTIMIZED SETTINGS FOR 1000+ STUDENTS
+  // 🛡️ M0 OPTIMIZED SETTINGS FOR 1000+ STUDENTS (Enhanced 2026-02-17)
   const opts = {
-    bufferCommands: false,
-    maxPoolSize: 3,                         // 🔥 ULTRA-LOW for M0 (prevent connection exhaustion)
-    minPoolSize: 1,                         // Keep at least 1 alive
-    serverSelectionTimeoutMS: 3000,         // Fail fast
-    socketTimeoutMS: 30000,                 // AGGRESSIVE: Close idle sockets after 30s
+    bufferCommands: false,                  // CRITICAL: Never buffer commands
+    maxPoolSize: 3,                         // Keep LOW for M0 (10 would exhaust free tier with 800+ students)
+    minPoolSize: 2,                         // ✅ IMPROVED: Keep 2 warm connections (was 1)
+    serverSelectionTimeoutMS: 5000,         // ✅ IMPROVED: More time to find server during peak (was 3000)
+    socketTimeoutMS: 45000,                 // ✅ IMPROVED: More time for slow queries during peak (was 30000)
     family: 4,                              // Force IPv4
     waitQueueTimeoutMS: 5000,               // Timeout for queue wait
     connectTimeoutMS: 10000,                // Connection timeout
-    retryWrites: false,                     // Disable retry writes to avoid duplicate connections
-    retryReads: false                       // Disable retry reads
+    retryWrites: false,                     // CRITICAL: Disable retry writes to avoid duplicate connections
+    retryReads: false                       // CRITICAL: Disable retry reads to avoid duplicate connections
   };
 
   console.log(`🔄 [${new Date().toLocaleTimeString()}] Connecting to MongoDB (ULTRA Pool: ${opts.maxPoolSize}, 1000+ students mode)...`);
