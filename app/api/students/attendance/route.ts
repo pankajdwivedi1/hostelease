@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
 
         // 1. Fetch Student and Verify Device (⚡ Optimized: Select only needed fields)
         // ✅ IMPROVED: Include roomNumber for verification
-        const student = await Student.findById(studentId).lean().select('deviceId firebaseUID email hostelName roomNumber webAuthnCredentials');
+        const student = await Student.findById(studentId).lean().select('name deviceId firebaseUID email hostelName roomNumber webAuthnCredentials');
         if (!student) {
             return NextResponse.json({ error: "Student not found" }, { status: 404 });
         }
