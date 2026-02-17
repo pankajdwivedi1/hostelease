@@ -41,6 +41,18 @@ function LoginForm() {
   const fetchHostels = async () => {
     try {
       const response = await fetch("/api/hostels");
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+      
+      const contentType = response.headers.get("content-type");
+      if (!contentType?.includes("application/json")) {
+        const text = await response.text();
+        console.error("Received non-JSON response:", text.substring(0, 200));
+        throw new Error("API returned non-JSON response");
+      }
+      
       const data = await response.json();
       if (data.hostels) {
         setHostels(data.hostels);

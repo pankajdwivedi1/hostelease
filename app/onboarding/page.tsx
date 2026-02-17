@@ -36,6 +36,11 @@ export default function OnboardingPage() {
       try {
         setHostelsLoading(true);
         const response = await fetch("/api/hostels");
+        
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+        
         const data = await response.json();
         if (response.ok && data.hostels) {
           setHostels(data.hostels);
@@ -52,6 +57,11 @@ export default function OnboardingPage() {
     const fetchConfig = async () => {
       try {
         const response = await fetch("/api/admin/settings");
+        
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+        
         const data = await response.json();
         if (data.success) {
           setFormConfig(data.registrationFieldsConfig || {});

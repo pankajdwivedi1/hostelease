@@ -41,16 +41,32 @@ export default function Dashboard() {
       if (storedUserType === "student") {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
           if (user) {
-            // ⚡ OPTIMIZED: Use minimal=true to only check if student exists (fastest)
-            const response = await fetch(`/api/students?firebaseUID=${user.uid}&minimal=true`);
-            const data = await response.json();
+            try {
+              // ⚡ OPTIMIZED: Use minimal=true to only check if student exists (fastest)
+              const response = await fetch(`/api/students?firebaseUID=${user.uid}&minimal=true`);
+              
+              if (!response.ok) {
+                throw new Error(`API error: ${response.status}`);
+              }
+              
+              const contentType = response.headers.get("content-type");
+              if (!contentType?.includes("application/json")) {
+                throw new Error("API returned non-JSON response");
+              }
+              
+              const data = await response.json();
 
-            if (data.student) {
-              setStudentData(data.student);
-              setUserType("student");
-              setLoading(false); // ⚡ Set loading false immediately, StudentDashboard will load its own data
-            } else {
-              router.push("/onboarding");
+              if (data.student) {
+                setStudentData(data.student);
+                setUserType("student");
+                setLoading(false); // ⚡ Set loading false immediately, StudentDashboard will load its own data
+              } else {
+                router.push("/onboarding");
+              }
+            } catch (error) {
+              console.error("Error fetching student data:", error);
+              router.push("/login");
+              setLoading(false);
             }
           } else {
             router.push("/login");

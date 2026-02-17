@@ -1,0 +1,262 @@
+{
+  "hostels": [
+    {
+      "hostelName": "Gaytri Hostel",
+      "description": "NGH - New Guest House",
+      "floors": [
+        {
+          "floor": "F2",
+          "routers": [
+            {
+              "routerId": "NGH_F2_3",
+              "location": "Floor 2",
+              "bssids": [
+                "64:29:95:4d:d2:80"
+              ],
+              "bands": ["2.4GHz"]
+            }
+          ]
+        },
+        {
+          "floor": "F3",
+          "routers": [
+            {
+              "routerId": "NGH_F3_3",
+              "location": "Floor 3 - Router 1",
+              "bssids": [
+                "64:29:95:4d:ef:f0"
+              ],
+              "bands": ["2.4GHz", "5GHz"]
+            },
+            {
+              "routerId": "NGH_F3_2",
+              "location": "Floor 3 - Router 2",
+              "bssids": [
+                "64:29:95:4d:aef:a0"
+              ],
+              "bands": ["2.4GHz"]
+            },
+            {
+              "routerId": "NGH_F3_5",
+              "location": "Floor 3 - Router 5",
+              "bssids": [
+                "64:29:43:bb:6b:88"
+              ],
+              "bands": ["5GHz"]
+            }
+          ]
+        },
+        {
+          "floor": "F4",
+          "routers": [
+            {
+              "routerId": "NGH_F4_3",
+              "location": "Floor 4 - Router 3",
+              "bssids": [
+                "64:29:43:bb:6b:00"
+              ],
+              "bands": ["2.4GHz"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "hostelName": "Boys Hostel",
+      "description": "BH",
+      "floors": [
+        {
+          "floor": "F0",
+          "routers": [
+            {
+              "routerId": "BH_F0_1",
+              "location": "Floor 0 - Router 1",
+              "bssids": [
+                "64:29:43:bb:84:b0"
+              ],
+              "bands": ["2.4GHz"]
+            },
+            {
+              "routerId": "BH_F0_2",
+              "location": "Floor 0 - Router 2",
+              "bssids": [
+                "64:29:43:bb:89:70"
+              ],
+              "bands": ["2.4GHz"]
+            },
+            {
+              "routerId": "BH_F0_3",
+              "location": "Floor 0 - Router 3",
+              "bssids": [
+                "64:ed:07:cc:ee:00"
+              ],
+              "bands": ["2.4GHz"]
+            }
+          ]
+        },
+        {
+          "floor": "F1",
+          "routers": [
+            {
+              "routerId": "BH_F1_1",
+              "location": "Floor 1 - Router 1",
+              "bssids": [
+                "64:29:43:bb:88:e0"
+              ],
+              "bands": ["2.4GHz"]
+            },
+            {
+              "routerId": "BH_F1_2",
+              "location": "Floor 1 - Router 2",
+              "bssids": [
+                "64:29:43:bb:89:10"
+              ],
+              "bands": ["2.4GHz"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "hostelName": "Gangotri Hostel",
+      "description": "GH - Already configured",
+      "floors": [
+        {
+          "floor": "F0",
+          "routers": [
+            {
+              "routerId": "GH_F0_1",
+              "location": "Floor 0 - Router 1",
+              "bssids": [
+                "64:29:43:bb:78:60",
+                "64:29:43:bb:78:68"
+              ],
+              "bands": ["2.4GHz", "5GHz"]
+            },
+            {
+              "routerId": "GH_F0_2",
+              "location": "Floor 0 - Router 2",
+              "bssids": [
+                "64:29:43:bb:79:40",
+                "64:29:43:bb:79:48"
+              ],
+              "bands": ["2.4GHz", "5GHz"]
+            }
+          ]
+        },
+        {
+          "floor": "F1",
+          "routers": [
+            {
+              "routerId": "GH_F1_2",
+              "location": "Floor 1 - Router 2",
+              "bssids": [
+                "64:29:43:bb:79:20",
+                "64:29:43:bb:79:a8"
+              ],
+              "bands": ["2.4GHz", "5GHz"]
+            },
+            {
+              "routerId": "GH_F1_3",
+              "location": "Floor 1 - Router 3",
+              "bssids": [
+                "64:29:43:bb:78:b0",
+                "64:29:43:bb:78:b8"
+              ],
+              "bands": ["2.4GHz", "5GHz"]
+            }
+          ]
+        },
+        {
+          "floor": "F2",
+          "routers": [
+            {
+              "routerId": "GH_F2_3",
+              "location": "Floor 2 - Router 3",
+              "bssids": [
+                "64:29:43:bb:6f:40",
+                "64:29:43:bb:6f:48"
+              ],
+              "bands": ["2.4GHz", "5GHz"]
+            },
+            {
+              "routerId": "GH_F2_4",
+              "location": "Floor 2 - Router 4",
+              "bssids": [
+                "64:29:43:bb:79:58"
+              ],
+              "bands": ["5GHz"]
+            }
+          ]
+        },
+        {
+          "floor": "F3",
+          "routers": [
+            {
+              "routerId": "GH_F3_3",
+              "location": "Floor 3 - Router 3",
+              "bssids": [
+                "64:29:43:bb:84:f0",
+                "64:29:43:bb:84:f8"
+              ],
+              "bands": ["2.4GHz", "5GHz"]
+            },
+            {
+              "routerId": "GH_F3_4",
+              "location": "Floor 3 - Router 4",
+              "bssids": [
+                "64:29:43:bb:85:50",
+                "64:29:43:bb:85:58"
+              ],
+              "bands": ["2.4GHz", "5GHz"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "hostelName": "Guest House Boys Hostel",
+      "description": "GHBH",
+      "floors": [
+        {
+          "floor": "F1",
+          "routers": [
+            {
+              "routerId": "GH_F1_1",
+              "location": "Floor 1 - Router 1",
+              "bssids": [
+                "64:29:43:bb:7d:78"
+              ],
+              "bands": ["5GHz"]
+            },
+            {
+              "routerId": "GH_F1_2",
+              "location": "Floor 1 - Router 2",
+              "bssids": [
+                "64:29:45:bb:76:a0",
+                "64:29:2b:3b:bb:76:a8"
+              ],
+              "bands": ["2.4GHz", "5GHz"]
+            },
+            {
+              "routerId": "GH_F1_3",
+              "location": "Floor 1 - Router 3",
+              "bssids": [
+                "64:29:43:bb:7d:70"
+              ],
+              "bands": ["2.4GHz"]
+            },
+            {
+              "routerId": "GH_F1_5",
+              "location": "Floor 1 - Router 5",
+              "bssids": [
+                "64:29:43:bb:8b:c8"
+              ],
+              "bands": ["5GHz"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

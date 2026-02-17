@@ -31,7 +31,8 @@ export async function GET(request: NextRequest) {
             wardenPassword: settings?.wardenPassword || "warden456",
             adminPassword: settings?.adminPassword || "pankajdwivedi81",
             overlapRadius: settings?.overlapRadius || false,
-            prioritizeAssignedHostel: settings?.prioritizeAssignedHostel || false
+            prioritizeAssignedHostel: settings?.prioritizeAssignedHostel || false,
+            wifiWhitelist: settings?.wifiWhitelist || []
         });
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);

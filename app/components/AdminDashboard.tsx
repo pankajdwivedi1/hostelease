@@ -14,6 +14,11 @@ const LocationPickerMap = dynamic(() => import("./LocationPickerMap"), {
   loading: () => <div className="h-64 w-full bg-gray-100 animate-pulse rounded-xl flex items-center justify-center text-gray-400 text-xs">Loading Map...</div>
 });
 
+const FieldEnforcementComponent = dynamic(() => import("./FieldEnforcementComponent"), {
+  ssr: false,
+  loading: () => <div className="h-64 w-full bg-gray-100 animate-pulse rounded-xl flex items-center justify-center text-gray-400 text-xs">Loading Field Enforcement...</div>
+});
+
 interface Permission {
   _id: string;
   studentId: {
@@ -191,7 +196,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   });
   const [isReconciling, setIsReconciling] = useState(false);
 
-  const [currentTab, setCurrentTab] = useState<"permissions" | "attendance" | "messaging" | "payments">("permissions");
+  const [currentTab, setCurrentTab] = useState<"permissions" | "attendance" | "messaging" | "payments" | "settings">("permissions");
   const [reviewingLog, setReviewingLog] = useState<AttendanceLog | null>(null);
   const [isEditCameraOpen, setIsEditCameraOpen] = useState(false);
   const editVideoRef = useRef<HTMLVideoElement>(null);
@@ -1413,13 +1418,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     try {
       // ⚡ OPTIMIZED: Fetch light permissions data (no images) to save massive bandwidth
       const response = await fetch("/api/permissions?light=true", { cache: "no-store" });
-      if (!response.ok) throw new Error(`Failed to fetch permissions: ${response.status}`);
       const data = await response.json();
-      if (data.permissions) {
-        setPermissions(data.permissions);
+      
+      // Handle both success and error responses
+      if (data.permissions !== undefined) {
+        setPermissions(Array.isArray(data.permissions) ? data.permissions : []);
+      } else if (!response.ok) {
+        console.warn(`Permissions API returned status ${response.status}`);
+        setPermissions([]);
       }
     } catch (error) {
       console.error("Error fetching permissions:", error);
+      setPermissions([]); // Set empty array on error
     }
   };
 
@@ -2000,10 +2010,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const data = filteredStudents.map(s => ({
       "Student ID": s.registrationId || "N/A",
       Name: s.name,
+      Room: s.roomNumber,
       Email: s.email,
       Phone: s.phoneNumber,
       Hostel: s.hostelName,
-      Room: s.roomNumber,
       College: s.collegeName,
       Branch: s.branch,
       Year: s.year,
@@ -2025,9 +2035,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const data = filteredAttendanceLogs.map(log => ({
         "Student ID": log.studentId?.registrationId || "N/A",
         Student: log.studentId?.name || "Unknown",
+        Room: log.studentId?.roomNumber || "N/A",
         Email: log.studentId?.email || "N/A",
         Hostel: log.studentId?.hostelName || "N/A",
-        Room: log.studentId?.roomNumber || "N/A",
         Time: log.istTime,
         Accuracy: log.location.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"
       }));
@@ -2043,9 +2053,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const data = filteredAbsentees.map(s => ({
         "Student ID": s.registrationId || "N/A",
         Student: s.name,
+        Room: s.roomNumber,
         Email: s.email,
         Hostel: s.hostelName,
-        Room: s.roomNumber,
         Phone: s.phoneNumber,
         Status: "Absent"
       }));
@@ -2548,6 +2558,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 >
                   Messaging
                 </button>
+                {!isWarden && (
+                  <button
+                    onClick={() => setCurrentTab('settings')}
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                  >
+                    Settings
+                  </button>
+                )}
                 {/* <button
                   onClick={() => setCurrentTab('payments')}
                   className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${currentTab === 'payments' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
@@ -3074,7 +3092,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               </div>
                               <div className="min-w-0">
                                 <p className="text-[9px] font-bold text-foreground truncate">{s.name}</p>
-                                <p className="text-[9px] text-secondary truncate uppercase">{s.roomNumber} • {s.hostelName}</p>
+                                <p className="text-[8px] text-secondary truncate uppercase">{s.roomNumber} • {s.floorNumber || s.hostelName}</p>
                               </div>
                               <a href={`tel:${s.phoneNumber}`} className="ml-auto w-7 h-7 bg-green-50 text-green-600 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors">
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
@@ -3276,6 +3294,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   )}
                 </div>
               )}
+              {currentTab === 'settings' && !isWarden && (
+                <FieldEnforcementComponent hostels={hostels.map(h => h.name)} />
+              )}
+
               {currentTab === 'messaging' && (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
@@ -5752,7 +5774,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       handleUpdateFormBuilder(updated);
                                     }}
                                     title="Duplicate Field"
-                                    className="p-1.5 text-gray-300 hover:text-blue-500 transition-colors opacity-0 group-hover:opacity-100"
+                                    className="p-1.5 text-gray-300 hover:text-blue-500 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                                   >
                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
                                   </button>
@@ -5763,7 +5785,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         handleUpdateFormBuilder(updated);
                                       }
                                     }}
-                                    className="p-1.5 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                                    className="p-1.5 text-gray-300 hover:text-red-500 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                                   >
                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                   </button>
@@ -5846,28 +5868,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-4">
                       <button
                         onClick={() => handleBulkProfileLock(true)}
                         disabled={isUpdatingSettings}
-                        className="flex flex-col items-center justify-center gap-3 p-6 bg-red-50 text-red-700 border-2 border-red-100 rounded-2xl hover:bg-red-100 transition-all font-black uppercase tracking-widest text-xs shadow-sm hover:shadow-lg disabled:opacity-50 group text-center"
+                        className="flex flex-col items-center justify-center gap-2 p-3 sm:p-6 bg-red-50 text-red-700 border-2 border-red-100 rounded-2xl hover:bg-red-100 transition-all font-black uppercase tracking-widest text-[10px] sm:text-xs shadow-sm hover:shadow-lg disabled:opacity-50 group text-center"
                       >
-                        <div className="p-3 bg-red-200 rounded-full text-red-700 mb-1 group-hover:scale-110 transition-transform shadow-sm">
-                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                        <div className="p-2 sm:p-3 bg-red-200 rounded-full text-red-700 group-hover:scale-110 transition-transform shadow-sm">
+                          <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                         </div>
                         Lock All Profiles
-                        <span className="text-[9px] text-red-500/70 font-bold normal-case block mt-1">Prevents all students from editing their profiles</span>
+                        <span className="text-[7px] sm:text-[9px] text-red-500/70 font-bold normal-case block mt-0.5 sm:mt-1">Prevents all students from editing their profiles</span>
                       </button>
                       <button
                         onClick={() => handleBulkProfileLock(false)}
                         disabled={isUpdatingSettings}
-                        className="flex flex-col items-center justify-center gap-3 p-6 bg-blue-50 text-blue-700 border-2 border-blue-100 rounded-2xl hover:bg-blue-100 transition-all font-black uppercase tracking-widest text-xs shadow-sm hover:shadow-lg disabled:opacity-50 group text-center"
+                        className="flex flex-col items-center justify-center gap-2 p-3 sm:p-6 bg-blue-50 text-blue-700 border-2 border-blue-100 rounded-2xl hover:bg-blue-100 transition-all font-black uppercase tracking-widest text-[10px] sm:text-xs shadow-sm hover:shadow-lg disabled:opacity-50 group text-center"
                       >
-                        <div className="p-3 bg-blue-200 rounded-full text-blue-700 mb-1 group-hover:scale-110 transition-transform shadow-sm">
-                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+                        <div className="p-2 sm:p-3 bg-blue-200 rounded-full text-blue-700 group-hover:scale-110 transition-transform shadow-sm">
+                          <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
                         </div>
                         Unlock All Profiles
-                        <span className="text-[9px] text-blue-500/70 font-bold normal-case block mt-1">Allows students to update their details</span>
+                        <span className="text-[7px] sm:text-[9px] text-blue-500/70 font-bold normal-case block mt-0.5 sm:mt-1">Allows students to update their details</span>
                       </button>
                     </div>
 
@@ -6981,10 +7003,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       {showChangePreviewModal && pendingFormBuilderChanges && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-3xl w-full max-w-5xl h-[90vh] overflow-hidden shadow-2xl flex flex-col">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+            <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <div>
-                <h2 className="text-xl font-bold text-gray-900 mb-1">Review Configuration Changes</h2>
-                <p className="text-sm text-gray-500">Please review the differences before saving everything to the database.</p>
+                <h2 className="text-sm sm:text-xl font-bold text-gray-900 mb-1">Review Configuration Changes</h2>
+                <p className="text-xs sm:text-sm text-gray-500">Please review the differences before saving everything to the database.</p>
               </div>
               <button
                 onClick={() => {
@@ -6997,25 +7019,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               </button>
             </div>
 
-            <div className="flex-1 overflow-auto p-6 bg-gray-50/30">
-              <div className="grid grid-cols-2 gap-8 h-full">
+            <div className="flex-1 overflow-auto p-4 sm:p-6 bg-gray-50/30">
+              <div className="grid grid-cols-2 gap-4 sm:gap-8 h-full">
                 {/* Original */}
                 <div className="flex flex-col h-full">
-                  <div className="mb-4 font-black text-xs text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <div className="mb-3 sm:mb-4 font-black text-xs text-gray-400 uppercase tracking-widest flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-gray-400"></span>
                     Current / Original
                   </div>
-                  <div className="flex-1 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 p-4 overflow-y-auto space-y-3">
+                  <div className="flex-1 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 p-3 sm:p-4 overflow-y-auto space-y-2 sm:space-y-3">
                     {savedFormBuilderConfig.length === 0 ? (
-                      <p className="text-gray-400 italic text-sm text-center py-10">No existing configuration</p>
+                      <p className="text-gray-400 italic text-xs sm:text-sm text-center py-10">No existing configuration</p>
                     ) : (
                       savedFormBuilderConfig.map((field, i) => (
-                        <div key={field.id || i} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm opacity-60 grayscale">
+                        <div key={field.id || i} className="bg-white p-2 sm:p-3 rounded-xl border border-gray-100 shadow-sm opacity-60 grayscale">
                           <div className="flex justify-between items-start mb-1">
                             <span className="font-bold text-xs text-gray-800">{field.label}</span>
-                            <span className="text-[10px] font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">{field.type}</span>
+                            <span className="text-[9px] sm:text-[10px] font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">{field.type}</span>
                           </div>
-                          <div className="flex gap-2 text-[10px] text-gray-400">
+                          <div className="flex gap-2 text-[8px] sm:text-[10px] text-gray-400">
                             <span>ID: {field.id}</span>
                             <span>•</span>
                             <span>{field.required ? 'Required*' : 'Optional'}</span>
@@ -7028,11 +7050,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                 {/* New */}
                 <div className="flex flex-col h-full">
-                  <div className="mb-4 font-black text-xs text-blue-600 uppercase tracking-widest flex items-center gap-2">
+                  <div className="mb-3 sm:mb-4 font-black text-xs text-blue-600 uppercase tracking-widest flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
                     New / Pending Save
                   </div>
-                  <div className="flex-1 bg-blue-50/30 rounded-2xl border-2 border-blue-100 p-4 overflow-y-auto space-y-3 shadow-inner">
+                  <div className="flex-1 bg-blue-50/30 rounded-2xl border-2 border-blue-100 p-3 sm:p-4 overflow-y-auto space-y-2 sm:space-y-3 shadow-inner">
                     {pendingFormBuilderChanges.map((field, i) => {
                       // 🔍 DETECT CHANGES (Compare against SAVED config, not current working copy)
                       const originalIndex = savedFormBuilderConfig.findIndex(f => f.id === field.id);
@@ -7061,25 +7083,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       return (
                         <div
                           key={field.id || i}
-                          className={`bg-white p-3 rounded-xl border-l-4 shadow-sm relative overflow-hidden group hover:shadow-md transition-all ${isChanged
+                          className={`bg-white p-2 sm:p-3 rounded-xl border-l-4 shadow-sm relative overflow-hidden group hover:shadow-md transition-all ${isChanged
                             ? 'border-emerald-500 ring-2 ring-emerald-100 bg-emerald-50/10' // 🟢 Green for changes
                             : 'border-blue-200 opacity-60 grayscale-[0.3]' // 🔵 Faded for unchanged
                             }`}
                         >
                           {isChanged && (
                             <div className="absolute top-2 right-2 flex gap-1">
-                              {changeType === 'new' && <span className="bg-emerald-500 text-white text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow-sm">NEW</span>}
-                              {changeType === 'modified' && <span className="bg-emerald-500 text-white text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow-sm">UPDATED</span>}
+                              {changeType === 'new' && <span className="bg-emerald-500 text-white text-[7px] sm:text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow-sm">NEW</span>}
+                              {changeType === 'modified' && <span className="bg-emerald-500 text-white text-[7px] sm:text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow-sm">UPDATED</span>}
                             </div>
                           )}
 
                           <div className="flex justify-between items-start mb-1">
                             <span className={`font-bold text-xs ${isChanged ? 'text-emerald-600' : 'text-gray-900'}`}>{field.label}</span>
-                            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${field.type === 'select' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                            <span className={`text-[9px] sm:text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${field.type === 'select' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
                               {field.type}
                             </span>
                           </div>
-                          <div className="flex gap-2 text-[10px] text-gray-500 mb-2">
+                          <div className="flex gap-2 text-[8px] sm:text-[10px] text-gray-500 mb-2">
                             <span className="font-mono text-gray-400">{field.id}</span>
                             <span className="text-gray-300">•</span>
                             <span className={field.required ? "text-red-500 font-bold" : "text-gray-400"}>{field.required ? 'Required*' : 'Optional'}</span>
@@ -7105,20 +7127,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               </div>
             </div>
 
-            <div className="p-6 border-t border-gray-100 bg-white flex justify-end gap-3 z-10">
+            <div className="p-3 sm:p-6 border-t border-gray-100 bg-white flex justify-end gap-2 sm:gap-3 z-10">
               <button
                 onClick={() => {
                   setShowChangePreviewModal(false);
                   setPendingFormBuilderChanges(null);
                 }}
-                className="px-6 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
+                className="px-4 sm:px-6 py-2 sm:py-3 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors text-sm sm:text-base"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmUpdateFormBuilder}
                 disabled={isSavingSystemSettings}
-                className="px-8 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex items-center gap-2"
+                className="px-6 sm:px-8 py-2 sm:py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex items-center gap-2 text-sm sm:text-base"
               >
                 {isSavingSystemSettings ? (
                   <>

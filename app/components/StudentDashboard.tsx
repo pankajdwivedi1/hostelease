@@ -277,6 +277,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   const fetchSystemSettings = async () => {
     try {
       const res = await fetch("/api/admin/settings");
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
       if (data.success) {
         setFormBuilderConfig(data.formBuilderConfig || []);
@@ -322,11 +323,13 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     try {
       // Fetch History
       const historyRes = await fetch(`/api/students/payments?studentId=${studentProfile._id}`);
+      if (!historyRes.ok) throw new Error(`API error: ${historyRes.status}`);
       const historyData = await historyRes.json();
       if (historyData.success) setPaymentHistory(historyData.payments);
 
       // Fetch Bank Details
       const settingsRes = await fetch("/api/admin/settings");
+      if (!settingsRes.ok) throw new Error(`API error: ${settingsRes.status}`);
       const settingsData = await settingsRes.json();
       if (settingsData.success) {
         setBankSettings({
@@ -365,6 +368,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         })
       });
 
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
       if (data.success) {
         alert(data.message);
@@ -652,14 +656,17 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         const fetchPermissions = async () => {
           try {
             const permResponse = await fetch(`/api/permissions?studentId=${studentId}&light=true`);
-            if (!permResponse.ok) throw new Error(`Failed to fetch permissions: ${permResponse.status}`);
             const permData = await permResponse.json();
 
             if (permData.permissions && isMounted) {
-              setPermissions(permData.permissions);
+              setPermissions(Array.isArray(permData.permissions) ? permData.permissions : []);
+            } else if (!permResponse.ok && isMounted) {
+              console.warn(`Permissions fetch returned status ${permResponse.status}`);
+              setPermissions([]);
             }
           } catch (error) {
             console.error("Error fetching permissions:", error);
+            setPermissions([]); // Set empty array on error
           }
         };
 
