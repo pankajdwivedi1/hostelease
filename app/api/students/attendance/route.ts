@@ -3,6 +3,7 @@ import connectDB from "@/lib/mongodb";
 import Student from "@/models/Student";
 import Attendance from "@/models/Attendance";
 import AdminSettings from "@/models/AdminSettings";
+import { db } from "@/lib/dbAdapter";
 import { checkRateLimit } from "@/lib/requestLimiter";
 
 // Cache for AdminSettings to reduce DB load during peak times
@@ -295,13 +296,15 @@ export async function POST(request: NextRequest) {
             );
         }
 
+
         // 4. Save Attendance Immediately (Fixed from Queue System)
         const nowIST = new Date();
         const readableTime = nowIST.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
         const readableDate = nowIST.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric" }).split('/').join('-');
 
+        // Prepare data (camelCase for internal app usage)
         const attendanceData = {
-            studentId: student._id,
+            studentId: student._id.toString(), // Ensure string for Supabase
             firebaseUID: student.firebaseUID,
             name: student.name,
             hostelName: student.hostelName,
@@ -312,7 +315,7 @@ export async function POST(request: NextRequest) {
             location: {
                 lat: lat || 0,
                 lng: lng || 0,
-                accuracy: verifiedBy === 'gps' ? (body.accuracy || 0) : 0
+                accuracy: verifiedBy === 'gps' ? (bodyAccuracy || 0) : 0
             },
             deviceId: deviceId,
             status: "present" as const,
@@ -320,14 +323,15 @@ export async function POST(request: NextRequest) {
             faceMatchStatus,
             flaggedPhotoUrl,
             needsReview: faceMatchStatus === 'flagged',
-            isTest: isTester
+            isTest: isTester,
+            timestamp: nowIST // Ensure timestamp is passed
         };
 
-        // ✅ CRITICAL FIX: Save immediately instead of queuing
-        // Queue system was unreliable in Next.js serverless environment
-        await Attendance.create(attendanceData);
+        // ✅ CRITICAL FIX: Use DB Adapter to route to Supabase or MongoDB
+        // The adapter handles snake_case conversion for Supabase automatically
+        await db.attendance.mark(attendanceData);
 
-        console.log(`✅ Attendance saved immediately for ${student.name} (${student.hostelName})`);
+        console.log(`✅ Attendance saved via DB ADAPTER for ${student.name}`);
 
         return NextResponse.json(
             {
@@ -341,6 +345,7 @@ export async function POST(request: NextRequest) {
             },
             { status: 200 }
         );
+
     } catch (error: any) {
         console.error("Error marking attendance:", error);
         return NextResponse.json(

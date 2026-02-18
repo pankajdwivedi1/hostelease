@@ -58,12 +58,18 @@ export interface IAdminSettings {
   }[];
   overlapRadius?: boolean; // ⚡ NEW: Slighly overlap the radii to account for GPS jitter
   prioritizeAssignedHostel?: boolean; // ⚡ NEW: Filter list to prioritize assigned hostel
+  activeDatabaseSource?: 'MONGODB' | 'SUPABASE'; // ⚡ LIVE SWITCH: Controls which DB is active
   createdAt?: Date;
   updatedAt?: Date;
 }
 
 const AdminSettingsSchema = new Schema<IAdminSettings>(
   {
+    activeDatabaseSource: {
+      type: String,
+      enum: ['MONGODB', 'SUPABASE'],
+      default: 'MONGODB'
+    },
     hostelLocations: [
       {
         lat: { type: Number, required: true },
