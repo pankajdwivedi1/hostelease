@@ -13,7 +13,8 @@ export async function GET(request: NextRequest) {
 
     let query: any = {};
     if (hostelName) {
-      query.hostelName = hostelName;
+      // Use regex for case-insensitive match if searching for a specific hostel
+      query.hostelName = { $regex: new RegExp(`^${hostelName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i") };
     }
 
     const enforcementRules = await FieldEnforcement.find(query).lean();
@@ -59,13 +60,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Sort fields by order
+    const normalizedHostelName = hostelName.trim();
+
     const sortedFields = enforcedFields.sort(
       (a: any, b: any) => (a.order || 0) - (b.order || 0)
     );
 
     const updateData = {
-      hostelName,
+      hostelName: normalizedHostelName,
       enforcedFields: sortedFields,
       isActive: isActive ?? false,
       notificationPriority: notificationPriority || "normal",
@@ -74,7 +76,7 @@ export async function POST(request: NextRequest) {
     };
 
     const enforcement = await FieldEnforcement.findOneAndUpdate(
-      { hostelName },
+      { hostelName: { $regex: new RegExp(`^${normalizedHostelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i") } },
       { $set: updateData },
       { upsert: true, new: true }
     );
@@ -99,13 +101,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { hostelName, ...updateData } = body;
 
-    if (!hostelName) {
-      return NextResponse.json(
-        { error: "hostelName is required" },
-        { status: 400 }
-      );
-    }
-
+    const normalizedHostelName = hostelName.trim();
     // Sort fields by order if enforcedFields is provided
     if (updateData.enforcedFields && Array.isArray(updateData.enforcedFields)) {
       updateData.enforcedFields = updateData.enforcedFields.sort(
@@ -114,7 +110,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const enforcement = await FieldEnforcement.findOneAndUpdate(
-      { hostelName },
+      { hostelName: { $regex: new RegExp(`^${normalizedHostelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i") } },
       { $set: updateData },
       { new: true }
     );
@@ -153,7 +149,9 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const result = await FieldEnforcement.findOneAndDelete({ hostelName });
+    const result = await FieldEnforcement.findOneAndDelete({
+      hostelName: { $regex: new RegExp(`^${hostelName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i") }
+    });
 
     if (!result) {
       return NextResponse.json(

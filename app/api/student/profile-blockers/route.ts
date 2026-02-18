@@ -33,42 +33,78 @@ export async function GET(request: NextRequest) {
         }
 
         // Fetch field enforcement rules for student's hostel
+        const studentHostel = (student.hostelName || "").trim();
+        console.log(`🔍 Checking blockers for student: ${studentId}, Hostel: "${studentHostel}"`);
+
+        // Robust matching: trim and case-insensitive
         const enforcement = await FieldEnforcement.findOne({
-            hostelName: student.hostelName,
-            isActive: true // Only if field enforcement is active
+            hostelName: { $regex: new RegExp(`^\\s*${studentHostel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, "i") },
+            isActive: true
         }).lean();
 
         // If no enforcement rules or not active, no blockers
         if (!enforcement || !enforcement.isActive) {
+            console.log(`ℹ️ No active enforcement rules found for hostel: "${studentHostel}"`);
             return NextResponse.json({
                 hasBlockers: false,
                 missingFields: [],
                 enforcement: null,
-                message: "No field enforcement active for this hostel"
+                message: `No field enforcement active for hostel: "${studentHostel}"`,
+                debug: {
+                    studentHostel: studentHostel,
+                    attemptedMatch: studentHostel
+                }
             });
         }
 
-        // Check which required fields are missing
+        // Fetch student field progress to see what they've already submitted via the modal
+        const StudentFieldProgress = (await import("@/models/StudentFieldProgress")).default;
+        const progress = await StudentFieldProgress.find({
+            studentId: student._id
+        }).lean();
+
+        console.log(`✅ Found ${enforcement.enforcedFields.length} rules. Student has ${progress.length} progress records.`);
+
+        // Check which required fields are missing or need updating
         const enabledFields = enforcement.enforcedFields.filter((f: any) => f.isEnabled);
         const missingFields: any[] = [];
 
         for (const field of enabledFields) {
-            const fieldValue = (student as any)[field.fieldId];
+            // Check both top-level fields and dynamicFields sub-object
+            const fieldValue = (student as any)[field.fieldId] ?? (student as any).dynamicFields?.[field.fieldId];
+            const progressRecord = progress.find(p => p.fieldId === field.fieldId);
 
-            // Check if field is empty/missing
+            // Check if field is empty/missing in Student record
             const isEmpty =
                 fieldValue === undefined ||
                 fieldValue === null ||
                 fieldValue === "" ||
                 (typeof fieldValue === "string" && fieldValue.trim() === "");
 
+            // A field is a "blocker" if:
+            // 1. It's empty in the student profile
+            // 2. OR It's NOT empty, but skipCompleted is false (force review)
+            // 3. OR skipCompleted is true, but it hasn't been "completed" via the enforcement system yet
+
+            let shouldShow = false;
+
             if (isEmpty) {
+                shouldShow = true; // Always show if empty
+            } else if (field.skipCompleted === false) {
+                shouldShow = true; // Force show even if not empty
+            } else if (field.skipCompleted === true && (!progressRecord || !progressRecord.isCompleted)) {
+                // Not empty, but haven't gone through the enforcement modal yet
+                shouldShow = true;
+            }
+
+            if (shouldShow) {
                 missingFields.push({
                     fieldId: field.fieldId,
                     fieldLabel: field.fieldLabel,
                     displayMode: field.displayMode,
                     durationDays: field.durationDays,
-                    order: field.order || 0
+                    order: field.order || 0,
+                    isCurrentlyEmpty: isEmpty
                 });
             }
         }
@@ -85,7 +121,12 @@ export async function GET(request: NextRequest) {
                 successMessage: enforcement.successMessage,
                 autoCloseNotification: enforcement.autoCloseNotification
             },
-            totalMissing: missingFields.length
+            debug: {
+                hostelMatched: enforcement.hostelName,
+                totalRules: enabledFields.length,
+                progressCount: progress.length,
+                missingCount: missingFields.length
+            }
         });
 
     } catch (error: any) {

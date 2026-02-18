@@ -6,18 +6,24 @@ import FieldEnforcement from "@/models/FieldEnforcement";
 
 export const dynamic = "force-dynamic";
 
-// POST - Mark field as completed by student
+// POST - Mark field(s) as completed by student
 export async function POST(request: NextRequest) {
   try {
     await connectDB();
     const body = await request.json();
-    const { firebaseUID, hostelName, fieldId } = body;
+    const { firebaseUID, hostelName, fieldId, fieldIds } = body;
 
-    if (!firebaseUID || !hostelName || !fieldId) {
+    if (!hostelName) {
+      return NextResponse.json({ error: "hostelName is required" }, { status: 400 });
+    }
+
+    const normalizedHostelName = hostelName.trim();
+    const hostelRegex = new RegExp(`^${normalizedHostelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i");
+
+    if (!firebaseUID || !normalizedHostelName || (!fieldId && !fieldIds)) {
       return NextResponse.json(
         {
-          error:
-            "firebaseUID, hostelName, and fieldId are required",
+          error: "firebaseUID, hostelName, and fieldId(s) are required",
         },
         { status: 400 }
       );
@@ -33,7 +39,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get field enforcement rules
-    const enforcement = await FieldEnforcement.findOne({ hostelName }).lean();
+    const enforcement = await FieldEnforcement.findOne({ hostelName: { $regex: hostelRegex } }).lean();
     if (!enforcement) {
       return NextResponse.json(
         { error: "Field enforcement rules not found for this hostel" },
@@ -41,38 +47,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find the field in enforcement rules
-    const field = enforcement.enforcedFields.find(
-      (f: any) => f.fieldId === fieldId
-    );
-    if (!field) {
-      return NextResponse.json(
-        { error: "Field not found in enforcement rules" },
-        { status: 404 }
-      );
-    }
+    const targetFieldIds = fieldIds || [fieldId];
+    const results = [];
 
-    // Create or update field progress
-    const fieldProgress = await StudentFieldProgress.findOneAndUpdate(
-      {
-        studentId: student._id,
-        fieldId,
-        hostelName,
-      },
-      {
-        $set: {
-          firebaseUID,
-          fieldLabel: field.fieldLabel,
-          isCompleted: true,
-          completedAt: new Date(),
+    for (const id of targetFieldIds) {
+      // Find the field in enforcement rules
+      const field = enforcement.enforcedFields.find(
+        (f: any) => f.fieldId === id
+      );
+      if (!field) continue;
+
+      // Create or update field progress
+      const fieldProgress = await StudentFieldProgress.findOneAndUpdate(
+        {
+          studentId: student._id,
+          fieldId: id,
+          hostelName: { $regex: hostelRegex },
         },
-      },
-      { upsert: true, new: true }
-    );
+        {
+          $set: {
+            firebaseUID,
+            hostelName: normalizedHostelName, // Normalize on save
+            fieldLabel: field.fieldLabel,
+            isCompleted: true,
+            completedAt: new Date(),
+          },
+        },
+        { upsert: true, new: true }
+      );
+      results.push(fieldProgress);
+    }
 
     return NextResponse.json({
       success: true,
-      data: fieldProgress,
+      data: results,
     });
   } catch (error: any) {
     console.error("Error marking field as completed:", error);
@@ -98,6 +106,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const normalizedHostelName = hostelName.trim();
+    const hostelRegex = new RegExp(`^${normalizedHostelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i");
+
     // Get student
     const student = await Student.findOne({ firebaseUID }).lean();
     if (!student) {
@@ -109,7 +120,7 @@ export async function GET(request: NextRequest) {
 
     // Get field enforcement rules
     const enforcement = await FieldEnforcement.findOne({
-      hostelName,
+      hostelName: { $regex: hostelRegex },
       isActive: true,
     }).lean();
 
@@ -130,7 +141,7 @@ export async function GET(request: NextRequest) {
     // Get field progress for this student
     const fieldProgress = await StudentFieldProgress.find({
       studentId: student._id,
-      hostelName,
+      hostelName: { $regex: hostelRegex },
     }).lean();
 
     const pendingFields: any[] = [];
@@ -192,6 +203,9 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    const normalizedHostelName = hostelName.trim();
+    const hostelRegex = new RegExp(`^${normalizedHostelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i");
+
     // Get student
     const student = await Student.findOne({ firebaseUID }).lean();
     if (!student) {
@@ -202,7 +216,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Get field enforcement rules
-    const enforcement = await FieldEnforcement.findOne({ hostelName }).lean();
+    const enforcement = await FieldEnforcement.findOne({ hostelName: { $regex: hostelRegex } }).lean();
     if (!enforcement || !enforcement.enforcedFields.length) {
       return NextResponse.json({
         success: true,
@@ -214,7 +228,7 @@ export async function PUT(request: NextRequest) {
     const fieldProgressRecords = enforcement.enforcedFields.map((field: any) => ({
       studentId: student._id,
       firebaseUID,
-      hostelName,
+      hostelName: normalizedHostelName,
       fieldId: field.fieldId,
       fieldLabel: field.fieldLabel,
       isCompleted: false,

@@ -117,6 +117,13 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   const [overlapRadius, setOverlapRadius] = useState(false); // ⚡ NEW
   const [prioritizeAssignedHostel, setPrioritizeAssignedHostel] = useState(false); // ⚡ NEW
 
+  // ⚡ FIELD ENFORCEMENT: Dynamic blocker system driven by admin settings
+  const [enforcedMissingFields, setEnforcedMissingFields] = useState<{ fieldId: string; fieldLabel: string; displayMode: string; order: number }[]>([]);
+  const [enforcementConfig, setEnforcementConfig] = useState<{ notificationPriority?: string; successMessage?: string; autoCloseNotification?: boolean } | null>(null);
+  const [showFieldEnforcementModal, setShowFieldEnforcementModal] = useState(false);
+  const [enforcementFormData, setEnforcementFormData] = useState<Record<string, string>>({});
+  const [savingEnforcementFields, setSavingEnforcementFields] = useState(false);
+
   // Face Matching State
   const [faceMatchProgress, setFaceMatchProgress] = useState(0);
   const [faceMatchResult, setFaceMatchResult] = useState<{
@@ -476,19 +483,58 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         setShowDeviceRegistration(true);
       }
 
-      // Hard Redirect Check: Critical fields must be filled
-      const isSectionInvalid = !studentProfile.section || studentProfile.section === "NIL" || studentProfile.section === "NILL";
-      if (!studentProfile.dob || !studentProfile.category || !studentProfile.homeState || isSectionInvalid) {
-        setShowMandatoryUpdate(true);
-        setMandatoryFormData({
-          dob: studentProfile.dob || "",
-          category: studentProfile.category || "",
-          homeState: studentProfile.homeState || "",
-          section: isSectionInvalid ? "" : (studentProfile.section || "")
-        });
-      } else {
-        setShowMandatoryUpdate(false);
-      }
+      // ⚡ FIELD ENFORCEMENT: Check for admin-enforced missing fields (replaces old hardcoded check)
+      const checkFieldEnforcement = async () => {
+        try {
+          const res = await fetch(`/api/student/profile-blockers?studentId=${studentProfile._id}`);
+          if (!res.ok) throw new Error('Failed to check profile blockers');
+          const data = await res.json();
+
+          if (data.hasBlockers && data.missingFields.length > 0) {
+            console.log("🚫 Profile Blockers Found:", data.missingFields.length);
+            setEnforcedMissingFields(data.missingFields);
+            setEnforcementConfig(data.enforcement);
+            // Pre-fill form with existing values
+            const initialFormData: Record<string, string> = {};
+            data.missingFields.forEach((f: any) => {
+              initialFormData[f.fieldId] = (studentProfile as any)[f.fieldId] || "";
+            });
+            setEnforcementFormData(initialFormData);
+            setShowFieldEnforcementModal(true);
+            setShowMandatoryUpdate(false); // Use new system instead
+          } else {
+            console.log("✅ No Profile Blockers found for hostel:", studentProfile.hostelName);
+            setShowFieldEnforcementModal(false);
+            // Fallback: Hard Redirect Check for critical fields (legacy support)
+            const isSectionInvalid = !studentProfile.section || studentProfile.section === "NIL" || studentProfile.section === "NILL";
+            if (!studentProfile.dob || !studentProfile.category || !studentProfile.homeState || isSectionInvalid) {
+              setShowMandatoryUpdate(true);
+              setMandatoryFormData({
+                dob: studentProfile.dob || "",
+                category: studentProfile.category || "",
+                homeState: studentProfile.homeState || "",
+                section: isSectionInvalid ? "" : (studentProfile.section || "")
+              });
+            } else {
+              setShowMandatoryUpdate(false);
+            }
+          }
+        } catch (e) {
+          console.error("Error checking field enforcement:", e);
+          // Fallback to old hardcoded check
+          const isSectionInvalid = !studentProfile.section || studentProfile.section === "NIL" || studentProfile.section === "NILL";
+          if (!studentProfile.dob || !studentProfile.category || !studentProfile.homeState || isSectionInvalid) {
+            setShowMandatoryUpdate(true);
+            setMandatoryFormData({
+              dob: studentProfile.dob || "",
+              category: studentProfile.category || "",
+              homeState: studentProfile.homeState || "",
+              section: isSectionInvalid ? "" : (studentProfile.section || "")
+            });
+          }
+        }
+      };
+      checkFieldEnforcement();
 
       // Check attendance status
       const checkAttendance = async () => {
@@ -817,6 +863,71 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       alert(error.message || "Failed to save details. Please try again.");
     } finally {
       setUpdatingProfile(false);
+    }
+  };
+
+  // ⚡ FIELD ENFORCEMENT: Save dynamically enforced fields
+  const handleFieldEnforcementSubmit = async () => {
+    if (!studentProfile) return;
+
+    // Check all required fields are filled
+    const emptyFields = enforcedMissingFields.filter(f => {
+      const val = enforcementFormData[f.fieldId];
+      return !val || (typeof val === 'string' && val.trim() === '');
+    });
+
+    if (emptyFields.length > 0) {
+      alert(`Please fill all required fields: ${emptyFields.map(f => f.fieldLabel).join(', ')}`);
+      return;
+    }
+
+    try {
+      setSavingEnforcementFields(true);
+
+      const updateData: Record<string, string> = {};
+      enforcedMissingFields.forEach(f => {
+        updateData[f.fieldId] = enforcementFormData[f.fieldId].trim();
+      });
+
+      const response = await fetch(`/api/students/${studentProfile._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updateData),
+      });
+
+      if (!response.ok) throw new Error(`Failed to update profile: ${response.status}`);
+      const data = await response.json();
+
+      if (data.success) {
+        // ⚡ NEW: Mark fields as completed in the FieldEnforcement tracking system
+        // This ensures the Admin Dashboard "Status" view updates immediately
+        try {
+          await fetch("/api/admin/field-enforcement/progress", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              firebaseUID: studentProfile.firebaseUID,
+              hostelName: studentProfile.hostelName,
+              fieldIds: enforcedMissingFields.map(f => f.fieldId)
+            })
+          });
+        } catch (err) {
+          console.error("Failed to sync field progress to tracker:", err);
+        }
+
+        setStudentProfile(data.student);
+        setShowFieldEnforcementModal(false);
+        setEnforcedMissingFields([]);
+        const successMsg = enforcementConfig?.successMessage || "All required fields have been completed! Thank you.";
+        alert(`✅ ${successMsg}`);
+      } else {
+        throw new Error(data.error || "Failed to update profile");
+      }
+    } catch (error: any) {
+      console.error("Error saving enforced fields:", error);
+      alert(error.message || "Failed to save details. Please try again.");
+    } finally {
+      setSavingEnforcementFields(false);
     }
   };
 
@@ -2199,6 +2310,199 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                           </>
                         ) : (
                           "Save & Continue"
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ⚡ DYNAMIC FIELD ENFORCEMENT MODAL - Blocks all actions until fields are filled */}
+              {showFieldEnforcementModal && enforcedMissingFields.length > 0 && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
+                  <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-white/20 max-h-[90vh] flex flex-col">
+                    {/* Header */}
+                    <div className={`p-6 pb-4 text-center ${enforcementConfig?.notificationPriority === 'critical'
+                      ? 'bg-gradient-to-b from-red-50 to-white'
+                      : enforcementConfig?.notificationPriority === 'urgent'
+                        ? 'bg-gradient-to-b from-orange-50 to-white'
+                        : 'bg-gradient-to-b from-blue-50 to-white'
+                      }`}>
+                      <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 ${enforcementConfig?.notificationPriority === 'critical'
+                        ? 'bg-red-100 text-red-600'
+                        : enforcementConfig?.notificationPriority === 'urgent'
+                          ? 'bg-orange-100 text-orange-600'
+                          : 'bg-blue-100 text-blue-600'
+                        }`}>
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                      </div>
+                      <h2 className="text-xl font-black text-gray-900 mb-1">
+                        {enforcementConfig?.notificationPriority === 'critical'
+                          ? '🚨 Action Required'
+                          : enforcementConfig?.notificationPriority === 'urgent'
+                            ? '⚠️ Profile Update Required'
+                            : 'Complete Your Profile'}
+                      </h2>
+                      <p className="text-gray-500 text-sm">
+                        Please fill the following {enforcedMissingFields.length} mandatory field{enforcedMissingFields.length > 1 ? 's' : ''} to continue using the app.
+                      </p>
+                      {/* Progress Bar */}
+                      <div className="mt-3 flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${enforcementConfig?.notificationPriority === 'critical' ? 'bg-red-500' : enforcementConfig?.notificationPriority === 'urgent' ? 'bg-orange-500' : 'bg-blue-500'
+                              }`}
+                            style={{
+                              width: `${Math.round(
+                                (enforcedMissingFields.filter(f => enforcementFormData[f.fieldId]?.trim()).length / enforcedMissingFields.length) * 100
+                              )}%`
+                            }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-black text-gray-400">
+                          {enforcedMissingFields.filter(f => enforcementFormData[f.fieldId]?.trim()).length}/{enforcedMissingFields.length}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Scrollable Form Fields */}
+                    <div className="px-6 pb-6 space-y-4 overflow-y-auto flex-1">
+                      {enforcedMissingFields.map((field) => (
+                        <div key={field.fieldId}>
+                          <label className="block text-[11px] font-black text-blue-600 uppercase tracking-widest mb-2 px-1">
+                            {field.fieldLabel} <span className="text-red-500">*</span>
+                          </label>
+
+                          {/* Render appropriate input based on fieldId */}
+                          {/* ⚡ CUSTOM DYNAMIC FIELDS: Try to render using Form Builder config first (Handles Floor Number, etc.) */}
+                          {(() => {
+                            const configField = formBuilderConfig.find(f =>
+                              f.id?.toLowerCase().trim() === field.fieldId?.toLowerCase().trim() ||
+                              f.label?.toLowerCase().trim() === field.fieldLabel?.toLowerCase().trim()
+                            );
+
+                            if (configField && (configField.type === 'select' || configField.type === 'dropdown' || (configField.options && configField.options.length > 0))) {
+                              return (
+                                <select
+                                  value={enforcementFormData[field.fieldId] || ''}
+                                  onChange={(e) => setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: e.target.value.toUpperCase() }))}
+                                  className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                                >
+                                  <option value="">SELECT {field.fieldLabel.toUpperCase()}</option>
+                                  {configField.options?.map((opt: string) => (
+                                    <option key={opt} value={opt.toUpperCase()}>{opt.toUpperCase()}</option>
+                                  ))}
+                                </select>
+                              );
+                            }
+                            return null;
+                          })() || (field.fieldId === 'category' ? (
+                            <select
+                              value={enforcementFormData[field.fieldId] || ''}
+                              onChange={(e) => setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: e.target.value }))}
+                              className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                            >
+                              <option value="">Select Category</option>
+                              <option value="GENERAL">GENERAL</option>
+                              <option value="SC">SC</option>
+                              <option value="ST">ST</option>
+                              <option value="OBC">OBC</option>
+                            </select>
+                          ) : field.fieldId === 'homeState' ? (
+                            <select
+                              value={enforcementFormData[field.fieldId] || ''}
+                              onChange={(e) => setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: e.target.value }))}
+                              className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                            >
+                              <option value="">SELECT STATE</option>
+                              {["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"].map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          ) : field.fieldId === 'section' ? (
+                            <select
+                              value={enforcementFormData[field.fieldId] || ''}
+                              onChange={(e) => setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: e.target.value.toUpperCase() }))}
+                              className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                            >
+                              <option value="">SELECT SECTION</option>
+                              {["A", "B", "C", "D", "E", "F"].map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          ) : field.fieldId === 'year' ? (
+                            <select
+                              value={enforcementFormData[field.fieldId] || ''}
+                              onChange={(e) => setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: e.target.value }))}
+                              className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                            >
+                              <option value="">SELECT YEAR</option>
+                              {["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR", "5TH YEAR"].map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          ) : field.fieldId === 'semester' ? (
+                            <select
+                              value={enforcementFormData[field.fieldId] || ''}
+                              onChange={(e) => setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: e.target.value }))}
+                              className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                            >
+                              <option value="">SELECT SEMESTER</option>
+                              {["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"].map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          ) : field.fieldId === 'dob' || field.fieldId === 'joiningDate' ? (
+                            <input
+                              type="date"
+                              value={enforcementFormData[field.fieldId] || ''}
+                              onChange={(e) => setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: e.target.value }))}
+                              className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                            />
+                          ) : field.fieldId === 'phoneNumber' || field.fieldId === 'fatherNumber' || field.fieldId === 'motherNumber' || field.fieldId === 'localGuardianPhoneNumber' ? (
+                            <input
+                              type="tel"
+                              placeholder={`Enter ${field.fieldLabel}`}
+                              value={enforcementFormData[field.fieldId] || ''}
+                              onChange={(e) => setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                              maxLength={10}
+                              className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                            />
+                          ) : (
+                            <input
+                              type="text"
+                              placeholder={`Enter ${field.fieldLabel}`}
+                              value={enforcementFormData[field.fieldId] || ''}
+                              onChange={(e) => setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: e.target.value }))}
+                              className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                            />
+                          ))}
+                        </div>
+                      ))}
+
+                      {/* Submit Button */}
+                      <button
+                        onClick={handleFieldEnforcementSubmit}
+                        disabled={savingEnforcementFields || enforcedMissingFields.some(f => !enforcementFormData[f.fieldId]?.trim())}
+                        className={`w-full h-14 text-white rounded-2xl font-black text-lg shadow-xl transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2 ${enforcementConfig?.notificationPriority === 'critical'
+                          ? 'bg-red-600 hover:bg-red-700 shadow-red-200'
+                          : enforcementConfig?.notificationPriority === 'urgent'
+                            ? 'bg-orange-600 hover:bg-orange-700 shadow-orange-200'
+                            : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
+                          }`}
+                      >
+                        {savingEnforcementFields ? (
+                          <>
+                            <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Save & Continue
+                          </>
                         )}
                       </button>
                     </div>

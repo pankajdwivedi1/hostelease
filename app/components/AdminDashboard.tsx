@@ -1419,7 +1419,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       // ⚡ OPTIMIZED: Fetch light permissions data (no images) to save massive bandwidth
       const response = await fetch("/api/permissions?light=true", { cache: "no-store" });
       const data = await response.json();
-      
+
       // Handle both success and error responses
       if (data.permissions !== undefined) {
         setPermissions(Array.isArray(data.permissions) ? data.permissions : []);
@@ -2558,7 +2558,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 >
                   Messaging
                 </button>
-                {!isWarden && (
+                {!isWarden && title === "Developer Dashboard" && (
                   <button
                     onClick={() => setCurrentTab('settings')}
                     className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
@@ -3294,7 +3294,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   )}
                 </div>
               )}
-              {currentTab === 'settings' && !isWarden && (
+              {currentTab === 'settings' && title === "Developer Dashboard" && (
                 <FieldEnforcementComponent hostels={hostels.map(h => h.name)} />
               )}
 

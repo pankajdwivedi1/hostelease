@@ -20,8 +20,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const normalizedHostelName = hostelName.trim();
+    const hostelRegex = new RegExp(`^${normalizedHostelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i");
+
     // Get the enforcement rules for this hostel
-    const enforcement = await FieldEnforcement.findOne({ hostelName }).lean();
+    const enforcement = await FieldEnforcement.findOne({ hostelName: { $regex: hostelRegex } }).lean();
 
     if (!enforcement || !enforcement.enforcedFields) {
       return NextResponse.json({
@@ -41,11 +44,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all students in this hostel
-    const students = await Student.find({ hostelName }).select("_id name email phoneNumber registrationId").lean();
+    const students = await Student.find({ hostelName: { $regex: hostelRegex } }).select("_id name email phoneNumber registrationId").lean();
 
     // Get field progress for all students
     const fieldProgress = await StudentFieldProgress.find({
-      hostelName,
+      hostelName: { $regex: hostelRegex },
     }).lean();
 
     // Build completion status per student

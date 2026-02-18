@@ -137,7 +137,7 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
       if (data.success) {
         const rulesMap: Record<string, EnforcementRule> = {};
         data.data.forEach((rule: EnforcementRule) => {
-          rulesMap[rule.hostelName] = rule;
+          rulesMap[rule.hostelName.toLowerCase().trim()] = rule;
         });
         setEnforcementRules(rulesMap);
       }
@@ -157,11 +157,12 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
     );
 
     // Load existing fields for this hostel
-    if (enforcementRules[hostel]) {
-      setSelectedFields(enforcementRules[hostel].enforcedFields);
-      setNotificationPriority(enforcementRules[hostel].notificationPriority);
-      setSuccessMessage(enforcementRules[hostel].successMessage);
-      setAutoCloseNotification(enforcementRules[hostel].autoCloseNotification);
+    const existingRule = enforcementRules[hostel.toLowerCase().trim()];
+    if (existingRule) {
+      setSelectedFields(existingRule.enforcedFields);
+      setNotificationPriority(existingRule.notificationPriority);
+      setSuccessMessage(existingRule.successMessage);
+      setAutoCloseNotification(existingRule.autoCloseNotification);
     }
   };
 
@@ -287,21 +288,19 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
       <div className="flex gap-2 sm:gap-3 mb-6 sm:mb-8 border-b overflow-hidden flex-nowrap">
         <button
           onClick={() => setActiveTab("rules")}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap ${
-            activeTab === "rules"
-              ? "text-blue-600 border-b-2 border-blue-600"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
+          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap ${activeTab === "rules"
+            ? "text-blue-600 border-b-2 border-blue-600"
+            : "text-slate-600 hover:text-slate-900"
+            }`}
         >
           📋 Configure
         </button>
         <button
           onClick={() => setActiveTab("status")}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap ${
-            activeTab === "status"
-              ? "text-blue-600 border-b-2 border-blue-600"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
+          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap ${activeTab === "status"
+            ? "text-blue-600 border-b-2 border-blue-600"
+            : "text-slate-600 hover:text-slate-900"
+            }`}
         >
           📊 Status
         </button>
@@ -313,11 +312,10 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
           {/* Message */}
           {message && (
             <div
-              className={`p-3 sm:p-4 rounded-lg text-xs sm:text-sm ${
-                message.includes("✓")
-                  ? "bg-green-50 text-green-700 border border-green-200"
-                  : "bg-red-50 text-red-700 border border-red-200"
-              }`}
+              className={`p-3 sm:p-4 rounded-lg text-xs sm:text-sm ${message.includes("✓")
+                ? "bg-green-50 text-green-700 border border-green-200"
+                : "bg-red-50 text-red-700 border border-red-200"
+                }`}
             >
               {message}
             </div>
@@ -331,11 +329,10 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
                 <button
                   key={hostel}
                   onClick={() => handleHostelSelect(hostel)}
-                  className={`p-2 sm:p-3 rounded-lg font-semibold transition text-center text-xs sm:text-sm ${
-                    selectedHostels.includes(hostel)
-                      ? "bg-blue-600 text-white border-2 border-blue-700"
-                      : "bg-slate-100 text-slate-900 border-2 border-slate-200 hover:bg-blue-50"
-                  }`}
+                  className={`p-2 sm:p-3 rounded-lg font-semibold transition text-center text-xs sm:text-sm ${selectedHostels.includes(hostel)
+                    ? "bg-blue-600 text-white border-2 border-blue-700"
+                    : "bg-slate-100 text-slate-900 border-2 border-slate-200 hover:bg-blue-50"
+                    }`}
                 >
                   {hostel}
                 </button>
@@ -469,17 +466,15 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
                     <button
                       key={priority}
                       onClick={() => setNotificationPriority(priority as any)}
-                      className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-semibold transition text-xs sm:text-sm ${
-                        notificationPriority === priority
-                          ? `${
-                              priority === "normal"
-                                ? "bg-blue-600 text-white"
-                                : priority === "urgent"
-                                ? "bg-orange-600 text-white"
-                                : "bg-red-600 text-white"
-                            }`
-                          : "bg-slate-100 text-slate-900 hover:bg-slate-200"
-                      }`}
+                      className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-semibold transition text-xs sm:text-sm ${notificationPriority === priority
+                        ? `${priority === "normal"
+                          ? "bg-blue-600 text-white"
+                          : priority === "urgent"
+                            ? "bg-orange-600 text-white"
+                            : "bg-red-600 text-white"
+                        }`
+                        : "bg-slate-100 text-slate-900 hover:bg-slate-200"
+                        }`}
                     >
                       {priority.toUpperCase()}
                     </button>
