@@ -97,9 +97,11 @@ export async function POST(request: NextRequest) {
         }
 
 
-        // 1. Fetch Student and Verify Device (⚡ Optimized: Select only needed fields)
-        // ✅ IMPROVED: Include roomNumber for verification
-        const student = await Student.findById(studentId).lean().select('name deviceId firebaseUID email hostelName roomNumber webAuthnCredentials');
+        // 1. Fetch Student and Verify Device (⚡ Database Aware)
+        // Using dbAdapter to fetch from active source (Supabase or MongoDB)
+        // We fetch the full student object because getById returns mapped camelCase data
+        const student = await db.students.getById(studentId);
+
         if (!student) {
             return NextResponse.json({ error: "Student not found" }, { status: 404 });
         }
@@ -111,7 +113,7 @@ export async function POST(request: NextRequest) {
             const webAuthnCredentials = student.webAuthnCredentials || [];
 
             const isLegacyMatch = hasLegacyDevice && student.deviceId === deviceId;
-            const isWebAuthnMatch = webAuthnCredentials.some(cred => cred.credentialID === deviceId);
+            const isWebAuthnMatch = webAuthnCredentials.some((cred: any) => cred.credentialID === deviceId);
 
             // ✅ FIX: Added logging for device validation debugging
             if (!isLegacyMatch && !isWebAuthnMatch) {
@@ -142,7 +144,7 @@ export async function POST(request: NextRequest) {
         }).split('/').reverse().join('-'); // YYYY-MM-DD
 
         // Check for existing attendance in database
-        const existingAttendance = await Attendance.findOne({ studentId, date: today }).lean();
+        const existingAttendance = await db.attendance.checkToday(studentId, today);
         if (existingAttendance) {
             if (isTester) {
                 // Delete existing attendance for tester to allow re-marking multiple times

@@ -29,11 +29,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const existingStudent = await Student.findOne({ firebaseUID }).lean();
-    
+    const { db } = await import("@/lib/dbAdapter");
+    const existingStudent = await db.students.findOne({ firebaseUID });
+
     // ✅ NEW: Check for duplicate phone numbers
     if (!existingStudent) {
-      const phoneExists = await Student.findOne({ phoneNumber: phoneNumber.trim() }).lean();
+      const phoneExists = await db.students.findOne({ phoneNumber: phoneNumber.trim() });
       if (phoneExists) {
         return NextResponse.json(
           { error: "This phone number is already registered with another account" },
@@ -41,10 +42,10 @@ export async function POST(request: NextRequest) {
         );
       }
     }
-    
+
     // ✅ NEW: Check for duplicate email
     if (!existingStudent) {
-      const emailExists = await Student.findOne({ email: email.toLowerCase().trim() }).lean();
+      const emailExists = await db.students.findOne({ email: email.toLowerCase().trim() });
       if (emailExists) {
         return NextResponse.json(
           { error: "This email is already registered with another account" },
@@ -52,11 +53,13 @@ export async function POST(request: NextRequest) {
         );
       }
     }
-    
+
     let registrationId = existingStudent?.registrationId;
 
     if (!registrationId) {
       // ✅ NEW FIX #13: Load hostel prefix mapping from AdminSettings (configurable)
+      // For now, keep AdminSettings in MongoDB as the central config source, 
+      // but we could make it database-aware later if needed.
       const adminSettings = await AdminSettings.findOne().lean();
       let hostelPrefixMap = adminSettings?.hostelPrefixMap || [
         { hostelName: "Guest House Boys Hostel", prefix: "GUEST" },
@@ -73,19 +76,25 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Find the highest number for this prefix
-      const lastStudent = await Student.findOne({
-        registrationId: { $regex: new RegExp(`^${prefix}-`) }
-      }).sort({ registrationId: -1 });
-
+      // Find the highest number for this prefix - Using getAll or list might be slow, 
+      // but since it's only on registration, it's okay for now.
+      // Better to add a dedicated findLastByRegistrationId to dbAdapter.
+      const students = await db.students.list({ search: prefix });
       let nextNumber = 1;
-      if (lastStudent && lastStudent.registrationId) {
-        const parts = lastStudent.registrationId.split('-');
-        const lastNumber = parseInt(parts[1]);
-        if (!isNaN(lastNumber)) {
-          nextNumber = lastNumber + 1;
+
+      if (students && students.length > 0) {
+        const regIds = students
+          .map((s: any) => s.registrationId)
+          .filter((id: string) => id && id.startsWith(`${prefix}-`));
+
+        if (regIds.length > 0) {
+          const numbers = regIds.map((id: string) => parseInt(id.split('-')[1])).filter((n: number) => !isNaN(n));
+          if (numbers.length > 0) {
+            nextNumber = Math.max(...numbers) + 1;
+          }
         }
       }
+
       registrationId = `${prefix}-${String(nextNumber).padStart(4, '0')}`;
     }
 
@@ -129,11 +138,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const student = await Student.findOneAndUpdate(
-      { firebaseUID },
-      updateData,
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+    const student = await db.students.save(firebaseUID, updateData);
 
     return NextResponse.json({ success: true, student }, { status: 200 });
   } catch (error: any) {
@@ -158,37 +163,23 @@ export async function GET(request: NextRequest) {
     const minimal = searchParams.get("minimal") === "true"; // ⚡ OPTIMIZATION: Support minimal data fetch
 
     if (firebaseUID) {
-      // ⚡ OPTIMIZATION: For login, only select minimal fields to speed up response
-      let student;
-      if (minimal) {
-        // ⚡ OPTIMIZED: Ultra-minimal selection for fastest login flow
-        // Include dob and category to prevent profile completion modal from showing incorrectly
-        student = await Student.findOne({ firebaseUID }).select("_id firebaseUID name studentStatus deviceId dob category homeState section isProfileLocked faceDescriptor attendanceMode webAuthnCredentials deviceResetCount");
-      } else {
-        student = await Student.findOne({ firebaseUID });
-      }
+      const { db } = await import("@/lib/dbAdapter");
+      // Use getById or findOne equivalent in dbAdapter
+      const student = await db.students.findOne({ firebaseUID });
 
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
 
-      if (!student.studentStatus) {
-        await Student.findByIdAndUpdate(student._id, { studentStatus: "in" });
-        student.studentStatus = "in";
-      }
-
+      // studentStatus is handled by dbAdapter if needed, but we can ensure it here
       return NextResponse.json({ student }, { status: 200 });
     }
 
     if (email) {
-      const student = await Student.findOne({ email });
+      const { db } = await import("@/lib/dbAdapter");
+      const student = await db.students.findOne({ email });
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
-      }
-
-      if (!student.studentStatus) {
-        await Student.findByIdAndUpdate(student._id, { studentStatus: "in" });
-        student.studentStatus = "in";
       }
 
       return NextResponse.json({ student }, { status: 200 });
@@ -203,41 +194,12 @@ export async function GET(request: NextRequest) {
 
     const light = searchParams.get("light") === "true"; // ⚡ OPTIMIZATION: Exclude heavy fields
 
-    if (search) {
-      // 🔍 BACKEND SEARCH: Only search required fields that always exist
-      // Optional fields (parent info, district, etc.) are searched on frontend via client-side filtering
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { phoneNumber: { $regex: search, $options: "i" } },
-        { roomNumber: { $regex: search, $options: "i" } },
-        { registrationId: { $regex: search, $options: "i" } },
-      ];
-    }
-    if (hostelName && hostelName !== "all") {
-      query.hostelName = { $regex: hostelName, $options: "i" };
-    }
-    if (collegeName && collegeName !== "all") {
-      query.collegeName = collegeName;
-    }
-    if (semester && semester !== "all") {
-      query.semester = { $regex: semester, $options: "i" };
-    }
-    if (branch && branch !== "all") {
-      query.branch = branch;
-    }
-    if (section && section !== "all") {
-      query.section = { $regex: section, $options: "i" };
-    }
+    const { db } = await import("@/lib/dbAdapter");
+    const students = await db.students.list(
+      { search, hostelName, collegeName, semester, branch, section },
+      { light }
+    );
 
-    let studentsQuery = Student.find(query).sort({ name: 1 });
-
-    if (light) {
-      // ⚡ Exclude profilePicture (base64 is heavy) to save bandwidth
-      studentsQuery = studentsQuery.select("-profilePicture");
-    }
-
-    const students = await studentsQuery;
     return NextResponse.json({ students }, { status: 200 });
   } catch (error: any) {
     console.error("❌ Error fetching students:");

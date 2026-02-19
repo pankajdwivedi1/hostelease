@@ -89,9 +89,9 @@ export async function POST(request: NextRequest) {
                 img = await api.fetchImage(`data:image/jpeg;base64,${base64Data}`);
             } catch (imgError: any) {
                 console.error('❌ Failed to decode image:', imgError.message);
-                return NextResponse.json({ 
-                    success: false, 
-                    message: "Invalid image format. Please provide a valid JPEG or PNG image" 
+                return NextResponse.json({
+                    success: false,
+                    message: "Invalid image format. Please provide a valid JPEG or PNG image"
                 }, { status: 400 });
             }
 
@@ -105,21 +105,22 @@ export async function POST(request: NextRequest) {
                     .withFaceDescriptor();
             } catch (detectionError: any) {
                 console.error('❌ Face detection failed:', detectionError.message);
-                return NextResponse.json({ 
-                    success: false, 
-                    message: "Face detection service temporarily unavailable" 
+                return NextResponse.json({
+                    success: false,
+                    message: "Face detection service temporarily unavailable"
                 }, { status: 503 });
             }
 
             if (!detection) {
-                return NextResponse.json({ 
-                    success: false, 
-                    message: "No face detected. Please take a clear photo with your face visible" 
+                return NextResponse.json({
+                    success: false,
+                    message: "No face detected. Please take a clear photo with your face visible"
                 }, { status: 400 });
             }
 
-            // 4. Fetch Student's Locked Descriptor (⚡ Optimized: Select only face descriptor)
-            const student = await Student.findOne({ firebaseUID }).lean().select('faceDescriptor name');
+            // 4. Fetch Student's Locked Descriptor (⚡ Database Aware)
+            const { db } = await import("@/lib/dbAdapter");
+            const student = await db.students.findOne({ firebaseUID });
             if (!student || !student.faceDescriptor) {
                 return NextResponse.json({ error: "Student profile or face lock-in not found" }, { status: 404 });
             }

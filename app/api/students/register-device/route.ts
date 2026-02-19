@@ -4,7 +4,6 @@ import Student from "@/models/Student";
 
 export async function POST(request: NextRequest) {
     try {
-        await connectDB();
 
         const body = await request.json();
         const { studentId, deviceId } = body;
@@ -16,14 +15,15 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Check if student already has a registered device
-        const existingStudent = await Student.findById(studentId);
+        const { db } = await import("@/lib/dbAdapter");
+        const existingStudent = await db.students.getById(studentId);
 
         if (!existingStudent) {
             return NextResponse.json({ error: "Student not found" }, { status: 404 });
         }
 
-        if (existingStudent.deviceId && existingStudent.deviceId.trim() !== "") {
+        const deviceIdField = existingStudent.device_id || existingStudent.deviceId;
+        if (deviceIdField && deviceIdField.trim() !== "") {
             return NextResponse.json(
                 { error: "Your account is already registered with a device. Please contact the administrator to reset your device link." },
                 { status: 403 }
@@ -31,10 +31,10 @@ export async function POST(request: NextRequest) {
         }
 
         // CRITICAL: Check if THIS deviceId is already used by ANY other student
-        const deviceUsedBy = await Student.findOne({
-            deviceId: deviceId,
-            _id: { $ne: studentId }
-        });
+        const studentsWithThisDevice = await db.students.list({ search: deviceId });
+        const deviceUsedBy = studentsWithThisDevice.find((s: any) =>
+            (s.device_id === deviceId || s.deviceId === deviceId) && s._id !== studentId
+        );
 
         if (deviceUsedBy) {
             return NextResponse.json(
@@ -44,20 +44,10 @@ export async function POST(request: NextRequest) {
         }
 
         // Update student with deviceId
-        const student = await Student.findByIdAndUpdate(
-            studentId,
-            {
-                deviceId,
-                $push: {
-                    deviceHistory: {
-                        deviceId: deviceId,
-                        action: "registered",
-                        timestamp: new Date()
-                    }
-                }
-            },
-            { new: true }
-        );
+        const student = await db.students.update(studentId, {
+            deviceId,
+            action: "registerDevice" // Custom flag if we want history handling in adapter
+        });
 
         if (!student) {
             return NextResponse.json({ error: "Student not found" }, { status: 404 });

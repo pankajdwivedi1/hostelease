@@ -78,8 +78,7 @@ export async function GET(request: NextRequest) {
       permissions = await Permission.find(query)
         .populate("studentId", studentFields)
         .sort({ createdAt: -1 })
-        .lean()
-        .timeout(5000); // Add timeout to prevent hanging
+        .lean();
     } catch (dbError: any) {
       console.warn("Warning: Could not fetch permissions from DB:", dbError.message);
       // Return empty array if permissions query fails (better than 500 error)

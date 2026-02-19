@@ -4,7 +4,7 @@
 
 -- 1. Create Students Table
 CREATE TABLE IF NOT EXISTS students (
-    _id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    _id TEXT PRIMARY KEY, -- Changed from UUID to TEXT to support MongoDB ObjectIDs
     firebase_uid TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
@@ -70,7 +70,7 @@ CREATE INDEX IF NOT EXISTS idx_students_registration_id ON students(registration
 -- 2. Create Attendance Table
 CREATE TABLE IF NOT EXISTS attendance (
     _id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    student_id UUID REFERENCES students(_id) ON DELETE CASCADE,
+    student_id TEXT REFERENCES students(_id) ON DELETE CASCADE, -- Changed to TEXT
     firebase_uid TEXT NOT NULL,
     
     -- Denormalized Fields (for fast reporting without joins)

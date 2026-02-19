@@ -155,6 +155,8 @@ const LiveDbSwitch = () => {
       const data = await res.json();
       if (data.success) {
         setSource(data.source);
+        // ⚡ CRITICAL: Clear all session storage to prevent stale cache after DB switch
+        sessionStorage.clear();
         alert(`✅ Switched to ${data.source}`);
         window.location.reload(); // Reload to refresh data view
       } else {
@@ -2052,6 +2054,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     } catch (error: any) {
       console.error("Error deleting student:", error);
       alert(error.message || "Failed to delete student. Please try again.");
+
+      // ⚡ NEW: If the error is 'Student not found' (404), refresh the list anyway 
+      // as it means the UI is out of sync with the database
+      if (error.message?.includes("404") || error.message?.includes("not found")) {
+        await Promise.all([fetchPermissions(), fetchStudents(true)]);
+        setSelectedStudent(null);
+        setShowDeleteConfirm(false);
+      }
     } finally {
       setDeletingStudentId(null);
     }

@@ -109,6 +109,12 @@ export default function GateDesktopPage() {
     const [gateName] = useState("Main Gate");
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [lastScanResult, setLastScanResult] = useState<any>(null);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     const router = useRouter();
 
     // ===================== Logout =====================
@@ -294,8 +300,12 @@ export default function GateDesktopPage() {
 
                 {/* Current Time */}
                 <div style={styles.clockContainer}>
-                    <p style={styles.clockTime}>{formatTime(currentTime)}</p>
-                    <p style={styles.clockDate}>{formatDate(currentTime)}</p>
+                    <p style={styles.clockTime}>
+                        {mounted ? formatTime(currentTime) : "--:--:-- --"}
+                    </p>
+                    <p style={styles.clockDate}>
+                        {mounted ? formatDate(currentTime) : "Loading date..."}
+                    </p>
                 </div>
 
                 {/* Error display */}
