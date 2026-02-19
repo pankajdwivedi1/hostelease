@@ -259,10 +259,11 @@ export const db = {
             const source = await getDbSource();
 
             if (source === 'SUPABASE') {
+                // Use ilike for case-insensitive matching in Supabase
                 const { data, error } = await supabase
                     .from('students')
                     .update(updateData)
-                    .eq('hostel_name', filter.hostelName)
+                    .ilike('hostel_name', filter.hostelName)
                     .select();
 
                 if (error) throw error;
@@ -270,7 +271,11 @@ export const db = {
             } else {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
-                const result = await StudentModel.updateMany({ hostelName: filter.hostelName }, { $set: updateData });
+                // Use case-insensitive regex for MongoDB matching
+                const result = await StudentModel.updateMany(
+                    { hostelName: { $regex: new RegExp(`^${filter.hostelName}$`, 'i') } },
+                    { $set: updateData }
+                );
                 return { count: result.modifiedCount };
             }
         }

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/dbAdapter";
 
 export async function POST(request: Request) {
     try {
-        const { hostelName, password } = await request.json();
+        const body = await request.json();
+        const { hostelName, password } = body;
 
         // Security Check - Use the developer password
         const DEVELOPER_PASSWORD = "pankaj852";
@@ -22,15 +23,14 @@ export async function POST(request: Request) {
         }
 
         // Perform Bulk Reset using the Database Adapter (Mongo/Supabase)
-        const { db } = await import("@/lib/dbAdapter");
         const source = await db.getSource();
+        console.log(`⚡ Developer Bulk Reset triggered for [${hostelName}] on [${source}]`);
 
         let fieldsToReset: any;
         if (source === 'SUPABASE') {
             fieldsToReset = {
                 device_id: null,
                 face_descriptor: null,
-                thumb_impression_id: null,
                 web_authn_credentials: null,
                 is_profile_locked: false
             };
@@ -43,7 +43,8 @@ export async function POST(request: Request) {
             };
         }
 
-        const { count } = await db.students.bulkUpdate({ hostelName }, fieldsToReset);
+        const result = await db.students.bulkUpdate({ hostelName }, fieldsToReset);
+        const count = result?.count || 0;
 
         return NextResponse.json({
             success: true,
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
     } catch (error: any) {
         console.error("Bulk Reset API Error:", error);
         return NextResponse.json(
-            { error: "Internal server error" },
+            { error: "Internal server error: " + (error.message || "Unknown error") },
             { status: 500 }
         );
     }
