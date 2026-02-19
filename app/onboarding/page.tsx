@@ -26,6 +26,7 @@ export default function OnboardingPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [isProfileLocked, setIsProfileLocked] = useState(false);
+  const [isExistingStudent, setIsExistingStudent] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [formConfig, setFormConfig] = useState<Record<string, any>>({});
   const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
@@ -36,11 +37,11 @@ export default function OnboardingPage() {
       try {
         setHostelsLoading(true);
         const response = await fetch("/api/hostels");
-        
+
         if (!response.ok) {
           throw new Error(`API error: ${response.status}`);
         }
-        
+
         const data = await response.json();
         if (response.ok && data.hostels) {
           setHostels(data.hostels);
@@ -57,11 +58,11 @@ export default function OnboardingPage() {
     const fetchConfig = async () => {
       try {
         const response = await fetch("/api/admin/settings");
-        
+
         if (!response.ok) {
           throw new Error(`API error: ${response.status}`);
         }
-        
+
         const data = await response.json();
         if (data.success) {
           setFormConfig(data.registrationFieldsConfig || {});
@@ -84,6 +85,7 @@ export default function OnboardingPage() {
           const response = await fetch(`/api/students?firebaseUID=${currentUser.uid}`);
           const data = await response.json();
           if (data.student) {
+            setIsExistingStudent(true);
             setFormData({
               ...data.student,
               ...(data.student.dynamicFields || {}),
@@ -148,6 +150,12 @@ export default function OnboardingPage() {
   };
 
   const handleBack = async () => {
+    // ⚡ FIX: If existing student (editing profile), just go back to dashboard
+    if (isExistingStudent) {
+      router.push("/");
+      return;
+    }
+
     try {
       await signOut(auth);
       sessionStorage.clear();

@@ -195,6 +195,32 @@ export const db = {
             }
         },
 
+        // Get a single student by WebAuthn Credential ID
+        getByCredentialId: async (credentialId: string) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                // Querying JSONB in Supabase
+                const { data, error } = await supabase
+                    .from('students')
+                    .select('*')
+                    .contains('web_authn_credentials', JSON.stringify([{ credentialID: credentialId }]))
+                    .maybeSingle(); // Use maybeSingle to avoid error if not found
+
+                if (error) {
+                    console.error("Supabase getByCredentialId Error:", error);
+                    return null;
+                }
+                return mapStudentToCamelCase(data);
+            } else {
+                await connectDB();
+                const StudentModel = (await import('@/models/Student')).default;
+                const student = await StudentModel.findOne({
+                    'webAuthnCredentials.credentialID': credentialId
+                }).lean();
+                return student ? JSON.parse(JSON.stringify(student)) : null;
+            }
+        },
+
         // Get a single student by specific filter
         findOne: async (filter: any) => {
             const source = await getDbSource();

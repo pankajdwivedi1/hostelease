@@ -109,27 +109,22 @@ export async function POST(request: NextRequest) {
         const isTester = student.email === "prem86.dwivedi@gmail.com";
 
         if (!isTester) {
-            const hasLegacyDevice = student.deviceId && student.deviceId.trim() !== "";
-            const webAuthnCredentials = student.webAuthnCredentials || [];
+            // 🔥 STRICT MODE: Enforce WebAuthn (Biometric) verification only
+            // We ignore the legacy `student.deviceId` field entirely.
+            // The `deviceId` sent in the payload MUST match a registered WebAuthn Credential ID.
 
-            const isLegacyMatch = hasLegacyDevice && student.deviceId === deviceId;
+            const webAuthnCredentials = student.webAuthnCredentials || [];
             const isWebAuthnMatch = webAuthnCredentials.some((cred: any) => cred.credentialID === deviceId);
 
-            // ✅ FIX: Added logging for device validation debugging
-            if (!isLegacyMatch && !isWebAuthnMatch) {
-                console.log(`⚠️ Device Mismatch for student ${student.email}:`, {
-                    providedDevice: deviceId,
-                    legacyDevice: student.deviceId || 'none',
-                    biometricCount: webAuthnCredentials.length
+            // Logging for debugging
+            if (!isWebAuthnMatch) {
+                console.log(`⚠️ Biometric Mismatch for student ${student.email}:`, {
+                    providedCredentialID: deviceId,
+                    registeredCredentials: webAuthnCredentials.length
                 });
 
-                // If it's a biometric verification but the ID doesn't match DB
-                const errorMsg = webAuthnCredentials.length > 0
-                    ? "Unauthorized device. Your biometric key does not match the one linked to your account in our database."
-                    : "Unauthorized device. This device is not registered to your account.";
-
                 return NextResponse.json(
-                    { error: errorMsg },
+                    { error: "Biometric verification failed. Please register your device using Face/fingerprint in your profile." },
                     { status: 403 }
                 );
             }

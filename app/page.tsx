@@ -45,6 +45,13 @@ export default function Dashboard() {
               // ⚡ OPTIMIZED: Use minimal=true to only check if student exists (fastest)
               const response = await fetch(`/api/students?firebaseUID=${user.uid}&minimal=true`);
 
+              // ⚡ FIX: Handle 404 (Not Found) as a valid state for new users -> Redirect to Onboarding
+              if (response.status === 404) {
+                router.push("/onboarding");
+                setLoading(false);
+                return;
+              }
+
               if (!response.ok) {
                 throw new Error(`API error: ${response.status}`);
               }

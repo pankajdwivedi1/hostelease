@@ -474,11 +474,16 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
   useEffect(() => {
     if (studentProfile && !loading) {
       const storedId = getStoredDeviceId();
-      // ⚡ FIX: If DB has no deviceId (after reset), clear local storage immediately 
-      // to ensure a clean registration flow and prevent "Multiple Device" errors.
-      if (!studentProfile.deviceId) {
+      const hasWebAuthn = studentProfile.webAuthnCredentials && studentProfile.webAuthnCredentials.length > 0;
+
+      // ⚡ FIX: If DB has no deviceId (after reset) AND no WebAuthn, trigger registration
+      if (!studentProfile.deviceId && !hasWebAuthn) {
         localStorage.removeItem("device_id_token");
         setShowDeviceRegistration(true);
+      } else if (hasWebAuthn) {
+        // If WebAuthn is registered, we assume this is the device (or user knows what they are doing).
+        // If they use a different device, Attendance API will throw 403, handling it there.
+        setShowDeviceRegistration(false);
       } else if (storedId && studentProfile.deviceId !== storedId) {
         setShowDeviceRegistration(true);
       }
@@ -2876,21 +2881,29 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
               )}
 
               {!studentProfile?.deviceId && (
-                <button
-                  onClick={handleRegisterDevice}
-                  disabled={isRegisteringDevice}
-                  className={`w-full h-14 rounded-2xl bg-blue-600 text-white font-bold text-lg shadow-lg shadow-blue-200 transition-all active:scale-95 ${isRegisteringDevice ? "opacity-75 cursor-not-allowed" : "hover:bg-blue-700 hover:shadow-xl"
-                    }`}
-                >
-                  {isRegisteringDevice ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Registering...
-                    </div>
-                  ) : (
-                    "Register This Device Now"
-                  )}
-                </button>
+                <>
+                  <button
+                    onClick={handleRegisterDevice}
+                    disabled={isRegisteringDevice}
+                    className={`w-full h-14 rounded-2xl bg-blue-600 text-white font-bold text-lg shadow-lg shadow-blue-200 transition-all active:scale-95 ${isRegisteringDevice ? "opacity-75 cursor-not-allowed" : "hover:bg-blue-700 hover:shadow-xl"
+                      }`}
+                  >
+                    {isRegisteringDevice ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Registering...
+                      </div>
+                    ) : (
+                      "Register This Device Now"
+                    )}
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full h-14 rounded-2xl bg-gray-100 text-gray-900 font-bold text-lg hover:bg-gray-200 transition-all active:scale-95 mt-3"
+                  >
+                    Logout
+                  </button>
+                </>
               )}
 
               {studentProfile?.deviceId && (
@@ -3180,19 +3193,22 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
               </div>
             </div>
           </div>
-        )}
+        )
+      }
 
 
-      {showToast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-5 duration-300 px-4 w-full max-w-sm">
-          <div className="bg-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-red-500/20 backdrop-blur-md">
-            <svg className="w-6 h-6 text-white/90 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p className="text-sm font-bold tracking-tight" style={{ fontFamily: 'Cambria, serif' }}>{toastMessage}</p>
+      {
+        showToast && (
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-5 duration-300 px-4 w-full max-w-sm">
+            <div className="bg-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-red-500/20 backdrop-blur-md">
+              <svg className="w-6 h-6 text-white/90 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm font-bold tracking-tight" style={{ fontFamily: 'Cambria, serif' }}>{toastMessage}</p>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }
