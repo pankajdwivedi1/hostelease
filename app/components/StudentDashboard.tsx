@@ -583,6 +583,18 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
       fetchPaymentData(); // Load payments and bank info
       fetchSystemSettings(); // Load dynamic form config
 
+      // ⚡ GETPASS SYNC: Store essential info for the gate scanner
+      if (studentProfile) {
+        localStorage.setItem("firebaseUID", studentProfile.firebaseUID || "");
+        localStorage.setItem("deviceId", studentProfile.deviceId || "");
+        localStorage.setItem("studentName", studentProfile.name || "");
+        localStorage.setItem("studentStatus", studentProfile.studentStatus || "in");
+
+        // Also keep prefixed ones for legacy/redundancy if needed
+        localStorage.setItem("getpass_uid", studentProfile.firebaseUID || "");
+        localStorage.setItem("getpass_device_id", studentProfile.deviceId || "");
+      }
+
       // Delay initial notification fetch by 3 seconds as requested
       const initialNotifTimer = setTimeout(fetchStudentNotifications, 3000);
 
@@ -1985,7 +1997,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
                   <div className="flex items-center justify-around py-2">
                     <div className="flex flex-col items-center gap-2">
-                      <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Warden approval</span>
+                      <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Campus approval</span>
                       <div className="flex items-center gap-2">
                         <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.wardenStatus === "allowed" ? "border-green-500 bg-green-50 text-green-600 shadow-sm ring-4 ring-green-50" : "border-gray-100 text-gray-300"}`}>
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
@@ -2020,35 +2032,46 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
               )}
 
               {/* Action Buttons Row */}
-              <div className="flex gap-3 mb-4">
+              <div className="flex flex-col gap-3 mb-6">
+                {/* ⚡ PRIMARY ACTION: Scan GETPASS */}
                 <button
-                  onClick={() => setShowPermissionsHistory(true)}
-                  className="flex-1 h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-bold text-[12px] hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
+                  onClick={() => router.push("/getpass/scan")}
+                  className="w-full h-16 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-lg shadow-xl shadow-blue-200 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 group px-6"
                 >
-                  🕙 Outing History
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center group-hover:bg-white/30 transition-colors">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 text-left">
+                    <span className="block text-xs font-bold text-blue-100 uppercase tracking-widest">Campus Entry/Exit</span>
+                    <span className="text-base uppercase tracking-tight">Scan Gate QR code</span>
+                  </div>
+                  <svg className="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
+                  </svg>
                 </button>
-                {studentProfile?.studentStatus === "out" ? (
+
+                <div className="flex gap-3">
                   <button
-                    onClick={handleCheckIn}
-                    disabled={checkingIn}
-                    className="flex-[2] h-12 rounded-xl bg-green-600 text-white font-bold text-[12px] shadow-lg shadow-green-100 hover:bg-green-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    onClick={() => setShowPermissionsHistory(true)}
+                    className="flex-1 h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-bold text-[12px] hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
                   >
-                    {checkingIn ? (
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : "✅ I'm Back In"}
+                    🕙 History
                   </button>
-                ) : (
-                  <button
-                    onClick={() => setShowRequestForm(!showRequestForm)}
-                    disabled={!isAtHostel}
-                    className={`flex-[2] h-12 rounded-xl font-bold text-[12px] shadow-lg transition-all flex items-center justify-center gap-2 ${isAtHostel
-                      ? "bg-blue-600 text-white shadow-blue-100 hover:bg-blue-700"
-                      : "bg-gray-100 text-gray-400 cursor-not-allowed shadow-none"
-                      }`}
-                  >
-                    {isAtHostel ? "🚀 Request Permission" : "🔒 Verify Location First"}
-                  </button>
-                )}
+                  {studentProfile?.studentStatus !== "out" && (
+                    <button
+                      onClick={() => setShowRequestForm(!showRequestForm)}
+                      disabled={!isAtHostel}
+                      className={`flex-[2] h-12 rounded-xl font-bold text-[12px] shadow-lg transition-all flex items-center justify-center gap-2 ${isAtHostel
+                        ? "bg-blue-600 text-white shadow-blue-100 hover:bg-blue-700"
+                        : "bg-gray-100 text-gray-400 cursor-not-allowed shadow-none"
+                        }`}
+                    >
+                      {isAtHostel ? "🚀 Request Permission" : "🔒 Request Permission"}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {showRequestForm && (
@@ -2195,7 +2218,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                             {/* Staff Approval Indicators */}
                             <div className="flex items-center justify-around pt-4 border-t border-slate-200/50 mt-4">
                               <div className="flex flex-col items-center gap-2">
-                                <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider">Warden approval</span>
+                                <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider">Campus approval</span>
                                 <div className="flex items-center gap-2">
                                   <div className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-500 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-300"}`}>
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>

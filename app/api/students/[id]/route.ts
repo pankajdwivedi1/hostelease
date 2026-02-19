@@ -75,40 +75,9 @@ export async function PATCH(
       return NextResponse.json({ error: "Student ID is required" }, { status: 400 });
     }
 
-    let updateQuery: any;
-
-    if (body.action === "resetDevice") {
-      const student = await Student.findById(studentId);
-      const oldDeviceId = student?.deviceId;
-
-      updateQuery = {
-        $set: {
-          deviceId: "",
-          webAuthnCredentials: []
-        },
-        $inc: { deviceResetCount: 1 }
-      };
-
-      if (oldDeviceId) {
-        updateQuery.$push = {
-          deviceHistory: {
-            deviceId: oldDeviceId,
-            action: "reset",
-            timestamp: new Date()
-          }
-        };
-      }
-    } else {
-      // Check if the body already contains MongoDB operators
-      const hasOperators = Object.keys(body).some(key => key.startsWith('$'));
-      updateQuery = hasOperators ? body : { $set: body };
-    }
-
-    const updatedStudent = await Student.findByIdAndUpdate(
-      studentId,
-      updateQuery,
-      { new: true }
-    );
+    // Use the Database Adapter for a database-aware update (Mongo/Supabase)
+    const { db } = await import("@/lib/dbAdapter");
+    const updatedStudent = await db.students.update(studentId, body);
 
     if (!updatedStudent) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });

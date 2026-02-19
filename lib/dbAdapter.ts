@@ -127,6 +127,152 @@ export const db = {
                 const students = await StudentModel.find({}).limit(limit).lean();
                 return JSON.parse(JSON.stringify(students));
             }
+        },
+
+        // ⚡ DATABASE-AWARE UPDATE
+        update: async (id: string, updateData: any) => {
+            const source = await getDbSource();
+
+            if (source === 'SUPABASE') {
+                // Mapping Function: camelCase -> snake_case for Supabase
+                const mapStudentFields = (data: any) => {
+                    const mapped: any = {};
+                    const fieldMap: any = {
+                        phoneNumber: 'phone_number',
+                        hostelName: 'hostel_name',
+                        roomNumber: 'room_number',
+                        profilePicture: 'profile_picture',
+                        fatherName: 'father_name',
+                        fatherNumber: 'father_number',
+                        motherName: 'mother_name',
+                        motherNumber: 'mother_number',
+                        homePinCode: 'home_pin_code',
+                        homeState: 'home_state',
+                        erpInformation: 'erp_information',
+                        joiningDate: 'joining_date',
+                        collegeName: 'college_name',
+                        localGuardianAddress: 'local_guardian_address',
+                        localGuardianPhoneNumber: 'local_guardian_phone_number',
+                        floorNumber: 'floor_number',
+                        registrationId: 'registration_id',
+                        isProfileLocked: 'is_profile_locked',
+                        faceDescriptor: 'face_descriptor',
+                        attendanceMode: 'attendance_mode',
+                        deviceResetCount: 'device_reset_count',
+                        webAuthnCredentials: 'web_authn_credentials',
+                        deviceHistory: 'device_history',
+                        deviceId: 'device_id',
+                        studentStatus: 'student_status'
+                    };
+
+                    Object.keys(data).forEach(key => {
+                        if (fieldMap[key]) {
+                            mapped[fieldMap[key]] = data[key];
+                        } else {
+                            // Default to original if no mapping (e.g. branch, year, etc already snake_case or same)
+                            mapped[key] = data[key];
+                        }
+                    });
+                    return mapped;
+                };
+
+                // Handle specific actions like resetDevice if passed in updateData
+                if (updateData.action === 'resetDevice') {
+                    // Fetch existing to handle history
+                    const student = await db.students.getById(id, true);
+                    const oldDeviceId = student?.device_id;
+
+                    const supabaseUpdate: any = {
+                        device_id: "",
+                        web_authn_credentials: [],
+                        device_reset_count: (student?.device_reset_count || 0) + 1
+                    };
+
+                    if (oldDeviceId) {
+                        const history = student?.device_history || [];
+                        supabaseUpdate.device_history = [...history, {
+                            deviceId: oldDeviceId,
+                            action: "reset",
+                            timestamp: new Date().toISOString()
+                        }];
+                    }
+
+                    const { data, error } = await supabase
+                        .from('students')
+                        .update(supabaseUpdate)
+                        .eq('_id', id)
+                        .select()
+                        .single();
+
+                    if (error) throw error;
+                    return data;
+                }
+
+                // General Update
+                const cleanUpdate = mapStudentFields(updateData);
+                const { data, error } = await supabase
+                    .from('students')
+                    .update(cleanUpdate)
+                    .eq('_id', id)
+                    .select()
+                    .single();
+
+                if (error) throw error;
+                return data;
+
+            } else {
+                // MongoDB Logic
+                await connectDB();
+                const StudentModel = (await import('@/models/Student')).default;
+
+                let mongoUpdate: any;
+                if (updateData.action === "resetDevice") {
+                    const student = await StudentModel.findById(id);
+                    const oldDeviceId = student?.deviceId;
+
+                    mongoUpdate = {
+                        $set: { deviceId: "", webAuthnCredentials: [] },
+                        $inc: { deviceResetCount: 1 }
+                    };
+
+                    if (oldDeviceId) {
+                        mongoUpdate.$push = {
+                            deviceHistory: {
+                                deviceId: oldDeviceId,
+                                action: "reset",
+                                timestamp: new Date()
+                            }
+                        };
+                    }
+                } else {
+                    const hasOperators = Object.keys(updateData).some(key => key.startsWith('$'));
+                    mongoUpdate = hasOperators ? updateData : { $set: updateData };
+                }
+
+                const updated = await StudentModel.findByIdAndUpdate(id, mongoUpdate, { new: true });
+                return JSON.parse(JSON.stringify(updated));
+            }
+        },
+
+        // ⚡ DATABASE-AWARE BULK UPDATE
+        bulkUpdate: async (filter: { hostelName: string }, updateData: any) => {
+            const source = await getDbSource();
+
+            if (source === 'SUPABASE') {
+                const { data, error } = await supabase
+                    .from('students')
+                    .update(updateData)
+                    .eq('hostel_name', filter.hostelName)
+                    .select();
+
+                if (error) throw error;
+                return { count: data?.length || 0 };
+            } else {
+                await connectDB();
+                const StudentModel = (await import('@/models/Student')).default;
+                const result = await StudentModel.updateMany({ hostelName: filter.hostelName }, { $set: updateData });
+                return { count: result.modifiedCount };
+            }
         }
     },
 

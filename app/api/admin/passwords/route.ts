@@ -12,7 +12,11 @@ export async function PATCH(request: NextRequest) {
             return NextResponse.json({ error: "Type and new password are required" }, { status: 400 });
         }
 
-        const updateField = type === "dean" ? "adminPassword" : type === "warden" ? "wardenPassword" : null;
+        const updateField =
+            type === "dean" ? "adminPassword" :
+                type === "warden" ? "wardenPassword" :
+                    type === "getpass" ? "getpassPassword" :
+                        null;
 
         if (!updateField) {
             return NextResponse.json({ error: "Invalid user type" }, { status: 400 });

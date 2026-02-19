@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
             adminPassword: settings?.adminPassword || "pankajdwivedi81",
             overlapRadius: settings?.overlapRadius || false,
             prioritizeAssignedHostel: settings?.prioritizeAssignedHostel || false,
+            getpassPassword: settings?.getpassPassword || "GET456",
             wifiWhitelist: settings?.wifiWhitelist || []
         });
     } catch (error: any) {
@@ -59,7 +60,8 @@ export async function POST(request: NextRequest) {
             paymentInstructions,
             isPaymentEnabled,
             overlapRadius,
-            prioritizeAssignedHostel
+            prioritizeAssignedHostel,
+            getpassPassword
         } = body;
 
         const updateData: any = {};
@@ -74,6 +76,7 @@ export async function POST(request: NextRequest) {
         if (isPaymentEnabled !== undefined) updateData.isPaymentEnabled = isPaymentEnabled;
         if (overlapRadius !== undefined) updateData.overlapRadius = overlapRadius;
         if (prioritizeAssignedHostel !== undefined) updateData.prioritizeAssignedHostel = prioritizeAssignedHostel;
+        if (getpassPassword !== undefined) updateData.getpassPassword = getpassPassword;
 
         const settings = await AdminSettings.findOneAndUpdate(
             {},

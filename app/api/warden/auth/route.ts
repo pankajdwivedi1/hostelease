@@ -25,7 +25,27 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 1. Try to find the specific hostel
+        // 1. Handle special GETPASS login
+        if (hostelId === 'getpass') {
+            const settings = await AdminSettings.findOne({});
+            const getpassPassword = settings?.getpassPassword || "GET456";
+
+            if (password === getpassPassword) {
+                return NextResponse.json({
+                    success: true,
+                    type: 'getpass',
+                    hostelName: 'GETPASS MONITOR',
+                    authorizedHostels: []
+                }, { status: 200 });
+            } else {
+                return NextResponse.json(
+                    { error: "Invalid authentication key for GETPASS" },
+                    { status: 401 }
+                );
+            }
+        }
+
+        // 2. Try to find the specific hostel
         const hostel = await Hostel.findById(hostelId);
         if (!hostel) {
             return NextResponse.json(

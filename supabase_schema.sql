@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS students (
     registration_id TEXT UNIQUE,
     is_profile_locked BOOLEAN DEFAULT FALSE,
     face_descriptor FLOAT8[], -- Array of numbers
+    thumb_impression_id TEXT, -- ⚡ NEW: Thumb biometrics
     attendance_mode TEXT DEFAULT 'default',
     device_reset_count INTEGER DEFAULT 0,
     

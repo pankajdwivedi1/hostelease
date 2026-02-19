@@ -20,6 +20,7 @@ export async function GET(req: Request) {
                                 id: "$_id",
                                 name: "$name",
                                 regId: "$registrationId",
+                                room: "$roomNumber",
                                 hostel: "$hostelName",
                                 email: "$email"
                             }
@@ -34,7 +35,7 @@ export async function GET(req: Request) {
 
         if (type === "duplicates-regid") {
             const duplicates = await Student.aggregate([
-                { $match: { registrationId: { $ne: null, $exists: true, $ne: "" } } },
+                { $match: { registrationId: { $nin: [null, ""], $exists: true } } },
                 {
                     $group: {
                         _id: "$registrationId",
@@ -44,6 +45,7 @@ export async function GET(req: Request) {
                                 id: "$_id",
                                 name: "$name",
                                 phone: "$phoneNumber",
+                                room: "$roomNumber",
                                 hostel: "$hostelName",
                                 email: "$email"
                             }
@@ -58,7 +60,7 @@ export async function GET(req: Request) {
 
         if (type === "gibberish-names") {
             // Fetch some fields to analyze
-            const students = await Student.find({}, "name phoneNumber registrationId hostelName email").lean();
+            const students = await Student.find({}, "name phoneNumber registrationId hostelName roomNumber email").lean();
 
             const gibberish = students.filter(s => {
                 if (!s.name) return true;

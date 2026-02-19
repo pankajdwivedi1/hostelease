@@ -41,18 +41,18 @@ function LoginForm() {
   const fetchHostels = async () => {
     try {
       const response = await fetch("/api/hostels");
-      
+
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
       }
-      
+
       const contentType = response.headers.get("content-type");
       if (!contentType?.includes("application/json")) {
         const text = await response.text();
         console.error("Received non-JSON response:", text.substring(0, 200));
         throw new Error("API returned non-JSON response");
       }
-      
+
       const data = await response.json();
       if (data.hostels) {
         setHostels(data.hostels);
@@ -194,6 +194,11 @@ function LoginForm() {
       }
 
       if (data.success) {
+        if (data.type === 'getpass') {
+          sessionStorage.setItem("userType", "getpass");
+          router.push("/getpass");
+          return;
+        }
         sessionStorage.setItem("userType", "warden");
         sessionStorage.setItem("wardenHostelName", data.hostelName);
         sessionStorage.setItem("authorizedHostels", JSON.stringify(data.authorizedHostels));
@@ -415,9 +420,9 @@ function LoginForm() {
                         </div>
                         <div className="text-center">
                           <span className={`block text-sm font-bold tracking-tight transition-colors ${showWardenPassword ? "text-indigo-900" : "text-slate-800"}`}>
-                            Warden
+                            Campus
                           </span>
-                          <span className="text-[10px] font-medium text-slate-400">Hostel Management</span>
+                          <span className="text-[10px] font-medium text-slate-400">Campus Management</span>
                         </div>
                       </button>
                     </div>
@@ -427,7 +432,7 @@ function LoginForm() {
                       <div className="mt-4 sm:mt-8 animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-500">
                         <div className="rounded-2xl border border-slate-100 bg-white p-4 sm:p-6 shadow-[0_12px_24px_-8px_rgba(0,0,0,0.08)]">
                           <label className="mb-2 sm:mb-3 block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
-                            {showAdminPassword ? "Dean Authentication Key" : showWardenPassword ? "Warden Authentication Key" : "Developer Override"}
+                            {showAdminPassword ? "Dean Authentication Key" : showWardenPassword ? "Campus Authentication Key" : "Developer Override"}
                           </label>
 
                           {showWardenPassword && (
@@ -441,6 +446,7 @@ function LoginForm() {
                                 className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:py-4 text-sm sm:text-base text-slate-900 appearance-none focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-medium"
                               >
                                 <option value="" disabled>Select Your Hostel</option>
+                                <option value="getpass" className="font-bold text-blue-600">🎟️ GETPASS MONITOR</option>
                                 {hostels.map(hostel => (
                                   <option key={hostel._id} value={hostel._id}>
                                     {hostel.name}

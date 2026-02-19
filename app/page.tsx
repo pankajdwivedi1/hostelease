@@ -44,16 +44,16 @@ export default function Dashboard() {
             try {
               // ⚡ OPTIMIZED: Use minimal=true to only check if student exists (fastest)
               const response = await fetch(`/api/students?firebaseUID=${user.uid}&minimal=true`);
-              
+
               if (!response.ok) {
                 throw new Error(`API error: ${response.status}`);
               }
-              
+
               const contentType = response.headers.get("content-type");
               if (!contentType?.includes("application/json")) {
                 throw new Error("API returned non-JSON response");
               }
-              
+
               const data = await response.json();
 
               if (data.student) {
@@ -101,7 +101,7 @@ export default function Dashboard() {
       {userType === "student" ? (
         <StudentDashboard initialData={studentData} />
       ) : userType === "warden" ? (
-        <AdminDashboard title="Warden Dashboard" />
+        <AdminDashboard title="Campus Dashboard" />
       ) : userType === "developer" ? (
         <AdminDashboard title="Developer Dashboard" showRemoveButton={true} />
       ) : (

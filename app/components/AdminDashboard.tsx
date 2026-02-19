@@ -20,6 +20,117 @@ const FieldEnforcementComponent = dynamic(() => import("./FieldEnforcementCompon
   loading: () => <div className="h-64 w-full bg-gray-100 animate-pulse rounded-xl flex items-center justify-center text-gray-400 text-xs">Loading Field Enforcement...</div>
 });
 
+// ⚡ DEVELOPER TOOLS COMPONENT
+const DeveloperTools = ({ hostels }: { hostels: any[] }) => {
+  const [password, setPassword] = useState("");
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [selectedHostel, setSelectedHostel] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleUnlock = () => {
+    if (password === "pankaj852") {
+      setIsUnlocked(true);
+    } else {
+      alert("Invalid developer password");
+    }
+  };
+
+  const handleReset = async () => {
+    if (!selectedHostel) return alert("Please select a hostel");
+    if (!confirm(`⚠️ WARNING: This will reset device IDs and biometrics for ALL students in ${selectedHostel}.\n\nAre you sure you want to proceed?`)) return;
+
+    setIsResetting(true);
+    try {
+      const res = await fetch("/api/developer/reset-devices-hostel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostelName: selectedHostel, password })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+      } else {
+        alert("Error: " + data.error);
+      }
+    } catch (e: any) {
+      alert("Error resetting: " + e.message);
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  if (!isUnlocked) {
+    return (
+      <div className="bg-red-50 p-6 rounded-2xl border border-red-100 flex flex-col items-center justify-center gap-4">
+        <div className="text-3xl text-red-500">🔒</div>
+        <div className="text-center">
+          <h4 className="font-black text-red-900 uppercase tracking-tighter text-lg">Developer Tools Locked</h4>
+          <p className="text-xs text-red-700 font-bold uppercase tracking-widest mt-1">Enter password to access dangerous tools</p>
+        </div>
+        <div className="flex gap-2 w-full max-w-xs">
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="flex-1 p-3 rounded-xl border border-red-200 text-sm font-bold focus:ring-2 ring-red-500/20 outline-none"
+            placeholder="Developer Password"
+          />
+          <button
+            onClick={handleUnlock}
+            className="px-6 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-100"
+          >
+            Unlock
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="font-black text-indigo-900 uppercase tracking-tighter text-lg">⚡ Developer Command Center</h4>
+          <p className="text-xs text-indigo-700 font-bold uppercase tracking-widest mt-1">Direct Database Overrides</p>
+        </div>
+        <button onClick={() => setIsUnlocked(false)} className="text-[10px] font-black uppercase text-indigo-400 hover:text-indigo-600">Lock Tools</button>
+      </div>
+
+      <div className="bg-white p-6 rounded-xl border border-indigo-200 shadow-sm space-y-4">
+        <div className="space-y-1">
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Step 1: Select Hostel to Wipe</label>
+          <select
+            value={selectedHostel}
+            onChange={(e) => setSelectedHostel(e.target.value)}
+            className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+          >
+            <option value="">Choose a hostel...</option>
+            {hostels.map(h => <option key={h._id} value={h.name}>{h.name}</option>)}
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Step 2: Trigger Bulk Reset (Supabase Only)</label>
+          <button
+            onClick={handleReset}
+            disabled={isResetting || !selectedHostel}
+            className="w-full py-4 bg-red-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-xl shadow-red-200 disabled:opacity-50"
+          >
+            {isResetting ? "⏳ WIPING DATA..." : "🚨 RESET ALL STUDENT DEVICES"}
+          </button>
+        </div>
+
+        <div className="p-4 bg-red-50 rounded-xl border border-red-100">
+          <p className="text-[10px] text-red-600 font-black leading-relaxed">
+            CRITICAL IMPACT: This will instantly clear Device IDs, Face Embeddings, and Biometric Keys for EVERY student in the selected hostel.
+            Students will be prompted to re-register their face and device upon their next login. This is irreversible.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ⚡ LIVE SWITCH COMPONENT
 const LiveDbSwitch = () => {
   const [source, setSource] = useState<'MONGODB' | 'SUPABASE' | null>(null);
@@ -193,6 +304,7 @@ interface StudentDetails {
     transports?: string[];
     createdAt: string;
   }[];
+  thumbImpressionId?: string; // ⚡ NEW: Thumb biometrics
   permissions: SimplePermission[];
 }
 
@@ -340,11 +452,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [registrationFields, setRegistrationFields] = useState<Record<string, any>>({});
   const [formBuilderFields, setFormBuilderFields] = useState<any[]>([]);
   const [savedFormBuilderConfig, setSavedFormBuilderConfig] = useState<any[]>([]); // ⚡ NEW: Reference for Diff
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"rooms" | "form" | "password" | "bank" | "system" | "audit">("password");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"rooms" | "form" | "password" | "bank" | "system" | "audit" | "developer">("password");
   const [globalWardenPassword, setGlobalWardenPassword] = useState("warden456");
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
   const [overlapRadius, setOverlapRadius] = useState(false); // ⚡ NEW
   const [prioritizeAssignedHostel, setPrioritizeAssignedHostel] = useState(false); // ⚡ NEW
+  const [getpassPassword, setGetpassPassword] = useState("GET456"); // ⚡ NEW
 
   // Audit States
   const [auditResults, setAuditResults] = useState<any[]>([]);
@@ -657,6 +770,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         }
         if (settingsData.overlapRadius !== undefined) setOverlapRadius(settingsData.overlapRadius);
         if (settingsData.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(settingsData.prioritizeAssignedHostel);
+        if (settingsData.getpassPassword) setGetpassPassword(settingsData.getpassPassword);
       }
 
       // Fetch Hostels (with warden/room info)
@@ -2636,13 +2750,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   onClick={() => setCurrentTab('attendance')}
                   className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${currentTab === 'attendance' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
                 >
-                  Daily Attendance
+                  Attendance
                 </button>
                 <button
                   onClick={() => setCurrentTab('messaging')}
                   className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${currentTab === 'messaging' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
                 >
-                  Messaging
+                  Broadcast
+                </button>
+                <button
+                  onClick={() => window.open('/getpass', '_blank')}
+                  className="flex-1 py-2.5 rounded-lg text-sm font-black transition-all text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-2 group"
+                >
+                  <div className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]"></span>
+                  </div>
+                  GETPASS
                 </button>
                 {!isWarden && title === "Developer Dashboard" && (
                   <button
@@ -2652,12 +2776,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     Settings
                   </button>
                 )}
-                {/* <button
-                  onClick={() => setCurrentTab('payments')}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${currentTab === 'payments' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
-                >
-                  Payments
-                </button> */}
               </div>
 
               {currentTab === 'permissions' && (
@@ -5556,8 +5674,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                     </div>
                     <div className="text-left">
-                      <p className="font-black text-indigo-900 uppercase text-sm tracking-tight">Warden Account</p>
-                      <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest">Hostel Management</p>
+                      <p className="font-black text-indigo-900 uppercase text-sm tracking-tight">Campus Account</p>
+                      <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest">Campus Management</p>
                     </div>
                   </div>
                   <svg className="w-5 h-5 text-indigo-300 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
@@ -5586,7 +5704,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <h2 className="text-lg sm:text-2xl font-black text-gray-900 uppercase tracking-tight">
                       System Settings
                     </h2>
-                    <p className="text-[9px] sm:text-xs font-bold text-gray-400 mt-0.5 uppercase tracking-widest">Config Wardens, Rooms & Forms</p>
+                    <p className="text-[9px] sm:text-xs font-bold text-gray-400 mt-0.5 uppercase tracking-widest">Config Campuses, Rooms & Forms</p>
                   </div>
                 </div>
                 <button
@@ -5604,7 +5722,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   { id: "form", label: "Form", icon: "📝" },
                   { id: "password", label: "Pass", icon: "🔑" },
                   { id: "system", label: "System", icon: "⚙️" },
-                  { id: "audit", label: "Audit", icon: "🔍" }
+                  { id: "audit", label: "Audit", icon: "🔍" },
+                  { id: "developer", label: "Dev", icon: "⚡" }
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -6270,7 +6389,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       <div key={sIdx} className="bg-white p-3 rounded-xl border border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-200 transition-all">
                                         <div className="min-w-0">
                                           <p className="text-xs font-black text-slate-800 uppercase truncate">{s.name}</p>
-                                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{s.hostel} • {s.regId || s.phone || s.id.slice(-6)}</p>
+                                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{s.hostel} • {s.regId || s.phone || s.id.slice(-6)} • ROOM: {s.room || 'N/A'}</p>
                                         </div>
                                         <button
                                           onClick={() => {
@@ -6295,7 +6414,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 <div className="flex items-center justify-between">
                                   <div className="min-w-0">
                                     <p className="text-xs font-black text-red-600 uppercase truncate">{result.name}</p>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{result.hostelName} • {result.phoneNumber}</p>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{result.hostelName} • {result.phoneNumber} • ROOM: {result.roomNumber || 'N/A'}</p>
                                   </div>
                                   <button
                                     onClick={() => {
@@ -6382,15 +6501,60 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                     <div className="w-full h-0.5 bg-slate-100"></div>
 
+                    {/* GETPASS Password Section */}
+                    <div className="bg-emerald-50 border-2 border-emerald-100 p-6 rounded-3xl mb-8">
+                      <div className="flex items-center gap-4 mb-6">
+                        <div className="p-3 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-100 text-xl font-bold">🎟️</div>
+                        <div>
+                          <h3 className="text-lg font-black text-emerald-900 uppercase tracking-tight">GETPASS ACCESS</h3>
+                          <p className="text-xs text-emerald-700 font-medium uppercase tracking-widest">Secure Monitor Link Password</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-emerald-600/60 uppercase tracking-widest px-1">Independent Getpass Password</label>
+                          <input
+                            type="text"
+                            value={getpassPassword}
+                            onChange={(e) => setGetpassPassword(e.target.value)}
+                            className="w-full h-14 p-4 rounded-2xl bg-white border-2 border-emerald-100 font-black text-emerald-900 outline-none focus:border-emerald-500 transition-all shadow-sm"
+                            placeholder="GET456"
+                          />
+                        </div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch("/api/admin/passwords", {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ newPassword: getpassPassword, type: "getpass" })
+                              });
+                              const data = await res.json();
+                              if (data.success) alert("✅ GETPASS password updated successfully!");
+                              else alert("Error: " + data.error);
+                            } catch (e) {
+                              alert("Failed to update password");
+                            }
+                          }}
+                          className="h-14 bg-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 active:scale-95"
+                        >
+                          Set Getpass Password
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="w-full h-0.5 bg-slate-100"></div>
+
                     {/* 2. Warden Management Section (Moved from Wardens Tab) */}
                     <div className="space-y-6">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                         <div className="bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl flex items-start gap-4 flex-1">
                           <span className="text-xl sm:text-2xl">👮</span>
                           <div className="flex-1">
-                            <h3 className="text-sm font-black text-blue-900 uppercase tracking-wide mb-1">Warden Management</h3>
+                            <h3 className="text-sm font-black text-blue-900 uppercase tracking-wide mb-1">Campus Management</h3>
                             <p className="text-xs sm:text-sm text-blue-800 font-medium">
-                              Map individual wardens to each hostel. They can only see students from their assigned hostel.
+                              Map individual campus managers to each campus. They can only see students from their assigned campus.
                             </p>
                           </div>
                         </div>
@@ -6438,7 +6602,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="bg-white/60 p-4 rounded-xl border border-white backdrop-blur-sm">
-                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Warden Username</label>
+                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Campus Username</label>
                                   <div className="flex items-center gap-3">
                                     <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-200" />
                                     <input
@@ -6450,7 +6614,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
                                 </div>
                                 <div className="bg-white/60 p-4 rounded-xl border border-white backdrop-blur-sm relative group/pass">
-                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Warden Password</label>
+                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Campus Password</label>
                                   <div className="flex items-center gap-3 justify-between">
                                     <div className="flex items-center gap-3">
                                       <div className="h-2 w-2 rounded-full bg-indigo-500 shadow-sm shadow-indigo-200" />
@@ -6501,7 +6665,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <div className="mt-12 pt-12 border-t-2 border-slate-100">
                         <div className="flex items-center justify-between mb-8">
                           <div>
-                            <h3 className="text-xl font-black text-slate-800">Unified Warden Accounts</h3>
+                            <h3 className="text-xl font-black text-slate-800">Unified Campus Accounts</h3>
                             <p className="text-sm text-slate-500 font-medium mt-1">Manage accounts with access to multiple locations</p>
                           </div>
                           <button
@@ -6519,7 +6683,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                         {isCreatingAccount && (
                           <div className="bg-white p-6 rounded-2xl border-2 border-indigo-100 shadow-xl mb-8 animate-in fade-in slide-in-from-top-4">
-                            <h4 className="font-black text-indigo-900 uppercase tracking-widest mb-6">{editingAccountId ? "Edit Warden Account" : "New Warden Account"}</h4>
+                            <h4 className="font-black text-indigo-900 uppercase tracking-widest mb-6">{editingAccountId ? "Edit Campus Account" : "New Campus Account"}</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                               <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Username</label>
@@ -6649,6 +6813,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
                     </div>
                   </div>
+                )}
+
+                {activeSettingsTab === "developer" && (
+                  <DeveloperTools hostels={hostels} />
                 )}
 
                 {/* Modal Footer */}
