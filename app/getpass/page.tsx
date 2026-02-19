@@ -15,7 +15,7 @@ import { useRouter } from "next/navigation";
 // Simple QR code generator using canvas - no external library needed
 // Uses a text-to-QR approach with the QR code API
 
-function QRCodeCanvas({ data, size = 400 }: { data: string; size?: number }) {
+function QRCodeCanvas({ data, size = 550 }: { data: string; size?: number }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
@@ -58,10 +58,7 @@ function QRCodeCanvas({ data, size = 400 }: { data: string; size?: number }) {
             ref={canvasRef}
             width={size}
             height={size}
-            style={{
-                borderRadius: "16px",
-                border: "3px solid rgba(0, 255, 136, 0.3)",
-            }}
+            className="w-full h-full object-contain rounded-2xl border-[3px] border-[#00ff884d] shadow-[0_0_20px_rgba(0,255,136,0.1)]"
         />
     );
 }
@@ -223,139 +220,143 @@ export default function GateDesktopPage() {
     };
 
     return (
-        <div style={styles.container}>
+        <div className="flex flex-col md:flex-row w-screen min-h-screen md:h-screen bg-[#0a0a1a] font-sans text-white overflow-y-auto md:overflow-hidden">
             {/* =================== LEFT PANEL: QR CODE =================== */}
-            <div style={styles.leftPanel}>
+            <div className="w-full md:w-1/2 flex flex-col items-center justify-between p-6 md:p-10 bg-gradient-to-b from-[#0a0a1a] via-[#0d1420] to-[#0a0a1a] border-b md:border-b-0 md:border-r border-[#00ff881a] relative shrink-0 transition-all duration-300">
                 {/* Header */}
-                <div style={styles.qrHeader}>
-                    <div style={styles.logoContainer}>
-                        <div style={styles.logoIcon}>🎫</div>
+                <div className="flex justify-between items-center w-full mb-6 md:mb-0">
+                    <div className="flex items-center gap-4">
+                        <div className="text-4xl animate-pulse">🎫</div>
                         <div>
-                            <h1 style={styles.title}>GETPASS</h1>
-                            <p style={styles.subtitle}>Campus Outing System</p>
+                            <h1 className="text-3xl font-extrabold bg-gradient-to-br from-[#00ff88] to-[#00cc6a] bg-clip-text text-transparent tracking-widest m-0">
+                                GETPASS
+                            </h1>
+                            <p className="text-[13px] text-[rgba(255,255,255,0.5)] tracking-widest uppercase m-0">
+                                Campus Outing System
+                            </p>
                         </div>
                     </div>
-                    <div style={styles.gateLabel}>
-                        <span style={styles.gateBadge}>📍 {gateName}</span>
+                    <div className="flex items-center">
+                        <span className="px-4 py-2 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-full text-sm text-[#00ff88]">
+                            📍 {gateName}
+                        </span>
                     </div>
                 </div>
 
                 {/* QR Code */}
-                <div style={styles.qrContainer}>
-                    <div style={{
-                        ...styles.qrWrapper,
-                        animation: "qrPulse 4s infinite cubic-bezier(0.4, 0, 0.6, 1)"
-                    }}>
+                <div className="flex flex-col items-center gap-5 flex-1 justify-center w-full py-2 md:py-0">
+                    <div className="p-4 bg-white rounded-[28px] border-[12px] border-[#00ff88] shadow-[0_0_100px_rgba(0,255,136,0.25)] relative flex items-center justify-center w-full max-w-[85vw] sm:max-w-[450px] md:max-w-[550px] aspect-square">
                         {qrData ? (
                             <QRCodeCanvas data={qrData} size={550} />
                         ) : (
-                            <div style={styles.qrPlaceholder}>
-                                <div style={styles.spinner}></div>
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-[rgba(255,255,255,0.5)] text-base">
+                                <div className="w-10 h-10 border-[3px] border-[rgba(0,255,136,0.2)] border-t-[#00ff88] rounded-full animate-spin"></div>
                                 <p>Generating QR Code...</p>
                             </div>
                         )}
                     </div>
 
                     {/* Timer Ring */}
-                    <div style={styles.timerContainer}>
+                    <div className="flex flex-col items-center gap-2 mt-4 md:mt-0">
                         <div
+                            className="w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-[0_0_20px_rgba(0,255,136,0.2)]"
                             style={{
-                                ...styles.timerRing,
                                 background: `conic-gradient(
                   ${timeLeft <= 3 ? "#ff4444" : "#00ff88"} ${(timeLeft / 10) * 360}deg,
                   rgba(255,255,255,0.1) ${(timeLeft / 10) * 360}deg
                 )`,
                             }}
                         >
-                            <div style={styles.timerInner}>
-                                <span style={{
-                                    ...styles.timerText,
-                                    color: timeLeft <= 3 ? "#ff4444" : "#00ff88",
-                                }}>
+                            <div className="w-[66px] h-[66px] rounded-full bg-[#0a0a1a] flex items-center justify-center">
+                                <span
+                                    className={`text-2xl font-black tabular-nums transition-colors duration-300 ${timeLeft <= 3 ? "text-[#ff4444]" : "text-[#00ff88]"
+                                        }`}
+                                >
                                     {timeLeft}s
                                 </span>
                             </div>
                         </div>
-                        <p style={styles.timerLabel}>New QR in</p>
+                        <p className="text-xs text-[rgba(255,255,255,0.4)] uppercase tracking-widest m-0">
+                            New QR in
+                        </p>
                     </div>
                 </div>
 
                 {/* Instructions */}
-                <div style={styles.instructions}>
-                    <div style={styles.instructionStep}>
-                        <span style={styles.stepIcon}>📱</span>
+                <div className="flex items-center gap-3 px-6 py-4 bg-[rgba(255,255,255,0.03)] rounded-2xl border border-[rgba(255,255,255,0.06)] mb-6 md:mb-0 hidden sm:flex">
+                    <div className="flex items-center gap-2 text-sm text-[rgba(255,255,255,0.7)]">
+                        <span className="text-xl">📱</span>
                         <span>Open HostelEase App</span>
                     </div>
-                    <div style={styles.instructionArrow}>→</div>
-                    <div style={styles.instructionStep}>
-                        <span style={styles.stepIcon}>📸</span>
+                    <div className="text-[rgba(0,255,136,0.5)] text-base font-bold">→</div>
+                    <div className="flex items-center gap-2 text-sm text-[rgba(255,255,255,0.7)]">
+                        <span className="text-xl">📸</span>
                         <span>Tap "Scan GETPASS"</span>
                     </div>
-                    <div style={styles.instructionArrow}>→</div>
-                    <div style={styles.instructionStep}>
-                        <span style={styles.stepIcon}>✅</span>
+                    <div className="text-[rgba(0,255,136,0.5)] text-base font-bold">→</div>
+                    <div className="flex items-center gap-2 text-sm text-[rgba(255,255,255,0.7)]">
+                        <span className="text-xl">✅</span>
                         <span>Done!</span>
                     </div>
                 </div>
 
                 {/* Current Time */}
-                <div style={styles.clockContainer}>
-                    <p style={styles.clockTime}>
+                <div className="text-center">
+                    <p className="text-3xl font-bold text-[rgba(255,255,255,0.9)] mb-1 tabular-nums">
                         {mounted ? formatTime(currentTime) : "--:--:-- --"}
                     </p>
-                    <p style={styles.clockDate}>
+                    <p className="text-sm text-[rgba(255,255,255,0.4)] m-0">
                         {mounted ? formatDate(currentTime) : "Loading date..."}
                     </p>
                 </div>
 
                 {/* Error display */}
                 {error && (
-                    <div style={styles.errorBanner}>
+                    <div className="absolute bottom-5 left-1/2 -translate-x-1/2 px-5 py-2.5 bg-[rgba(255,68,68,0.2)] border border-[rgba(255,68,68,0.4)] rounded-lg text-[#ff6b6b] text-sm">
                         ⚠️ {error}
                     </div>
                 )}
             </div>
 
             {/* =================== RIGHT PANEL: LIVE OUTING HISTORY =================== */}
-            <div style={styles.rightPanel}>
+            <div className="w-full md:w-1/2 flex flex-col p-6 md:p-8 bg-gradient-to-b from-[#0d1117] to-[#0a0e14] overflow-hidden min-h-[500px] md:h-full">
                 {/* Summary Cards */}
-                <div style={styles.summaryHeader}>
-                    <h2 style={styles.rightTitle}>📊 Live Campus Status</h2>
-                    <div style={{ display: "flex", gap: "8px" }}>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl md:text-2xl font-bold text-white m-0">📊 Live Campus Status</h2>
+                    <div className="flex gap-2">
                         <button
                             onClick={handleLogout}
-                            style={styles.logoutBtn}
+                            className="bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.3)] text-[#ff6b6b] px-4 py-1.5 rounded-lg flex items-center gap-2 font-semibold transition-all hover:bg-[rgba(255,68,68,0.2)]"
                             title="Logout from GETPASS"
                         >
-                            <span style={{ fontSize: "14px" }}>Logout</span>
-                            <span style={{ fontSize: "18px" }}>🚪</span>
+                            <span className="text-sm">Logout</span>
+                            <span className="text-lg">🚪</span>
                         </button>
-                        <button onClick={toggleFullscreen} style={styles.fullscreenBtn}>
+                        <button
+                            onClick={toggleFullscreen}
+                            className="bg-[rgba(255,255,255,0.1)] border border-[rgba(255,255,255,0.2)] text-white px-3 py-1.5 rounded-lg text-lg flex items-center justify-center transition-all hover:bg-[rgba(255,255,255,0.2)]"
+                        >
                             {isFullscreen ? "⊡" : "⊞"}
                         </button>
                     </div>
                 </div>
 
                 {liveData && (
-                    <div style={styles.summaryCards}>
-                        <div style={styles.summaryCard}>
-                            <div style={styles.summaryIcon}>👥</div>
-                            <div style={styles.summaryValue}>{liveData.summary.totalStudents}</div>
-                            <div style={styles.summaryLabel}>Total Students</div>
+                    <div className="flex gap-3 mb-5 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
+                        <div className="flex-1 min-w-[100px] p-4 bg-[rgba(255,255,255,0.04)] rounded-2xl border border-[rgba(255,255,255,0.08)] text-center">
+                            <div className="text-2xl mb-1">👥</div>
+                            <div className="text-3xl font-extrabold text-white tabular-nums">{liveData.summary.totalStudents}</div>
+                            <div className="text-[11px] text-[rgba(255,255,255,0.5)] uppercase tracking-widest mt-1">Total Students</div>
                         </div>
-                        <div style={{ ...styles.summaryCard, ...styles.summaryCardGreen }}>
-                            <div style={styles.summaryIcon}>🏠</div>
-                            <div style={{ ...styles.summaryValue, color: "#00ff88" }}>
-                                {liveData.summary.studentsIn}
-                            </div>
-                            <div style={styles.summaryLabel}>In Campus</div>
+                        <div className="flex-1 min-w-[100px] p-4 bg-[rgba(0,255,136,0.05)] rounded-2xl border border-[rgba(0,255,136,0.2)] text-center">
+                            <div className="text-2xl mb-1">🏠</div>
+                            <div className="text-3xl font-extrabold text-[#00ff88] tabular-nums">{liveData.summary.studentsIn}</div>
+                            <div className="text-[11px] text-[rgba(255,255,255,0.5)] uppercase tracking-widest mt-1">In Campus</div>
                         </div>
-                        <div style={{ ...styles.summaryCard, ...styles.summaryCardRed }}>
-                            <div style={styles.summaryIcon}>🚶</div>
-                            <div style={{ ...styles.summaryValue, color: "#ff6b6b" }}>
-                                {liveData.summary.studentsOut}
-                            </div>
-                            <div style={styles.summaryLabel}>Outside</div>
+                        <div className="flex-1 min-w-[100px] p-4 bg-[rgba(255,107,107,0.05)] rounded-2xl border border-[rgba(255,107,107,0.2)] text-center">
+                            <div className="text-2xl mb-1">🚶</div>
+                            <div className="text-3xl font-extrabold text-[#ff6b6b] tabular-nums">{liveData.summary.studentsOut}</div>
+                            <div className="text-[11px] text-[rgba(255,255,255,0.5)] uppercase tracking-widest mt-1">Outside</div>
                         </div>
                     </div>
                 )}
@@ -363,53 +364,53 @@ export default function GateDesktopPage() {
                 {/* Last Scan Result Banner */}
                 {lastScanResult && (
                     <div
+                        className="flex items-center gap-3 p-3 md:p-4 rounded-xl border mb-4 animate-[fadeIn_0.3s_ease]"
                         style={{
-                            ...styles.scanResultBanner,
                             background: lastScanResult.action === "checkout"
                                 ? "linear-gradient(135deg, rgba(255, 107, 107, 0.2), rgba(255, 107, 107, 0.05))"
                                 : "linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 255, 136, 0.05))",
                             borderColor: lastScanResult.action === "checkout" ? "#ff6b6b" : "#00ff88",
                         }}
                     >
-                        <span style={styles.scanResultIcon}>
+                        <span className="text-3xl">
                             {lastScanResult.action === "checkout" ? "🚶‍♂️" : "🏠"}
                         </span>
                         <div>
-                            <p style={styles.scanResultName}>{lastScanResult.studentName}</p>
-                            <p style={styles.scanResultMsg}>{lastScanResult.message}</p>
+                            <p className="text-base font-bold text-white m-0">{lastScanResult.studentName}</p>
+                            <p className="text-[13px] text-[rgba(255,255,255,0.7)] m-0">{lastScanResult.message}</p>
                         </div>
                     </div>
                 )}
 
                 {/* Currently Outside */}
-                <div style={styles.sectionHeader}>
-                    <h3 style={styles.sectionTitle}>
+                <div className="mb-2.5">
+                    <h3 className="text-base font-semibold text-[rgba(255,255,255,0.9)] m-0">
                         🔴 Currently Outside ({liveData?.currentlyOut?.length || 0})
                     </h3>
                 </div>
 
-                <div style={styles.scrollContainer}>
+                <div className="flex-1 overflow-y-auto mb-4 min-h-[200px] border border-[rgba(255,255,255,0.05)] rounded-xl p-2 bg-[#0a0a1a]/30 custom-scrollbar">
                     {liveData?.currentlyOut && liveData.currentlyOut.length > 0 ? (
-                        <div style={styles.outingList}>
+                        <div className="flex flex-col gap-2">
                             {liveData.currentlyOut.map((record) => (
-                                <div key={record._id} style={styles.outingCard}>
-                                    <div style={styles.outingCardLeft}>
-                                        <div style={styles.outingAvatar}>
+                                <div key={record._id} className="flex justify-between items-center p-3 bg-[rgba(255,107,107,0.06)] rounded-xl border border-[rgba(255,107,107,0.15)] transition-colors hover:bg-[rgba(255,107,107,0.1)]">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#ff6b6b] to-[#ee5a24] flex items-center justify-center font-bold text-lg text-white">
                                             {record.studentName?.charAt(0)?.toUpperCase() || "?"}
                                         </div>
                                         <div>
-                                            <p style={styles.outingName}>{record.studentName}</p>
-                                            <p style={styles.outingDetails}>
+                                            <p className="text-[15px] font-semibold text-white m-0">{record.studentName}</p>
+                                            <p className="text-xs text-[rgba(255,255,255,0.5)] mt-0.5">
                                                 {record.hostelName} • Room {record.roomNumber}
                                                 {record.registrationId && ` • ${record.registrationId}`}
                                             </p>
                                         </div>
                                     </div>
-                                    <div style={styles.outingCardRight}>
-                                        <span style={styles.outingDuration}>
+                                    <div className="flex flex-col items-end gap-1">
+                                        <span className="text-base font-bold text-[#ff6b6b] tabular-nums">
                                             {record.currentDurationText || formatDuration(record.currentDurationMinutes || 0)}
                                         </span>
-                                        <span style={styles.outingTime}>
+                                        <span className="text-[11px] text-[rgba(255,255,255,0.4)]">
                                             Out at {record.checkOutISTTime}
                                         </span>
                                     </div>
@@ -417,38 +418,38 @@ export default function GateDesktopPage() {
                             ))}
                         </div>
                     ) : (
-                        <div style={styles.emptyState}>
-                            <span style={styles.emptyIcon}>✅</span>
-                            <p style={styles.emptyText}>All students are in campus</p>
+                        <div className="flex flex-col items-center justify-center h-full gap-3 py-10">
+                            <span className="text-4xl">✅</span>
+                            <p className="text-sm text-[rgba(255,255,255,0.4)]">All students are in campus</p>
                         </div>
                     )}
                 </div>
 
                 {/* Recent Activity */}
-                <div style={styles.sectionHeader}>
-                    <h3 style={styles.sectionTitle}>📋 Recent Activity</h3>
+                <div className="mb-2.5">
+                    <h3 className="text-base font-semibold text-[rgba(255,255,255,0.9)] m-0">📋 Recent Activity</h3>
                 </div>
 
-                <div style={styles.scrollContainerSmall}>
+                <div className="flex-1 overflow-y-auto max-h-[250px] min-h-[150px] border border-[rgba(255,255,255,0.05)] rounded-xl p-2 bg-[#0a0a1a]/30 custom-scrollbar">
                     {liveData?.recentActivity && liveData.recentActivity.length > 0 ? (
-                        <div style={styles.activityList}>
+                        <div className="flex flex-col gap-1">
                             {liveData.recentActivity.map((record) => (
-                                <div key={record._id} style={styles.activityRow}>
+                                <div key={record._id} className="flex items-center gap-2 p-2 rounded-lg bg-[rgba(255,255,255,0.02)] text-[13px] hover:bg-[rgba(255,255,255,0.05)]">
                                     <span
+                                        className="w-2 h-2 rounded-full shrink-0"
                                         style={{
-                                            ...styles.activityDot,
                                             background: record.status === "out" ? "#ff6b6b" : "#00ff88",
                                         }}
                                     />
-                                    <span style={styles.activityName}>{record.studentName}</span>
-                                    <span style={styles.activityAction}>
+                                    <span className="font-semibold text-[rgba(255,255,255,0.9)] flex-1">{record.studentName}</span>
+                                    <span className="text-[rgba(255,255,255,0.4)] text-xs">
                                         {record.status === "out" ? "went out" : "returned"}
                                     </span>
-                                    <span style={styles.activityTime}>
+                                    <span className="text-[rgba(255,255,255,0.5)] tabular-nums text-xs min-w-[70px] text-right">
                                         {record.status === "out" ? record.checkOutISTTime : record.checkInISTTime}
                                     </span>
                                     {record.status === "in" && record.durationMinutes !== undefined && (
-                                        <span style={styles.activityDurationBadge}>
+                                        <span className="px-2 py-0.5 bg-[rgba(0,255,136,0.1)] rounded text-[#00ff88] text-[11px] font-semibold">
                                             {formatDuration(record.durationMinutes)}
                                         </span>
                                     )}
@@ -456,9 +457,9 @@ export default function GateDesktopPage() {
                             ))}
                         </div>
                     ) : (
-                        <div style={styles.emptyState}>
-                            <span style={styles.emptyIcon}>📭</span>
-                            <p style={styles.emptyText}>No activity yet today</p>
+                        <div className="flex flex-col items-center justify-center h-full gap-3 py-10">
+                            <span className="text-4xl">📭</span>
+                            <p className="text-sm text-[rgba(255,255,255,0.4)]">No activity yet today</p>
                         </div>
                     )}
                 </div>
@@ -466,508 +467,3 @@ export default function GateDesktopPage() {
         </div>
     );
 }
-
-// ===================== Styles =====================
-const styles: { [key: string]: React.CSSProperties } = {
-    container: {
-        display: "flex",
-        width: "100vw",
-        height: "100vh",
-        background: "#0a0a1a",
-        fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
-        color: "#ffffff",
-        overflow: "hidden",
-    },
-
-    // ===== LEFT PANEL (QR Code) =====
-    leftPanel: {
-        flex: "0 0 50%",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "30px 40px",
-        background: "linear-gradient(180deg, #0a0a1a 0%, #0d1420 50%, #0a0a1a 100%)",
-        borderRight: "1px solid rgba(0, 255, 136, 0.1)",
-        position: "relative",
-    },
-
-    qrHeader: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        width: "100%",
-    },
-
-    logoContainer: {
-        display: "flex",
-        alignItems: "center",
-        gap: "16px",
-    },
-
-    logoIcon: {
-        fontSize: "40px",
-        animation: "pulse 2s infinite",
-    },
-
-    title: {
-        fontSize: "32px",
-        fontWeight: "800",
-        background: "linear-gradient(135deg, #00ff88, #00cc6a)",
-        WebkitBackgroundClip: "text",
-        WebkitTextFillColor: "transparent",
-        letterSpacing: "3px",
-        margin: 0,
-    },
-
-    subtitle: {
-        fontSize: "13px",
-        color: "rgba(255,255,255,0.5)",
-        margin: 0,
-        letterSpacing: "2px",
-        textTransform: "uppercase" as const,
-    },
-
-    gateLabel: {
-        display: "flex",
-        alignItems: "center",
-    },
-
-    gateBadge: {
-        padding: "8px 16px",
-        background: "rgba(0, 255, 136, 0.1)",
-        border: "1px solid rgba(0, 255, 136, 0.3)",
-        borderRadius: "20px",
-        fontSize: "14px",
-        color: "#00ff88",
-    },
-
-    qrContainer: {
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "20px",
-        flex: 1,
-        justifyContent: "center",
-    },
-
-    qrWrapper: {
-        padding: "15px",
-        background: "#ffffff",
-        borderRadius: "28px",
-        border: "12px solid #00ff88",
-        boxShadow: "0 0 100px rgba(0, 255, 136, 0.25)",
-        position: "relative" as const,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-    },
-
-    qrPlaceholder: {
-        width: "550px",
-        height: "550px",
-        display: "flex",
-        flexDirection: "column" as const,
-        alignItems: "center",
-        justifyContent: "center",
-        gap: "16px",
-        color: "rgba(255,255,255,0.5)",
-        fontSize: "16px",
-    },
-
-    spinner: {
-        width: "40px",
-        height: "40px",
-        border: "3px solid rgba(0, 255, 136, 0.2)",
-        borderTop: "3px solid #00ff88",
-        borderRadius: "50%",
-        animation: "spin 1s linear infinite",
-    },
-
-    timerContainer: {
-        display: "flex",
-        flexDirection: "column" as const,
-        alignItems: "center",
-        gap: "8px",
-    },
-
-    timerRing: {
-        width: "80px",
-        height: "80px",
-        borderRadius: "50%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        transition: "background 0.3s ease",
-        boxShadow: "0 0 20px rgba(0, 255, 136, 0.2)",
-    },
-
-    timerInner: {
-        width: "66px",
-        height: "66px",
-        borderRadius: "50%",
-        background: "#0a0a1a",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-    },
-
-    timerText: {
-        fontSize: "24px",
-        fontWeight: "900",
-        fontVariantNumeric: "tabular-nums" as const,
-    },
-
-    timerLabel: {
-        fontSize: "12px",
-        color: "rgba(255,255,255,0.4)",
-        margin: 0,
-        textTransform: "uppercase" as const,
-        letterSpacing: "1px",
-    },
-
-    instructions: {
-        display: "flex",
-        alignItems: "center",
-        gap: "12px",
-        padding: "16px 24px",
-        background: "rgba(255,255,255,0.03)",
-        borderRadius: "16px",
-        border: "1px solid rgba(255,255,255,0.06)",
-    },
-
-    instructionStep: {
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        fontSize: "14px",
-        color: "rgba(255,255,255,0.7)",
-    },
-
-    stepIcon: {
-        fontSize: "20px",
-    },
-
-    instructionArrow: {
-        color: "rgba(0, 255, 136, 0.5)",
-        fontSize: "16px",
-        fontWeight: "700",
-    },
-
-    clockContainer: {
-        textAlign: "center" as const,
-    },
-
-    clockTime: {
-        fontSize: "28px",
-        fontWeight: "700",
-        color: "rgba(255,255,255,0.9)",
-        margin: "0 0 4px 0",
-        fontVariantNumeric: "tabular-nums" as const,
-    },
-
-    clockDate: {
-        fontSize: "14px",
-        color: "rgba(255,255,255,0.4)",
-        margin: 0,
-    },
-
-    errorBanner: {
-        position: "absolute" as const,
-        bottom: "20px",
-        left: "50%",
-        transform: "translateX(-50%)",
-        padding: "10px 20px",
-        background: "rgba(255, 68, 68, 0.2)",
-        border: "1px solid rgba(255, 68, 68, 0.4)",
-        borderRadius: "8px",
-        color: "#ff6b6b",
-        fontSize: "13px",
-    },
-
-    // ===== RIGHT PANEL (Live Data) =====
-    rightPanel: {
-        flex: "0 0 50%",
-        display: "flex",
-        flexDirection: "column",
-        padding: "24px 30px",
-        background: "linear-gradient(180deg, #0d1117 0%, #0a0e14 100%)",
-        overflow: "hidden",
-    },
-
-    summaryHeader: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: "16px",
-    },
-
-    rightTitle: {
-        fontSize: "22px",
-        fontWeight: "700",
-        color: "#ffffff",
-        margin: 0,
-    },
-
-    fullscreenBtn: {
-        background: "rgba(255,255,255,0.1)",
-        border: "1px solid rgba(255,255,255,0.2)",
-        color: "#fff",
-        padding: "6px 12px",
-        borderRadius: "8px",
-        cursor: "pointer",
-        fontSize: "18px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        transition: "all 0.2s ease",
-    },
-
-    logoutBtn: {
-        background: "rgba(255, 68, 68, 0.1)",
-        border: "1px solid rgba(255, 68, 68, 0.3)",
-        color: "#ff6b6b",
-        padding: "6px 16px",
-        borderRadius: "8px",
-        cursor: "pointer",
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        fontWeight: "600",
-        transition: "all 0.2s ease",
-    },
-
-    summaryCards: {
-        display: "flex",
-        gap: "12px",
-        marginBottom: "20px",
-    },
-
-    summaryCard: {
-        flex: 1,
-        padding: "16px",
-        background: "rgba(255,255,255,0.04)",
-        borderRadius: "16px",
-        border: "1px solid rgba(255,255,255,0.08)",
-        textAlign: "center" as const,
-    },
-
-    summaryCardGreen: {
-        border: "1px solid rgba(0, 255, 136, 0.2)",
-        background: "rgba(0, 255, 136, 0.05)",
-    },
-
-    summaryCardRed: {
-        border: "1px solid rgba(255, 107, 107, 0.2)",
-        background: "rgba(255, 107, 107, 0.05)",
-    },
-
-    summaryIcon: {
-        fontSize: "24px",
-        marginBottom: "4px",
-    },
-
-    summaryValue: {
-        fontSize: "32px",
-        fontWeight: "800",
-        color: "#ffffff",
-        fontVariantNumeric: "tabular-nums" as const,
-    },
-
-    summaryLabel: {
-        fontSize: "11px",
-        color: "rgba(255,255,255,0.5)",
-        textTransform: "uppercase" as const,
-        letterSpacing: "1px",
-        marginTop: "4px",
-    },
-
-    scanResultBanner: {
-        display: "flex",
-        alignItems: "center",
-        gap: "12px",
-        padding: "12px 16px",
-        borderRadius: "12px",
-        border: "1px solid",
-        marginBottom: "16px",
-        animation: "fadeIn 0.3s ease",
-    },
-
-    scanResultIcon: {
-        fontSize: "32px",
-    },
-
-    scanResultName: {
-        fontSize: "16px",
-        fontWeight: "700",
-        color: "#fff",
-        margin: 0,
-    },
-
-    scanResultMsg: {
-        fontSize: "13px",
-        color: "rgba(255,255,255,0.7)",
-        margin: 0,
-    },
-
-    sectionHeader: {
-        marginBottom: "10px",
-    },
-
-    sectionTitle: {
-        fontSize: "16px",
-        fontWeight: "600",
-        color: "rgba(255,255,255,0.9)",
-        margin: 0,
-    },
-
-    scrollContainer: {
-        flex: 1,
-        overflowY: "auto" as const,
-        marginBottom: "16px",
-        minHeight: "0",
-    },
-
-    scrollContainerSmall: {
-        flex: 1,
-        overflowY: "auto" as const,
-        minHeight: "0",
-    },
-
-    outingList: {
-        display: "flex",
-        flexDirection: "column" as const,
-        gap: "8px",
-    },
-
-    outingCard: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "12px 16px",
-        background: "rgba(255, 107, 107, 0.06)",
-        borderRadius: "12px",
-        border: "1px solid rgba(255, 107, 107, 0.15)",
-    },
-
-    outingCardLeft: {
-        display: "flex",
-        alignItems: "center",
-        gap: "12px",
-    },
-
-    outingAvatar: {
-        width: "40px",
-        height: "40px",
-        borderRadius: "10px",
-        background: "linear-gradient(135deg, #ff6b6b, #ee5a24)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontWeight: "700",
-        fontSize: "18px",
-        color: "#fff",
-    },
-
-    outingName: {
-        fontSize: "15px",
-        fontWeight: "600",
-        color: "#fff",
-        margin: 0,
-    },
-
-    outingDetails: {
-        fontSize: "12px",
-        color: "rgba(255,255,255,0.5)",
-        margin: "2px 0 0 0",
-    },
-
-    outingCardRight: {
-        display: "flex",
-        flexDirection: "column" as const,
-        alignItems: "flex-end",
-        gap: "4px",
-    },
-
-    outingDuration: {
-        fontSize: "16px",
-        fontWeight: "700",
-        color: "#ff6b6b",
-        fontVariantNumeric: "tabular-nums" as const,
-    },
-
-    outingTime: {
-        fontSize: "11px",
-        color: "rgba(255,255,255,0.4)",
-    },
-
-    emptyState: {
-        display: "flex",
-        flexDirection: "column" as const,
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "40px 20px",
-        gap: "12px",
-    },
-
-    emptyIcon: {
-        fontSize: "36px",
-    },
-
-    emptyText: {
-        fontSize: "14px",
-        color: "rgba(255,255,255,0.4)",
-        margin: 0,
-    },
-
-    activityList: {
-        display: "flex",
-        flexDirection: "column" as const,
-        gap: "4px",
-    },
-
-    activityRow: {
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        padding: "8px 12px",
-        borderRadius: "8px",
-        background: "rgba(255,255,255,0.02)",
-        fontSize: "13px",
-    },
-
-    activityDot: {
-        width: "8px",
-        height: "8px",
-        borderRadius: "50%",
-        flexShrink: 0,
-    },
-
-    activityName: {
-        fontWeight: "600",
-        color: "rgba(255,255,255,0.9)",
-        flex: 1,
-    },
-
-    activityAction: {
-        color: "rgba(255,255,255,0.4)",
-        fontSize: "12px",
-    },
-
-    activityTime: {
-        color: "rgba(255,255,255,0.5)",
-        fontVariantNumeric: "tabular-nums" as const,
-        fontSize: "12px",
-        minWidth: "70px",
-        textAlign: "right" as const,
-    },
-
-    activityDurationBadge: {
-        padding: "2px 8px",
-        background: "rgba(0, 255, 136, 0.1)",
-        borderRadius: "4px",
-        color: "#00ff88",
-        fontSize: "11px",
-        fontWeight: "600",
-    },
-};
