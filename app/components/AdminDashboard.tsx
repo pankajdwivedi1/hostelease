@@ -1401,7 +1401,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
 
     return attendanceLogs.filter(log => {
-      if (!log.studentId) return false;
+      if (!log.studentId || typeof log.studentId !== 'object') return false;
       const studentHostel = getHostelCategory(log.studentId.hostelName) || log.studentId.hostelName;
       return authorizedHostels.some(h => h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase());
     });
@@ -1434,7 +1434,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const presentStudentsForSelectedHostel = useMemo(() => {
     if (!selectedAttendanceHostel) return [];
     return filteredAttendanceLogs.filter(log => {
-      if (!log.studentId) return false;
+      if (!log.studentId || typeof log.studentId !== 'object') return false;
       const studentHostel = getHostelCategory(log.studentId.hostelName) || log.studentId.hostelName;
       return studentHostel.toLowerCase() === selectedAttendanceHostel.toLowerCase();
     });

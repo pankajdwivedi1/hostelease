@@ -365,8 +365,12 @@ export async function GET(request: NextRequest) {
 
         if (studentId) {
             const nowMs = Date.now();
+
+            // Use dbAdapter for student fetch to support Supabase/Mongo switching
+            const studentPromise = db.students.getById(studentId);
+
             const [student, adminSettings] = await Promise.all([
-                Student.findById(studentId).lean().select('email hostelName'),
+                studentPromise,
                 (cachedAdminSettings && (nowMs - lastCacheUpdate < CACHE_DURATION))
                     ? Promise.resolve(cachedAdminSettings)
                     : AdminSettings.findOne().lean()
@@ -379,7 +383,6 @@ export async function GET(request: NextRequest) {
 
             const isTester = student?.email === "prem86.dwivedi@gmail.com";
 
-
             const today = new Date().toLocaleDateString("en-IN", {
                 timeZone: "Asia/Kolkata",
                 year: "numeric",
@@ -387,9 +390,8 @@ export async function GET(request: NextRequest) {
                 day: "2-digit",
             }).split('/').reverse().join('-');
 
-            const [attendance] = await Promise.all([
-                Attendance.findOne({ studentId, date: today }).lean()
-            ]);
+            // Use dbAdapter for attendance check
+            const attendance = await db.attendance.checkToday(studentId, today);
 
             return NextResponse.json({
                 marked: isTester ? false : !!attendance,
