@@ -46,11 +46,24 @@ export async function POST(request: Request) {
         const result = await db.students.bulkUpdate({ hostelName }, fieldsToReset);
         const count = result?.count || 0;
 
-        return NextResponse.json({
+        const response = NextResponse.json({
             success: true,
             message: `Successfully reset devices for ${count} students in ${hostelName}.`,
             count
         });
+
+        // 🔓 BULK RESET: Clear the trusted_device_owner cookie on the requesting browser too
+        // (in case admin accidentally ran reset from a student browser).
+        // The real fix is in webauthn/register which now bypasses stale cookies for reset students.
+        response.cookies.set('trusted_device_owner', '', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 0,
+            path: '/'
+        });
+
+        return response;
 
     } catch (error: any) {
         console.error("Bulk Reset API Error:", error);

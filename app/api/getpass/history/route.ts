@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import GatePass from "@/models/GatePass";
+import { db } from "@/lib/dbAdapter";
 
 /**
  * GET /api/getpass/history
@@ -14,8 +13,6 @@ import GatePass from "@/models/GatePass";
  */
 export async function GET(request: NextRequest) {
     try {
-        await connectDB();
-
         const searchParams = request.nextUrl.searchParams;
         const firebaseUID = searchParams.get("firebaseUID");
         const hostelName = searchParams.get("hostelName");
@@ -25,51 +22,33 @@ export async function GET(request: NextRequest) {
         const limit = parseInt(searchParams.get("limit") || "50");
         const page = parseInt(searchParams.get("page") || "1");
 
-        const query: any = {};
+        const filters: any = {};
 
         if (firebaseUID) {
-            query.firebaseUID = firebaseUID;
+            filters.firebaseUID = firebaseUID;
         }
 
         if (hostelName && hostelName !== "all") {
-            query.hostelName = { $regex: hostelName, $options: "i" };
+            filters.hostelName = hostelName;
         }
 
         if (status && status !== "all") {
-            query.status = status;
+            filters.status = status;
         }
 
-        if (startDate || endDate) {
-            query.checkOutTime = {};
-            if (startDate) {
-                query.checkOutTime.$gte = new Date(startDate);
-            }
-            if (endDate) {
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
-                query.checkOutTime.$lte = end;
-            }
-        }
+        if (startDate) filters.startDate = startDate;
+        if (endDate) filters.endDate = endDate;
 
-        const skip = (page - 1) * limit;
-
-        const [records, totalCount] = await Promise.all([
-            GatePass.find(query)
-                .sort({ checkOutTime: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean(),
-            GatePass.countDocuments(query),
-        ]);
+        const { records, total } = await db.gatePasses.list(filters, { page, limit });
 
         return NextResponse.json({
             success: true,
             records,
             pagination: {
-                total: totalCount,
+                total,
                 page,
                 limit,
-                totalPages: Math.ceil(totalCount / limit),
+                totalPages: Math.ceil(total / limit),
             },
         });
     } catch (error: any) {
@@ -80,3 +59,4 @@ export async function GET(request: NextRequest) {
         );
     }
 }
+

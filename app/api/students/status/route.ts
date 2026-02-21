@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Student from "@/models/Student";
+import { db } from "@/lib/dbAdapter";
 
 export async function PATCH(request: NextRequest) {
   try {
-    await connectDB();
-
     const body = await request.json();
     const { studentId, status, deviceId } = body;
 
@@ -16,13 +13,14 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const studentRecord = await Student.findById(studentId);
+    const studentRecord = await db.students.getById(studentId, true); // true to fallback to Supabase if needed
     if (!studentRecord) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
     // Verify deviceId if it exists in the record
-    if (studentRecord.deviceId && studentRecord.deviceId !== deviceId) {
+    const recordDeviceId = studentRecord.deviceId || studentRecord.device_id;
+    if (recordDeviceId && recordDeviceId !== deviceId) {
       return NextResponse.json(
         { error: "This device is not registered for this student." },
         { status: 403 }
@@ -36,20 +34,16 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const student = await Student.findByIdAndUpdate(
-      studentId,
-      { studentStatus: status },
-      { new: true }
-    );
+    const updatedStudent = await db.students.update(studentId, { studentStatus: status });
 
-    if (!student) {
+    if (!updatedStudent) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
     return NextResponse.json(
       {
         success: true,
-        student,
+        student: updatedStudent,
       },
       { status: 200 }
     );
@@ -61,4 +55,5 @@ export async function PATCH(request: NextRequest) {
     );
   }
 }
+
 

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Student from "@/models/Student";
+import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +9,6 @@ export async function GET(
     { params }: { params: { registrationId: string } }
 ) {
     try {
-        await connectDB();
-
         const { registrationId } = params;
 
         if (!registrationId) {
@@ -21,12 +18,12 @@ export async function GET(
             );
         }
 
-        // Find student by registration ID
-        const student = await Student.findOne({
+        // Find student by registration ID using dbAdapter
+        const students = await db.students.list({
             registrationId: registrationId.toUpperCase()
-        }).select(
-            'name email phoneNumber collegeName branch section hostelName roomNumber erpInformation registrationId profilePicture studentStatus'
-        ).lean();
+        });
+
+        const student = students[0];
 
         if (!student) {
             return NextResponse.json(

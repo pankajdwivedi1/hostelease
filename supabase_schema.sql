@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS students (
     mother_number TEXT,
     
     -- Address & Context
-    home_pin_code TEXT,
+    permanent_address TEXT,
     home_state TEXT,
     erp_information TEXT,
     joining_date DATE,

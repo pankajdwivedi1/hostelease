@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import GatePassToken from "@/models/GatePassToken";
-import GatePass from "@/models/GatePass";
-import Student from "@/models/Student";
+import { db } from "@/lib/dbAdapter";
 
 /**
  * Helper: Get IST time and date strings
@@ -26,21 +23,9 @@ function getISTStrings(date: Date) {
 
 /**
  * POST /api/getpass/scan
- * 
- * Called when a student scans the QR code at the gate.
- * 
- * Logic:
- * 1. Verify the QR token is valid and not expired
- * 2. Identify the student (via firebaseUID)
- * 3. Check student's current status:
- *    - If "in" → Create a new GatePass record (check-out)
- *    - If "out" → Close the existing GatePass record (check-in)
- * 4. Update student's studentStatus field
  */
 export async function POST(request: NextRequest) {
     try {
-        await connectDB();
-
         const body = await request.json();
         const { qrData, firebaseUID, deviceId } = body;
 
@@ -74,17 +59,17 @@ export async function POST(request: NextRequest) {
         const token = parsedQR.t;
 
         // Verify token exists and hasn't expired
-        const tokenRecord = await GatePassToken.findOne({ token });
+        const tokenRecord = await db.gatePassTokens.findOne({ token });
 
         if (!tokenRecord) {
             return NextResponse.json(
                 { error: "QR code has expired. Please scan the new QR code displayed at the gate." },
-                { status: 410 } // 410 Gone
+                { status: 410 }
             );
         }
 
         // Check if token is expired
-        if (new Date() > tokenRecord.expiresAt) {
+        if (new Date() > new Date(tokenRecord.expiresAt)) {
             return NextResponse.json(
                 { error: "QR code has expired. Please scan the new QR code displayed at the gate." },
                 { status: 410 }
@@ -92,7 +77,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Find the student
-        const student = await Student.findOne({ firebaseUID });
+        const student = await db.students.findOne({ firebaseUID });
         if (!student) {
             return NextResponse.json(
                 { error: "Student not found. Please register first." },
@@ -115,31 +100,29 @@ export async function POST(request: NextRequest) {
         const currentStatus = student.studentStatus || "in";
 
         if (currentStatus === "in") {
-            // =============================================
             // STUDENT IS GOING OUT (CHECK-OUT)
-            // =============================================
-
             // Double check: ensure no open gate pass exists
-            const existingOpenPass = await GatePass.findOne({
+            const existingOpenPass = await db.gatePasses.findOne({
                 studentId: student._id,
                 status: "out",
             });
 
             if (existingOpenPass) {
-                // Edge case: status is "in" but there's an open pass - close the old one first
-                existingOpenPass.checkInTime = now;
-                existingOpenPass.checkInISTTime = istTime;
-                existingOpenPass.checkInISTDate = istDate;
-                existingOpenPass.status = "in";
-                const diffMs = now.getTime() - existingOpenPass.checkOutTime.getTime();
-                existingOpenPass.durationMinutes = Math.round(diffMs / 60000);
-                existingOpenPass.qrTokenUsedIn = token;
-                await existingOpenPass.save();
+                // Close the old one first
+                const diffMs = now.getTime() - new Date(existingOpenPass.checkOutTime).getTime();
+                await db.gatePasses.update(existingOpenPass._id, {
+                    checkInTime: now,
+                    checkInISTTime: istTime,
+                    checkInISTDate: istDate,
+                    status: "in",
+                    durationMinutes: Math.round(diffMs / 60000),
+                    qrTokenUsedIn: token
+                });
             }
 
             // Create new gate pass (check-out)
-            const gatePass = await GatePass.create({
-                studentId: student._id,
+            const gatePass = await db.gatePasses.create({
+                studentId: student._id.toString(),
                 firebaseUID: student.firebaseUID,
                 studentName: student.name,
                 hostelName: student.hostelName,
@@ -154,7 +137,7 @@ export async function POST(request: NextRequest) {
             });
 
             // Update student status to "out"
-            await Student.findByIdAndUpdate(student._id, { studentStatus: "out" });
+            await db.students.update(student._id.toString(), { studentStatus: "out" });
 
             return NextResponse.json({
                 success: true,
@@ -173,19 +156,16 @@ export async function POST(request: NextRequest) {
                 newStatus: "out",
             });
         } else {
-            // =============================================
             // STUDENT IS COMING BACK (CHECK-IN)
-            // =============================================
-
             // Find the open gate pass for this student
-            const openPass = await GatePass.findOne({
+            const openPass = await db.gatePasses.findOne({
                 studentId: student._id,
                 status: "out",
-            }).sort({ checkOutTime: -1 });
+            });
 
             if (!openPass) {
-                // No open pass found but status is "out" - fix status and create a synthetic record
-                await Student.findByIdAndUpdate(student._id, { studentStatus: "in" });
+                // No open pass found but status is "out" - fix status
+                await db.students.update(student._id.toString(), { studentStatus: "in" });
 
                 return NextResponse.json({
                     success: true,
@@ -199,25 +179,26 @@ export async function POST(request: NextRequest) {
                 });
             }
 
-            // Close the gate pass
-            openPass.checkInTime = now;
-            openPass.checkInISTTime = istTime;
-            openPass.checkInISTDate = istDate;
-            openPass.status = "in";
-            openPass.qrTokenUsedIn = token;
-
             // Calculate duration
-            const diffMs = now.getTime() - openPass.checkOutTime.getTime();
-            openPass.durationMinutes = Math.round(diffMs / 60000);
+            const diffMs = now.getTime() - new Date(openPass.checkOutTime).getTime();
+            const durationMinutes = Math.round(diffMs / 60000);
 
-            await openPass.save();
+            // Close the gate pass
+            const updatedPass = await db.gatePasses.update(openPass._id, {
+                checkInTime: now,
+                checkInISTTime: istTime,
+                checkInISTDate: istDate,
+                status: "in",
+                qrTokenUsedIn: token,
+                durationMinutes
+            });
 
             // Update student status to "in"
-            await Student.findByIdAndUpdate(student._id, { studentStatus: "in" });
+            await db.students.update(student._id.toString(), { studentStatus: "in" });
 
             // Format duration for display
-            const hours = Math.floor(openPass.durationMinutes / 60);
-            const mins = openPass.durationMinutes % 60;
+            const hours = Math.floor(durationMinutes / 60);
+            const mins = durationMinutes % 60;
             const durationText = hours > 0
                 ? `${hours}h ${mins}m`
                 : `${mins} minutes`;
@@ -227,19 +208,19 @@ export async function POST(request: NextRequest) {
                 action: "checkin",
                 message: `Welcome back, ${student.name}! You were out for ${durationText}.`,
                 gatePass: {
-                    id: openPass._id,
-                    checkOutTime: openPass.checkOutISTTime,
-                    checkOutDate: openPass.checkOutISTDate,
-                    checkInTime: openPass.checkInISTTime,
-                    checkInDate: openPass.checkInISTDate,
-                    durationMinutes: openPass.durationMinutes,
-                    gateName: openPass.gateName,
+                    id: updatedPass._id,
+                    checkOutTime: updatedPass.checkOutISTTime,
+                    checkOutDate: updatedPass.checkOutISTDate,
+                    checkInTime: updatedPass.checkInISTTime,
+                    checkInDate: updatedPass.checkInISTDate,
+                    durationMinutes,
+                    gateName: updatedPass.gateName,
                 },
                 studentName: student.name,
                 hostelName: student.hostelName,
                 roomNumber: student.roomNumber,
                 newStatus: "in",
-                durationMinutes: openPass.durationMinutes,
+                durationMinutes,
                 durationText,
             });
         }
@@ -251,3 +232,4 @@ export async function POST(request: NextRequest) {
         );
     }
 }
+

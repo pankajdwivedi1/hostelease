@@ -18,7 +18,7 @@ export interface IStudentBase {
   fatherNumber?: string;
   motherName?: string;
   motherNumber?: string;
-  homePinCode?: string;
+  permanentAddress?: string;
   homeState?: string;
   erpInformation?: string;
   joiningDate?: Date;
@@ -123,7 +123,7 @@ const StudentSchema = new Schema<IStudent>(
       type: String,
       required: false,
     },
-    homePinCode: {
+    permanentAddress: {
       type: String,
       required: false,
     },

@@ -115,7 +115,7 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
         { fieldId: "year", fieldLabel: "Year", isEnabled: false, displayMode: "on-login" },
         { fieldId: "semester", fieldLabel: "Semester", isEnabled: false, displayMode: "on-login" },
         { fieldId: "section", fieldLabel: "Section", isEnabled: false, displayMode: "on-login" },
-        { fieldId: "homePinCode", fieldLabel: "Home Pin Code", isEnabled: false, displayMode: "on-login" },
+        { fieldId: "permanentAddress", fieldLabel: "Permanent Address", isEnabled: false, displayMode: "on-login" },
         { fieldId: "homeState", fieldLabel: "Home State", isEnabled: false, displayMode: "on-login" },
         { fieldId: "localGuardianAddress", fieldLabel: "Local Guardian Address", isEnabled: false, displayMode: "on-login" },
         { fieldId: "localGuardianPhoneNumber", fieldLabel: "Local Guardian Phone", isEnabled: false, displayMode: "on-login" },

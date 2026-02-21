@@ -27,9 +27,9 @@ const mapStudentToCamelCase = (s: any) => {
         fatherNumber: s.father_number,
         motherName: s.mother_name,
         motherNumber: s.mother_number,
-        homePinCode: s.home_pin_code,
+        permanentAddress: s.permanent_address,
         homeState: s.home_state,
-        erpInformation: s.erp_information,
+        erpInformation: s.erp_id,
         branch: s.branch,
         collegeName: s.college_name,
         year: s.year,
@@ -47,7 +47,8 @@ const mapStudentToCamelCase = (s: any) => {
         webAuthnCredentials: s.web_authn_credentials,
         deviceResetCount: s.device_reset_count,
         deviceHistory: s.device_history,
-        thumbImpressionId: s.thumb_impression_id
+        thumbImpressionId: s.thumb_impression_id,
+        dynamicFields: s.dynamic_fields || {}
     };
 };
 
@@ -86,6 +87,443 @@ const mapAttendanceToCamelCase = (a: any) => {
         isTest: a.is_test,
         timestamp: a.timestamp
     };
+};
+
+/**
+ * Maps Supabase snake_case admin settings to camelCase
+ */
+const mapSettingsToCamelCase = (s: any) => {
+    if (!s) return null;
+    return {
+        _id: s._id,
+        activeDatabaseSource: s.active_database_source,
+        hostelLocations: s.hostel_locations,
+        attendanceStartTime: s.attendance_start_time,
+        attendanceEndTime: s.attendance_end_time,
+        adminPassword: s.admin_password,
+        wardenPassword: s.warden_password,
+        wardenAccounts: s.warden_accounts,
+        registrationFieldsConfig: s.registration_fields_config,
+        formBuilderConfig: s.form_builder_config,
+        universityBankDetails: s.university_bank_details,
+        hostelFeeAmount: s.hostel_fee_amount,
+        paymentInstructions: s.payment_instructions,
+        isPaymentEnabled: s.is_payment_enabled,
+        wifiWhitelist: s.wifi_whitelist,
+        hostelPrefixMap: s.hostel_prefix_map,
+        overlapRadius: s.overlap_radius,
+        prioritizeAssignedHostel: s.prioritize_assigned_hostel,
+        getpassPassword: s.getpass_password,
+        createdAt: s.created_at,
+        updatedAt: s.updated_at
+    };
+};
+
+/**
+ * Maps camelCase admin settings to Supabase snake_case
+ */
+const mapSettingsToSnakeCase = (s: any) => {
+    if (!s) return null;
+    const mapped: any = {};
+    const fieldMap: any = {
+        activeDatabaseSource: 'active_database_source',
+        hostelLocations: 'hostel_locations',
+        attendanceStartTime: 'attendance_start_time',
+        attendanceEndTime: 'attendance_end_time',
+        adminPassword: 'admin_password',
+        wardenPassword: 'warden_password',
+        wardenAccounts: 'warden_accounts',
+        registrationFieldsConfig: 'registration_fields_config',
+        formBuilderConfig: 'form_builder_config',
+        universityBankDetails: 'university_bank_details',
+        hostelFeeAmount: 'hostel_fee_amount',
+        paymentInstructions: 'payment_instructions',
+        isPaymentEnabled: 'is_payment_enabled',
+        wifiWhitelist: 'wifi_whitelist',
+        hostelPrefixMap: 'hostel_prefix_map',
+        overlapRadius: 'overlap_radius',
+        prioritizeAssignedHostel: 'prioritize_assigned_hostel',
+        getpassPassword: 'getpass_password'
+    };
+
+    Object.keys(s).forEach(key => {
+        if (fieldMap[key]) {
+            mapped[fieldMap[key]] = s[key];
+        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
+            mapped[key] = s[key];
+        }
+    });
+
+    return mapped;
+};
+
+/**
+ * Maps Supabase snake_case hostel data to camelCase
+ */
+const mapHostelToCamelCase = (h: any) => {
+    if (!h) return null;
+    return {
+        _id: h._id,
+        name: h.name,
+        totalRooms: h.total_rooms,
+        wardenUsername: h.warden_username,
+        wardenPassword: h.warden_password,
+        attendanceMode: h.attendance_mode,
+        createdAt: h.created_at,
+        updatedAt: h.updated_at
+    };
+};
+
+/**
+ * Maps Supabase snake_case gate pass data to camelCase
+ */
+const mapGatePassToCamelCase = (g: any) => {
+    if (!g) return null;
+    return {
+        _id: g._id,
+        studentId: g.student_id,
+        firebaseUID: g.firebase_uid,
+        studentName: g.student_name,
+        hostelName: g.hostel_name,
+        roomNumber: g.room_number,
+        registrationId: g.registration_id,
+        checkOutTime: g.check_out_time,
+        checkOutISTTime: g.check_out_ist_time,
+        checkOutISTDate: g.check_out_ist_date,
+        checkInTime: g.check_in_time,
+        checkInISTTime: g.check_in_ist_time,
+        checkInISTDate: g.check_in_ist_date,
+        status: g.status,
+        durationMinutes: g.duration_minutes,
+        gateName: g.gate_name,
+        qrTokenUsedOut: g.qr_token_used_out,
+        qrTokenUsedIn: g.qr_token_used_in,
+        createdAt: g.created_at,
+        updatedAt: g.updated_at
+    };
+};
+
+/**
+ * Maps camelCase hostel data to Supabase snake_case
+ */
+const mapHostelToSnakeCase = (h: any) => {
+    if (!h) return null;
+    const mapped: any = {};
+    const fieldMap: any = {
+        totalRooms: 'total_rooms',
+        wardenUsername: 'warden_username',
+        wardenPassword: 'warden_password',
+        attendanceMode: 'attendance_mode'
+    };
+
+    Object.keys(h).forEach(key => {
+        if (fieldMap[key]) {
+            mapped[fieldMap[key]] = h[key];
+        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
+            mapped[key] = h[key];
+        }
+    });
+
+    return mapped;
+};
+
+/**
+ * Maps camelCase gate pass data to Supabase snake_case
+ */
+const mapGatePassToSnakeCase = (g: any) => {
+    if (!g) return null;
+    const mapped: any = {};
+    const fieldMap: any = {
+        studentId: 'student_id',
+        firebaseUID: 'firebase_uid',
+        studentName: 'student_name',
+        hostelName: 'hostel_name',
+        roomNumber: 'room_number',
+        registrationId: 'registration_id',
+        checkOutTime: 'check_out_time',
+        checkOutISTTime: 'check_out_ist_time',
+        checkOutISTDate: 'check_out_ist_date',
+        checkInTime: 'check_in_time',
+        checkInISTTime: 'check_in_ist_time',
+        checkInISTDate: 'check_in_ist_date',
+        status: 'status',
+        durationMinutes: 'duration_minutes',
+        gateName: 'gate_name',
+        qrTokenUsedOut: 'qr_token_used_out',
+        qrTokenUsedIn: 'qr_token_used_in'
+    };
+
+    Object.keys(g).forEach(key => {
+        if (fieldMap[key]) {
+            mapped[fieldMap[key]] = g[key];
+        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
+            mapped[key] = g[key];
+        }
+    });
+
+    return mapped;
+};
+
+/**
+ * Maps Supabase snake_case gate pass token data to camelCase
+ */
+const mapGatePassTokenToCamelCase = (t: any) => {
+    if (!t) return null;
+    return {
+        _id: t._id,
+        token: t.token,
+        gateName: t.gate_name,
+        createdAt: t.created_at,
+        expiresAt: t.expires_at,
+        isUsed: t.is_used
+    };
+};
+
+/**
+ * Maps Supabase snake_case permission data to camelCase
+ */
+const mapPermissionToCamelCase = (p: any) => {
+    if (!p) return null;
+    const mapped: any = {
+        _id: p._id,
+        studentId: p.student_id,
+        fromDateTime: p.from_date_time,
+        toDateTime: p.to_date_time,
+        reason: p.reason,
+        status: p.status,
+        wardenStatus: p.warden_status,
+        deanStatus: p.dean_status,
+        createdAt: p.created_at,
+        updatedAt: p.updated_at
+    };
+
+    if (p.students) {
+        // Handle joined student data if present
+        mapped.studentId = mapStudentToCamelCase(p.students);
+    }
+
+    return mapped;
+};
+
+/**
+ * Maps camelCase permission data to Supabase snake_case
+ */
+const mapPermissionToSnakeCase = (p: any) => {
+    if (!p) return null;
+    const mapped: any = {};
+    const fieldMap: any = {
+        studentId: 'student_id',
+        fromDateTime: 'from_date_time',
+        toDateTime: 'to_date_time',
+        reason: 'reason',
+        status: 'status',
+        wardenStatus: 'warden_status',
+        deanStatus: 'dean_status'
+    };
+
+    Object.keys(p).forEach(key => {
+        if (fieldMap[key]) {
+            mapped[fieldMap[key]] = p[key];
+        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
+            mapped[key] = p[key];
+        }
+    });
+
+    return mapped;
+};
+
+/**
+ * Maps Supabase snake_case field enforcement data to camelCase
+ */
+const mapFieldEnforcementToCamelCase = (f: any) => {
+    if (!f) return null;
+    return {
+        _id: f._id,
+        hostelName: f.hostel_name,
+        enforcedFields: f.enforced_fields,
+        isActive: f.is_active,
+        notificationPriority: f.notification_priority,
+        successMessage: f.success_message,
+        autoCloseNotification: f.auto_close_notification,
+        createdAt: f.created_at,
+        updatedAt: f.updated_at
+    };
+};
+
+/**
+ * Maps camelCase field enforcement data to snake_case
+ */
+const mapFieldEnforcementToSnakeCase = (f: any) => {
+    if (!f) return null;
+    const mapped: any = {};
+    const fieldMap: any = {
+        hostelName: 'hostel_name',
+        enforcedFields: 'enforced_fields',
+        isActive: 'is_active',
+        notificationPriority: 'notification_priority',
+        successMessage: 'success_message',
+        autoCloseNotification: 'auto_close_notification'
+    };
+
+    Object.keys(f).forEach(key => {
+        if (fieldMap[key]) {
+            mapped[fieldMap[key]] = f[key];
+        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
+            mapped[key] = f[key];
+        }
+    });
+
+    return mapped;
+};
+
+/**
+ * Maps Supabase snake_case notification data to camelCase
+ */
+const mapNotificationToCamelCase = (n: any) => {
+    if (!n) return null;
+    return {
+        _id: n._id,
+        senderId: n.sender_id,
+        targetType: n.target_type,
+        targetHostel: n.target_hostel,
+        targetStudentId: n.target_student_id,
+        message: n.message,
+        priority: n.priority,
+        image: n.image,
+        expiresAt: n.expires_at,
+        acknowledgedBy: n.acknowledged_by,
+        createdAt: n.created_at,
+        updatedAt: n.updated_at
+    };
+};
+
+/**
+ * Maps camelCase notification data to snake_case
+ */
+const mapNotificationToSnakeCase = (n: any) => {
+    if (!n) return null;
+    const mapped: any = {};
+    const fieldMap: any = {
+        senderId: 'sender_id',
+        targetType: 'target_type',
+        targetHostel: 'target_hostel',
+        targetStudentId: 'target_student_id',
+        message: 'message',
+        priority: 'priority',
+        image: 'image',
+        expiresAt: 'expires_at',
+        acknowledgedBy: 'acknowledged_by'
+    };
+
+    Object.keys(n).forEach(key => {
+        if (fieldMap[key]) {
+            mapped[fieldMap[key]] = n[key];
+        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
+            mapped[key] = n[key];
+        }
+    });
+
+    return mapped;
+};
+
+/**
+ * Maps Supabase snake_case transaction data to camelCase
+ */
+const mapTransactionToCamelCase = (t: any) => {
+    if (!t) return null;
+    return {
+        _id: t._id,
+        studentId: t.student_id,
+        registrationId: t.registration_id,
+        utrNumber: t.utr_number,
+        amount: t.amount,
+        paymentSource: t.payment_source,
+        screenshot: t.screenshot,
+        status: t.status,
+        adminRemarks: t.admin_remarks,
+        verifiedAt: t.verified_at,
+        reconciledViaCSV: t.reconciled_via_csv,
+        createdAt: t.created_at,
+        updatedAt: t.updated_at
+    };
+};
+
+/**
+ * Maps camelCase transaction data to snake_case
+ */
+const mapTransactionToSnakeCase = (t: any) => {
+    if (!t) return null;
+    const mapped: any = {};
+    const fieldMap: any = {
+        studentId: 'student_id',
+        registrationId: 'registration_id',
+        utrNumber: 'utr_number',
+        amount: 'amount',
+        paymentSource: 'payment_source',
+        screenshot: 'screenshot',
+        status: 'status',
+        adminRemarks: 'admin_remarks',
+        verifiedAt: 'verified_at',
+        reconciledViaCSV: 'reconciled_via_csv'
+    };
+
+    Object.keys(t).forEach(key => {
+        if (fieldMap[key]) {
+            mapped[fieldMap[key]] = t[key];
+        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
+            mapped[key] = t[key];
+        }
+    });
+
+    return mapped;
+};
+
+/**
+ * Maps Supabase snake_case student field progress data to camelCase
+ */
+const mapStudentFieldProgressToCamelCase = (p: any) => {
+    if (!p) return null;
+    return {
+        _id: p._id,
+        studentId: p.student_id,
+        firebaseUID: p.firebase_uid,
+        hostelName: p.hostel_name,
+        fieldId: p.field_id,
+        fieldLabel: p.field_label,
+        isCompleted: p.is_completed,
+        completedAt: p.completed_at,
+        notificationId: p.notification_id,
+        createdAt: p.created_at,
+        updatedAt: p.updated_at
+    };
+};
+
+/**
+ * Maps camelCase student field progress data to snake_case
+ */
+const mapStudentFieldProgressToSnakeCase = (p: any) => {
+    if (!p) return null;
+    const mapped: any = {};
+    const fieldMap: any = {
+        studentId: 'student_id',
+        firebaseUID: 'firebase_uid',
+        hostelName: 'hostel_name',
+        fieldId: 'field_id',
+        fieldLabel: 'field_label',
+        isCompleted: 'is_completed',
+        completedAt: 'completed_at',
+        notificationId: 'notification_id'
+    };
+
+    Object.keys(p).forEach(key => {
+        if (fieldMap[key]) {
+            mapped[fieldMap[key]] = p[key];
+        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
+            mapped[key] = p[key];
+        }
+    });
+
+    return mapped;
 };
 
 /**
@@ -158,6 +596,70 @@ const getDbSource = async () => {
 export const db = {
     // Returns which database is currently active
     getSource: getDbSource,
+
+    /**
+     * ADMIN SETTINGS OPERATIONS
+     */
+    settings: {
+        get: async () => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const { data, error } = await supabase
+                    .from('admin_settings')
+                    .select('*')
+                    .limit(1)
+                    .maybeSingle();
+
+                if (error) {
+                    console.error("Supabase settings.get Error:", error);
+                    return null;
+                }
+                return mapSettingsToCamelCase(data);
+            } else {
+                await connectDB();
+                const AdminSettings = (await import('@/models/AdminSettings')).default;
+                const settings = await AdminSettings.findOne().lean();
+                return settings ? JSON.parse(JSON.stringify(settings)) : null;
+            }
+        },
+
+        update: async (updateData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const snakeData = mapSettingsToSnakeCase(updateData);
+
+                // Fetch first to get the ID if not provided
+                const { data: existing } = await supabase.from('admin_settings').select('_id').limit(1).single();
+
+                if (!existing) {
+                    // Create if doesn't exist
+                    const { data, error } = await supabase
+                        .from('admin_settings')
+                        .insert([snakeData])
+                        .select()
+                        .single();
+                    if (error) throw error;
+                    return mapSettingsToCamelCase(data);
+                }
+
+                const { data, error } = await supabase
+                    .from('admin_settings')
+                    .update(snakeData)
+                    .eq('_id', existing._id)
+                    .select()
+                    .single();
+
+                if (error) throw error;
+                return mapSettingsToCamelCase(data);
+            } else {
+                await connectDB();
+                const AdminSettings = (await import('@/models/AdminSettings')).default;
+                const updated = await AdminSettings.findOneAndUpdate({}, updateData, { new: true, upsert: true });
+                return JSON.parse(JSON.stringify(updated));
+            }
+        }
+    },
+
 
     /**
      * STUDENT OPERATIONS
@@ -255,9 +757,10 @@ export const db = {
         save: async (firebaseUID: string, studentData: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                // Map fields to snake_case for Supabase
+                // Map camelCase fields to Supabase snake_case column names
                 const mapStudentFields = (data: any) => {
                     const mapped: any = {};
+                    // Explicit camelCase → snake_case mappings for Supabase columns
                     const fieldMap: any = {
                         firebaseUID: 'firebase_uid',
                         phoneNumber: 'phone_number',
@@ -268,9 +771,11 @@ export const db = {
                         fatherNumber: 'father_number',
                         motherName: 'mother_name',
                         motherNumber: 'mother_number',
-                        homePinCode: 'home_pin_code',
+                        // ✅ permanentAddress maps to permanent_address column in Supabase
+                        permanentAddress: 'permanent_address',
                         homeState: 'home_state',
-                        erpInformation: 'erp_information',
+                        // ✅ erpInformation maps to erp_id (actual live Supabase column name)
+                        erpInformation: 'erp_id',
                         joiningDate: 'joining_date',
                         collegeName: 'college_name',
                         localGuardianAddress: 'local_guardian_address',
@@ -284,13 +789,24 @@ export const db = {
                         webAuthnCredentials: 'web_authn_credentials',
                         deviceHistory: 'device_history',
                         deviceId: 'device_id',
-                        studentStatus: 'student_status'
+                        studentStatus: 'student_status',
+                        dynamicFields: 'dynamic_fields'
                     };
 
+                    // Fields to skip — they are metadata, identifiers, or computed elsewhere
+                    const forbidden = [
+                        'id', '_id', 'firebaseuid', 'firebase_uid', 'createdat', 'updatedat',
+                        'action', '__v', 'permissions', 'lastcheckinlocation', 'permanentaddress', 'permanent_address'
+                    ];
+
                     Object.keys(data).forEach(key => {
+                        const lowKey = key.toLowerCase();
+                        if (forbidden.includes(lowKey) || forbidden.includes(lowKey.replace(/_/g, ''))) return;
+
                         if (fieldMap[key]) {
                             mapped[fieldMap[key]] = data[key];
                         } else {
+                            // Pass through fields that are already in snake_case or don't need remapping
                             mapped[key] = data[key];
                         }
                     });
@@ -299,14 +815,48 @@ export const db = {
 
                 const supabaseData = mapStudentFields(studentData);
 
-                // Perform upsert based on firebase_uid
-                const { data, error } = await supabase
-                    .from('students')
-                    .upsert({ ...supabaseData, firebase_uid: firebaseUID }, { onConflict: 'firebase_uid' })
-                    .select()
-                    .single();
+                // ✅ CORRECT APPROACH: Never use upsert when _id is the PK referenced by FK.
+                // Supabase upsert's ON CONFLICT DO UPDATE SET includes _id → violates attendance FK.
+                // Instead: check if student exists, then UPDATE or INSERT cleanly.
 
-                if (error) throw error;
+                // Step 1: Check if student already exists
+                const { data: existingStudent } = await supabase
+                    .from('students')
+                    .select('_id')
+                    .eq('firebase_uid', firebaseUID)
+                    .maybeSingle();
+
+                let data: any;
+                let error: any;
+
+                if (existingStudent?._id) {
+                    // ✅ Student EXISTS → UPDATE only (never touch _id or firebase_uid)
+                    console.log(`[DB_ADAPTER] Existing student found (_id=${existingStudent._id}), doing UPDATE`);
+                    const result = await supabase
+                        .from('students')
+                        .update(supabaseData)
+                        .eq('firebase_uid', firebaseUID)
+                        .select()
+                        .single();
+                    data = result.data;
+                    error = result.error;
+                } else {
+                    // ✅ New student → INSERT with a fresh UUID _id
+                    const newId = crypto.randomUUID();
+                    console.log(`[DB_ADAPTER] New student, doing INSERT with _id=${newId}`);
+                    const result = await supabase
+                        .from('students')
+                        .insert({ ...supabaseData, _id: newId, firebase_uid: firebaseUID })
+                        .select()
+                        .single();
+                    data = result.data;
+                    error = result.error;
+                }
+
+                if (error) {
+                    console.error("❌ Supabase Save Error Detail:", error);
+                    throw error;
+                }
                 return data;
             } else {
                 await connectDB();
@@ -375,9 +925,13 @@ export const db = {
                     query = query.eq('college_name', filters.collegeName);
                 }
 
+                if (filters.registrationId) {
+                    query = query.ilike('registration_id', filters.registrationId);
+                }
+
                 if (filters.search) {
                     const s = filters.search;
-                    query = query.or(`name.ilike.%${s}%,email.ilike.%${s}%,phone_number.ilike.%${s}%,room_number.ilike.%${s}%,registration_id.ilike.%${s}%`);
+                    query = query.or(`name.ilike.%${s}%,email.ilike.%${s}%,phone_number.ilike.%${s}%,room_number.ilike.%${s}%,registration_id.ilike.%${s}%,device_id.ilike.%${s}%`);
                 }
 
                 const { data, error } = await query.order('name', { ascending: true });
@@ -395,6 +949,10 @@ export const db = {
                     mongoQuery.hostelName = { $regex: filters.hostelName, $options: "i" };
                 }
 
+                if (filters.registrationId) {
+                    mongoQuery.registrationId = filters.registrationId;
+                }
+
                 if (filters.search) {
                     mongoQuery.$or = [
                         { name: { $regex: filters.search, $options: "i" } },
@@ -402,6 +960,7 @@ export const db = {
                         { phoneNumber: { $regex: filters.search, $options: "i" } },
                         { roomNumber: { $regex: filters.search, $options: "i" } },
                         { registrationId: { $regex: filters.search, $options: "i" } },
+                        { deviceId: { $regex: filters.search, $options: "i" } },
                     ];
                 }
 
@@ -410,6 +969,33 @@ export const db = {
 
                 const students = await q.lean();
                 return JSON.parse(JSON.stringify(students));
+            }
+        },
+
+        count: async (filters: any = {}) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('students').select('*', { count: 'exact', head: true });
+                if (filters.hostelName && filters.hostelName !== 'all') {
+                    query = query.ilike('hostel_name', `%${filters.hostelName}%`);
+                }
+                if (filters.studentStatus) {
+                    query = query.eq('student_status', filters.studentStatus);
+                }
+                const { count, error } = await query;
+                if (error) throw error;
+                return count || 0;
+            } else {
+                await connectDB();
+                const StudentModel = (await import('@/models/Student')).default;
+                let mongoQuery: any = {};
+                if (filters.hostelName && filters.hostelName !== 'all') {
+                    mongoQuery.hostelName = { $regex: filters.hostelName, $options: "i" };
+                }
+                if (filters.studentStatus) {
+                    mongoQuery.studentStatus = filters.studentStatus;
+                }
+                return await StudentModel.countDocuments(mongoQuery);
             }
         },
 
@@ -449,9 +1035,11 @@ export const db = {
                         fatherNumber: 'father_number',
                         motherName: 'mother_name',
                         motherNumber: 'mother_number',
-                        homePinCode: 'home_pin_code',
+                        // ✅ permanentAddress maps to permanent_address column in Supabase
+                        permanentAddress: 'permanent_address',
                         homeState: 'home_state',
-                        erpInformation: 'erp_information',
+                        // ✅ Corrected: erp_id is the actual live Supabase column name
+                        erpInformation: 'erp_id',
                         joiningDate: 'joining_date',
                         collegeName: 'college_name',
                         localGuardianAddress: 'local_guardian_address',
@@ -466,14 +1054,19 @@ export const db = {
                         deviceHistory: 'device_history',
                         deviceId: 'device_id',
                         studentStatus: 'student_status',
-                        thumbImpressionId: 'thumb_impression_id'
+                        thumbImpressionId: 'thumb_impression_id',
+                        dynamicFields: 'dynamic_fields'
                     };
 
-                    // Fields to explicitly EXCLUDE from update (metadata, identifiers, or handled elsewhere)
-                    const forbidden = ['id', '_id', 'firebaseUID', 'firebase_uid', 'createdAt', 'updatedAt', 'action', '__v', 'permissions', 'lastCheckInLocation'];
+                    // Fields to explicitly EXCLUDE from update (metadata, identifiers, or computed)
+                    const forbidden = [
+                        'id', '_id', 'firebaseuid', 'firebase_uid', 'createdat', 'updatedat',
+                        'action', '__v', 'permissions', 'lastcheckinlocation', 'permanentaddress', 'permanent_address'
+                    ];
 
                     Object.keys(data).forEach(key => {
-                        if (forbidden.includes(key)) return;
+                        const lowKey = key.toLowerCase();
+                        if (forbidden.includes(lowKey) || forbidden.includes(lowKey.replace(/_/g, ''))) return;
 
                         if (fieldMap[key]) {
                             mapped[fieldMap[key]] = data[key];
@@ -522,12 +1115,29 @@ export const db = {
                 // General Update
                 const cleanUpdate = mapStudentFields(updateData);
                 console.log(`[DB_ADAPTER] Supabase Update Payload:`, cleanUpdate);
-                const { data, error } = await supabase
+
+                // ✅ Try update by _id first
+                let { data, error } = await supabase
                     .from('students')
                     .update(cleanUpdate)
                     .eq('_id', id)
                     .select()
                     .single();
+
+                // ✅ FALLBACK: If no row matched by _id (e.g. _id was NULL from the old save bug),
+                // try matching by firebase_uid. Do NOT touch _id here — it is the PK and is
+                // referenced by attendance.student_id (FK constraint). Changing it would throw.
+                if (error && (error.code === 'PGRST116' || error.message?.includes('rows returned'))) {
+                    console.warn(`[DB_ADAPTER] _id lookup failed, trying firebase_uid fallback for id=${id}`);
+                    const fallback = await supabase
+                        .from('students')
+                        .update(cleanUpdate)          // ← only field updates, no _id change
+                        .eq('firebase_uid', id)
+                        .select()
+                        .single();
+                    data = fallback.data;
+                    error = fallback.error;
+                }
 
                 if (error) {
                     console.error("❌ Supabase Update Error Details:", error);
@@ -570,29 +1180,127 @@ export const db = {
         },
 
         // ⚡ DATABASE-AWARE BULK UPDATE
-        bulkUpdate: async (filter: { hostelName: string }, updateData: any) => {
+        bulkUpdate: async (filter: any, updateData: any) => {
             const source = await getDbSource();
 
             if (source === 'SUPABASE') {
-                // Use ilike for case-insensitive matching in Supabase
-                const { data, error } = await supabase
-                    .from('students')
-                    .update(updateData)
-                    .ilike('hostel_name', filter.hostelName)
-                    .select();
+                let query = supabase.from('students').update(updateData);
+
+                if (filter?.hostelName) {
+                    query = query.ilike('hostel_name', filter.hostelName);
+                }
+
+                const { data, error } = await query.select();
 
                 if (error) throw error;
                 return { count: data?.length || 0 };
             } else {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
-                // Use case-insensitive regex for MongoDB matching
-                const result = await StudentModel.updateMany(
-                    { hostelName: { $regex: new RegExp(`^${filter.hostelName}$`, 'i') } },
-                    { $set: updateData }
-                );
+
+                let mongoFilter: any = {};
+                if (filter?.hostelName) {
+                    mongoFilter.hostelName = { $regex: new RegExp(`^${filter.hostelName}$`, 'i') };
+                }
+
+                const result = await StudentModel.updateMany(mongoFilter, { $set: updateData });
                 return { count: result.modifiedCount };
             }
+        },
+
+        audit: async (type: string) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                if (type === "duplicates-phone") {
+                    const { data: allStudents } = await supabase.from('students').select('_id,name,phone_number,registration_id,room_number,hostel_name,email');
+                    const grouped = (allStudents || []).reduce((acc: any, s: any) => {
+                        const key = s.phone_number;
+                        if (!key) return acc;
+                        if (!acc[key]) acc[key] = { _id: key, count: 0, students: [] };
+                        acc[key].count++;
+                        acc[key].students.push({
+                            id: s._id,
+                            name: s.name,
+                            regId: s.registration_id,
+                            room: s.room_number,
+                            hostel: s.hostel_name,
+                            email: s.email
+                        });
+                        return acc;
+                    }, {});
+                    return Object.values(grouped).filter((g: any) => g.count > 1).sort((a: any, b: any) => b.count - a.count);
+                }
+
+                if (type === "duplicates-regid") {
+                    const { data: allStudents } = await supabase.from('students').select('_id,name,phone_number,registration_id,room_number,hostel_name,email').not('registration_id', 'is', null).neq('registration_id', '');
+                    const grouped = (allStudents || []).reduce((acc: any, s: any) => {
+                        const key = s.registration_id;
+                        if (!key) return acc;
+                        if (!acc[key]) acc[key] = { _id: key, count: 0, students: [] };
+                        acc[key].count++;
+                        acc[key].students.push({
+                            id: s._id,
+                            name: s.name,
+                            phone: s.phone_number,
+                            room: s.room_number,
+                            hostel: s.hostel_name,
+                            email: s.email
+                        });
+                        return acc;
+                    }, {});
+                    return Object.values(grouped).filter((g: any) => g.count > 1).sort((a: any, b: any) => b.count - a.count);
+                }
+
+                if (type === "gibberish-names") {
+                    const { data: students } = await supabase.from('students').select('_id,name,phone_number,registration_id,hostel_name,room_number,email');
+                    return (students || []).filter(s => {
+                        if (!s.name) return true;
+                        const name = s.name.toLowerCase().trim();
+                        if (name.length < 3) return true;
+                        const vowels = name.match(/[aeiou]/gi) || [];
+                        if (vowels.length === 0 && name.length > 3) return true;
+                        if (/(.)\1\1\1/.test(name)) return true;
+                        const mashPatterns = ["asdf", "sdfg", "dfgh", "fghj", "ghjk", "hjkl", "lkjh", "kjhg", "jhgf", "hgfd", "gfds", "fdsa", "qwerty", "asfg", "zxcv", "1234", "ghj", "jkl", "dfs", "dfg"];
+                        if (mashPatterns.some(p => name.includes(p))) return true;
+                        if (name.length > 8 && vowels.length < 2) return true;
+                        return false;
+                    }).map(s => mapStudentToCamelCase(s));
+                }
+            } else {
+                await connectDB();
+                const StudentModel = (await import('@/models/Student')).default;
+                if (type === "duplicates-phone") {
+                    return await StudentModel.aggregate([
+                        { $group: { _id: "$phoneNumber", count: { $sum: 1 }, students: { $push: { id: "$_id", name: "$name", regId: "$registrationId", room: "$roomNumber", hostel: "$hostelName", email: "$email" } } } },
+                        { $match: { count: { $gt: 1 } } },
+                        { $sort: { count: -1 } }
+                    ]);
+                }
+                if (type === "duplicates-regid") {
+                    return await StudentModel.aggregate([
+                        { $match: { registrationId: { $nin: [null, ""], $exists: true } } },
+                        { $group: { _id: "$registrationId", count: { $sum: 1 }, students: { $push: { id: "$_id", name: "$name", phone: "$phoneNumber", room: "$roomNumber", hostel: "$hostelName", email: "$email" } } } },
+                        { $match: { count: { $gt: 1 } } },
+                        { $sort: { count: -1 } }
+                    ]);
+                }
+                if (type === "gibberish-names") {
+                    const students = await StudentModel.find({}, "name phoneNumber registrationId hostelName roomNumber email").lean();
+                    return students.filter((s: any) => {
+                        if (!s.name) return true;
+                        const name = s.name.toLowerCase().trim();
+                        if (name.length < 3) return true;
+                        const vowels = name.match(/[aeiou]/gi) || [];
+                        if (vowels.length === 0 && name.length > 3) return true;
+                        if (/(.)\1\1\1/.test(name)) return true;
+                        const mashPatterns = ["asdf", "sdfg", "dfgh", "fghj", "ghjk", "hjkl", "lkjh", "kjhg", "jhgf", "hgfd", "gfds", "fdsa", "qwerty", "asfg", "zxcv", "1234", "ghj", "jkl", "dfs", "dfg"];
+                        if (mashPatterns.some(p => name.includes(p))) return true;
+                        if (name.length > 8 && vowels.length < 2) return true;
+                        return false;
+                    });
+                }
+            }
+            return [];
         }
     },
 
@@ -744,6 +1452,962 @@ export const db = {
 
                 return JSON.parse(JSON.stringify(attendance));
             }
+        },
+
+        summary: async (date: string) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const { data, error } = await supabase
+                    .from('attendance')
+                    .select('student_id, hostel_name')
+                    .eq('date', date)
+                    .neq('is_test', true);
+
+                if (error) throw error;
+                return {
+                    records: data || [],
+                    presentStudentIds: (data || []).map((r: any) => r.student_id)
+                };
+            } else {
+                await connectDB();
+                const AttendanceModel = (await import('@/models/Attendance')).default;
+
+                const summary = await AttendanceModel.aggregate([
+                    { $match: { date: date, isTest: { $ne: true } } },
+                    { $group: { _id: "$hostelName", count: { $sum: 1 } } }
+                ]);
+
+                const presentStudents = await AttendanceModel.find({ date: date, isTest: { $ne: true } }).select("studentId").lean();
+
+                return {
+                    summary: summary,
+                    presentStudentIds: presentStudents.map((a: any) => a.studentId.toString())
+                };
+            }
+        },
+
+        delete: async (id: string) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const { error } = await supabase
+                    .from('attendance')
+                    .delete()
+                    .eq('_id', id);
+                if (error) throw error;
+                return true;
+            } else {
+                await connectDB();
+                const AttendanceModel = (await import('@/models/Attendance')).default;
+                const result = await AttendanceModel.findByIdAndDelete(id);
+                return !!result;
+            }
+        },
+
+        deleteMany: async (filter: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('attendance').delete();
+
+                if (filter?.timestamp?.$lt) {
+                    query = query.lt('timestamp', filter.timestamp.$lt.toISOString());
+                }
+
+                const { error, data } = await query.select('_id');
+                if (error) throw error;
+                return { count: data?.length || 0 };
+            } else {
+                await connectDB();
+                const AttendanceModel = (await import('@/models/Attendance')).default;
+                const result = await AttendanceModel.deleteMany(filter);
+                return { count: result.deletedCount };
+            }
+        }
+    },
+
+
+    /**
+     * HOSTEL OPERATIONS
+     */
+    hostels: {
+        getById: async (id: string) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const { data, error } = await supabase
+                    .from('hostels')
+                    .select('*')
+                    .eq('_id', id)
+                    .single();
+                if (error) return null;
+                return mapHostelToCamelCase(data);
+            } else {
+                await connectDB();
+                const HostelModel = (await import('@/models/Hostel')).default;
+                const hostel = await HostelModel.findById(id).lean();
+                return hostel ? JSON.parse(JSON.stringify(hostel)) : null;
+            }
+        },
+
+        getAll: async () => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const { data, error } = await supabase
+                    .from('hostels')
+                    .select('*')
+                    .order('name', { ascending: true });
+                if (error) throw error;
+                return (data || []).map(mapHostelToCamelCase);
+            } else {
+                await connectDB();
+                const HostelModel = (await import('@/models/Hostel')).default;
+                const hostels = await HostelModel.find({}).sort({ name: 1 }).lean();
+                return JSON.parse(JSON.stringify(hostels));
+            }
+        },
+
+        findOne: async (filter: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('hostels').select('*');
+                if (filter.name) query = query.eq('name', filter.name);
+
+                const { data, error } = await query.maybeSingle();
+                if (error) return null;
+                return mapHostelToCamelCase(data);
+            } else {
+                await connectDB();
+                const HostelModel = (await import('@/models/Hostel')).default;
+                const hostel = await HostelModel.findOne(filter).lean();
+                return hostel ? JSON.parse(JSON.stringify(hostel)) : null;
+            }
+        },
+
+        create: async (hostelData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const snakeData = mapHostelToSnakeCase(hostelData);
+                const { data, error } = await supabase
+                    .from('hostels')
+                    .insert([snakeData])
+                    .select()
+                    .single();
+                if (error) throw error;
+                return mapHostelToCamelCase(data);
+            } else {
+                await connectDB();
+                const HostelModel = (await import('@/models/Hostel')).default;
+                const record = await HostelModel.create(hostelData);
+                return JSON.parse(JSON.stringify(record));
+            }
+        },
+
+        update: async (id: string, updateData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const snakeData = mapHostelToSnakeCase(updateData);
+                const { data, error } = await supabase
+                    .from('hostels')
+                    .update(snakeData)
+                    .eq('_id', id)
+                    .select()
+                    .single();
+                if (error) throw error;
+                return mapHostelToCamelCase(data);
+            } else {
+                await connectDB();
+                const HostelModel = (await import('@/models/Hostel')).default;
+                const updated = await HostelModel.findByIdAndUpdate(id, updateData, { new: true });
+                return JSON.parse(JSON.stringify(updated));
+            }
+        },
+
+        delete: async (id: string) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const { error } = await supabase
+                    .from('hostels')
+                    .delete()
+                    .eq('_id', id);
+                if (error) throw error;
+                return true;
+            } else {
+                await connectDB();
+                const HostelModel = (await import('@/models/Hostel')).default;
+                const result = await HostelModel.findByIdAndDelete(id);
+                return !!result;
+            }
+        },
+
+        bulkUpdate: async (filter: any, updateData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const snakeUpdate = mapHostelToSnakeCase(updateData.$set || updateData);
+                let query = supabase.from('hostels').update(snakeUpdate);
+                // Apply simple equality filters if provided
+                if (filter) {
+                    Object.keys(filter).forEach(key => {
+                        query = query.eq(key, filter[key]);
+                    });
+                }
+                const { data, error } = await query.select();
+                if (error) throw error;
+                return { count: data?.length || 0 };
+            } else {
+                await connectDB();
+                const HostelModel = (await import('@/models/Hostel')).default;
+                const result = await HostelModel.updateMany(filter, { $set: updateData });
+                return { count: result.modifiedCount };
+            }
+        }
+    },
+
+    /**
+     * GATE PASS OPERATIONS
+     */
+    gatePasses: {
+        list: async (filters: any = {}, options: { page?: number; limit?: number } = {}) => {
+            const source = await getDbSource();
+            const limit = options.limit || 50;
+            const page = options.page || 1;
+            const skip = (page - 1) * limit;
+
+            if (source === 'SUPABASE') {
+                let query = supabase.from('gate_passes').select('*', { count: 'exact' });
+
+                if (filters.firebaseUID) query = query.eq('firebase_uid', filters.firebaseUID);
+                if (filters.studentId) query = query.eq('student_id', filters.studentId);
+                if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
+
+                if (filters.hostelName && filters.hostelName !== 'all') {
+                    query = query.ilike('hostel_name', `%${filters.hostelName}%`);
+                }
+
+                if (filters.startDate) query = query.gte('check_out_time', new Date(filters.startDate).toISOString());
+                if (filters.endDate) {
+                    const end = new Date(filters.endDate);
+                    end.setHours(23, 59, 59, 999);
+                    query = query.lte('check_out_time', end.toISOString());
+                }
+
+                const { data, count, error } = await query
+                    .order('check_out_time', { ascending: false })
+                    .range(skip, skip + limit - 1);
+
+                if (error) throw error;
+                return {
+                    records: (data || []).map(mapGatePassToCamelCase),
+                    total: count || 0
+                };
+            } else {
+                await connectDB();
+                const GatePassModel = (await import('@/models/GatePass')).default;
+
+                const mongoQuery: any = {};
+                if (filters.firebaseUID) mongoQuery.firebaseUID = filters.firebaseUID;
+                if (filters.studentId) mongoQuery.studentId = filters.studentId;
+                if (filters.status && filters.status !== 'all') mongoQuery.status = filters.status;
+                if (filters.hostelName && filters.hostelName !== 'all') {
+                    mongoQuery.hostelName = { $regex: filters.hostelName, $options: "i" };
+                }
+                if (filters.startDate || filters.endDate) {
+                    mongoQuery.checkOutTime = {};
+                    if (filters.startDate) mongoQuery.checkOutTime.$gte = new Date(filters.startDate);
+                    if (filters.endDate) {
+                        const end = new Date(filters.endDate);
+                        end.setHours(23, 59, 59, 999);
+                        mongoQuery.checkOutTime.$lte = end;
+                    }
+                }
+
+                const records = await GatePassModel.find(mongoQuery)
+                    .sort({ checkOutTime: -1 })
+                    .skip(skip)
+                    .limit(limit)
+                    .lean();
+
+                const total = await GatePassModel.countDocuments(mongoQuery);
+
+                return {
+                    records: JSON.parse(JSON.stringify(records)),
+                    total
+                };
+            }
+        },
+
+        create: async (gatePassData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const snakeData = mapGatePassToSnakeCase(gatePassData);
+                const { data, error } = await supabase
+                    .from('gate_passes')
+                    .insert([snakeData])
+                    .select()
+                    .single();
+                if (error) throw error;
+                return mapGatePassToCamelCase(data);
+            } else {
+                await connectDB();
+                const GatePassModel = (await import('@/models/GatePass')).default;
+                const record = await GatePassModel.create(gatePassData);
+                return JSON.parse(JSON.stringify(record));
+            }
+        },
+
+        update: async (id: string, updateData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const snakeData = mapGatePassToSnakeCase(updateData);
+                const { data, error } = await supabase
+                    .from('gate_passes')
+                    .update(snakeData)
+                    .eq('_id', id)
+                    .select()
+                    .single();
+                if (error) throw error;
+                return mapGatePassToCamelCase(data);
+            } else {
+                await connectDB();
+                const GatePassModel = (await import('@/models/GatePass')).default;
+                const updated = await GatePassModel.findByIdAndUpdate(id, updateData, { new: true });
+                return JSON.parse(JSON.stringify(updated));
+            }
+        },
+
+        findOne: async (filter: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('gate_passes').select('*');
+                if (filter.studentId) query = query.eq('student_id', filter.studentId);
+                if (filter.firebaseUID) query = query.eq('firebase_uid', filter.firebaseUID);
+                if (filter.status) query = query.eq('status', filter.status);
+
+                const { data, error } = await query
+                    .order('check_out_time', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (error) return null;
+                return mapGatePassToCamelCase(data);
+            } else {
+                await connectDB();
+                const GatePassModel = (await import('@/models/GatePass')).default;
+                const record = await GatePassModel.findOne(filter).sort({ checkOutTime: -1 }).lean();
+                return record ? JSON.parse(JSON.stringify(record)) : null;
+            }
+        },
+
+        count: async (filters: any = {}) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('gate_passes').select('*', { count: 'exact', head: true });
+                if (filters.status) query = query.eq('status', filters.status);
+                if (filters.hostelName && filters.hostelName !== 'all') {
+                    query = query.ilike('hostel_name', `%${filters.hostelName}%`);
+                }
+                const { count, error } = await query;
+                if (error) throw error;
+                return count || 0;
+            } else {
+                await connectDB();
+                const GatePassModel = (await import('@/models/GatePass')).default;
+                let mongoQuery: any = {};
+                if (filters.status) mongoQuery.status = filters.status;
+                if (filters.hostelName && filters.hostelName !== 'all') {
+                    mongoQuery.hostelName = { $regex: filters.hostelName, $options: "i" };
+                }
+                return await GatePassModel.countDocuments(mongoQuery);
+            }
+        }
+    },
+
+    /**
+     * GATE PASS TOKEN OPERATIONS
+     */
+    gatePassTokens: {
+        create: async (tokenData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const snakeData = {
+                    token: tokenData.token,
+                    gate_name: tokenData.gateName,
+                    expires_at: tokenData.expiresAt,
+                    created_at: tokenData.createdAt || new Date().toISOString()
+                };
+                const { data, error } = await supabase
+                    .from('gate_pass_tokens')
+                    .insert([snakeData])
+                    .select()
+                    .single();
+                if (error) throw error;
+                return mapGatePassTokenToCamelCase(data);
+            } else {
+                await connectDB();
+                const GatePassTokenModel = (await import('@/models/GatePassToken')).default;
+                const record = await GatePassTokenModel.create(tokenData);
+                return JSON.parse(JSON.stringify(record));
+            }
+        },
+
+        findOne: async (filter: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('gate_pass_tokens').select('*');
+                if (filter.token) query = query.eq('token', filter.token);
+
+                const { data, error } = await query.maybeSingle();
+                if (error) return null;
+                return mapGatePassTokenToCamelCase(data);
+            } else {
+                await connectDB();
+                const GatePassTokenModel = (await import('@/models/GatePassToken')).default;
+                const record = await GatePassTokenModel.findOne(filter).lean();
+                return record ? JSON.parse(JSON.stringify(record)) : null;
+            }
+        }
+    },
+
+    /**
+     * FIELD ENFORCEMENT OPERATIONS
+     */
+    fieldEnforcement: {
+        find: async (filter: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('field_enforcement').select('*');
+                if (filter.hostelName) {
+                    if (typeof filter.hostelName === 'object' && filter.hostelName.$regex) {
+                        const pattern = filter.hostelName.$regex.replace(/^\^|\$$/g, '');
+                        query = query.ilike('hostel_name', pattern);
+                    } else {
+                        query = query.eq('hostel_name', filter.hostelName);
+                    }
+                }
+                const { data, error } = await query;
+                if (error) throw error;
+                return (data || []).map(mapFieldEnforcementToCamelCase);
+            } else {
+                await connectDB();
+                const FieldEnforcementModel = (await import('@/models/FieldEnforcement')).default;
+                const rules = await FieldEnforcementModel.find(filter).lean();
+                return JSON.parse(JSON.stringify(rules));
+            }
+        },
+
+        findOneAndUpdate: async (filter: any, update: any, options: { upsert?: boolean; new?: boolean } = {}) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const snakeUpdate = mapFieldEnforcementToSnakeCase(update.$set || update);
+                const hostelName = filter.hostelName?.$regex ? filter.hostelName.$regex.replace(/^\^|\$$/g, '') : (typeof filter.hostelName === 'string' ? filter.hostelName : null);
+
+                if (!hostelName) return null;
+
+                const { data: existing } = await supabase.from('field_enforcement').select('_id').ilike('hostel_name', hostelName).maybeSingle();
+
+                if (existing) {
+                    const { data, error } = await supabase
+                        .from('field_enforcement')
+                        .update(snakeUpdate)
+                        .eq('_id', existing._id)
+                        .select()
+                        .single();
+                    if (error) throw error;
+                    return mapFieldEnforcementToCamelCase(data);
+                } else if (options.upsert) {
+                    const { data, error } = await supabase
+                        .from('field_enforcement')
+                        .insert([{ ...snakeUpdate, hostel_name: hostelName }])
+                        .select()
+                        .single();
+                    if (error) throw error;
+                    return mapFieldEnforcementToCamelCase(data);
+                }
+                return null;
+            } else {
+                await connectDB();
+                const FieldEnforcementModel = (await import('@/models/FieldEnforcement')).default;
+                const updated = await FieldEnforcementModel.findOneAndUpdate(filter, update, options);
+                return JSON.parse(JSON.stringify(updated));
+            }
+        },
+
+        findOneAndDelete: async (filter: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const hostelName = filter.hostelName?.$regex ? filter.hostelName.$regex.replace(/^\^|\$$/g, '') : (typeof filter.hostelName === 'string' ? filter.hostelName : null);
+                if (!hostelName) return null;
+
+                const { data, error } = await supabase
+                    .from('field_enforcement')
+                    .delete()
+                    .ilike('hostel_name', hostelName)
+                    .select()
+                    .maybeSingle();
+                if (error) throw error;
+                return data;
+            } else {
+                await connectDB();
+                const FieldEnforcementModel = (await import('@/models/FieldEnforcement')).default;
+                const deleted = await FieldEnforcementModel.findOneAndDelete(filter);
+                return !!deleted;
+            }
+        }
+    },
+
+    /**
+     * NOTIFICATION OPERATIONS
+     */
+    notifications: {
+        list: async (filters: any = {}, options: { limit?: number } = {}) => {
+            const source = await getDbSource();
+            const limit = options.limit || 50;
+
+            if (source === 'SUPABASE') {
+                let query = supabase.from('notifications').select('*, targetStudentId:students(name, registration_id)');
+
+                if (filters.$or) {
+                    const orParts = filters.$or.map((part: any) => {
+                        if (part.targetType === 'all') return 'target_type.eq.all';
+                        if (part.targetType === 'hostel') return `and(target_type.eq.hostel,target_hostel.eq."${part.targetHostel}")`;
+                        if (part.targetType === 'individual') return `and(target_type.eq.individual,target_student_id.eq.${part.targetStudentId})`;
+                        return '';
+                    }).filter((p: string) => p !== '');
+
+                    if (orParts.length > 0) {
+                        query = query.or(orParts.join(','));
+                    }
+                } else {
+                    if (filters.targetStudentId) query = query.eq('target_student_id', filters.targetStudentId);
+                    if (filters.targetType) query = query.eq('target_type', filters.targetType);
+                    if (filters.targetHostel) query = query.eq('target_hostel', filters.targetHostel);
+                }
+
+                if (filters.createdAt && filters.createdAt.$gte) {
+                    query = query.gte('created_at', new Date(filters.createdAt.$gte).toISOString());
+                }
+
+                const { data, error } = await query
+                    .order('created_at', { ascending: false })
+                    .limit(limit);
+
+                if (error) throw error;
+                return (data || []).map(n => ({
+                    ...mapNotificationToCamelCase(n),
+                    targetStudentId: n.targetStudentId
+                }));
+            } else {
+                await connectDB();
+                const NotificationModel = (await import('@/models/Notification')).default;
+                const records = await NotificationModel.find(filters)
+                    .populate("targetStudentId", "name registrationId")
+                    .sort({ createdAt: -1 })
+                    .limit(limit)
+                    .lean();
+                return JSON.parse(JSON.stringify(records));
+            }
+        },
+
+        create: async (notificationData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const snakeData = mapNotificationToSnakeCase(notificationData);
+                const { data, error } = await supabase
+                    .from('notifications')
+                    .insert([snakeData])
+                    .select()
+                    .single();
+                if (error) throw error;
+                return mapNotificationToCamelCase(data);
+            } else {
+                await connectDB();
+                const NotificationModel = (await import('@/models/Notification')).default;
+                const record = await NotificationModel.create(notificationData);
+                return JSON.parse(JSON.stringify(record));
+            }
+        },
+
+        update: async (id: string, updateData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                if (updateData.$addToSet) {
+                    const { data: existing } = await supabase.from('notifications').select('acknowledged_by').eq('_id', id).single();
+                    let acknowledgedBy = existing?.acknowledged_by || [];
+
+                    if (updateData.$addToSet.acknowledgedBy) {
+                        const newItem = updateData.$addToSet.acknowledgedBy;
+                        const exists = acknowledgedBy.some((item: any) => item.studentId === newItem.studentId);
+                        if (!exists) {
+                            acknowledgedBy.push(newItem);
+                        }
+                    }
+
+                    const { data, error } = await supabase
+                        .from('notifications')
+                        .update({ acknowledged_by: acknowledgedBy })
+                        .eq('_id', id)
+                        .select()
+                        .single();
+                    if (error) throw error;
+                    return mapNotificationToCamelCase(data);
+                }
+
+                const snakeUpdate = mapNotificationToSnakeCase(updateData.$set || updateData);
+                const { data, error } = await supabase
+                    .from('notifications')
+                    .update(snakeUpdate)
+                    .eq('_id', id)
+                    .select()
+                    .single();
+                if (error) throw error;
+                return mapNotificationToCamelCase(data);
+            } else {
+                await connectDB();
+                const NotificationModel = (await import('@/models/Notification')).default;
+                const updated = await NotificationModel.findByIdAndUpdate(id, updateData, { new: true });
+                return JSON.parse(JSON.stringify(updated));
+            }
+        },
+
+        deleteMany: async (filter: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('notifications').delete();
+                if (filter.createdAt && filter.createdAt.$lt) {
+                    query = query.lt('created_at', new Date(filter.createdAt.$lt).toISOString());
+                }
+                const { count, error } = await query;
+                if (error) throw error;
+                return { deletedCount: count || 0 };
+            } else {
+                await connectDB();
+                const NotificationModel = (await import('@/models/Notification')).default;
+                const result = await NotificationModel.deleteMany(filter);
+                return { deletedCount: result.deletedCount };
+            }
+        }
+    },
+
+
+    /**
+     * TRANSACTION OPERATIONS (PAYMENTS)
+     */
+    transactions: {
+        list: async (filters: any = {}, options: { limit?: number } = {}) => {
+            const source = await getDbSource();
+            const limit = options.limit || 100;
+
+            if (source === 'SUPABASE') {
+                let query = supabase.from('transactions').select('*, studentId:students(name, hostel_name, room_number, email)');
+
+                if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
+                if (filters.studentId) query = query.eq('student_id', filters.studentId);
+
+                if (filters.search) {
+                    const s = filters.search;
+                    query = query.or(`registration_id.ilike.%${s}%,utr_number.ilike.%${s}%`);
+                }
+
+                if (filters.utrNumber) query = query.eq('utr_number', filters.utrNumber);
+
+                const { data, error } = await query
+                    .order('created_at', { ascending: false })
+                    .limit(limit);
+
+                if (error) throw error;
+                return (data || []).map(t => ({
+                    ...mapTransactionToCamelCase(t),
+                    studentId: t.studentId
+                }));
+            } else {
+                await connectDB();
+                const TransactionModel = (await import('@/models/Transaction')).default;
+                const StudentModel = (await import('@/models/Student')).default;
+
+                let mongoQuery: any = {};
+                if (filters.status && filters.status !== 'all') mongoQuery.status = filters.status;
+                if (filters.studentId) mongoQuery.studentId = filters.studentId;
+                if (filters.search) {
+                    mongoQuery.$or = [
+                        { registrationId: { $regex: filters.search, $options: "i" } },
+                        { utrNumber: { $regex: filters.search, $options: "i" } },
+                    ];
+                }
+                if (filters.utrNumber) mongoQuery.utrNumber = filters.utrNumber;
+
+                const records = await TransactionModel.find(mongoQuery)
+                    .populate("studentId", "name hostelName roomNumber email")
+                    .sort({ createdAt: -1 })
+                    .limit(limit)
+                    .lean();
+                return JSON.parse(JSON.stringify(records));
+            }
+        },
+
+        findOne: async (filter: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('transactions').select('*');
+                if (filter.utrNumber) query = query.eq('utr_number', filter.utrNumber);
+                if (filter.status && filter.status.$ne) query = query.neq('status', filter.status.$ne);
+                if (filter.status && typeof filter.status === 'string') query = query.eq('status', filter.status);
+
+                const { data, error } = await query.maybeSingle();
+                if (error) return null;
+                return mapTransactionToCamelCase(data);
+            } else {
+                await connectDB();
+                const TransactionModel = (await import('@/models/Transaction')).default;
+                const record = await TransactionModel.findOne(filter).lean();
+                return record ? JSON.parse(JSON.stringify(record)) : null;
+            }
+        },
+
+        update: async (id: string, updateData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const snakeUpdate = mapTransactionToSnakeCase(updateData.$set || updateData);
+                const { data, error } = await supabase
+                    .from('transactions')
+                    .update(snakeUpdate)
+                    .eq('_id', id)
+                    .select()
+                    .single();
+                if (error) throw error;
+                return mapTransactionToCamelCase(data);
+            } else {
+                await connectDB();
+                const TransactionModel = (await import('@/models/Transaction')).default;
+                const updated = await TransactionModel.findByIdAndUpdate(id, updateData, { new: true });
+                return JSON.parse(JSON.stringify(updated));
+            }
+        },
+
+        create: async (transactionData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const snakeData = mapTransactionToSnakeCase(transactionData);
+                const { data, error } = await supabase
+                    .from('transactions')
+                    .insert([snakeData])
+                    .select()
+                    .single();
+                if (error) throw error;
+                return mapTransactionToCamelCase(data);
+            } else {
+                await connectDB();
+                const TransactionModel = (await import('@/models/Transaction')).default;
+                const record = await TransactionModel.create(transactionData);
+                return JSON.parse(JSON.stringify(record));
+            }
+        }
+    },
+
+    /**
+     * PERMISSION OPERATIONS
+     */
+    permissions: {
+        list: async (filters: any = {}, options: { limit?: number; offset?: number; populate?: boolean } = {}) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('permissions').select(options.populate ? '*, students(*)' : '*');
+
+                if (filters.studentId) query = query.eq('student_id', filters.studentId);
+                if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
+
+                query = query.order('created_at', { ascending: false });
+
+                if (options.limit) query = query.limit(options.limit);
+                if (options.offset) query = query.range(options.offset, options.offset + (options.limit || 10) - 1);
+
+                const { data, error, count } = await query;
+                if (error) throw error;
+
+                return {
+                    records: (data || []).map(mapPermissionToCamelCase),
+                    total: count || 0
+                };
+            } else {
+                await connectDB();
+                const PermissionModel = (await import('@/models/Permission')).default;
+                let query = PermissionModel.find(filters);
+
+                if (options.populate) {
+                    query = query.populate('studentId');
+                }
+
+                query = query.sort({ createdAt: -1 });
+
+                if (options.limit) query = query.limit(options.limit);
+                if (options.offset) query = query.skip(options.offset);
+
+                const records = await query.lean();
+                return {
+                    records: JSON.parse(JSON.stringify(records)),
+                    total: await PermissionModel.countDocuments(filters)
+                };
+            }
+        },
+
+        getById: async (id: string, options: { populate?: boolean } = {}) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const query = supabase.from('permissions').select(options.populate ? '*, students(*)' : '*').eq('_id', id).single();
+                const { data, error } = await query;
+                if (error) return null;
+                return mapPermissionToCamelCase(data);
+            } else {
+                await connectDB();
+                const PermissionModel = (await import('@/models/Permission')).default;
+                let query = PermissionModel.findById(id);
+                if (options.populate) query = query.populate('studentId');
+                const record = await query.lean();
+                return record ? JSON.parse(JSON.stringify(record)) : null;
+            }
+        },
+
+        create: async (permissionData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const snakeData = mapPermissionToSnakeCase(permissionData);
+                const { data, error } = await supabase
+                    .from('permissions')
+                    .insert([snakeData])
+                    .select()
+                    .single();
+                if (error) throw error;
+                return mapPermissionToCamelCase(data);
+            } else {
+                await connectDB();
+                const PermissionModel = (await import('@/models/Permission')).default;
+                const record = await PermissionModel.create(permissionData);
+                return JSON.parse(JSON.stringify(record));
+            }
+        },
+
+        update: async (id: string, updateData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const snakeUpdate = mapPermissionToSnakeCase(updateData.$set || updateData);
+                const { data, error } = await supabase
+                    .from('permissions')
+                    .update(snakeUpdate)
+                    .eq('_id', id)
+                    .select()
+                    .single();
+                if (error) throw error;
+                return mapPermissionToCamelCase(data);
+            } else {
+                await connectDB();
+                const PermissionModel = (await import('@/models/Permission')).default;
+                const updated = await PermissionModel.findByIdAndUpdate(id, updateData, { new: true });
+                return JSON.parse(JSON.stringify(updated));
+            }
+        },
+
+        deleteMany: async (filters: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('permissions').delete();
+                if (filters.studentId) query = query.eq('student_id', filters.studentId);
+                const { error } = await query;
+                if (error) throw error;
+                return true;
+            } else {
+                await connectDB();
+                const PermissionModel = (await import('@/models/Permission')).default;
+                await PermissionModel.deleteMany(filters);
+                return true;
+            }
+        }
+    },
+
+    /**
+     * STUDENT FIELD PROGRESS OPERATIONS
+     */
+    studentFieldProgress: {
+        find: async (filter: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('student_field_progress').select('*');
+                if (filter.studentId) query = query.eq('student_id', filter.studentId);
+                if (filter.firebaseUID) query = query.eq('firebase_uid', filter.firebaseUID);
+                if (filter.fieldId) query = query.eq('field_id', filter.fieldId);
+
+                const { data, error } = await query;
+                if (error) throw error;
+                return (data || []).map(mapStudentFieldProgressToCamelCase);
+            } else {
+                await connectDB();
+                const StudentFieldProgressModel = (await import('@/models/StudentFieldProgress')).default;
+                const records = await StudentFieldProgressModel.find(filter).lean();
+                return JSON.parse(JSON.stringify(records));
+            }
+        },
+
+        upsert: async (recordData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const snakeData = mapStudentFieldProgressToSnakeCase(recordData);
+                const { data: existing } = await supabase
+                    .from('student_field_progress')
+                    .select('_id')
+                    .eq('student_id', snakeData.student_id)
+                    .eq('field_id', snakeData.field_id)
+                    .eq('hostel_name', snakeData.hostel_name)
+                    .maybeSingle();
+
+                if (existing) {
+                    const { data, error } = await supabase
+                        .from('student_field_progress')
+                        .update(snakeData)
+                        .eq('_id', existing._id)
+                        .select()
+                        .single();
+                    if (error) throw error;
+                    return mapStudentFieldProgressToCamelCase(data);
+                } else {
+                    const { data, error } = await supabase
+                        .from('student_field_progress')
+                        .insert([snakeData])
+                        .select()
+                        .single();
+                    if (error) throw error;
+                    return mapStudentFieldProgressToCamelCase(data);
+                }
+            } else {
+                await connectDB();
+                const StudentFieldProgressModel = (await import('@/models/StudentFieldProgress')).default;
+                const filter = {
+                    studentId: recordData.studentId,
+                    fieldId: recordData.fieldId,
+                    hostelName: recordData.hostelName
+                };
+                const updated = await StudentFieldProgressModel.findOneAndUpdate(filter, recordData, { upsert: true, new: true });
+                return JSON.parse(JSON.stringify(updated));
+            }
+        },
+
+        deleteMany: async (filter: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('student_field_progress').delete();
+                if (filter.hostelName) query = query.eq('hostel_name', filter.hostelName);
+                if (filter.studentId) query = query.eq('student_id', filter.studentId);
+
+                const { count, error } = await query;
+                if (error) throw error;
+                return { deletedCount: count || 0 };
+            } else {
+                await connectDB();
+                const StudentFieldProgressModel = (await import('@/models/StudentFieldProgress')).default;
+                const result = await StudentFieldProgressModel.deleteMany(filter);
+                return { deletedCount: result.deletedCount };
+            }
         }
     }
 };
+
+
+
+
+
+
+

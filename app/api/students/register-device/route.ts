@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Student from "@/models/Student";
+import { db } from "@/lib/dbAdapter";
 
 export async function POST(request: NextRequest) {
     try {
-
         const body = await request.json();
         const { studentId, deviceId } = body;
 
@@ -15,7 +13,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { db } = await import("@/lib/dbAdapter");
         const existingStudent = await db.students.getById(studentId);
 
         if (!existingStudent) {

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Student from "@/models/Student";
+import { db } from "@/lib/dbAdapter";
 
 /**
  * API to save/update student face descriptor
@@ -8,7 +7,6 @@ import Student from "@/models/Student";
  */
 export async function POST(request: NextRequest) {
     try {
-        await connectDB();
         const { firebaseUID, faceDescriptor } = await request.json();
 
         if (!firebaseUID || !faceDescriptor || !Array.isArray(faceDescriptor)) {
@@ -18,11 +16,9 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const student = await Student.findOneAndUpdate(
-            { firebaseUID },
-            { faceDescriptor },
-            { new: true }
-        );
+        // Use the Database Adapter for a database-aware update (Mongo/Supabase)
+        // Note: db.students.save handles upsert by firebaseUID
+        const student = await db.students.save(firebaseUID, { faceDescriptor });
 
         if (!student) {
             return NextResponse.json({ error: "Student not found" }, { status: 404 });

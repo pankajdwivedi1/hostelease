@@ -21,7 +21,17 @@ export async function POST(request: NextRequest) {
 
         // 🔒 CHECK DEVICE LOCK: Is this browser already claimed by another student?
         const deviceOwnerCookie = request.cookies.get('trusted_device_owner');
-        if (deviceOwnerCookie && deviceOwnerCookie.value !== studentId) {
+        const cookieOwner = deviceOwnerCookie?.value;
+
+        // 🔓 POST-RESET BYPASS: If the student's DB record has NO credentials
+        // (meaning admin reset their device), we allow re-registration regardless
+        // of what the stale cookie says. The old cookie will be overwritten below
+        // with the new registration cookie.
+        const currentCreds = student.webAuthnCredentials || [];
+        const studentWasReset = currentCreds.length === 0;
+
+        // Block ONLY if: cookie exists AND belongs to a DIFFERENT student AND student was NOT reset
+        if (cookieOwner && cookieOwner !== studentId && !studentWasReset) {
             return NextResponse.json(
                 { error: "Access Denied: This browser is permanently linked to another student. You cannot register a second account on this device." },
                 { status: 403 }
@@ -39,8 +49,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Check if current user already has a key
-        const currentCreds = student.webAuthnCredentials || [];
+        // Check if current user already has a key (only block if NOT reset)
         if (currentCreds.length > 0) {
             return NextResponse.json(
                 { error: "Account already has a registered biometric device. Reset required for new device." },

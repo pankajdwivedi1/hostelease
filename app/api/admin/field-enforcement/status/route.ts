@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import StudentFieldProgress from "@/models/StudentFieldProgress";
-import Student from "@/models/Student";
-import FieldEnforcement from "@/models/FieldEnforcement";
+import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
 // GET - Get field enforcement completion status for a hostel
 export async function GET(request: NextRequest) {
   try {
-    await connectDB();
     const { searchParams } = new URL(request.url);
     const hostelName = searchParams.get("hostelName");
 
@@ -21,10 +17,16 @@ export async function GET(request: NextRequest) {
     }
 
     const normalizedHostelName = hostelName.trim();
-    const hostelRegex = new RegExp(`^${normalizedHostelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i");
 
-    // Get the enforcement rules for this hostel
-    const enforcement = await FieldEnforcement.findOne({ hostelName: { $regex: hostelRegex } }).lean();
+    // Get the enforcement rules for this hostel using adapter
+    const rules = await db.fieldEnforcement.find({
+      hostelName: { $regex: `^${normalizedHostelName}$` }
+    });
+
+    // Find the active rule or the one matching the hostel
+    const enforcement = rules.find((r: any) =>
+      r.hostelName.toLowerCase() === normalizedHostelName.toLowerCase()
+    );
 
     if (!enforcement || !enforcement.enforcedFields) {
       return NextResponse.json({
@@ -38,28 +40,31 @@ export async function GET(request: NextRequest) {
             totalFields: 0,
             completedCount: 0,
             pendingCount: 0,
+            completionPercentage: 0
           },
         },
       });
     }
 
-    // Get all students in this hostel
-    const students = await Student.find({ hostelName: { $regex: hostelRegex } }).select("_id name email phoneNumber registrationId").lean();
+    // Get all students in this hostel using adapter
+    const students = await db.students.list({
+      hostelName: normalizedHostelName
+    });
 
-    // Get field progress for all students
-    const fieldProgress = await StudentFieldProgress.find({
-      hostelName: { $regex: hostelRegex },
-    }).lean();
+    // Get field progress for all students via adapter
+    const fieldProgress = await db.studentFieldProgress.find({
+      hostelName: normalizedHostelName,
+    });
 
     // Build completion status per student
-    const studentsCompletionStatus = students.map((student) => {
+    const studentsCompletionStatus = students.map((student: any) => {
       const studentProgress = fieldProgress.filter(
-        (fp) => fp.studentId.toString() === student._id.toString()
+        (fp: any) => (fp.studentId || "").toString() === (student._id || "").toString()
       );
 
-      const fieldStatuses = enforcement.enforcedFields.map((field) => {
+      const fieldStatuses = (enforcement.enforcedFields || []).map((field: any) => {
         const progress = studentProgress.find(
-          (fp) => fp.fieldId === field.fieldId
+          (fp: any) => fp.fieldId === field.fieldId
         );
         return {
           fieldId: field.fieldId,
@@ -80,17 +85,17 @@ export async function GET(request: NextRequest) {
         registrationId: student.registrationId,
         fieldStatuses,
         completedCount,
-        totalFields: enforcement.enforcedFields.length,
+        totalFields: (enforcement.enforcedFields || []).length,
         allCompleted,
       };
     });
 
     // Calculate completion stats
     const totalStudents = students.length;
-    const totalFields = enforcement.enforcedFields.length;
-    const completedCount = fieldProgress.filter((fp) => fp.isCompleted).length;
+    const totalFields = (enforcement.enforcedFields || []).length;
+    const totalCompletedInDB = fieldProgress.filter((fp: any) => fp.isCompleted).length;
     const potentialCompletions = totalStudents * totalFields;
-    const pendingCount = potentialCompletions - completedCount;
+    const pendingCount = potentialCompletions - totalCompletedInDB;
 
     return NextResponse.json({
       success: true,
@@ -101,9 +106,9 @@ export async function GET(request: NextRequest) {
         completionStats: {
           totalStudents,
           totalFields,
-          completedCount,
+          completedCount: totalCompletedInDB,
           pendingCount,
-          completionPercentage: totalFields > 0 ? Math.round((completedCount / potentialCompletions) * 100) : 0,
+          completionPercentage: potentialCompletions > 0 ? Math.round((totalCompletedInDB / potentialCompletions) * 100) : 0,
         },
       },
     });
@@ -115,3 +120,4 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+

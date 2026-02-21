@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Student from "@/models/Student";
-import Permission from "@/models/Permission";
 import { adminAuth } from "@/lib/firebase-admin";
+import { db } from "@/lib/dbAdapter";
 
 export async function DELETE(
   request: NextRequest,
@@ -10,7 +8,6 @@ export async function DELETE(
 ) {
   try {
     const { id: studentId } = await params;
-    const { db } = await import("@/lib/dbAdapter");
     const student = await db.students.getById(studentId);
 
     if (!student) {
@@ -35,8 +32,8 @@ export async function DELETE(
       }
     }
 
-    // Delete permissions (assuming Permission model is MongoDB only for now, or we can make it DB aware later)
-    await Permission.deleteMany({ studentId: studentId });
+    // Delete permissions using adapter
+    await db.permissions.deleteMany({ studentId: studentId });
 
     // Perform database-aware deletion
     await db.students.delete(studentId);
@@ -70,14 +67,30 @@ export async function PATCH(
     }
 
     // Use the Database Adapter for a database-aware update (Mongo/Supabase)
-    const { db } = await import("@/lib/dbAdapter");
     const updatedStudent = await db.students.update(studentId, body);
 
     if (!updatedStudent) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, student: updatedStudent }, { status: 200 });
+    const response = NextResponse.json({ success: true, student: updatedStudent }, { status: 200 });
+
+    // 🔓 DEVICE RESET: If admin resets a student's device, we MUST also clear the
+    // browser-side 'trusted_device_owner' cookie so the student can re-register freely.
+    // Without this, the 10-year cookie would still block re-registration even though
+    // the DB was wiped clean. We delete it by setting maxAge to 0 (immediate expiry).
+    if (body.action === "resetDevice") {
+      response.cookies.set('trusted_device_owner', '', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 0, // Immediately expire the cookie → browser deletes it
+        path: '/'
+      });
+      console.log(`🔓 Cleared trusted_device_owner cookie for student: ${studentId}`);
+    }
+
+    return response;
   } catch (error: any) {
     console.error("❌ BACKEND PATCH ERROR:", error);
     return NextResponse.json(
@@ -86,5 +99,3 @@ export async function PATCH(
     );
   }
 }
-
-

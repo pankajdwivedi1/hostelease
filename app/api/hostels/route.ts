@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Hostel from "@/models/Hostel";
+import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
 // GET - Fetch all hostels
 export async function GET(request: NextRequest) {
     try {
-        await connectDB();
-
-        const hostels = await Hostel.find().sort({ name: 1 });
+        const hostels = await db.hostels.getAll();
 
         // If no hostels exist, create the default ones
         if (hostels.length === 0) {
@@ -20,9 +17,13 @@ export async function GET(request: NextRequest) {
                 { name: "Guest House Boys Hostel" },
             ];
 
-            await Hostel.insertMany(defaultHostels);
-            const newHostels = await Hostel.find().sort({ name: 1 });
+            // Use Promise.all with create for each since insertMany isn't in adapter yet
+            // or we can just loop.
+            for (const h of defaultHostels) {
+                await db.hostels.create(h);
+            }
 
+            const newHostels = await db.hostels.getAll();
             return NextResponse.json({ hostels: newHostels }, { status: 200 });
         }
 
@@ -39,8 +40,6 @@ export async function GET(request: NextRequest) {
 // POST - Create a new hostel
 export async function POST(request: NextRequest) {
     try {
-        await connectDB();
-
         const body = await request.json();
         const { name } = body;
 
@@ -52,7 +51,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Check if hostel already exists
-        const existingHostel = await Hostel.findOne({ name: name.trim() });
+        const existingHostel = await db.hostels.findOne({ name: name.trim() });
         if (existingHostel) {
             return NextResponse.json(
                 { error: "Hostel with this name already exists" },
@@ -60,7 +59,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const hostel = await Hostel.create({ name: name.trim() });
+        const hostel = await db.hostels.create({ name: name.trim() });
 
         return NextResponse.json(
             { success: true, hostel },
@@ -75,11 +74,9 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// DELETE - Delete a hostel
+// DELETE - Delete a hostel (Legacy support if needed, but admin has its own)
 export async function DELETE(request: NextRequest) {
     try {
-        await connectDB();
-
         const { searchParams } = new URL(request.url);
         const id = searchParams.get("id");
 
@@ -90,9 +87,9 @@ export async function DELETE(request: NextRequest) {
             );
         }
 
-        const hostel = await Hostel.findByIdAndDelete(id);
+        const result = await db.hostels.delete(id);
 
-        if (!hostel) {
+        if (!result) {
             return NextResponse.json(
                 { error: "Hostel not found" },
                 { status: 404 }

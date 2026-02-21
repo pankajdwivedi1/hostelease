@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import AdminSettings from "@/models/AdminSettings";
+import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
     try {
-        await connectDB();
-        const settings = await AdminSettings.findOne().lean();
+        const settings = await db.settings.get();
 
         const defaultLocations = [
             { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
@@ -47,7 +45,6 @@ export async function GET(request: NextRequest) {
 // POST - Update admin settings
 export async function POST(request: NextRequest) {
     try {
-        await connectDB();
         const body = await request.json();
         const {
             locations,
@@ -78,11 +75,7 @@ export async function POST(request: NextRequest) {
         if (prioritizeAssignedHostel !== undefined) updateData.prioritizeAssignedHostel = prioritizeAssignedHostel;
         if (getpassPassword !== undefined) updateData.getpassPassword = getpassPassword;
 
-        const settings = await AdminSettings.findOneAndUpdate(
-            {},
-            { $set: updateData },
-            { upsert: true, new: true }
-        );
+        const settings = await db.settings.update(updateData);
 
         return NextResponse.json({
             success: true,
@@ -96,3 +89,4 @@ export async function POST(request: NextRequest) {
         );
     }
 }
+

@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Hostel from "@/models/Hostel";
-import AdminSettings from "@/models/AdminSettings";
+import { db } from "@/lib/dbAdapter";
 
 // Diagnostic endpoint to check hostel passwords
 export async function GET(request: NextRequest) {
     try {
-        await connectDB();
-
-        const hostels = await Hostel.find().lean();
-        const settings = await AdminSettings.findOne({}).lean();
+        const hostels = await db.hostels.getAll();
+        const settings = await db.settings.get();
         const globalPassword = settings?.wardenPassword || "warden456";
 
-        const hostelStatus = hostels.map(h => ({
+        const hostelStatus = hostels.map((h: any) => ({
             name: h.name,
             id: h._id,
             hasPassword: !!h.wardenPassword,

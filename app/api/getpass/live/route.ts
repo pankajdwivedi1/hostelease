@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import GatePass from "@/models/GatePass";
-import Student from "@/models/Student";
+import { db } from "@/lib/dbAdapter";
 
 /**
  * GET /api/getpass/live
@@ -14,41 +12,35 @@ import Student from "@/models/Student";
  */
 export async function GET(request: NextRequest) {
     try {
-        await connectDB();
-
         const searchParams = request.nextUrl.searchParams;
         const hostelName = searchParams.get("hostelName");
 
-        // 1. Get all currently "out" students
-        const outQuery: any = { status: "out" };
+        // 1. Get all currently "out" students using adapter
+        const filters: any = { status: "out" };
         if (hostelName && hostelName !== "all") {
-            outQuery.hostelName = { $regex: hostelName, $options: "i" };
+            filters.hostelName = hostelName;
         }
 
-        const currentlyOut = await GatePass.find(outQuery)
-            .sort({ checkOutTime: -1 })
-            .lean();
+        const { records: currentlyOut } = await db.gatePasses.list(filters, { limit: 100 });
 
-        // 2. Get student counts
-        const studentQuery: any = {};
+        // 2. Get student counts using adapter
+        const countFilters: any = {};
         if (hostelName && hostelName !== "all") {
-            studentQuery.hostelName = { $regex: hostelName, $options: "i" };
+            countFilters.hostelName = hostelName;
         }
 
         const [totalStudents, studentsOut] = await Promise.all([
-            Student.countDocuments(studentQuery),
-            Student.countDocuments({ ...studentQuery, studentStatus: "out" }),
+            db.students.count(countFilters),
+            db.students.count({ ...countFilters, studentStatus: "out" }),
         ]);
 
         // 3. Get recent activity (last 20 records - both check-in and check-out)
-        const recentActivity = await GatePass.find(
-            hostelName && hostelName !== "all"
-                ? { hostelName: { $regex: hostelName, $options: "i" } }
-                : {}
-        )
-            .sort({ updatedAt: -1 })
-            .limit(20)
-            .lean();
+        const recentFilters: any = {};
+        if (hostelName && hostelName !== "all") {
+            recentFilters.hostelName = hostelName;
+        }
+
+        const { records: recentActivity } = await db.gatePasses.list(recentFilters, { limit: 20 });
 
         // 4. Calculate duration for students who are still out
         const now = new Date();
@@ -68,8 +60,8 @@ export async function GET(request: NextRequest) {
             success: true,
             summary: {
                 totalStudents,
-                studentsIn: totalStudents - studentsOut,
-                studentsOut,
+                studentsIn: (totalStudents || 0) - (studentsOut || 0),
+                studentsOut: studentsOut || 0,
             },
             currentlyOut: currentlyOutWithDuration,
             recentActivity,
@@ -82,3 +74,4 @@ export async function GET(request: NextRequest) {
         );
     }
 }
+

@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import AdminSettings from "@/models/AdminSettings";
+import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
 // GET - Fetch all locations
 export async function GET(request: NextRequest) {
     try {
-        await connectDB();
-        const settings = await AdminSettings.findOne().lean();
+        const settings = await db.settings.get();
 
         const defaultLocations = [
             { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
@@ -37,7 +35,6 @@ export async function GET(request: NextRequest) {
 // POST - Add a new location
 export async function POST(request: NextRequest) {
     try {
-        await connectDB();
         const body = await request.json();
         const { name, lat, lng, radius } = body;
 
@@ -57,26 +54,17 @@ export async function POST(request: NextRequest) {
         }
 
         // Get current settings
-        let settings = await AdminSettings.findOne();
+        const settings = await db.settings.get();
+        const hostelLocations = (settings?.hostelLocations || []).slice();
+        hostelLocations.push({ name, lat, lng, radius });
 
-        if (!settings) {
-            // Create new settings document
-            settings = new AdminSettings({
-                hostelLocations: [{ name, lat, lng, radius }]
-            });
-        } else {
-            // Add to existing locations
-            settings.hostelLocations = settings.hostelLocations || [];
-            settings.hostelLocations.push({ name, lat, lng, radius });
-        }
-
-        await settings.save();
+        await db.settings.update({ hostelLocations });
 
         return NextResponse.json({
             success: true,
             message: "Location added successfully",
             location: { name, lat, lng, radius },
-            totalLocations: settings.hostelLocations?.length || 0
+            totalLocations: hostelLocations.length
         });
     } catch (error: any) {
         console.error("Error adding location:", error);
@@ -90,7 +78,6 @@ export async function POST(request: NextRequest) {
 // PUT - Update an existing location
 export async function PUT(request: NextRequest) {
     try {
-        await connectDB();
         const body = await request.json();
         const { index, name, lat, lng, radius } = body;
 
@@ -102,7 +89,7 @@ export async function PUT(request: NextRequest) {
             );
         }
 
-        const settings = await AdminSettings.findOne();
+        const settings = await db.settings.get();
 
         if (!settings || !settings.hostelLocations || settings.hostelLocations.length === 0) {
             return NextResponse.json(
@@ -119,8 +106,9 @@ export async function PUT(request: NextRequest) {
         }
 
         // Update the location
-        settings.hostelLocations[index] = { name, lat, lng, radius };
-        await settings.save();
+        const hostelLocations = settings.hostelLocations.slice();
+        hostelLocations[index] = { name, lat, lng, radius };
+        await db.settings.update({ hostelLocations });
 
         return NextResponse.json({
             success: true,
@@ -140,7 +128,6 @@ export async function PUT(request: NextRequest) {
 // DELETE - Remove a location
 export async function DELETE(request: NextRequest) {
     try {
-        await connectDB();
         const { searchParams } = new URL(request.url);
         const indexStr = searchParams.get('index');
 
@@ -153,7 +140,7 @@ export async function DELETE(request: NextRequest) {
 
         const index = parseInt(indexStr);
 
-        const settings = await AdminSettings.findOne();
+        const settings = await db.settings.get();
 
         if (!settings || !settings.hostelLocations || settings.hostelLocations.length === 0) {
             return NextResponse.json(
@@ -170,15 +157,15 @@ export async function DELETE(request: NextRequest) {
         }
 
         // Remove the location
-        const deletedLocation = settings.hostelLocations[index];
-        settings.hostelLocations.splice(index, 1);
-        await settings.save();
+        const hostelLocations = settings.hostelLocations.slice();
+        const deletedLocation = hostelLocations.splice(index, 1)[0];
+        await db.settings.update({ hostelLocations });
 
         return NextResponse.json({
             success: true,
             message: "Location deleted successfully",
             deletedLocation,
-            remainingLocations: settings.hostelLocations.length
+            remainingLocations: hostelLocations.length
         });
     } catch (error: any) {
         console.error("Error deleting location:", error);
@@ -188,3 +175,4 @@ export async function DELETE(request: NextRequest) {
         );
     }
 }
+

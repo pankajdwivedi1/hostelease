@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Hostel from "@/models/Hostel";
+import { db } from "@/lib/dbAdapter";
 
 // Helper endpoint to set warden password for all hostels at once
 export async function POST(request: NextRequest) {
     try {
-        await connectDB();
-
         const body = await request.json();
         const { password } = body;
 
@@ -17,16 +14,13 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Update all hostels with the same password
-        const result = await Hostel.updateMany(
-            {}, // Update all hostels
-            { $set: { wardenPassword: password } }
-        );
+        // Update all hostels with the same password using dbAdapter
+        const result = await db.hostels.bulkUpdate({}, { wardenPassword: password });
 
         return NextResponse.json({
             success: true,
-            message: `Updated ${result.modifiedCount} hostels with warden password`,
-            modifiedCount: result.modifiedCount
+            message: `Updated ${result.count} hostels with warden password`,
+            modifiedCount: result.count
         });
     } catch (error: any) {
         console.error("Error setting bulk passwords:", error);

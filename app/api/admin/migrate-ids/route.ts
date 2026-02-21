@@ -1,36 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Student from "@/models/Student";
+import { db } from "@/lib/dbAdapter";
 
 export async function POST(request: NextRequest) {
     try {
-        await connectDB();
-
-        const students = await Student.find({});
-        students.sort((a, b) => a.name.localeCompare(b.name));
-
-        const hostelPrefixes: { [key: string]: string } = {
+        const source = await db.getSource();
+        const settings = await db.settings.get();
+        const hostelPrefixMap = settings?.hostelPrefixMap || {
             "Guest House Boys Hostel": "GUEST",
             "Boys Hostel": "BOYS",
             "Gangotri Hostel": "GANGOTRI",
             "Gaytri Hostel": "GAYTRI"
         };
 
-        const counters: { [key: string]: number } = {
-            "GUEST": 0,
-            "BOYS": 0,
-            "GANGOTRI": 0,
-            "GAYTRI": 0
-        };
+        const students = await db.students.list({});
+        students.sort((a: any, b: any) => a.name.localeCompare(b.name));
 
+        const counters: { [key: string]: number } = {};
         const updates = [];
 
         for (const student of students) {
             let prefix = "STUDENT";
             // Find matching prefix
-            for (const [name, p] of Object.entries(hostelPrefixes)) {
-                if (student.hostelName.toLowerCase().includes(name.toLowerCase())) {
-                    prefix = p;
+            for (const [name, p] of Object.entries(hostelPrefixMap)) {
+                if (student.hostelName?.toLowerCase().includes(name.toLowerCase())) {
+                    prefix = p as string;
                     break;
                 }
             }
@@ -39,7 +32,7 @@ export async function POST(request: NextRequest) {
             const regId = `${prefix}-${String(counters[prefix]).padStart(4, '0')}`;
 
             updates.push(
-                Student.findByIdAndUpdate(student._id, { registrationId: regId })
+                db.students.update(student._id.toString(), { registrationId: regId })
             );
         }
 
@@ -47,7 +40,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            message: `Updated ${updates.length} students with registration IDs`,
+            message: `Updated ${updates.length} students with registration IDs on ${source}`,
             details: counters
         });
     } catch (error: any) {

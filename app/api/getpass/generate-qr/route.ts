@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import GatePassToken from "@/models/GatePassToken";
+import { db } from "@/lib/dbAdapter";
 import crypto from "crypto";
 
 /**
@@ -12,8 +11,6 @@ import crypto from "crypto";
  */
 export async function GET(request: NextRequest) {
     try {
-        await connectDB();
-
         const searchParams = request.nextUrl.searchParams;
         const gateName = searchParams.get("gate") || "Main Gate";
 
@@ -22,12 +19,12 @@ export async function GET(request: NextRequest) {
         const now = new Date();
         const expiresAt = new Date(now.getTime() + 15000); // 15 seconds validity (10s + 5s buffer)
 
-        // Create the token in DB
-        const qrToken = await GatePassToken.create({
+        // Create the token in DB using adapter
+        await db.gatePassTokens.create({
             token,
             gateName,
             createdAt: now,
-            expiresAt,
+            expiresAt: expiresAt,
         });
 
         // The QR code will encode this data
@@ -54,3 +51,4 @@ export async function GET(request: NextRequest) {
         );
     }
 }
+

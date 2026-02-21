@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Permission from "@/models/Permission";
-import Student from "@/models/Student";
+import { db } from "@/lib/dbAdapter";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
-
     const body = await request.json();
     const { studentId, fromDateTime, toDateTime, reason } = body;
 
@@ -28,12 +26,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const student = await Student.findById(studentId);
+    const student = await db.students.getById(studentId);
     if (!student) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
-    const permission = await Permission.create({
+    const permission = await db.permissions.create({
       studentId,
       fromDateTime: new Date(fromDateTime),
       toDateTime: new Date(toDateTime),
@@ -53,42 +51,25 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    await connectDB();
-
     const searchParams = request.nextUrl.searchParams;
     const studentId = searchParams.get("studentId");
     const status = searchParams.get("status");
 
-    let query: any = {};
+    const filters: any = {};
     if (studentId) {
-      query.studentId = studentId;
+      filters.studentId = studentId;
     }
     if (status && status !== "all") {
-      query.status = status;
+      filters.status = status;
     }
 
     const light = searchParams.get("light") === "true";
-    const studentFields = light
-      ? "name email phoneNumber hostelName roomNumber studentStatus collegeName branch semester section"
-      : "name email phoneNumber hostelName roomNumber profilePicture studentStatus collegeName branch semester section";
-
-    // ✅ FIX: Added proper error handling and fallback
-    let permissions = [];
-    try {
-      permissions = await Permission.find(query)
-        .populate("studentId", studentFields)
-        .sort({ createdAt: -1 })
-        .lean();
-    } catch (dbError: any) {
-      console.warn("Warning: Could not fetch permissions from DB:", dbError.message);
-      // Return empty array if permissions query fails (better than 500 error)
-      permissions = [];
-    }
+    // Adapter currently doesn't support field selection in list, but we can pass populate: true
+    const { records: permissions } = await db.permissions.list(filters, { populate: true });
 
     return NextResponse.json({ permissions, success: true }, { status: 200 });
   } catch (error: any) {
     console.error("Error in GET /api/permissions:", error);
-    // Return empty permissions array instead of error to prevent 500
     return NextResponse.json(
       { permissions: [], success: false, error: error.message },
       { status: 200 }
@@ -98,8 +79,6 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    await connectDB();
-
     const body = await request.json();
     const { permissionId, status, wardenStatus, deanStatus } = body;
 
@@ -110,7 +89,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const currentPermission = await Permission.findById(permissionId);
+    const currentPermission = await db.permissions.getById(permissionId);
     if (!currentPermission) {
       return NextResponse.json({ error: "Permission not found" }, { status: 404 });
     }
@@ -132,57 +111,37 @@ export async function PATCH(request: NextRequest) {
       update.status = "pending";
     }
 
-    const permission = await Permission.findByIdAndUpdate(
-      permissionId,
-      update,
-      { new: true }
-    ).populate("studentId", "name email phoneNumber hostelName roomNumber profilePicture studentStatus");
+    const permission = await db.permissions.update(permissionId, update);
 
-    if (!permission) {
+    // We need the student info for the status update below
+    const populatedPermission = await db.permissions.getById(permissionId, { populate: true });
+
+    if (!populatedPermission) {
       return NextResponse.json({ error: "Permission not found" }, { status: 404 });
     }
 
-    const finalStatus = permission.status;
+    const finalStatus = populatedPermission.status;
 
     // If permission is allowed, set student studentStatus to "out"
-    if (finalStatus === "allowed" && permission.studentId) {
-      let studentId: string;
+    if (finalStatus === "allowed" && populatedPermission.studentId) {
+      const studentId = typeof populatedPermission.studentId === "object"
+        ? populatedPermission.studentId._id || populatedPermission.studentId.id
+        : populatedPermission.studentId;
 
-      if (typeof permission.studentId === "object" && permission.studentId._id) {
-        studentId = permission.studentId._id.toString();
-      } else if (typeof permission.studentId === "string") {
-        studentId = permission.studentId;
-      } else {
-        studentId = permission.studentId.toString();
-      }
-
-      const updatedStudent = await Student.findByIdAndUpdate(
-        studentId,
-        { studentStatus: "out" },
-        { new: true }
-      );
-
-      if (!updatedStudent) {
-        console.error(`Failed to update student studentStatus for studentId: ${studentId}`);
-      } else {
-        console.log(`Student ${studentId} studentStatus updated to "out"`);
-      }
+      await db.students.update(studentId, { studentStatus: "out" });
+      console.log(`Student ${studentId} studentStatus updated to "out"`);
     }
 
     // If permission is rejected, set student studentStatus to "in" (they're back)
-    if (finalStatus === "rejected" && permission.studentId) {
-      const studentId = typeof permission.studentId === "object"
-        ? permission.studentId._id
-        : permission.studentId;
+    if (finalStatus === "rejected" && populatedPermission.studentId) {
+      const studentId = typeof populatedPermission.studentId === "object"
+        ? populatedPermission.studentId._id || populatedPermission.studentId.id
+        : populatedPermission.studentId;
 
-      await Student.findByIdAndUpdate(
-        studentId,
-        { studentStatus: "in" },
-        { new: true }
-      );
+      await db.students.update(studentId, { studentStatus: "in" });
     }
 
-    return NextResponse.json({ success: true, permission }, { status: 200 });
+    return NextResponse.json({ success: true, permission: populatedPermission }, { status: 200 });
   } catch (error: any) {
     console.error("Error updating permission:", error);
     return NextResponse.json(
@@ -191,4 +150,3 @@ export async function PATCH(request: NextRequest) {
     );
   }
 }
-

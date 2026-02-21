@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Transaction from "@/models/Transaction";
-import Student from "@/models/Student";
+import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
 // GET - Fetch all payments for a student
 export async function GET(request: NextRequest) {
     try {
-        await connectDB();
         const searchParams = request.nextUrl.searchParams;
         const studentId = searchParams.get("studentId");
 
@@ -16,7 +13,7 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: "Student ID required" }, { status: 400 });
         }
 
-        const payments = await Transaction.find({ studentId }).sort({ createdAt: -1 });
+        const payments = await db.transactions.list({ studentId });
 
         return NextResponse.json({
             success: true,
@@ -31,7 +28,6 @@ export async function GET(request: NextRequest) {
 // POST - Submit a new payment claim
 export async function POST(request: NextRequest) {
     try {
-        await connectDB();
         const body = await request.json();
         const { studentId, registrationId, utrNumber, amount, paymentSource, screenshot } = body;
 
@@ -40,8 +36,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
-        // Check for duplicate UTR
-        const existing = await Transaction.findOne({ utrNumber: utrNumber.trim() });
+        // Check for duplicate UTR using adapter
+        const existing = await db.transactions.findOne({ utrNumber: utrNumber.trim() });
         if (existing) {
             return NextResponse.json(
                 { error: "This UTR/Transaction ID has already been submitted." },
@@ -49,7 +45,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const transaction = await Transaction.create({
+        const transaction = await db.transactions.create({
             studentId,
             registrationId,
             utrNumber: utrNumber.trim(),
@@ -66,7 +62,8 @@ export async function POST(request: NextRequest) {
         });
     } catch (error: any) {
         console.error("Error submitting payment:", error);
-        if (error.code === 11000) {
+        // Handle duplicate key error for Mongo (11000) or Supabase (23505)
+        if (error.code === 11000 || error.code === '23505') {
             return NextResponse.json({ error: "Duplicate UTR Number detected." }, { status: 400 });
         }
         return NextResponse.json({ error: "Failed to submit payment" }, { status: 500 });

@@ -1,8 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Student from "@/models/Student";
-import Attendance from "@/models/Attendance";
-import AdminSettings from "@/models/AdminSettings";
 import { db } from "@/lib/dbAdapter";
 import { checkRateLimit } from "@/lib/requestLimiter";
 
@@ -34,7 +30,6 @@ function calculateDistance(
 
 export async function POST(request: NextRequest) {
     try {
-        await connectDB();
 
         const body = await request.json();
         const {
@@ -143,7 +138,7 @@ export async function POST(request: NextRequest) {
         if (existingAttendance) {
             if (isTester) {
                 // Delete existing attendance for tester to allow re-marking multiple times
-                await Attendance.deleteOne({ _id: existingAttendance._id });
+                await db.attendance.delete(existingAttendance._id);
             } else {
                 return NextResponse.json(
                     { error: "Attendance already marked for today", alreadyMarked: true },
@@ -159,7 +154,7 @@ export async function POST(request: NextRequest) {
         if (cachedAdminSettings && (nowMs - lastCacheUpdate < CACHE_DURATION)) {
             adminSettings = cachedAdminSettings;
         } else {
-            adminSettings = await AdminSettings.findOne().lean();
+            adminSettings = await db.settings.get();
             cachedAdminSettings = adminSettings;
             lastCacheUpdate = nowMs;
         }
@@ -354,7 +349,6 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
     try {
-        await connectDB();
         const searchParams = request.nextUrl.searchParams;
         const studentId = searchParams.get("studentId");
 
@@ -368,7 +362,7 @@ export async function GET(request: NextRequest) {
                 studentPromise,
                 (cachedAdminSettings && (nowMs - lastCacheUpdate < CACHE_DURATION))
                     ? Promise.resolve(cachedAdminSettings)
-                    : AdminSettings.findOne().lean()
+                    : db.settings.get()
             ]);
 
             if (!cachedAdminSettings || (nowMs - lastCacheUpdate >= CACHE_DURATION)) {

@@ -114,7 +114,8 @@ export default function OnboardingPage() {
     const newErrors: Record<string, string> = {};
 
     formBuilderConfig.forEach(field => {
-      if (field.visible && field.required) {
+      // ⚡ PIN CODE: Made optional globally as per user request
+      if (field.visible && field.required && field.id !== 'homePinCode') {
         if (field.type === 'image') {
           if (!capturedImage) {
             newErrors[field.id] = `${field.label} is required`;
@@ -247,7 +248,9 @@ export default function OnboardingPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to save data");
+        const error: any = new Error(data.error || "Failed to save data");
+        error.details = data.details; // Attach server-side validation errors
+        throw error;
       }
 
       if (deviceJustRegistered) {
@@ -258,7 +261,17 @@ export default function OnboardingPage() {
       router.push("/");
     } catch (error: any) {
       console.error("Error saving student data:", error);
-      setErrors({ submit: error.message || "Failed to save data. Please try again." });
+
+      // If the server returned validation details, use them
+      if (error.details && Array.isArray(error.details)) {
+        const newErrors: Record<string, string> = {};
+        error.details.forEach((detail: string, index: number) => {
+          newErrors[`server_${index}`] = detail;
+        });
+        setErrors(newErrors);
+      } else {
+        setErrors({ submit: error.message || "Failed to save data. Please try again." });
+      }
     } finally {
       setLoading(false);
     }
@@ -617,7 +630,14 @@ export default function OnboardingPage() {
 
             {Object.keys(errors).length > 0 && (
               <div className="p-3 rounded-lg bg-red-50 border border-red-200">
-                <p className="text-sm text-red-800">⚠️ Please fill all required fields:</p>
+                <p className="text-sm text-red-800 font-bold mb-1">⚠️ Please fill all required fields:</p>
+                <div className="flex flex-wrap gap-x-2 gap-y-1">
+                  {Object.entries(errors).map(([id, msg]) => (
+                    <span key={id} className="text-[11px] bg-red-100 text-red-700 px-2 py-0.5 rounded font-black uppercase">
+                      {msg.replace(" is required", "")}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
             <div className="flex gap-4 mt-6">

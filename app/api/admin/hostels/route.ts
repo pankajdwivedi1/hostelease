@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Hostel from "@/models/Hostel";
+import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
 // GET - Fetch all hostels
 export async function GET(request: NextRequest) {
     try {
-        await connectDB();
-        const hostels = await Hostel.find().sort({ name: 1 }).lean();
+        const hostels = await db.hostels.getAll();
         return NextResponse.json({ success: true, hostels });
     } catch (error: any) {
         return NextResponse.json(
@@ -21,23 +19,31 @@ export async function GET(request: NextRequest) {
 // POST - Create or update hostel
 export async function POST(request: NextRequest) {
     try {
-        await connectDB();
         const body = await request.json();
         const { id, name, totalRooms, wardenUsername, wardenPassword, attendanceMode } = body;
 
         let hostel;
         if (id) {
-            hostel = await Hostel.findByIdAndUpdate(
-                id,
-                { name, totalRooms, wardenUsername, wardenPassword, attendanceMode },
-                { new: true }
-            );
+            hostel = await db.hostels.update(id, {
+                name,
+                totalRooms,
+                wardenUsername,
+                wardenPassword,
+                attendanceMode
+            });
         } else {
-            hostel = await Hostel.create({ name, totalRooms, wardenUsername, wardenPassword, attendanceMode });
+            hostel = await db.hostels.create({
+                name,
+                totalRooms,
+                wardenUsername,
+                wardenPassword,
+                attendanceMode
+            });
         }
 
         return NextResponse.json({ success: true, hostel });
     } catch (error: any) {
+        console.error("Error saving hostel:", error);
         return NextResponse.json(
             { error: error.message || "Failed to save hostel" },
             { status: 500 }
@@ -52,8 +58,7 @@ export async function DELETE(request: NextRequest) {
         const id = searchParams.get("id");
         if (!id) throw new Error("ID is required");
 
-        await connectDB();
-        await Hostel.findByIdAndDelete(id);
+        await db.hostels.delete(id);
 
         return NextResponse.json({ success: true, message: "Hostel deleted" });
     } catch (error: any) {

@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import AdminSettings from "@/models/AdminSettings";
+import { db } from "@/lib/dbAdapter";
 
 const DEFAULT_ADMIN_PASSWORD = "pankajdwivedi81";
 
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
     const body = await request.json();
     const { password } = body;
 
@@ -17,8 +15,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch from DB
-    const settings = await AdminSettings.findOne({});
+    // Fetch from DB using adapter
+    const settings = await db.settings.get();
     const dynamicPassword = settings?.adminPassword || DEFAULT_ADMIN_PASSWORD;
 
     if (password === dynamicPassword) {
@@ -37,4 +35,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

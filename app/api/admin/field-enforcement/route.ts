@@ -1,23 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import FieldEnforcement from "@/models/FieldEnforcement";
+import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
 // GET all field enforcement rules or for a specific hostel
 export async function GET(request: NextRequest) {
   try {
-    await connectDB();
     const { searchParams } = new URL(request.url);
     const hostelName = searchParams.get("hostelName");
 
-    let query: any = {};
+    let filter: any = {};
     if (hostelName) {
-      // Use regex for case-insensitive match if searching for a specific hostel
-      query.hostelName = { $regex: new RegExp(`^${hostelName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i") };
+      filter.hostelName = { $regex: `^${hostelName.trim()}$` };
     }
 
-    const enforcementRules = await FieldEnforcement.find(query).lean();
+    const enforcementRules = await db.fieldEnforcement.find(filter);
 
     return NextResponse.json({
       success: true,
@@ -35,7 +32,6 @@ export async function GET(request: NextRequest) {
 // POST - Create or update field enforcement rules for a hostel
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
     const body = await request.json();
     const {
       hostelName,
@@ -75,8 +71,8 @@ export async function POST(request: NextRequest) {
       autoCloseNotification: autoCloseNotification ?? true,
     };
 
-    const enforcement = await FieldEnforcement.findOneAndUpdate(
-      { hostelName: { $regex: new RegExp(`^${normalizedHostelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i") } },
+    const enforcement = await db.fieldEnforcement.findOneAndUpdate(
+      { hostelName: { $regex: `^${normalizedHostelName}$` } },
       { $set: updateData },
       { upsert: true, new: true }
     );
@@ -97,7 +93,6 @@ export async function POST(request: NextRequest) {
 // PUT - Update specific hostel enforcement rules
 export async function PUT(request: NextRequest) {
   try {
-    await connectDB();
     const body = await request.json();
     const { hostelName, ...updateData } = body;
 
@@ -109,8 +104,8 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const enforcement = await FieldEnforcement.findOneAndUpdate(
-      { hostelName: { $regex: new RegExp(`^${normalizedHostelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i") } },
+    const enforcement = await db.fieldEnforcement.findOneAndUpdate(
+      { hostelName: { $regex: `^${normalizedHostelName}$` } },
       { $set: updateData },
       { new: true }
     );
@@ -138,7 +133,6 @@ export async function PUT(request: NextRequest) {
 // DELETE - Delete field enforcement rules for a hostel
 export async function DELETE(request: NextRequest) {
   try {
-    await connectDB();
     const { searchParams } = new URL(request.url);
     const hostelName = searchParams.get("hostelName");
 
@@ -149,8 +143,8 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const result = await FieldEnforcement.findOneAndDelete({
-      hostelName: { $regex: new RegExp(`^${hostelName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i") }
+    const result = await db.fieldEnforcement.findOneAndDelete({
+      hostelName: { $regex: `^${hostelName.trim()}$` }
     });
 
     if (!result) {
@@ -172,3 +166,4 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
+

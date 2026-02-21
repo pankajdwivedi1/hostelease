@@ -1,23 +1,20 @@
 import { NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Attendance from "@/models/Attendance";
+import { db } from "@/lib/dbAdapter";
 
 export async function POST(req: Request) {
     try {
-        await connectDB();
         const { attendanceId, status } = await req.json();
 
         if (!attendanceId || !status) {
             return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 });
         }
 
-        const attendance = await Attendance.findByIdAndUpdate(
+        const attendance = await db.attendance.update(
             attendanceId,
             {
                 faceMatchStatus: status,
                 needsReview: false
-            },
-            { new: true }
+            }
         );
 
         if (!attendance) {

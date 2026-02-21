@@ -1,11 +1,8 @@
-import { NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Notification from "@/models/Notification";
-import mongoose from "mongoose";
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/dbAdapter";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        await connectDB();
         const { searchParams } = new URL(request.url);
         const studentId = searchParams.get("studentId");
         const hostelName = searchParams.get("hostelName");
@@ -14,19 +11,17 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "Student ID required" }, { status: 400 });
         }
 
-        const studentObjId = new mongoose.Types.ObjectId(studentId);
-
         // Fetch notifications from the last 48 hours that target this student
         const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
-        const notifications = await Notification.find({
+        const notifications = await db.notifications.list({
             $or: [
                 { targetType: "all" },
                 { targetType: "hostel", targetHostel: hostelName },
-                { targetType: "individual", targetStudentId: studentObjId },
+                { targetType: "individual", targetStudentId: studentId },
             ],
             createdAt: { $gte: fortyEightHoursAgo }
-        }).sort({ createdAt: -1 });
+        }, { limit: 50 });
 
         return NextResponse.json({ success: true, notifications });
     } catch (error: any) {
@@ -34,21 +29,19 @@ export async function GET(request: Request) {
     }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        await connectDB();
         const { notificationId, studentId } = await request.json();
 
         if (!notificationId || !studentId) {
             return NextResponse.json({ error: "Missing fields" }, { status: 400 });
         }
 
-        const notification = await Notification.findByIdAndUpdate(
+        const notification = await db.notifications.update(
             notificationId,
             {
-                $addToSet: { acknowledgedBy: { studentId: new mongoose.Types.ObjectId(studentId), at: new Date() } },
-            },
-            { new: true }
+                $addToSet: { acknowledgedBy: { studentId: studentId, at: new Date() } },
+            }
         );
 
         return NextResponse.json({ success: true, notification });
@@ -56,3 +49,4 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
+

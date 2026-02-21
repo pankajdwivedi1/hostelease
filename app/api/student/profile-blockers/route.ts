@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Student from "@/models/Student";
-import FieldEnforcement from "@/models/FieldEnforcement";
+import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +9,6 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: NextRequest) {
     try {
-        await connectDB();
-
         const { searchParams } = new URL(request.url);
         const studentId = searchParams.get("studentId");
 
@@ -23,8 +19,8 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Fetch student data
-        const student = await Student.findById(studentId).lean();
+        // Fetch student data using adapter
+        const student = await db.students.getById(studentId);
         if (!student) {
             return NextResponse.json(
                 { error: "Student not found" },
@@ -36,14 +32,16 @@ export async function GET(request: NextRequest) {
         const studentHostel = (student.hostelName || "").trim();
         console.log(`🔍 Checking blockers for student: ${studentId}, Hostel: "${studentHostel}"`);
 
-        // Robust matching: trim and case-insensitive
-        const enforcement = await FieldEnforcement.findOne({
-            hostelName: { $regex: new RegExp(`^\\s*${studentHostel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, "i") },
-            isActive: true
-        }).lean();
+        // Use adapter for enforcement lookup
+        const rules = await db.fieldEnforcement.find({
+            hostelName: { $regex: `^${studentHostel}$` }
+        });
+
+        // Find the active rule (usually only one per hostel)
+        const enforcement = rules.find((r: any) => r.isActive);
 
         // If no enforcement rules or not active, no blockers
-        if (!enforcement || !enforcement.isActive) {
+        if (!enforcement) {
             console.log(`ℹ️ No active enforcement rules found for hostel: "${studentHostel}"`);
             return NextResponse.json({
                 hasBlockers: false,
@@ -57,11 +55,10 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        // Fetch student field progress to see what they've already submitted via the modal
-        const StudentFieldProgress = (await import("@/models/StudentFieldProgress")).default;
-        const progress = await StudentFieldProgress.find({
+        // Fetch student field progress via adapter
+        const progress = await db.studentFieldProgress.find({
             studentId: student._id
-        }).lean();
+        });
 
         console.log(`✅ Found ${enforcement.enforcedFields.length} rules. Student has ${progress.length} progress records.`);
 
@@ -72,7 +69,7 @@ export async function GET(request: NextRequest) {
         for (const field of enabledFields) {
             // Check both top-level fields and dynamicFields sub-object
             const fieldValue = (student as any)[field.fieldId] ?? (student as any).dynamicFields?.[field.fieldId];
-            const progressRecord = progress.find(p => p.fieldId === field.fieldId);
+            const progressRecord = progress.find((p: any) => p.fieldId === field.fieldId);
 
             // Check if field is empty/missing in Student record
             const isEmpty =
@@ -137,3 +134,4 @@ export async function GET(request: NextRequest) {
         );
     }
 }
+

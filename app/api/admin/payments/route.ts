@@ -1,29 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Transaction from "@/models/Transaction";
+import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
 // GET - Admin fetch all payments (with filters)
 export async function GET(request: NextRequest) {
     try {
-        await connectDB();
         const searchParams = request.nextUrl.searchParams;
         const status = searchParams.get("status");
         const search = searchParams.get("search");
 
-        let query: any = {};
-        if (status && status !== "all") query.status = status;
-        if (search) {
-            query.$or = [
-                { registrationId: { $regex: search, $options: "i" } },
-                { utrNumber: { $regex: search, $options: "i" } },
-            ];
-        }
+        const filters: any = {};
+        if (status && status !== "all") filters.status = status;
+        if (search) filters.search = search;
 
-        const payments = await Transaction.find(query)
-            .populate("studentId", "name hostelName roomNumber email")
-            .sort({ createdAt: -1 });
+        const payments = await db.transactions.list(filters);
 
         return NextResponse.json({
             success: true,
@@ -38,7 +29,6 @@ export async function GET(request: NextRequest) {
 // POST - Reconcile payments via CSV data
 export async function POST(request: NextRequest) {
     try {
-        await connectDB();
         const body = await request.json();
         const { csvRecords } = body; // Array of { utr: string, amount: number }
 
@@ -55,24 +45,24 @@ export async function POST(request: NextRequest) {
             if (!utr) continue;
 
             // Find the pending transaction with this UTR
-            const payment = await Transaction.findOne({
+            const payment = await db.transactions.findOne({
                 utrNumber: utr.trim(),
                 status: { $ne: "verified" },
             });
 
             if (payment) {
-                // Optional: Check if amount matches (caution: bank might add charges or student might pay partial)
-                // For now, if UTR matches, we verify it.
-                payment.status = "verified";
-                payment.reconciledViaCSV = true;
-                payment.verifiedAt = new Date();
-                payment.adminRemarks = "Automatically verified via Bank CSV reconciliation.";
-                await payment.save();
+                // Update via adapter
+                await db.transactions.update(payment._id, {
+                    status: "verified",
+                    reconciledViaCSV: true,
+                    verifiedAt: new Date(),
+                    adminRemarks: "Automatically verified via Bank CSV reconciliation."
+                });
                 verifiedCount++;
                 results.push({ utr, status: "verified", registrationId: payment.registrationId });
             } else {
                 // Check if it was already verified
-                const exists = await Transaction.findOne({ utrNumber: utr.trim(), status: "verified" });
+                const exists = await db.transactions.findOne({ utrNumber: utr.trim(), status: "verified" });
                 if (exists) {
                     alreadyVerified++;
                 }
@@ -94,7 +84,6 @@ export async function POST(request: NextRequest) {
 // PATCH - Manual update status (Approve/Reject)
 export async function PATCH(request: NextRequest) {
     try {
-        await connectDB();
         const body = await request.json();
         const { paymentId, status, adminRemarks } = body;
 
@@ -107,11 +96,7 @@ export async function PATCH(request: NextRequest) {
             updateData.verifiedAt = new Date();
         }
 
-        const payment = await Transaction.findByIdAndUpdate(
-            paymentId,
-            { $set: updateData },
-            { new: true }
-        );
+        const payment = await db.transactions.update(paymentId, updateData);
 
         if (!payment) {
             return NextResponse.json({ error: "Payment record not found" }, { status: 404 });
@@ -127,3 +112,4 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: "Update failed" }, { status: 500 });
     }
 }
+

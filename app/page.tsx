@@ -42,8 +42,8 @@ export default function Dashboard() {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
           if (user) {
             try {
-              // ⚡ OPTIMIZED: Use minimal=true to only check if student exists (fastest)
-              const response = await fetch(`/api/students?firebaseUID=${user.uid}&minimal=true`);
+              // ⚡ NEW: Check by EMAIL as requested (to identify existing records)
+              const response = await fetch(`/api/students?email=${encodeURIComponent(user.email || "")}&minimal=true`);
 
               // ⚡ FIX: Handle 404 (Not Found) as a valid state for new users -> Redirect to Onboarding
               if (response.status === 404) {

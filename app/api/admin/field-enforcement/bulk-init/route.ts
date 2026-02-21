@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import FieldEnforcement from "@/models/FieldEnforcement";
-import StudentFieldProgress from "@/models/StudentFieldProgress";
-import Student from "@/models/Student";
+import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
 // POST - Initialize field progress for all students in a hostel
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
     const body = await request.json();
     const { hostelName } = body;
 
@@ -21,10 +17,15 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedHostelName = hostelName.trim();
-    const hostelRegex = new RegExp(`^${normalizedHostelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i");
 
-    // Get field enforcement rules
-    const enforcement = await FieldEnforcement.findOne({ hostelName: { $regex: hostelRegex } }).lean();
+    // Get field enforcement rules via adapter
+    const rules = await db.fieldEnforcement.find({
+      hostelName: { $regex: `^${normalizedHostelName}$` }
+    });
+    const enforcement = rules.find((r: any) =>
+      r.hostelName.toLowerCase() === normalizedHostelName.toLowerCase()
+    );
+
     if (!enforcement) {
       return NextResponse.json(
         { error: "Field enforcement rules not found for this hostel" },
@@ -32,39 +33,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get all students in this hostel
-    const students = await Student.find({ hostelName: { $regex: hostelRegex } }).select("_id firebaseUID").lean();
+    // Get all students in this hostel via adapter
+    const students = await db.students.list({
+      hostelName: normalizedHostelName
+    });
 
     let createdCount = 0;
     let skippedCount = 0;
 
     // For each student, initialize field progress
     for (const student of students) {
-      for (const enforcedField of enforcement.enforcedFields) {
-        // Check if progress record already exists
-        const existing = await StudentFieldProgress.findOne({
-          studentId: student._id,
-          fieldId: enforcedField.fieldId,
-          hostelName: { $regex: hostelRegex },
-        });
-
-        if (!existing) {
-          // Create new progress record
-          try {
-            await StudentFieldProgress.create({
-              studentId: student._id,
-              firebaseUID: student.firebaseUID,
-              hostelName: normalizedHostelName, // Save normalized version
-              fieldId: enforcedField.fieldId,
-              fieldLabel: enforcedField.fieldLabel,
-              isCompleted: false,
-            });
-            createdCount++;
-          } catch (err) {
-            // Skip if duplicate or other insert error
-            skippedCount++;
-          }
-        } else {
+      for (const enforcedField of (enforcement.enforcedFields || [])) {
+        // Upsert handles checking if it exists
+        try {
+          await db.studentFieldProgress.upsert({
+            studentId: student._id,
+            firebaseUID: student.firebaseUID,
+            hostelName: normalizedHostelName,
+            fieldId: enforcedField.fieldId,
+            fieldLabel: enforcedField.fieldLabel,
+            isCompleted: false,
+          });
+          createdCount++;
+        } catch (err) {
           skippedCount++;
         }
       }
@@ -75,10 +66,10 @@ export async function POST(request: NextRequest) {
       message: `Initialized field progress for ${hostelName}`,
       stats: {
         totalStudents: students.length,
-        totalFields: enforcement.enforcedFields.length,
+        totalFields: (enforcement.enforcedFields || []).length,
         recordsCreated: createdCount,
         recordsSkipped: skippedCount,
-        potentialRecords: students.length * enforcement.enforcedFields.length,
+        potentialRecords: students.length * (enforcement.enforcedFields || []).length,
       },
     });
   } catch (error: any) {
@@ -93,7 +84,6 @@ export async function POST(request: NextRequest) {
 // DELETE - Clear all field progress for a hostel
 export async function DELETE(request: NextRequest) {
   try {
-    await connectDB();
     const { searchParams } = new URL(request.url);
     const hostelName = searchParams.get("hostelName");
 
@@ -104,7 +94,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const result = await StudentFieldProgress.deleteMany({ hostelName });
+    const result = await db.studentFieldProgress.deleteMany({ hostelName });
 
     return NextResponse.json({
       success: true,
@@ -119,3 +109,4 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
+

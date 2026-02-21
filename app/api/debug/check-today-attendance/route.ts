@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Attendance from "@/models/Attendance";
+import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
 // Debug endpoint to check today's attendance in database
 export async function GET(request: NextRequest) {
     try {
-        await connectDB();
-
         // Get today's date in IST format (YYYY-MM-DD)
         const today = new Date().toLocaleDateString("en-IN", {
             timeZone: "Asia/Kolkata",
@@ -17,22 +14,18 @@ export async function GET(request: NextRequest) {
             day: "2-digit",
         }).split('/').reverse().join('-');
 
-        // Count total attendance for today
-        const count = await Attendance.countDocuments({ date: today });
-
-        // Get all attendance records for today
-        const records = await Attendance.find({ date: today })
-            .select('name hostelName roomNumber istTime status studentId')
-            .sort({ istTime: 1 })
-            .lean();
+        // Get all attendance records for today using adapter
+        const records = await db.attendance.list({ date: today });
+        const count = records.length;
 
         // Group by hostel
         const byHostel: Record<string, number> = {};
-        records.forEach(r => {
-            if (!byHostel[r.hostelName]) {
-                byHostel[r.hostelName] = 0;
+        records.forEach((r: any) => {
+            const hostelName = r.hostelName;
+            if (!byHostel[hostelName]) {
+                byHostel[hostelName] = 0;
             }
-            byHostel[r.hostelName]++;
+            byHostel[hostelName]++;
         });
 
         return NextResponse.json({
@@ -42,7 +35,7 @@ export async function GET(request: NextRequest) {
             records: records,
             byHostel: byHostel,
             message: count === 0
-                ? "NO ATTENDANCE RECORDS FOUND - All queued attendance was lost"
+                ? "NO ATTENDANCE RECORDS FOUND"
                 : `Found ${count} attendance records for today`
         });
     } catch (error: any) {

@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import AdminSettings from "@/models/AdminSettings";
+import { db } from "@/lib/dbAdapter";
 
 export async function PATCH(request: NextRequest) {
     try {
-        await connectDB();
         const body = await request.json();
         const { type, newPassword } = body;
 
@@ -22,11 +20,7 @@ export async function PATCH(request: NextRequest) {
             return NextResponse.json({ error: "Invalid user type" }, { status: 400 });
         }
 
-        const result = await AdminSettings.findOneAndUpdate(
-            {},
-            { [updateField]: newPassword },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-        );
+        await db.settings.update({ [updateField]: newPassword });
 
         return NextResponse.json({ success: true, message: `Password for ${type} updated successfully` }, { status: 200 });
     } catch (error: any) {
