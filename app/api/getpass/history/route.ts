@@ -16,7 +16,11 @@ export async function GET(request: NextRequest) {
         const searchParams = request.nextUrl.searchParams;
         const firebaseUID = searchParams.get("firebaseUID");
         const hostelName = searchParams.get("hostelName");
-        const status = searchParams.get("status"); // "out" or "in" or "all"
+        const status = searchParams.get("status");
+        const erpId = searchParams.get("erpId");
+        const registrationId = searchParams.get("registrationId");
+        const collegeName = searchParams.get("collegeName");
+        const search = searchParams.get("search");
         const startDate = searchParams.get("startDate");
         const endDate = searchParams.get("endDate");
         const limit = parseInt(searchParams.get("limit") || "50");
@@ -36,6 +40,10 @@ export async function GET(request: NextRequest) {
             filters.status = status;
         }
 
+        if (erpId) filters.erpId = erpId;
+        if (registrationId) filters.registrationId = registrationId;
+        if (collegeName && collegeName !== "all") filters.collegeName = collegeName;
+        if (search) filters.search = search;
         if (startDate) filters.startDate = startDate;
         if (endDate) filters.endDate = endDate;
 
@@ -59,4 +67,3 @@ export async function GET(request: NextRequest) {
         );
     }
 }
-

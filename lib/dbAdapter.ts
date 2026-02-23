@@ -2,6 +2,7 @@
 import { supabase } from '@/lib/supabase';
 import connectDB from '@/lib/mongodb';
 import { headers } from 'next/headers'; // To check for secret header
+import crypto from 'crypto';
 
 // Note: We might need to ensure mongoose models are imported correctly
 
@@ -50,6 +51,56 @@ const mapStudentToCamelCase = (s: any) => {
         thumbImpressionId: s.thumb_impression_id,
         dynamicFields: s.dynamic_fields || {}
     };
+};
+
+/**
+ * Maps camelCase student fields to snake_case for Supabase updates/inserts
+ */
+const mapStudentToSnakeCase = (data: any) => {
+    const mapped: any = {};
+    const fieldMap: any = {
+        firebaseUID: 'firebase_uid',
+        phoneNumber: 'phone_number',
+        hostelName: 'hostel_name',
+        roomNumber: 'room_number',
+        profilePicture: 'profile_picture',
+        fatherName: 'father_name',
+        fatherNumber: 'father_number',
+        motherName: 'mother_name',
+        motherNumber: 'mother_number',
+        permanentAddress: 'permanent_address',
+        homeState: 'home_state',
+        erpInformation: 'erp_id',
+        joiningDate: 'joining_date',
+        collegeName: 'college_name',
+        localGuardianAddress: 'local_guardian_address',
+        localGuardianPhoneNumber: 'local_guardian_phone_number',
+        floorNumber: 'floor_number',
+        registrationId: 'registration_id',
+        isProfileLocked: 'is_profile_locked',
+        faceDescriptor: 'face_descriptor',
+        attendanceMode: 'attendance_mode',
+        deviceResetCount: 'device_reset_count',
+        webAuthnCredentials: 'web_authn_credentials',
+        deviceHistory: 'device_history',
+        deviceId: 'device_id',
+        studentStatus: 'student_status',
+        dynamicFields: 'dynamic_fields'
+    };
+    const forbidden = [
+        'id', '_id', 'firebaseuid', 'firebase_uid', 'createdat', 'updatedat',
+        'action', '__v', 'permissions', 'lastcheckinlocation', 'permanentaddress', 'permanent_address'
+    ];
+    Object.keys(data).forEach(key => {
+        const lowKey = key.toLowerCase();
+        if (forbidden.includes(lowKey) || forbidden.includes(lowKey.replace(/_/g, ''))) return;
+        if (fieldMap[key]) {
+            mapped[fieldMap[key]] = data[key];
+        } else {
+            mapped[key] = data[key];
+        }
+    });
+    return mapped;
 };
 
 /**
@@ -179,6 +230,8 @@ const mapHostelToCamelCase = (h: any) => {
  */
 const mapGatePassToCamelCase = (g: any) => {
     if (!g) return null;
+    const student = Array.isArray(g.students) ? g.students[0] : g.students;
+
     return {
         _id: g._id,
         studentId: g.student_id,
@@ -186,6 +239,7 @@ const mapGatePassToCamelCase = (g: any) => {
         studentName: g.student_name,
         hostelName: g.hostel_name,
         roomNumber: g.room_number,
+        phoneNumber: student?.phone_number || null,
         registrationId: g.registration_id,
         checkOutTime: g.check_out_time,
         checkOutISTTime: g.check_out_ist_time,
@@ -254,10 +308,19 @@ const mapGatePassToSnakeCase = (g: any) => {
     };
 
     Object.keys(g).forEach(key => {
+        let value = g[key];
+        // Convert Date objects to ISO strings for Supabase
+        if (value instanceof Date) {
+            // Convert to IST offset string (e.g., 2026-02-22T23:49:12+05:30)
+            const offset = 5.5 * 60 * 60 * 1000;
+            const istDate = new Date(value.getTime() + offset);
+            value = istDate.toISOString().replace('Z', '+05:30');
+        }
+
         if (fieldMap[key]) {
-            mapped[fieldMap[key]] = g[key];
+            mapped[fieldMap[key]] = value;
         } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
-            mapped[key] = g[key];
+            mapped[key] = value;
         }
     });
 
@@ -758,62 +821,9 @@ export const db = {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 // Map camelCase fields to Supabase snake_case column names
-                const mapStudentFields = (data: any) => {
-                    const mapped: any = {};
-                    // Explicit camelCase → snake_case mappings for Supabase columns
-                    const fieldMap: any = {
-                        firebaseUID: 'firebase_uid',
-                        phoneNumber: 'phone_number',
-                        hostelName: 'hostel_name',
-                        roomNumber: 'room_number',
-                        profilePicture: 'profile_picture',
-                        fatherName: 'father_name',
-                        fatherNumber: 'father_number',
-                        motherName: 'mother_name',
-                        motherNumber: 'mother_number',
-                        // ✅ permanentAddress maps to permanent_address column in Supabase
-                        permanentAddress: 'permanent_address',
-                        homeState: 'home_state',
-                        // ✅ erpInformation maps to erp_id (actual live Supabase column name)
-                        erpInformation: 'erp_id',
-                        joiningDate: 'joining_date',
-                        collegeName: 'college_name',
-                        localGuardianAddress: 'local_guardian_address',
-                        localGuardianPhoneNumber: 'local_guardian_phone_number',
-                        floorNumber: 'floor_number',
-                        registrationId: 'registration_id',
-                        isProfileLocked: 'is_profile_locked',
-                        faceDescriptor: 'face_descriptor',
-                        attendanceMode: 'attendance_mode',
-                        deviceResetCount: 'device_reset_count',
-                        webAuthnCredentials: 'web_authn_credentials',
-                        deviceHistory: 'device_history',
-                        deviceId: 'device_id',
-                        studentStatus: 'student_status',
-                        dynamicFields: 'dynamic_fields'
-                    };
+                // (delegates to the module-level mapStudentToSnakeCase helper)
 
-                    // Fields to skip — they are metadata, identifiers, or computed elsewhere
-                    const forbidden = [
-                        'id', '_id', 'firebaseuid', 'firebase_uid', 'createdat', 'updatedat',
-                        'action', '__v', 'permissions', 'lastcheckinlocation', 'permanentaddress', 'permanent_address'
-                    ];
-
-                    Object.keys(data).forEach(key => {
-                        const lowKey = key.toLowerCase();
-                        if (forbidden.includes(lowKey) || forbidden.includes(lowKey.replace(/_/g, ''))) return;
-
-                        if (fieldMap[key]) {
-                            mapped[fieldMap[key]] = data[key];
-                        } else {
-                            // Pass through fields that are already in snake_case or don't need remapping
-                            mapped[key] = data[key];
-                        }
-                    });
-                    return mapped;
-                };
-
-                const supabaseData = mapStudentFields(studentData);
+                const supabaseData = mapStudentToSnakeCase(studentData);
 
                 // ✅ CORRECT APPROACH: Never use upsert when _id is the PK referenced by FK.
                 // Supabase upsert's ON CONFLICT DO UPDATE SET includes _id → violates attendance FK.
@@ -874,9 +884,13 @@ export const db = {
         create: async (studentData: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const finalData = { ...studentData };
+                if (!finalData._id) {
+                    finalData._id = crypto.randomUUID();
+                }
                 const { data, error } = await supabase
                     .from('students')
-                    .insert([studentData])
+                    .insert([finalData])
                     .select();
 
                 if (error) throw error;
@@ -1184,16 +1198,30 @@ export const db = {
             const source = await getDbSource();
 
             if (source === 'SUPABASE') {
-                let query = supabase.from('students').update(updateData);
+                // Convert camelCase keys to snake_case for Supabase
+                const snakeUpdate = mapStudentToSnakeCase(updateData);
+                // ⚡ Do NOT use .select() after bulk update — it causes Supabase to
+                // stream back ALL rows which hits the statement timeout on large tables.
+                // Instead: update without returning rows, then do a cheap count.
+                let updateQuery = supabase.from('students').update(snakeUpdate);
 
                 if (filter?.hostelName) {
-                    query = query.ilike('hostel_name', filter.hostelName);
+                    updateQuery = updateQuery.ilike('hostel_name', filter.hostelName);
+                } else {
+                    // neq('_id', '') matches every row — required by Supabase safety check
+                    updateQuery = updateQuery.neq('_id', '');
                 }
 
-                const { data, error } = await query.select();
-
+                const { error } = await updateQuery;
                 if (error) throw error;
-                return { count: data?.length || 0 };
+
+                // Get a lightweight count of students (to return how many were affected)
+                let countQuery = supabase.from('students').select('_id', { count: 'exact', head: true });
+                if (filter?.hostelName) {
+                    countQuery = countQuery.ilike('hostel_name', filter.hostelName);
+                }
+                const { count } = await countQuery;
+                return { count: count || 0 };
             } else {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
@@ -1313,7 +1341,8 @@ export const db = {
             if (source === 'SUPABASE') {
                 // Map camelCase (API) to snake_case (Supabase)
                 // Note: _id is auto-generated by Supabase (gen_random_uuid())
-                const supabaseData = {
+                const supabaseData: any = {
+                    _id: crypto.randomUUID(), // Explicitly generate for Supabase
                     student_id: attendanceData.studentId,
                     firebase_uid: attendanceData.firebaseUID,
                     name: attendanceData.name,
@@ -1382,7 +1411,7 @@ export const db = {
                 // We alias the joined 'students' table as 'studentId' to match Mongo's populated structure
                 let query = supabase
                     .from('attendance')
-                    .select('*, studentId:students(*)');
+                    .select('*, studentId:students!attendance_student_id_fkey(*)');
 
                 if (filters.date) {
                     query = query.eq('date', filters.date);
@@ -1585,6 +1614,9 @@ export const db = {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const snakeData = mapHostelToSnakeCase(hostelData);
+                if (!snakeData._id) {
+                    snakeData._id = crypto.randomUUID();
+                }
                 const { data, error } = await supabase
                     .from('hostels')
                     .insert([snakeData])
@@ -1671,14 +1703,29 @@ export const db = {
             const skip = (page - 1) * limit;
 
             if (source === 'SUPABASE') {
-                let query = supabase.from('gate_passes').select('*', { count: 'exact' });
+                const needsStudentJoin = (filters.collegeName && filters.collegeName !== 'all') || filters.erpId;
+                const studentFields = 'phone_number, college_name, erp_id';
+                let query = supabase.from('gate_passes').select(
+                    needsStudentJoin ? `*, students!student_id!inner(${studentFields})` : `*, students!student_id(${studentFields})`,
+                    { count: 'exact' }
+                );
 
                 if (filters.firebaseUID) query = query.eq('firebase_uid', filters.firebaseUID);
                 if (filters.studentId) query = query.eq('student_id', filters.studentId);
                 if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
+                if (filters.registrationId) query = query.ilike('registration_id', `%${filters.registrationId}%`);
+                if (filters.erpId) query = query.ilike('students.erp_id', `%${filters.erpId}%`);
+                if (filters.hostelName && filters.hostelName !== 'all') query = query.ilike('hostel_name', `%${filters.hostelName}%`);
+                if (filters.collegeName && filters.collegeName !== 'all') query = query.ilike('students.college_name', `%${filters.collegeName}%`);
 
-                if (filters.hostelName && filters.hostelName !== 'all') {
-                    query = query.ilike('hostel_name', `%${filters.hostelName}%`);
+                if (filters.search) {
+                    const s = `%${filters.search}%`;
+                    // Always try to search in joined table if possible, but keep it safe
+                    if (needsStudentJoin) {
+                        query = query.or(`registration_id.ilike.${s},student_name.ilike.${s},students.erp_id.ilike.${s}`);
+                    } else {
+                        query = query.or(`registration_id.ilike.${s},student_name.ilike.${s}`);
+                    }
                 }
 
                 if (filters.startDate) query = query.gte('check_out_time', new Date(filters.startDate).toISOString());
@@ -1737,6 +1784,11 @@ export const db = {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const snakeData = mapGatePassToSnakeCase(gatePassData);
+                // Ensure _id is generated for Supabase if not provided
+                if (!snakeData._id) {
+                    snakeData._id = crypto.randomUUID();
+                }
+
                 const { data, error } = await supabase
                     .from('gate_passes')
                     .insert([snakeData])
@@ -1816,6 +1868,27 @@ export const db = {
                 }
                 return await GatePassModel.countDocuments(mongoQuery);
             }
+        },
+
+        deleteMany: async (filter: any = {}) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('gate_passes').delete();
+                if (filter.status) {
+                    query = query.eq('status', filter.status);
+                } else {
+                    // Supabase requires a filter for delete. neq _id to empty string effectively selects all.
+                    query = query.neq('_id', '');
+                }
+                const { error, count } = await query;
+                if (error) throw error;
+                return { deletedCount: count || 0 };
+            } else {
+                await connectDB();
+                const GatePassModel = (await import('@/models/GatePass')).default;
+                const result = await GatePassModel.deleteMany(filter);
+                return { deletedCount: result.deletedCount };
+            }
         }
     },
 
@@ -1827,6 +1900,7 @@ export const db = {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const snakeData = {
+                    _id: crypto.randomUUID(),
                     token: tokenData.token,
                     gate_name: tokenData.gateName,
                     expires_at: tokenData.expiresAt,
@@ -1861,6 +1935,21 @@ export const db = {
                 const GatePassTokenModel = (await import('@/models/GatePassToken')).default;
                 const record = await GatePassTokenModel.findOne(filter).lean();
                 return record ? JSON.parse(JSON.stringify(record)) : null;
+            }
+        },
+
+        deleteMany: async (filter: any = {}) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let query = supabase.from('gate_pass_tokens').delete().neq('_id', '');
+                const { error, count } = await query;
+                if (error) throw error;
+                return { deletedCount: count || 0 };
+            } else {
+                await connectDB();
+                const GatePassTokenModel = (await import('@/models/GatePassToken')).default;
+                const result = await GatePassTokenModel.deleteMany(filter);
+                return { deletedCount: result.deletedCount };
             }
         }
     },
@@ -2009,6 +2098,9 @@ export const db = {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const snakeData = mapNotificationToSnakeCase(notificationData);
+                if (!snakeData._id) {
+                    snakeData._id = crypto.randomUUID();
+                }
                 const { data, error } = await supabase
                     .from('notifications')
                     .insert([snakeData])
@@ -2095,7 +2187,7 @@ export const db = {
             const limit = options.limit || 100;
 
             if (source === 'SUPABASE') {
-                let query = supabase.from('transactions').select('*, studentId:students(name, hostel_name, room_number, email)');
+                let query = supabase.from('transactions').select('*, studentId:students!student_id(name, hostel_name, room_number, email)');
 
                 if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
                 if (filters.studentId) query = query.eq('student_id', filters.studentId);
@@ -2184,6 +2276,9 @@ export const db = {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const snakeData = mapTransactionToSnakeCase(transactionData);
+                if (!snakeData._id) {
+                    snakeData._id = crypto.randomUUID();
+                }
                 const { data, error } = await supabase
                     .from('transactions')
                     .insert([snakeData])
@@ -2207,7 +2302,7 @@ export const db = {
         list: async (filters: any = {}, options: { limit?: number; offset?: number; populate?: boolean } = {}) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                let query = supabase.from('permissions').select(options.populate ? '*, students(*)' : '*');
+                let query = supabase.from('permissions').select(options.populate ? '*, students!student_id(*)' : '*');
 
                 if (filters.studentId) query = query.eq('student_id', filters.studentId);
                 if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
@@ -2249,7 +2344,7 @@ export const db = {
         getById: async (id: string, options: { populate?: boolean } = {}) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                const query = supabase.from('permissions').select(options.populate ? '*, students(*)' : '*').eq('_id', id).single();
+                const query = supabase.from('permissions').select(options.populate ? '*, students!student_id(*)' : '*').eq('_id', id).single();
                 const { data, error } = await query;
                 if (error) return null;
                 return mapPermissionToCamelCase(data);
@@ -2267,6 +2362,9 @@ export const db = {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const snakeData = mapPermissionToSnakeCase(permissionData);
+                if (!snakeData._id) {
+                    snakeData._id = crypto.randomUUID();
+                }
                 const { data, error } = await supabase
                     .from('permissions')
                     .insert([snakeData])
@@ -2364,6 +2462,8 @@ export const db = {
                     if (error) throw error;
                     return mapStudentFieldProgressToCamelCase(data);
                 } else {
+                    // Add _id for new insert
+                    snakeData._id = crypto.randomUUID();
                     const { data, error } = await supabase
                         .from('student_field_progress')
                         .insert([snakeData])

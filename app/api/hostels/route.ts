@@ -6,10 +6,12 @@ export const dynamic = "force-dynamic";
 // GET - Fetch all hostels
 export async function GET(request: NextRequest) {
     try {
+        console.log("🏨 [API/hostels] Fetching all hostels...");
         const hostels = await db.hostels.getAll();
 
         // If no hostels exist, create the default ones
-        if (hostels.length === 0) {
+        if (!hostels || hostels.length === 0) {
+            console.log("🏨 [API/hostels] No hostels found, creating defaults...");
             const defaultHostels = [
                 { name: "Gangotri Hostel" },
                 { name: "Gaytri Hostel" },
@@ -17,8 +19,6 @@ export async function GET(request: NextRequest) {
                 { name: "Guest House Boys Hostel" },
             ];
 
-            // Use Promise.all with create for each since insertMany isn't in adapter yet
-            // or we can just loop.
             for (const h of defaultHostels) {
                 await db.hostels.create(h);
             }
@@ -27,9 +27,10 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ hostels: newHostels }, { status: 200 });
         }
 
+        console.log(`🏨 [API/hostels] Returning ${hostels.length} hostels.`);
         return NextResponse.json({ hostels }, { status: 200 });
     } catch (error: any) {
-        console.error("Error fetching hostels:", error);
+        console.error("❌ [API/hostels] Error:", error);
         return NextResponse.json(
             { error: error.message || "Failed to fetch hostels" },
             { status: 500 }
@@ -50,7 +51,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Check if hostel already exists
         const existingHostel = await db.hostels.findOne({ name: name.trim() });
         if (existingHostel) {
             return NextResponse.json(
@@ -66,44 +66,9 @@ export async function POST(request: NextRequest) {
             { status: 201 }
         );
     } catch (error: any) {
-        console.error("Error creating hostel:", error);
+        console.error("❌ [API/hostels] Error creating hostel:", error);
         return NextResponse.json(
             { error: error.message || "Failed to create hostel" },
-            { status: 500 }
-        );
-    }
-}
-
-// DELETE - Delete a hostel (Legacy support if needed, but admin has its own)
-export async function DELETE(request: NextRequest) {
-    try {
-        const { searchParams } = new URL(request.url);
-        const id = searchParams.get("id");
-
-        if (!id) {
-            return NextResponse.json(
-                { error: "Hostel ID is required" },
-                { status: 400 }
-            );
-        }
-
-        const result = await db.hostels.delete(id);
-
-        if (!result) {
-            return NextResponse.json(
-                { error: "Hostel not found" },
-                { status: 404 }
-            );
-        }
-
-        return NextResponse.json(
-            { success: true, message: "Hostel deleted successfully" },
-            { status: 200 }
-        );
-    } catch (error: any) {
-        console.error("Error deleting hostel:", error);
-        return NextResponse.json(
-            { error: error.message || "Failed to delete hostel" },
             { status: 500 }
         );
     }

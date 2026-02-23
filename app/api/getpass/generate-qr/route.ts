@@ -14,31 +14,32 @@ export async function GET(request: NextRequest) {
         const searchParams = request.nextUrl.searchParams;
         const gateName = searchParams.get("gate") || "Main Gate";
 
-        // Generate a cryptographically secure random token
-        const token = crypto.randomBytes(32).toString("hex");
         const now = new Date();
-        const expiresAt = new Date(now.getTime() + 15000); // 15 seconds validity (10s + 5s buffer)
+        const timestamp = now.getTime();
 
-        // Create the token in DB using adapter
-        await db.gatePassTokens.create({
-            token,
-            gateName,
-            createdAt: now,
-            expiresAt: expiresAt,
-        });
+        // Use a secret key to sign the token (In production, use process.env.GATEPASS_SECRET)
+        const secret = "hostelease_secure_gate_key_2026";
+
+        // Create a signature that includes gate name and timestamp
+        const dataToSign = `${gateName}:${timestamp}`;
+        const signature = crypto.createHmac('sha256', secret).update(dataToSign).digest('hex');
+
+        // The token is now a combination of timestamp and signature
+        const signedToken = `${timestamp}.${signature}`;
+        const expiresAt = new Date(timestamp + 15000);
 
         // The QR code will encode this data
         const qrData = JSON.stringify({
-            t: token, // token
-            g: gateName, // gate name
-            ts: now.getTime(), // timestamp
-            app: "hostelease-getpass", // app identifier
+            t: signedToken, // signed token
+            g: gateName,    // gate name
+            ts: timestamp,  // timestamp
+            app: "hostelease-getpass",
         });
 
         return NextResponse.json({
             success: true,
             qrData,
-            token,
+            token: signedToken,
             expiresAt: expiresAt.toISOString(),
             gateName,
             generatedAt: now.toISOString(),

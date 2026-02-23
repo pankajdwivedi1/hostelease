@@ -31,12 +31,12 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json({
                     success: true,
                     type: 'getpass',
-                    hostelName: 'GETPASS MONITOR',
+                    hostelName: 'GATEPASS MONITOR',
                     authorizedHostels: []
                 }, { status: 200 });
             } else {
                 return NextResponse.json(
-                    { error: "Invalid authentication key for GETPASS" },
+                    { error: "Invalid authentication key for GATEPASS" },
                     { status: 401 }
                 );
             }

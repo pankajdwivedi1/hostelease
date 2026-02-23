@@ -27,6 +27,8 @@ const DeveloperTools = ({ hostels }: { hostels: any[] }) => {
   const [selectedHostel, setSelectedHostel] = useState("");
   const [isResetting, setIsResetting] = useState(false);
 
+  const [isClearingLogs, setIsClearingLogs] = useState(false);
+
   const handleUnlock = () => {
     if (password === "pankaj852") {
       setIsUnlocked(true);
@@ -56,6 +58,25 @@ const DeveloperTools = ({ hostels }: { hostels: any[] }) => {
       alert("Error resetting: " + e.message);
     } finally {
       setIsResetting(false);
+    }
+  };
+
+  const handleClearGatepassLogs = async () => {
+    if (!confirm("🚨 DANGER: This will permanently delete ALL Gatepass history and tokens for EVERY student. This is irreversible.\n\nAre you absolutely sure?")) return;
+
+    setIsClearingLogs(true);
+    try {
+      const res = await fetch("/api/admin/clear-logs", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+      } else {
+        alert("Error: " + data.error);
+      }
+    } catch (e: any) {
+      alert("Error clearing logs: " + e.message);
+    } finally {
+      setIsClearingLogs(false);
     }
   };
 
@@ -96,35 +117,57 @@ const DeveloperTools = ({ hostels }: { hostels: any[] }) => {
         <button onClick={() => setIsUnlocked(false)} className="text-[10px] font-black uppercase text-indigo-400 hover:text-indigo-600">Lock Tools</button>
       </div>
 
-      <div className="bg-white p-6 rounded-xl border border-indigo-200 shadow-sm space-y-4">
-        <div className="space-y-1">
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Step 1: Select Hostel to Wipe</label>
-          <select
-            value={selectedHostel}
-            onChange={(e) => setSelectedHostel(e.target.value)}
-            className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
-          >
-            <option value="">Choose a hostel...</option>
-            {hostels.map(h => <option key={h._id} value={h.name}>{h.name}</option>)}
-          </select>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white p-6 rounded-xl border border-indigo-200 shadow-sm space-y-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Step 1: Select Hostel to Wipe</label>
+            <select
+              value={selectedHostel}
+              onChange={(e) => setSelectedHostel(e.target.value)}
+              className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+            >
+              <option value="">Choose a hostel...</option>
+              {hostels.map(h => <option key={h._id} value={h.name}>{h.name}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Step 2: Trigger Bulk Reset (Supabase Only)</label>
+            <button
+              onClick={handleReset}
+              disabled={isResetting || !selectedHostel}
+              className="w-full py-4 bg-red-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-xl shadow-red-200 disabled:opacity-50"
+            >
+              {isResetting ? "⏳ WIPING DATA..." : "🚨 RESET ALL STUDENT DEVICES"}
+            </button>
+          </div>
+
+          <div className="p-4 bg-red-50 rounded-xl border border-red-100">
+            <p className="text-[10px] text-red-600 font-black leading-relaxed">
+              CRITICAL IMPACT: This will instantly clear Device IDs, Face Embeddings, and Biometric Keys for EVERY student in the selected hostel.
+            </p>
+          </div>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Step 2: Trigger Bulk Reset (Supabase Only)</label>
+        <div className="bg-white p-6 rounded-xl border border-amber-200 shadow-sm space-y-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Gatepass Archive Cleanup</label>
+            <p className="text-[11px] text-gray-500 font-bold">Wipe movement history and active QR tokens across the entire campus.</p>
+          </div>
+
           <button
-            onClick={handleReset}
-            disabled={isResetting || !selectedHostel}
-            className="w-full py-4 bg-red-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-xl shadow-red-200 disabled:opacity-50"
+            onClick={handleClearGatepassLogs}
+            disabled={isClearingLogs}
+            className="w-full py-4 bg-amber-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-amber-700 transition-all shadow-xl shadow-amber-200 disabled:opacity-50"
           >
-            {isResetting ? "⏳ WIPING DATA..." : "🚨 RESET ALL STUDENT DEVICES"}
+            {isClearingLogs ? "⏳ DELETING ARCHIVES..." : "🗑️ CLEAR ALL GATEPASS LOGS"}
           </button>
-        </div>
 
-        <div className="p-4 bg-red-50 rounded-xl border border-red-100">
-          <p className="text-[10px] text-red-600 font-black leading-relaxed">
-            CRITICAL IMPACT: This will instantly clear Device IDs, Face Embeddings, and Biometric Keys for EVERY student in the selected hostel.
-            Students will be prompted to re-register their face and device upon their next login. This is irreversible.
-          </p>
+          <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
+            <p className="text-[10px] text-amber-700 font-black leading-relaxed italic">
+              Use this before going Live to remove all test movement data.
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -2768,16 +2811,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 >
                   Broadcast
                 </button>
-                <button
-                  onClick={() => window.open('/getpass', '_blank')}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-black transition-all text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-2 group"
-                >
-                  <div className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]"></span>
-                  </div>
-                  GETPASS
-                </button>
+                {title === "Developer Dashboard" && (
+                  <button
+                    onClick={() => window.open('/getpass', '_blank')}
+                    className="flex-1 py-2.5 rounded-lg text-sm font-black transition-all text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-2 group"
+                  >
+                    <div className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]"></span>
+                    </div>
+                    GATEPASS
+                  </button>
+                )}
                 {!isWarden && title === "Developer Dashboard" && (
                   <button
                     onClick={() => setCurrentTab('settings')}
@@ -6516,14 +6561,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <div className="flex items-center gap-4 mb-6">
                         <div className="p-3 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-100 text-xl font-bold">🎟️</div>
                         <div>
-                          <h3 className="text-lg font-black text-emerald-900 uppercase tracking-tight">GETPASS ACCESS</h3>
+                          <h3 className="text-lg font-black text-emerald-900 uppercase tracking-tight">GATEPASS ACCESS</h3>
                           <p className="text-xs text-emerald-700 font-medium uppercase tracking-widest">Secure Monitor Link Password</p>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
                         <div className="space-y-2">
-                          <label className="text-[10px] font-black text-emerald-600/60 uppercase tracking-widest px-1">Independent Getpass Password</label>
+                          <label className="text-[10px] font-black text-emerald-600/60 uppercase tracking-widest px-1">Independent Gatepass Password</label>
                           <input
                             type="text"
                             value={getpassPassword}
@@ -6541,7 +6586,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 body: JSON.stringify({ newPassword: getpassPassword, type: "getpass" })
                               });
                               const data = await res.json();
-                              if (data.success) alert("✅ GETPASS password updated successfully!");
+                              if (data.success) alert("✅ GATEPASS password updated successfully!");
                               else alert("Error: " + data.error);
                             } catch (e) {
                               alert("Failed to update password");
@@ -6549,7 +6594,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           }}
                           className="h-14 bg-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 active:scale-95"
                         >
-                          Set Getpass Password
+                          Set Gatepass Password
                         </button>
                       </div>
                     </div>

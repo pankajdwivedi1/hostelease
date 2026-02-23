@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS admin_settings (
 );
 
 -- 2. GATE PASS
-CREATE TABLE IF NOT EXISTS gate_pass (
+CREATE TABLE IF NOT EXISTS gate_passes (
     _id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     student_id TEXT NOT NULL, -- Logical FK to students._id
     firebase_uid TEXT NOT NULL,
@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS field_enforcement (
 
 -- RLS POLICIES (Development Mode: Allow All)
 ALTER TABLE admin_settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE gate_pass ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gate_passes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gate_pass_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hostels ENABLE ROW LEVEL SECURITY;
 ALTER TABLE permissions ENABLE ROW LEVEL SECURITY;
@@ -168,7 +168,7 @@ ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE field_enforcement ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow All" ON admin_settings FOR ALL USING (true);
-CREATE POLICY "Allow All" ON gate_pass FOR ALL USING (true);
+CREATE POLICY "Allow All" ON gate_passes FOR ALL USING (true);
 CREATE POLICY "Allow All" ON gate_pass_tokens FOR ALL USING (true);
 CREATE POLICY "Allow All" ON hostels FOR ALL USING (true);
 CREATE POLICY "Allow All" ON permissions FOR ALL USING (true);

@@ -51,28 +51,42 @@ export async function POST(request: NextRequest) {
         // Verify it's a GETPASS QR code
         if (parsedQR.app !== "hostelease-getpass") {
             return NextResponse.json(
-                { error: "This is not a valid GETPASS QR code" },
+                { error: "This is not a valid GATEPASS QR code" },
                 { status: 400 }
             );
         }
 
         const token = parsedQR.t;
+        const gateName = parsedQR.g || "Main Gate";
 
-        // Verify token exists and hasn't expired
-        const tokenRecord = await db.gatePassTokens.findOne({ token });
+        // Verification logic for Digital Signature
+        try {
+            const [timestampStr, signature] = token.split('.');
+            const timestamp = parseInt(timestampStr);
+            const secret = "hostelease_secure_gate_key_2026";
 
-        if (!tokenRecord) {
+            // Re-create the signature to compare
+            const crypto = await import('crypto');
+            const dataToVerify = `${gateName}:${timestamp}`;
+            const expectedSignature = crypto.createHmac('sha256', secret).update(dataToVerify).digest('hex');
+
+            // 1. Check if signature is valid
+            if (signature !== expectedSignature) {
+                throw new Error("Invalid signature");
+            }
+
+            // 2. Check if token is too old (15 seconds limit)
+            const nowMs = Date.now();
+            if (nowMs - timestamp > 15000) {
+                return NextResponse.json(
+                    { error: "QR code has expired. Please scan the new QR code displayed at the gate." },
+                    { status: 410 }
+                );
+            }
+        } catch (err) {
             return NextResponse.json(
-                { error: "QR code has expired. Please scan the new QR code displayed at the gate." },
-                { status: 410 }
-            );
-        }
-
-        // Check if token is expired
-        if (new Date() > new Date(tokenRecord.expiresAt)) {
-            return NextResponse.json(
-                { error: "QR code has expired. Please scan the new QR code displayed at the gate." },
-                { status: 410 }
+                { error: "This is an invalid or tempered QR code." },
+                { status: 400 }
             );
         }
 

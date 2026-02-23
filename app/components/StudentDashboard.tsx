@@ -49,6 +49,7 @@ interface StudentProfile {
     faceDescriptor?: number[]; // ⚡ NEW: Stores face embedding
     firebaseUID?: string;
     attendanceMode?: "default" | "strict" | "gps-only" | "biometric"; // ⚡ NEW: Override
+    isProfileLocked?: boolean; // ⚡ Admin-controlled profile lock
     webAuthnCredentials?: {
         credentialID: string;
         publicKey: string;
@@ -473,20 +474,21 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
     useEffect(() => {
         if (studentProfile && !loading) {
+            // ⚡ DISABLED: Device binding is no longer required for currently registered students
+            /*
             const storedId = getStoredDeviceId();
             const hasWebAuthn = studentProfile.webAuthnCredentials && studentProfile.webAuthnCredentials.length > 0;
 
-            // ⚡ FIX: If DB has no deviceId (after reset) AND no WebAuthn, trigger registration
             if (!studentProfile.deviceId && !hasWebAuthn) {
                 localStorage.removeItem("device_id_token");
                 setShowDeviceRegistration(true);
             } else if (hasWebAuthn) {
-                // If WebAuthn is registered, we assume this is the device (or user knows what they are doing).
-                // If they use a different device, Attendance API will throw 403, handling it there.
                 setShowDeviceRegistration(false);
             } else if (storedId && studentProfile.deviceId !== storedId) {
                 setShowDeviceRegistration(true);
             }
+            */
+            setShowDeviceRegistration(false); // Force false as per user request
 
             // ⚡ FIELD ENFORCEMENT: Check for admin-enforced missing fields (replaces old hardcoded check)
             const checkFieldEnforcement = async () => {
@@ -2038,7 +2040,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
                             {/* Action Buttons Row */}
                             <div className="flex flex-col gap-3 mb-6">
-                                {/* ⚡ PRIMARY ACTION: Scan GETPASS */}
+                                {/* ⚡ PRIMARY ACTION: Scan GATEPASS */}
                                 <button
                                     onClick={() => router.push("/getpass/scan")}
                                     className="w-full h-16 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-lg shadow-xl shadow-blue-200 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 group px-6"
@@ -2839,12 +2841,21 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                             </div>
 
                             <div className="mt-6">
-                                <button
-                                    onClick={() => router.push("/onboarding")}
-                                    className="w-full px-4 py-3 rounded-lg bg-foreground text-background text-sm font-medium hover:bg-[#383838] transition-colors"
-                                >
-                                    Edit Profile
-                                </button>
+                                {studentProfile.isProfileLocked ? (
+                                    <div className="w-full px-4 py-3 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center gap-2 text-sm font-semibold text-red-700">
+                                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                        </svg>
+                                        Profile is Locked by Admin
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => router.push("/onboarding")}
+                                        className="w-full px-4 py-3 rounded-lg bg-foreground text-background text-sm font-medium hover:bg-[#383838] transition-colors"
+                                    >
+                                        Edit Profile
+                                    </button>
+                                )}
                             </div>
                         </>
                     )}

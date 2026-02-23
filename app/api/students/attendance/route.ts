@@ -73,12 +73,14 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        /*
         if (!deviceId) {
             return NextResponse.json(
                 { error: "Device not registered. Please update your profile from the profile section to register this device first." },
                 { status: 400 }
             );
         }
+        */
 
         // WiFi or GPS coordinates required (at least one)
         const hasWiFi = wifiBSSID && wifiBSSID.trim().length > 0;
@@ -103,6 +105,8 @@ export async function POST(request: NextRequest) {
 
         const isTester = student.email === "prem86.dwivedi@gmail.com";
 
+        // ⚡ DISABLED: Device binding / Biometric check ignored as per user request
+        /*
         if (!isTester) {
             // 🔥 STRICT MODE: Enforce WebAuthn (Biometric) verification only
             // We ignore the legacy `student.deviceId` field entirely.
@@ -124,6 +128,7 @@ export async function POST(request: NextRequest) {
                 );
             }
         }
+        */
 
         // 2. Check for existing attendance today (IST Date)
         const today = new Date().toLocaleDateString("en-IN", {

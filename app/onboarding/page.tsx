@@ -191,6 +191,8 @@ export default function OnboardingPage() {
         localStorage.setItem("device_id_token", btoa(id));
       };
 
+      // ⚡ DISABLED: Device binding is no longer required
+      /*
       let currentDeviceId = getStoredDeviceId();
       let deviceJustRegistered = false;
 
@@ -207,6 +209,8 @@ export default function OnboardingPage() {
         storeDeviceId(currentDeviceId);
         deviceJustRegistered = true;
       }
+      */
+      const currentDeviceId = "no-binding"; // Dummy value for legacy field
 
       const response = await fetch("/api/students", {
         method: "POST",
@@ -253,9 +257,11 @@ export default function OnboardingPage() {
         throw error;
       }
 
+      /*
       if (deviceJustRegistered) {
         alert("Device registered successfully! You can now use all features.");
       }
+      */
 
       localStorage.setItem("userType", "student");
       router.push("/");

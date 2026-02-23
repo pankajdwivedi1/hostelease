@@ -446,7 +446,7 @@ function LoginForm() {
                                 className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:py-4 text-sm sm:text-base text-slate-900 appearance-none focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-medium"
                               >
                                 <option value="" disabled>Select Your Hostel</option>
-                                <option value="getpass" className="font-bold text-blue-600">🎟️ GETPASS MONITOR</option>
+                                <option value="getpass" className="font-bold text-blue-600">🎟️ GATEPASS MONITOR</option>
                                 {hostels.map(hostel => (
                                   <option key={hostel._id} value={hostel._id}>
                                     {hostel.name}

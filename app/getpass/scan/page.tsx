@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 
 // ============================================================
-// GETPASS STUDENT SCANNER — QR Code Scanner for Students
+// GATEPASS STUDENT SCANNER — QR Code Scanner for Students
 // ============================================================
 // Students open this page on their phone to scan the gate QR
 // Uses the device camera to read QR codes
@@ -234,7 +234,7 @@ export default function StudentScannerPage() {
     const handleQRCodeDetected = useCallback(async (qrData: string) => {
         if (processing) return;
 
-        // Verify it's a GETPASS QR code
+        // Verify it's a GATEPASS QR code
         try {
             const parsed = JSON.parse(qrData);
             if (parsed.app !== "hostelease-getpass") {
@@ -321,7 +321,7 @@ export default function StudentScannerPage() {
             <div style={styles.header}>
                 <a href="/" style={styles.backBtn}>←</a>
                 <div style={styles.headerContent}>
-                    <h1 style={styles.headerTitle}>🎫 GETPASS</h1>
+                    <h1 style={styles.headerTitle}>🎫 GATEPASS</h1>
                     <div style={{
                         ...styles.statusBadge,
                         background: currentStatus === "in"
