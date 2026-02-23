@@ -17,8 +17,8 @@ export default function Dashboard() {
     const checkAuth = async () => {
       if (typeof window === "undefined") return;
 
-      // ⚡ CHANGED: Use sessionStorage instead of localStorage to allow independent tabs
-      const storedUserType = sessionStorage.getItem("userType");
+      // ⚡ CHANGED: Use localStorage instead of sessionStorage to stay logged in "always"
+      const storedUserType = localStorage.getItem("userType");
 
       if (storedUserType === "admin") {
         setUserType("admin");
@@ -34,6 +34,12 @@ export default function Dashboard() {
 
       if (storedUserType === "developer") {
         setUserType("developer");
+        setLoading(false);
+        return;
+      }
+
+      if (storedUserType === "getpass") {
+        router.push("/getpass");
         setLoading(false);
         return;
       }

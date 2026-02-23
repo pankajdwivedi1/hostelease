@@ -273,7 +273,7 @@ export default function GateDesktopPage() {
 
     // ===================== Logout =====================
     const handleLogout = () => {
-        sessionStorage.clear();
+        localStorage.clear();
         router.push("/login?logout=success");
     };
 
@@ -434,18 +434,20 @@ export default function GateDesktopPage() {
             <div className="w-full md:w-1/2 flex flex-col items-center justify-start gap-5 p-6 md:p-8 bg-gradient-to-b from-[#0a0a1a] via-[#0d1420] to-[#0a0a1a] border-b md:border-b-0 md:border-r border-[#00ff881a] relative shrink-0 transition-all duration-300 overflow-hidden">
 
                 {/* ── TOP ROW: Logo left + Instructions right ── */}
-                <div className="flex items-start justify-between w-full">
+                <div className="flex items-start justify-between w-full mb-2">
                     {/* Logo block */}
-                    <div>
-                        <h1 className="text-3xl font-extrabold bg-gradient-to-br from-[#00ff88] to-[#00cc6a] bg-clip-text text-transparent tracking-widest m-0">
+                    <div className="flex flex-col">
+                        <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-br from-[#00ff88] to-[#00cc6a] bg-clip-text text-transparent tracking-widest m-0 leading-tight">
                             GATEPASS
                         </h1>
-                        <span className="inline-block mt-0.5 px-3 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-full text-sm text-[#00ff88] font-semibold">
-                            📍 {gateName}
-                        </span>
-                        <p className="text-[12px] text-[rgba(255,255,255,0.45)] tracking-widest uppercase mt-1 m-0">
-                            Campus Outing System
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <span className="inline-block px-2 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-full text-[10px] md:text-xs text-[#00ff88] font-bold">
+                                📍 {gateName}
+                            </span>
+                            <p className="text-[10px] md:text-[11px] text-[rgba(255,255,255,0.45)] tracking-widest uppercase m-0 leading-none">
+                                Campus Outing System
+                            </p>
+                        </div>
                     </div>
 
                     {/* Instructions bar */}
@@ -468,39 +470,44 @@ export default function GateDesktopPage() {
                 </div>
 
                 {/* ── Timer | Time | Date — single centered row ── */}
-                <div className="flex items-center justify-center gap-4 w-full overflow-x-auto flex-nowrap">
+                <div className="flex flex-col items-center gap-4 w-full">
+                    <div className="flex items-center justify-center gap-3 md:gap-4 w-full px-2">
+                        {/* Timer */}
+                        <div className="scale-75 md:scale-100 origin-center shrink-0">
+                            <RectangleTimer timeLeft={timeLeft} maxTime={10} />
+                        </div>
 
-                    {/* Timer */}
-                    <RectangleTimer timeLeft={timeLeft} maxTime={10} />
+                        {/* Divider */}
+                        <div className="w-px h-8 md:h-12 bg-[rgba(255,255,255,0.2)] shrink-0" />
 
-                    {/* Divider */}
-                    <div className="w-px h-12 bg-[rgba(255,255,255,0.2)] flex-shrink-0" />
+                        {/* Time & Date Container */}
+                        <div className="flex flex-col items-center md:flex-row md:items-center md:gap-4 shrink-0">
+                            <p className="text-xl md:text-3xl font-bold text-white tabular-nums m-0 leading-tight whitespace-nowrap">
+                                {mounted ? formatTime(currentTime) : "--:--:-- --"}
+                            </p>
 
-                    {/* Time */}
-                    <p className="text-3xl font-bold text-white tabular-nums m-0 leading-none whitespace-nowrap flex-shrink-0">
-                        {mounted ? formatTime(currentTime) : "--:--:-- --"}
-                    </p>
+                            {/* Divider - Desktop Only */}
+                            <div className="hidden md:block w-px h-12 bg-[rgba(255,255,255,0.2)]" />
 
-                    {/* Divider */}
-                    <div className="w-px h-12 bg-[rgba(255,255,255,0.2)] flex-shrink-0" />
+                            <p className="text-sm md:text-3xl md:font-bold text-[rgba(255,255,255,0.5)] md:text-white m-0 leading-tight whitespace-nowrap">
+                                {mounted ? formatDate(currentTime) : "Loading..."}
+                            </p>
+                        </div>
+                    </div>
 
-                    {/* Date */}
-                    <p className="text-3xl font-bold text-white m-0 leading-none whitespace-nowrap flex-shrink-0">
-                        {mounted ? formatDate(currentTime) : "Loading date..."}
-                    </p>
-
+                    <div className="w-full h-px bg-gradient-to-r from-transparent via-[rgba(0,255,136,0.2)] to-transparent" />
                 </div>
 
                 {/* QR Code */}
-                <div className="flex flex-col items-center w-full">
-                    <div className="p-4 bg-white rounded-[28px] border-[12px] border-[#00ff88] shadow-[0_0_100px_rgba(0,255,136,0.25)] relative flex items-center justify-center w-full max-w-[min(44vw,68vh,580px)]"
+                <div className="flex flex-col items-center w-full py-2">
+                    <div className="p-3 md:p-4 bg-white rounded-[24px] md:rounded-[28px] border-[8px] md:border-[12px] border-[#00ff88] shadow-[0_0_60px_rgba(0,255,136,0.15)] md:shadow-[0_0_100px_rgba(0,255,136,0.25)] relative flex items-center justify-center w-full max-w-[min(70vw,50vh,580px)] md:max-w-[min(44vw,68vh,580px)]"
                         style={{ aspectRatio: '1/1' }}>
                         {qrData ? (
                             <QRCodeCanvas data={qrData} size={550} />
                         ) : (
                             <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-[rgba(255,255,255,0.5)] text-base">
                                 <div className="w-10 h-10 border-[3px] border-[rgba(0,255,136,0.2)] border-t-[#00ff88] rounded-full animate-spin"></div>
-                                <p>Generating QR Code...</p>
+                                <p className="text-gray-400 font-medium">Wait...</p>
                             </div>
                         )}
                     </div>
@@ -517,20 +524,23 @@ export default function GateDesktopPage() {
             {/* =================== RIGHT PANEL: LIVE OUTING HISTORY =================== */}
             <div className="w-full md:w-1/2 flex flex-col p-6 md:p-8 bg-gradient-to-b from-[#0d1117] to-[#0a0e14] overflow-hidden min-h-[500px] md:h-full">
                 {/* Summary Cards */}
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-lg md:text-xl font-bold text-white m-0">📊 Live Campus Status</h2>
-                    <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+                    <h2 className="text-lg md:text-xl font-bold text-white m-0 flex items-center gap-2">
+                        <span className="p-2 bg-[rgba(59,130,246,0.1)] rounded-lg text-blue-400">📊</span>
+                        Live Campus Status
+                    </h2>
+                    <div className="flex gap-2 self-end sm:self-auto">
                         <button
                             onClick={handleLogout}
-                            className="bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.3)] text-[#ff6b6b] px-3 py-1 rounded-lg flex items-center gap-1.5 font-semibold transition-all hover:bg-[rgba(255,68,68,0.2)]"
-                            title="Logout from GATEPASS"
+                            className="bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] text-[#ff6b6b] px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-bold transition-all hover:bg-[rgba(255,68,68,0.2)] active:scale-95"
+                            title="Logout"
                         >
-                            <span className="text-xs">Logout</span>
-                            <span className="text-base">🚪</span>
+                            <span className="text-[10px] uppercase tracking-wider">Logout</span>
+                            <span className="text-sm">🚪</span>
                         </button>
                         <button
                             onClick={toggleFullscreen}
-                            className="bg-[rgba(255,255,255,0.1)] border border-[rgba(255,255,255,0.2)] text-white px-2.5 py-1 rounded-lg text-base flex items-center justify-center transition-all hover:bg-[rgba(255,255,255,0.2)]"
+                            className="bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-white w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-[rgba(255,255,255,0.1)] active:scale-95"
                         >
                             {isFullscreen ? "⊡" : "⊞"}
                         </button>
@@ -538,32 +548,32 @@ export default function GateDesktopPage() {
                 </div>
 
                 {liveData && (
-                    <div className="flex gap-3 mb-4 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
-                        <div className="flex-1 min-w-[100px] p-3 bg-[rgba(255,255,255,0.04)] rounded-2xl border border-[rgba(255,255,255,0.08)] text-center">
+                    <div className="grid grid-cols-2 lg:flex lg:flex-row gap-2 md:gap-3 mb-4">
+                        <div className="p-3 bg-[rgba(255,255,255,0.04)] rounded-2xl border border-[rgba(255,255,255,0.08)] text-center flex flex-col justify-center lg:flex-1">
                             <div className="text-xl mb-1">👥</div>
-                            <div className="text-2xl font-extrabold text-white tabular-nums">{liveData.summary.totalStudents}</div>
-                            <div className="text-[10px] text-[rgba(255,255,255,0.5)] uppercase tracking-widest mt-1">Total Students</div>
+                            <div className="text-2xl font-extrabold text-white tabular-nums leading-tight">{liveData.summary.totalStudents}</div>
+                            <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest mt-0.5">Total</div>
                         </div>
-                        <div className="flex-1 min-w-[100px] p-3 bg-[rgba(0,255,136,0.05)] rounded-2xl border border-[rgba(0,255,136,0.2)] text-center">
+                        <div className="p-3 bg-[rgba(0,255,136,0.05)] rounded-2xl border border-[rgba(0,255,136,0.2)] text-center flex flex-col justify-center lg:flex-1">
                             <div className="text-xl mb-1">🏠</div>
-                            <div className="text-2xl font-extrabold text-[#00ff88] tabular-nums">{liveData.summary.studentsIn}</div>
-                            <div className="text-[10px] text-[rgba(255,255,255,0.5)] uppercase tracking-widest mt-1">In Campus</div>
+                            <div className="text-2xl font-extrabold text-[#00ff88] tabular-nums leading-tight">{liveData.summary.studentsIn}</div>
+                            <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest mt-0.5">In Campus</div>
                         </div>
-                        <div className="flex-1 min-w-[100px] p-3 bg-[rgba(255,107,107,0.05)] rounded-2xl border border-[rgba(255,107,107,0.2)] text-center">
+                        <div className="p-3 bg-[rgba(255,107,107,0.05)] rounded-2xl border border-[rgba(255,107,107,0.2)] text-center flex flex-col justify-center lg:flex-1">
                             <div className="text-xl mb-1">🚶</div>
-                            <div className="text-2xl font-extrabold text-[#ff6b6b] tabular-nums">{liveData.summary.studentsOut}</div>
-                            <div className="text-[10px] text-[rgba(255,255,255,0.5)] uppercase tracking-widest mt-1">Outside</div>
+                            <div className="text-2xl font-extrabold text-[#ff6b6b] tabular-nums leading-tight">{liveData.summary.studentsOut}</div>
+                            <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest mt-0.5">Outside</div>
                         </div>
                         <div
                             onClick={() => router.push('/getpass/history')}
-                            className="flex-1 min-w-[100px] p-3 bg-[rgba(59,130,246,0.05)] rounded-2xl border border-[rgba(59,130,246,0.2)] text-center cursor-pointer hover:bg-[rgba(59,130,246,0.1)] transition-all group active:scale-95"
+                            className="p-3 bg-[rgba(59,130,246,0.05)] rounded-2xl border border-[rgba(59,130,246,0.2)] text-center cursor-pointer hover:bg-[rgba(59,130,246,0.1)] transition-all group active:scale-95 flex flex-col justify-center lg:flex-1"
                         >
                             <div className="text-xl mb-1 group-hover:scale-110 transition-transform">📜</div>
-                            <div className="text-2xl font-extrabold text-[#3b82f6] tabular-nums group-hover:text-[#60a5fa] transition-colors flex items-center justify-center gap-1">
+                            <div className="text-2xl font-extrabold text-[#3b82f6] tabular-nums group-hover:text-[#60a5fa] transition-colors flex items-center justify-center gap-1 leading-tight">
                                 GO
-                                <span className="text-sm font-black mt-1">→</span>
+                                <span className="text-sm font-black">→</span>
                             </div>
-                            <div className="text-[10px] text-[rgba(255,255,255,0.5)] uppercase tracking-widest mt-1 group-hover:text-[rgba(255,255,255,0.8)] transition-colors">Outing History</div>
+                            <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest mt-0.5 group-hover:text-[rgba(255,255,255,0.8)] transition-colors">History</div>
                         </div>
                     </div>
                 )}
@@ -580,31 +590,31 @@ export default function GateDesktopPage() {
                     {liveData?.currentlyOut && liveData.currentlyOut.length > 0 ? (
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
                             {liveData.currentlyOut.map((record) => (
-                                <div key={record._id} className="flex justify-between items-center py-2 px-3 bg-[#121421]/90 rounded-xl border border-[#ff6b6b1a] transition-all hover:bg-[#161a29] group">
-                                    <div className="flex items-center gap-2.5 min-w-0">
+                                <div key={record._id} className="flex justify-between items-center py-2.5 px-3 bg-[#161b2e] rounded-2xl border border-[#ff6b6b15] transition-all hover:border-[#ff6b6b30] group">
+                                    <div className="flex items-center gap-3 min-w-0">
                                         <div
                                             onClick={() => handleStudentClick(record.studentId)}
-                                            className="w-8 h-8 rounded-lg bg-[#ff6b6b] flex items-center justify-center font-black text-xs text-white cursor-pointer shadow-[0_2px_8px_rgba(255,107,107,0.2)] transition-transform hover:scale-105 shrink-0"
+                                            className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#ff6b6b] to-[#ee5253] flex items-center justify-center font-black text-sm text-white cursor-pointer shadow-[0_4px_12px_rgba(238,82,83,0.3)] transition-transform hover:scale-105 shrink-0"
                                         >
                                             {record.studentName?.charAt(0)?.toUpperCase() || "?"}
                                         </div>
                                         <div className="min-w-0">
                                             <p
                                                 onClick={() => handleStudentClick(record.studentId)}
-                                                className="text-[13px] font-bold text-white m-0 cursor-pointer hover:text-[#ff6b6b] transition-colors leading-tight truncate"
+                                                className="text-[14px] font-bold text-white m-0 cursor-pointer hover:text-[#ff6b6b] transition-colors leading-tight truncate"
                                             >
                                                 {record.studentName}
                                             </p>
-                                            <p className="text-[9px] text-[rgba(255,255,255,0.3)] mt-0.5 font-medium italic truncate max-w-[150px]">
+                                            <p className="text-[10px] text-[rgba(255,255,255,0.35)] mt-0.5 font-medium truncate">
                                                 {record.hostelName} • {record.roomNumber}
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="flex flex-col items-end gap-0.5 min-w-[65px] shrink-0">
-                                        <span className="text-[13px] font-black text-[#ff6b6b] tabular-nums tracking-tight">
+                                    <div className="flex flex-col items-end gap-0.5 shrink-0">
+                                        <span className="text-[14px] font-black text-[#ff6b6b] tabular-nums tracking-tight">
                                             {record.currentDurationText || formatDuration(record.currentDurationMinutes || 0)}
                                         </span>
-                                        <span className="text-[8px] text-[rgba(255,255,255,0.3)] font-semibold uppercase tracking-tighter">
+                                        <span className="text-[9px] text-[rgba(255,255,255,0.3)] font-bold uppercase tracking-wider">
                                             {record.checkOutISTTime}
                                         </span>
                                     </div>
@@ -630,25 +640,25 @@ export default function GateDesktopPage() {
                             {liveData.recentActivity.map((record) => (
                                 <div key={record._id} className="flex items-center gap-2 py-1.5 px-2 border-b border-[rgba(255,255,255,0.03)] hover:bg-[rgba(255,255,255,0.02)] transition-all min-w-0">
                                     <span
-                                        className="w-2 h-2 rounded-full shrink-0"
+                                        className="w-2.5 h-2.5 rounded-full shrink-0"
                                         style={{
                                             background: record.status === "out" ? "#ff6b6b" : "#00ff88",
-                                            boxShadow: record.status === "in" ? "0 0 6px rgba(0,255,136,0.2)" : "0 0 6px rgba(255,107,107,0.2)"
+                                            boxShadow: record.status === "in" ? "0 0 10px rgba(0,255,136,0.25)" : "0 0 10px rgba(255,107,107,0.25)"
                                         }}
                                     />
                                     <span
                                         onClick={() => handleStudentClick(record.studentId)}
-                                        className="text-[12px] font-bold text-[rgba(255,255,255,0.9)] flex-1 cursor-pointer hover:text-[#00ff88] transition-colors truncate"
+                                        className="text-[13px] font-bold text-[rgba(255,255,255,0.9)] flex-1 cursor-pointer hover:text-[#00ff88] transition-colors truncate"
                                     >
                                         {record.studentName}
                                     </span>
 
                                     <div className="flex items-center gap-2 shrink-0">
-                                        <span className="text-[10px] text-[rgba(255,255,255,0.4)] tabular-nums font-semibold min-w-[55px] text-right">
+                                        <span className="text-[11px] text-[rgba(255,255,255,0.4)] tabular-nums font-bold min-w-[60px] text-right">
                                             {record.status === "out" ? record.checkOutISTTime : record.checkInISTTime}
                                         </span>
                                         {record.status === "in" && record.durationMinutes !== undefined && (
-                                            <span className="px-1 py-0.5 bg-[rgba(0,255,136,0.08)] rounded text-[#00ff88] text-[9px] font-black uppercase tracking-tighter">
+                                            <span className="px-1.5 py-0.5 bg-[rgba(0,255,136,0.08)] rounded text-[#00ff88] text-[10px] font-black uppercase tracking-tighter">
                                                 {formatDuration(record.durationMinutes)}
                                             </span>
                                         )}
@@ -697,9 +707,9 @@ export default function GateDesktopPage() {
                                     <div className="h-28 bg-gradient-to-r from-blue-600 to-indigo-700 relative shrink-0" />
 
                                     {/* Profile Summary & Basic Info in a Row */}
-                                    <div className="px-10 py-6 flex flex-row items-center gap-10">
-                                        <div className="w-40 h-40 rounded-3xl bg-white p-1.5 shadow-xl shadow-blue-900/10 relative group overflow-hidden shrink-0 -mt-20">
-                                            <div className="w-full h-full rounded-2xl bg-gray-50 flex items-center justify-center text-4xl font-black text-blue-600 overflow-hidden">
+                                    <div className="px-6 md:px-10 py-6 flex flex-col md:flex-row items-center gap-6 md:gap-10">
+                                        <div className="w-32 h-32 md:w-40 md:h-40 rounded-3xl bg-white p-1.5 shadow-xl shadow-blue-900/10 relative group overflow-hidden shrink-0 -mt-16 md:-mt-20">
+                                            <div className="w-full h-full rounded-2xl bg-gray-50 flex items-center justify-center text-3xl md:text-4xl font-black text-blue-600 overflow-hidden">
                                                 {selectedStudent.profilePicture ? (
                                                     <img
                                                         src={selectedStudent.profilePicture}
@@ -711,64 +721,64 @@ export default function GateDesktopPage() {
                                                 )}
                                             </div>
                                             <div className="absolute top-2 right-2">
-                                                <div className={`w-5 h-5 rounded-full border-4 border-white shadow-sm ${selectedStudent.studentStatus === 'out' ? 'bg-red-500' : 'bg-green-500'}`} />
+                                                <div className={`w-4 h-4 md:w-5 md:h-5 rounded-full border-4 border-white shadow-sm ${selectedStudent.studentStatus === 'out' ? 'bg-red-500' : 'bg-green-500'}`} />
                                             </div>
                                         </div>
 
-                                        <div className="flex flex-col text-left flex-1">
-                                            <div className="flex items-center gap-4 mb-2">
-                                                <h2 className="text-3xl font-black text-gray-900 m-0">{selectedStudent.name}</h2>
-                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${selectedStudent.studentStatus === 'out' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                                        <div className="flex flex-col text-center md:text-left flex-1 w-full">
+                                            <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 mb-3">
+                                                <h2 className="text-2xl md:text-3xl font-black text-gray-900 m-0">{selectedStudent.name}</h2>
+                                                <span className={`inline-block self-center md:self-auto px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider ${selectedStudent.studentStatus === 'out' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
                                                     {selectedStudent.studentStatus === 'out' ? 'Currently Outside' : 'Inside Campus'}
                                                 </span>
                                             </div>
 
-                                            <div className="flex items-center gap-6">
+                                            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 md:gap-6">
                                                 <div>
-                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Registration ID</p>
-                                                    <p className="text-blue-600 font-bold text-lg select-all m-0">{selectedStudent.registrationId || "N/A"}</p>
+                                                    <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Registration ID</p>
+                                                    <p className="text-blue-600 font-bold text-base md:text-lg select-all m-0">{selectedStudent.registrationId || "N/A"}</p>
                                                 </div>
-                                                <div className="w-px h-10 bg-gray-100" />
+                                                <div className="hidden md:block w-px h-10 bg-gray-100" />
                                                 <div>
-                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Hostel & Room</p>
-                                                    <p className="text-gray-800 font-bold text-lg m-0">{selectedStudent.hostelName || "Official"} • No. {selectedStudent.roomNumber || "0"}</p>
+                                                    <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Hostel & Room</p>
+                                                    <p className="text-gray-800 font-bold text-base md:text-lg m-0">{selectedStudent.hostelName || "Official"} • No. {selectedStudent.roomNumber || "0"}</p>
                                                 </div>
-                                                <div className="w-px h-10 bg-gray-100" />
+                                                <div className="hidden md:block w-px h-10 bg-gray-100" />
                                                 <div>
-                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Biometric</p>
-                                                    <div className="flex items-center gap-1.5">
+                                                    <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Biometric</p>
+                                                    <div className="flex items-center justify-center md:justify-start gap-1.5">
                                                         <span className={`w-2 h-2 rounded-full ${selectedStudent.faceDescriptor ? 'bg-green-500' : 'bg-orange-500'}`} />
-                                                        <p className="text-gray-700 font-bold text-base m-0">{selectedStudent.faceDescriptor ? 'Verified' : 'Pending'}</p>
+                                                        <p className="text-gray-700 font-bold text-sm md:text-base m-0">{selectedStudent.faceDescriptor ? 'Verified' : 'Pending'}</p>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Details Grid - 4 Columns */}
-                                    <div className="px-10 pb-10">
-                                        <div className="bg-gray-50/50 rounded-3xl border border-gray-100 p-8">
-                                            <div className="grid grid-cols-4 gap-x-12 gap-y-8">
-                                                <DetailItem label="Email Address" value={selectedStudent.email} icon="📧" colSpan={2} />
+                                    {/* Details Grid - Responsive Columns */}
+                                    <div className="px-6 md:px-10 pb-10">
+                                        <div className="bg-gray-50/50 rounded-3xl border border-gray-100 p-6 md:p-8">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-6 md:gap-x-12 gap-y-6 md:gap-y-8">
+                                                <DetailItem label="Email Address" value={selectedStudent.email} icon="📧" className="col-span-1 sm:col-span-2" />
                                                 <DetailItem label="Mobile Number" value={selectedStudent.phoneNumber} icon="📱" />
                                                 <DetailItem label="Father's Name" value={selectedStudent.fatherName} icon="👨" />
 
-                                                <div className="col-span-4 h-px bg-gray-100 my-2" />
+                                                <div className="hidden sm:block col-span-1 sm:col-span-2 md:col-span-4 h-px bg-gray-100 my-2" />
 
                                                 <DetailItem label="Father's Phone" value={selectedStudent.fatherNumber} icon="📞" />
-                                                <DetailItem label="College Name" value={selectedStudent.collegeName} icon="🎓" colSpan={2} />
+                                                <DetailItem label="College Name" value={selectedStudent.collegeName} icon="🎓" className="col-span-1 sm:col-span-2" />
                                                 <DetailItem label="Course / Branch" value={selectedStudent.branch} icon="📚" />
 
-                                                <div className="col-span-4 h-px bg-gray-100 my-2" />
+                                                <div className="hidden sm:block col-span-1 sm:col-span-2 md:col-span-4 h-px bg-gray-100 my-2" />
 
                                                 <DetailItem label="Academic Year" value={selectedStudent.year} icon="📅" />
                                                 <DetailItem label="Semester" value={selectedStudent.semester} icon="⏱️" />
                                                 <DetailItem label="Enrollment ID" value={selectedStudent.erpInformation} icon="🆔" textColor="text-blue-600" />
                                                 <DetailItem label="Gender/Category" value={selectedStudent.category || 'N/A'} icon="👤" />
 
-                                                <div className="col-span-4 h-px bg-gray-100 my-2" />
+                                                <div className="col-span-1 sm:col-span-2 md:col-span-4 h-px bg-gray-100 my-2" />
 
-                                                <DetailItem label="Permanent Address" value={selectedStudent.permanentAddress} icon="🏠" colSpan={4} />
+                                                <DetailItem label="Permanent Address" value={selectedStudent.permanentAddress} icon="🏠" className="col-span-1 sm:col-span-4" />
                                             </div>
                                         </div>
                                     </div>
@@ -797,16 +807,15 @@ export default function GateDesktopPage() {
 }
 
 // Helper component for detail items
-function DetailItem({ label, value, icon, colSpan = 1, textColor = "text-gray-800" }: { label: string, value?: string, icon: string, colSpan?: number, textColor?: string }) {
-    const spanClass = colSpan === 4 ? "col-span-4" : colSpan === 3 ? "col-span-3" : colSpan === 2 ? "col-span-2" : "col-span-1";
+function DetailItem({ label, value, icon, className = "col-span-1", textColor = "text-gray-800" }: { label: string, value?: string, icon: string, className?: string, textColor?: string }) {
     return (
-        <div className={`${spanClass} flex flex-col gap-1.5 min-w-0`}>
+        <div className={`${className} flex flex-col gap-1.5 min-w-0`}>
             <div className="flex items-center gap-2">
                 <span className="text-sm grayscale opacity-70 leading-none">{icon}</span>
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] whitespace-nowrap overflow-hidden text-ellipsis">{label}</span>
             </div>
             <p
-                className={`text-[15px] font-bold ${textColor} leading-tight truncate`}
+                className={`text-[15px] font-bold ${textColor} leading-tight break-words`}
                 title={value || "-"}
             >
                 {value || "-"}

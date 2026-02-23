@@ -76,8 +76,8 @@ function LoginForm() {
         const data = await response.json();
 
         // Store session data and redirect immediately
-        sessionStorage.setItem("userType", "student");
-        sessionStorage.setItem("firebaseUID", user.uid);
+        localStorage.setItem("userType", "student");
+        localStorage.setItem("firebaseUID", user.uid);
 
         if (data.student) {
           // User exists - go to dashboard (profile loads there)
@@ -141,7 +141,7 @@ function LoginForm() {
       }
 
       if (data.success) {
-        sessionStorage.setItem("userType", "admin");
+        localStorage.setItem("userType", "admin");
         router.push("/");
       }
     } catch (error: any) {
@@ -195,13 +195,13 @@ function LoginForm() {
 
       if (data.success) {
         if (data.type === 'getpass') {
-          sessionStorage.setItem("userType", "getpass");
+          localStorage.setItem("userType", "getpass");
           router.push("/getpass");
           return;
         }
-        sessionStorage.setItem("userType", "warden");
-        sessionStorage.setItem("wardenHostelName", data.hostelName);
-        sessionStorage.setItem("authorizedHostels", JSON.stringify(data.authorizedHostels));
+        localStorage.setItem("userType", "warden");
+        localStorage.setItem("wardenHostelName", data.hostelName);
+        localStorage.setItem("authorizedHostels", JSON.stringify(data.authorizedHostels));
         router.push("/");
       }
     } catch (error: any) {
@@ -241,7 +241,7 @@ function LoginForm() {
       }
 
       if (data.success) {
-        sessionStorage.setItem("userType", "developer");
+        localStorage.setItem("userType", "developer");
         router.push("/");
       }
     } catch (error: any) {

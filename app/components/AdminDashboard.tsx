@@ -198,8 +198,8 @@ const LiveDbSwitch = () => {
       const data = await res.json();
       if (data.success) {
         setSource(data.source);
-        // ⚡ CRITICAL: Clear all session storage to prevent stale cache after DB switch
-        sessionStorage.clear();
+        // ⚡ CRITICAL: Clear all storage to prevent stale cache after DB switch
+        localStorage.clear();
         alert(`✅ Switched to ${data.source}`);
         window.location.reload(); // Reload to refresh data view
       } else {
@@ -613,9 +613,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   // Warden Filter Initialization
   useEffect(() => {
-    const type = sessionStorage.getItem("userType");
-    const hostelName = sessionStorage.getItem("wardenHostelName");
-    const authHostelsStr = sessionStorage.getItem("authorizedHostels");
+    const type = localStorage.getItem("userType");
+    const hostelName = localStorage.getItem("wardenHostelName");
+    const authHostelsStr = localStorage.getItem("authorizedHostels");
 
     if (type === "warden" && hostelName) {
       setIsWarden(true);
@@ -1528,7 +1528,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const fetchHostels = async (forceRefresh = false) => {
     try {
       if (!forceRefresh) {
-        const cached = sessionStorage.getItem(CACHE_KEYS.HOSTELS);
+        const cached = localStorage.getItem(CACHE_KEYS.HOSTELS);
         if (cached) {
           setHostels(JSON.parse(cached));
           // Don't return here if we want to background update, but usually hostels don't change often.
@@ -1543,7 +1543,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (data.hostels) {
         setHostels(data.hostels);
         try {
-          sessionStorage.setItem(CACHE_KEYS.HOSTELS, JSON.stringify(data.hostels));
+          localStorage.setItem(CACHE_KEYS.HOSTELS, JSON.stringify(data.hostels));
         } catch (e) {
           console.warn("Failed to cache hostels");
         }
@@ -1564,8 +1564,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const fetchStudents = async (forceRefresh = false) => {
     try {
       if (!forceRefresh) {
-        const cached = sessionStorage.getItem(CACHE_KEYS.STUDENTS);
-        const timestamp = sessionStorage.getItem(CACHE_KEYS.TIMESTAMP);
+        const cached = localStorage.getItem(CACHE_KEYS.STUDENTS);
+        const timestamp = localStorage.getItem(CACHE_KEYS.TIMESTAMP);
 
         if (cached && timestamp) {
           const age = Date.now() - parseInt(timestamp);
@@ -1619,8 +1619,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         setStudents(formattedStudents);
 
         try {
-          sessionStorage.setItem(CACHE_KEYS.STUDENTS, JSON.stringify(formattedStudents));
-          sessionStorage.setItem(CACHE_KEYS.TIMESTAMP, Date.now().toString());
+          localStorage.setItem(CACHE_KEYS.STUDENTS, JSON.stringify(formattedStudents));
+          localStorage.setItem(CACHE_KEYS.TIMESTAMP, Date.now().toString());
         } catch (e) {
           console.warn("Failed to cache students", e);
         }
@@ -1736,7 +1736,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     if (!newMessage.message) return;
     try {
       setSendingMessage(true);
-      const senderId = sessionStorage.getItem("firebaseUID") || sessionStorage.getItem("userType");
+      const senderId = localStorage.getItem("firebaseUID") || localStorage.getItem("userType");
 
       // Calculate expiry date
       let expiresAt = null;
@@ -2066,8 +2066,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      sessionStorage.removeItem("userType");
-      sessionStorage.removeItem("firebaseUID");
+      localStorage.removeItem("userType");
+      localStorage.removeItem("firebaseUID");
       router.push("/login?logout=success");
     } catch (error) {
       console.error("Logout error:", error);
@@ -2180,7 +2180,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const handleStatusChange = async (id: string, newStatus: "allowed" | "rejected") => {
     try {
-      const userType = sessionStorage.getItem("userType");
+      const userType = localStorage.getItem("userType");
       const updateData: any = { permissionId: id };
 
       if (userType === "warden") {
@@ -2548,7 +2548,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
 
 
-  const userType = typeof window !== "undefined" ? sessionStorage.getItem("userType") : null;
+  const userType = typeof window !== "undefined" ? localStorage.getItem("userType") : null;
 
   return (
     <div className="min-h-screen bg-white">

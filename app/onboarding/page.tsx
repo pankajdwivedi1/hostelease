@@ -159,7 +159,7 @@ export default function OnboardingPage() {
 
     try {
       await signOut(auth);
-      sessionStorage.clear();
+      localStorage.clear();
       router.push("/login");
     } catch (error) {
       console.error("Error signing out:", error);

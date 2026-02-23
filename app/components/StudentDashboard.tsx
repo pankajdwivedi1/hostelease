@@ -558,7 +558,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                 }
             };
             // Initialize session dismissed notifications
-            const dismissed = JSON.parse(sessionStorage.getItem("dismissed_notifs") || "[]");
+            const dismissed = JSON.parse(localStorage.getItem("dismissed_notifs") || "[]");
             setSessionDismissedIds(dismissed);
 
             // Fetch Notifications
@@ -569,7 +569,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                     const data = await res.json();
                     if (data.success && data.notifications.length > 0) {
                         // Filter out ones dismissed in current session
-                        const currentDismissed = JSON.parse(sessionStorage.getItem("dismissed_notifs") || "[]");
+                        const currentDismissed = JSON.parse(localStorage.getItem("dismissed_notifs") || "[]");
                         const active = data.notifications.filter((n: any) => !currentDismissed.includes(n._id));
 
                         setNotifications(active);
@@ -632,7 +632,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     const handleLogout = async () => {
         try {
             await signOut(auth);
-            sessionStorage.clear();
+            localStorage.clear();
             router.push("/login?logout=success");
         } catch (error) {
             console.error("Error signing out:", error);
@@ -1202,11 +1202,11 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             if (!response.ok) throw new Error(`Failed to acknowledge: ${response.status}`);
             const data = await response.json();
             if (data.success) {
-                // Save to session storage to hide for THIS session
-                const currentDismissed = JSON.parse(sessionStorage.getItem("dismissed_notifs") || "[]");
+                // Save to local storage to hide "always"
+                const currentDismissed = JSON.parse(localStorage.getItem("dismissed_notifs") || "[]");
                 if (!currentDismissed.includes(notificationId)) {
                     currentDismissed.push(notificationId);
-                    sessionStorage.setItem("dismissed_notifs", JSON.stringify(currentDismissed));
+                    localStorage.setItem("dismissed_notifs", JSON.stringify(currentDismissed));
                     setSessionDismissedIds(currentDismissed);
                 }
 
@@ -2849,12 +2849,42 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                                         Profile is Locked by Admin
                                     </div>
                                 ) : (
-                                    <button
-                                        onClick={() => router.push("/onboarding")}
-                                        className="w-full px-4 py-3 rounded-lg bg-foreground text-background text-sm font-medium hover:bg-[#383838] transition-colors"
-                                    >
-                                        Edit Profile
-                                    </button>
+                                    <div className="flex flex-col gap-3">
+                                        {/* ⚡ NEW: Manual Biometric Setup Button */}
+                                        <button
+                                            onClick={handleRegisterDevice}
+                                            disabled={isRegisteringDevice}
+                                            className={`w-full px-4 py-3 rounded-xl text-sm font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${studentProfile.webAuthnCredentials?.length ? 'bg-green-50 text-green-700 border-2 border-green-200' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700'}`}
+                                        >
+                                            {isRegisteringDevice ? (
+                                                <>
+                                                    <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                    Processing...
+                                                </>
+                                            ) : studentProfile.webAuthnCredentials?.length ? (
+                                                <>
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                    Secure Biometrics Linked
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                    </svg>
+                                                    Link Face ID / Fingerprint
+                                                </>
+                                            )}
+                                        </button>
+
+                                        <button
+                                            onClick={() => router.push("/onboarding")}
+                                            className="w-full px-4 py-3 rounded-lg bg-foreground text-background text-sm font-medium hover:bg-[#383838] transition-colors"
+                                        >
+                                            Edit Profile
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         </>
