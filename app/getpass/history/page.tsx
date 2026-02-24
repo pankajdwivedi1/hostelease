@@ -13,11 +13,14 @@ export default function OutingHistoryPage() {
     // Filters State
     const [filters, setFilters] = useState({
         collegeName: "all",
+        hostelName: "all",
         status: "all",
         startDate: "",
         endDate: "",
         search: ""
     });
+
+    const [hostelsList, setHostelsList] = useState<any[]>([]);
 
     // Profile Modal State
     const [selectedStudent, setSelectedStudent] = useState<any>(null);
@@ -26,6 +29,21 @@ export default function OutingHistoryPage() {
 
     const colleges = ["OIST", "OCT", "OCP", "OPM", "OIPR"];
 
+    useEffect(() => {
+        const fetchHostelsList = async () => {
+            try {
+                const res = await fetch("/api/admin/hostels");
+                const data = await res.json();
+                if (data.success) {
+                    setHostelsList(data.hostels || []);
+                }
+            } catch (error) {
+                console.error("Error fetching hostels:", error);
+            }
+        };
+        fetchHostelsList();
+    }, []);
+
     const fetchHistory = useCallback(async (pageNo = 1) => {
         setIsLoading(true);
         try {
@@ -33,6 +51,7 @@ export default function OutingHistoryPage() {
                 page: pageNo.toString(),
                 limit: "50",
                 collegeName: filters.collegeName,
+                hostelName: filters.hostelName,
                 status: filters.status,
                 startDate: filters.startDate,
                 endDate: filters.endDate,
@@ -87,6 +106,7 @@ export default function OutingHistoryPage() {
             const params = new URLSearchParams({
                 limit: "10000",
                 collegeName: filters.collegeName,
+                hostelName: filters.hostelName,
                 status: filters.status,
                 startDate: filters.startDate,
                 endDate: filters.endDate,
@@ -222,7 +242,7 @@ export default function OutingHistoryPage() {
 
             <div className="max-w-[1600px] mx-auto p-6 flex flex-col gap-6">
                 {/* Filters Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-5 bg-[#0a0a0f] border border-white/5 rounded-2xl shadow-2xl">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 p-5 bg-[#0a0a0f] border border-white/5 rounded-2xl shadow-2xl">
                     <div className="flex flex-col gap-1.5">
                         <label className="text-[10px] text-white/40 font-black uppercase tracking-widest ml-1">College</label>
                         <select
@@ -233,6 +253,19 @@ export default function OutingHistoryPage() {
                         >
                             <option value="all">All Colleges</option>
                             {colleges.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] text-white/40 font-black uppercase tracking-widest ml-1">Select Hostel</label>
+                        <select
+                            name="hostelName"
+                            value={filters.hostelName}
+                            onChange={handleFilterChange}
+                            className="bg-[#121421] border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500/50 transition-all appearance-none cursor-pointer"
+                        >
+                            <option value="all">All Hostels</option>
+                            {hostelsList.map(h => <option key={h._id} value={h.name}>{h.name}</option>)}
                         </select>
                     </div>
 
@@ -353,7 +386,7 @@ export default function OutingHistoryPage() {
                             <h3 className="text-xl font-bold text-white/80 m-0">No records found</h3>
                             <p className="text-white/40 mt-2">Adjust your filters to search deeper into the archives.</p>
                             <button
-                                onClick={() => setFilters({ collegeName: "all", status: "all", startDate: "", endDate: "", search: "" })}
+                                onClick={() => setFilters({ collegeName: "all", hostelName: "all", status: "all", startDate: "", endDate: "", search: "" })}
                                 className="mt-6 px-6 py-2.5 rounded-xl bg-blue-600 font-bold text-sm transition-all hover:bg-blue-500 active:scale-95"
                             >
                                 Reset All Filters
