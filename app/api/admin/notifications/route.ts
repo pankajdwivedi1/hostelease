@@ -60,6 +60,7 @@ export async function DELETE(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const action = searchParams.get("action");
+        const id = searchParams.get("id");
 
         if (action === "cleanup") {
             // Cleanup notifications older than 30 days
@@ -73,7 +74,35 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ success: true, deletedCount: result.deletedCount });
         }
 
-        return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+        if (id) {
+            // Support both Mongo and Supabase via dbAdapter patterns
+            // Use deleteMany with id filter as it's already implemented in dbAdapter
+            await db.notifications.deleteMany({ _id: id });
+            return NextResponse.json({ success: true, message: "Notification deleted" });
+        }
+
+        return NextResponse.json({ error: "Invalid action or missing ID" }, { status: 400 });
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+export async function PATCH(request: NextRequest) {
+    try {
+        const body = await request.json();
+        const { id, message, priority, expiryHours } = body;
+
+        if (!id || !message) {
+            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+        }
+
+        const updateData: any = { message };
+        if (priority) updateData.priority = priority;
+        if (expiryHours) updateData.expiryHours = expiryHours;
+
+        const updated = await db.notifications.update(id, { $set: updateData });
+
+        return NextResponse.json({ success: true, notification: updated });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }

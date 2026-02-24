@@ -105,6 +105,16 @@ export async function POST(request: NextRequest) {
 
         const isTester = student.email === "prem86.dwivedi@gmail.com";
 
+        // 🔥 SECURITY RESTRICTION: Mandatory Check-In First
+        // If a student is marked as "out" in the gate system, they must scan the entry QR code 
+        // to come "inside" before the daily attendance can be marked.
+        if (!isTester && student.studentStatus === 'out') {
+            return NextResponse.json(
+                { error: "Access Denied: You are currently marked as OUT in the gate pass system. Please scan the entry QR code at the main gate to check-in first before marking daily attendance." },
+                { status: 403 }
+            );
+        }
+
         // ⚡ DISABLED: Device binding / Biometric check ignored as per user request
         /*
         if (!isTester) {
@@ -172,7 +182,7 @@ export async function POST(request: NextRequest) {
             // Check if student's hostel has WiFi whitelist configured
             const wifiWhitelist = adminSettings?.wifiWhitelist || [];
             const studentHostelWifi = wifiWhitelist.find(
-                (wl: any) => wl.hostelName.toLowerCase() === student.hostelName.toLowerCase()
+                (wl: any) => wl.hostelName?.toLowerCase() === student.hostelName?.toLowerCase()
             );
 
             // ✅ FIX: Normalize WiFi BSSID to uppercase for consistent comparison
@@ -186,6 +196,26 @@ export async function POST(request: NextRequest) {
             } else {
                 console.log(`⚠️ WiFi BSSID not whitelisted: ${normalizedBSSID} for ${student.hostelName}`);
                 // WiFi failed, will try GPS fallback below
+            }
+        }
+
+        // ⚡ NEW: Public IP Verification (Fallback for WiFi)
+        if (!isLocationVerified) {
+            const forwarded = request.headers.get("x-forwarded-for");
+            const clientIp = forwarded ? forwarded.split(",")[0] : (request as any).ip || "127.0.0.1";
+            const globalIpWhitelist = adminSettings?.wifiWhitelist || [];
+
+            // If the whitelist is just strings (IPs), check them. 
+            // If it's objects with bssids, check if any of them is just the IP string.
+            const ipWhitelisted = globalIpWhitelist.some((item: any) => {
+                const ipToMatch = typeof item === 'string' ? item : (item.ip || item.name);
+                return ipToMatch === clientIp;
+            });
+
+            if (ipWhitelisted) {
+                isLocationVerified = true;
+                verifiedBy = 'ip';
+                console.log(`✅ IP Verified: ${student.name} via Whitelisted IP: ${clientIp}`);
             }
         }
 
@@ -248,7 +278,7 @@ export async function POST(request: NextRequest) {
                 // ⚡ DEVELOPER CONFIG: Radius Overlap (+20m if enabled)
                 const allowedRadius = ((loc as any).radius || 100) + (adminSettings?.overlapRadius ? 20 : 0);
 
-                const isInside = (dist - bodyAccuracy) <= allowedRadius;
+                const isInside = dist <= allowedRadius;
 
                 // ⚡ DEVELOPER CONFIG: Prioritize Assigned Hostel
                 let isMatchValid = isInside;
@@ -335,7 +365,7 @@ export async function POST(request: NextRequest) {
                 success: true,
                 message: verifiedBy === 'wifi'
                     ? "✅ Attendance saved! Verified via Campus WiFi"
-                    : "✅ Attendance saved! Verified via GPS",
+                    : verifiedBy === 'ip' ? "✅ Attendance saved! Verified via Campus Network" : "✅ Attendance saved! Verified via GPS",
                 attendance: attendanceData,
                 verifiedBy: verifiedBy,
                 wifiBSSID: verifiedBy === 'wifi' ? wifiBSSID : undefined

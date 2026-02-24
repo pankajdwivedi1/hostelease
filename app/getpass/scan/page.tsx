@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import jsQR from "jsqr";
 
 // ============================================================
 // GATEPASS STUDENT SCANNER — QR Code Scanner for Students
@@ -201,33 +202,37 @@ export default function StudentScannerPage() {
         }
     };
 
-    // ===================== Canvas-based fallback scanning =====================
+    // ===================== Canvas-based fallback scanning (Essential for iOS) =====================
     const scanWithCanvas = () => {
         scanIntervalRef.current = setInterval(() => {
             if (!videoRef.current || !canvasRef.current || processing) return;
 
             const video = videoRef.current;
             const canvas = canvasRef.current;
-            const ctx = canvas.getContext("2d");
+            const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
             if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
+            // Use a smaller canvas for performance if needed, but 1:1 is accurate
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-            // Try using BarcodeDetector on ImageData
-            if ("BarcodeDetector" in window) {
-                const detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
-                detector.detect(canvas).then((barcodes: any[]) => {
-                    if (barcodes.length > 0) {
-                        handleQRCodeDetected(barcodes[0].rawValue);
-                    }
-                }).catch(() => { });
+            // ⚡ CORE FIX: Use jsQR for decoding on iOS/Safari
+            try {
+                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: "dontInvert",
+                });
+
+                if (code && code.data) {
+                    handleQRCodeDetected(code.data);
+                }
+            } catch (err) {
+                // Ignore decoding errors
             }
-        }, 500);
+        }, 300); // Scan every 300ms for responsiveness
     };
 
     // ===================== Handle QR Code Detection =====================

@@ -296,6 +296,7 @@ interface DBNotification {
   message: string;
   image?: string;
   targetType: "all" | "hostel" | "individual";
+  targetHostel?: string;
   targetStudentId?: {
     name: string;
     registrationId: string;
@@ -389,6 +390,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
   const [attendanceLogsLoading, setAttendanceLogsLoading] = useState(false);
   const [adminNotifications, setAdminNotifications] = useState<DBNotification[]>([]);
+  const [editingNotificationId, setEditingNotificationId] = useState<string | null>(null);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [showEditStudentModal, setShowEditStudentModal] = useState(false);
   const [isUpdatingStudent, setIsUpdatingStudent] = useState(false);
@@ -421,12 +423,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const selectionButtonsRef = useRef<HTMLDivElement>(null);
   const studentsPresentRef = useRef<HTMLDivElement>(null);
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
-  const [newMessage, setNewMessage] = useState({
+  const [newMessage, setNewMessage] = useState<{
+    message: string;
+    targetType: string;
+    targetHostel: string;
+    targetStudentId: string;
+    priority: "normal" | "urgent" | "critical";
+    image: string;
+    expiryHours: string;
+  }>({
     message: "",
     targetType: "all",
     targetHostel: "",
     targetStudentId: "",
-    priority: "normal" as const,
+    priority: "normal",
     image: "",
     expiryHours: "24" // Default 24 hours
   });
@@ -454,6 +464,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [selectedAttendanceHostel, setSelectedAttendanceHostel] = useState<string | null>(null);
   const [showAllEntryLogs, setShowAllEntryLogs] = useState(false);
   const [showAllAbsentees, setShowAllAbsentees] = useState(false);
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false);
 
   // Refs for click-outside detection
   const entryLogsRef = useRef<HTMLDivElement>(null);
@@ -503,6 +514,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [overlapRadius, setOverlapRadius] = useState(false); // ⚡ NEW
   const [prioritizeAssignedHostel, setPrioritizeAssignedHostel] = useState(false); // ⚡ NEW
   const [getpassPassword, setGetpassPassword] = useState("GET456"); // ⚡ NEW
+  const [wifiWhitelist, setWifiWhitelist] = useState<any[]>([]); // ⚡ NEW: Global IP Whitelist
+
 
   // Audit States
   const [auditResults, setAuditResults] = useState<any[]>([]);
@@ -816,6 +829,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (settingsData.overlapRadius !== undefined) setOverlapRadius(settingsData.overlapRadius);
         if (settingsData.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(settingsData.prioritizeAssignedHostel);
         if (settingsData.getpassPassword) setGetpassPassword(settingsData.getpassPassword);
+        if (settingsData.wifiWhitelist) setWifiWhitelist(settingsData.wifiWhitelist);
       }
 
       // Fetch Hostels (with warden/room info)
@@ -848,8 +862,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (key === 'overlapRadius') setOverlapRadius(value);
         if (key === 'prioritizeAssignedHostel') setPrioritizeAssignedHostel(value);
       }
-    } catch (error) {
-      alert("Failed to update setting");
+    } catch (e) {
+      console.error("Failed to update setting", e);
+    } finally {
+      setIsUpdatingSettings(false);
+    }
+  };
+
+  const handleUpdateSettings = async (updateData: any) => {
+    try {
+      setIsUpdatingSettings(true);
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updateData)
+      });
+      const data = await res.json();
+      if (!data.success) alert("Update failed: " + data.error);
+    } catch (e) {
+      console.error("Error updating settings:", e);
     } finally {
       setIsUpdatingSettings(false);
     }
@@ -1745,15 +1776,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         expiresAt.setHours(expiresAt.getHours() + parseInt(newMessage.expiryHours));
       }
 
-      const response = await fetch("/api/admin/notifications", {
-        method: "POST",
+      const url = "/api/admin/notifications";
+      const method = editingNotificationId ? "PATCH" : "POST";
+      const body = editingNotificationId
+        ? { id: editingNotificationId, message: newMessage.message, priority: newMessage.priority, expiryHours: newMessage.expiryHours }
+        : { ...newMessage, senderId, expiresAt };
+
+      const response = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...newMessage, senderId, expiresAt }),
+        body: JSON.stringify(body),
       });
-      if (!response.ok) throw new Error(`Failed to send message: ${response.status}`);
+      if (!response.ok) throw new Error(`Failed to ${editingNotificationId ? 'update' : 'send'} message: ${response.status}`);
       const data = await response.json();
       if (data.success) {
-        alert("Notification broadcasted successfully!");
+        alert(editingNotificationId ? "Notification updated successfully!" : "Notification broadcasted successfully!");
         setNewMessage({
           message: "",
           targetType: "all",
@@ -1763,14 +1800,30 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           image: "",
           expiryHours: "24"
         });
+        setEditingNotificationId(null);
         fetchAdminNotifications();
       } else {
-        alert(data.error || "Failed to broadcast notification");
+        alert(data.error || `Failed to ${editingNotificationId ? 'update' : 'broadcast'} notification`);
       }
     } catch (error) {
       console.error("Error sending message:", error);
     } finally {
       setSendingMessage(false);
+    }
+  };
+
+  const handleDeleteNotification = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this broadcast? This action cannot be undone.")) return;
+    try {
+      const res = await fetch(`/api/admin/notifications?id=${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        fetchAdminNotifications();
+      } else {
+        alert(data.error || "Failed to delete notification");
+      }
+    } catch (e) {
+      console.error("Error deleting notification:", e);
     }
   };
 
@@ -1813,6 +1866,44 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     } catch (error) {
       console.error("Error toggling profile lock:", error);
       alert("Failed to update profile lock status");
+    }
+  };
+
+  const handleManualToggle = async (studentId: string, currentStatus: "in" | "out") => {
+    if (!studentId) return;
+
+    // Auto-detect user type from local storage
+    const storedUserType = localStorage.getItem("userType") || "warden";
+
+    const action = currentStatus === 'out' ? "Mark IN" : "Mark OUT";
+    if (!window.confirm(`⚠️ MANUAL OVERRIDE:\nAre you sure you want to ${action} this student manually?`)) return;
+
+    try {
+      setIsTogglingStatus(true);
+      const res = await fetch("/api/getpass/manual-toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId, userType: storedUserType }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        // Refresh students and permissions
+        fetchStudents(true);
+        fetchPermissions();
+        if (currentTab === "attendance") fetchAttendanceLogs();
+
+        // If profile details are open, update them
+        if (selectedStudent && selectedStudent.id === studentId) {
+          setSelectedStudent({ ...selectedStudent, studentStatus: data.newStatus });
+        }
+      } else {
+        alert(data.error);
+      }
+    } catch (err) {
+      alert("Error: Failed to update status");
+    } finally {
+      setIsTogglingStatus(false);
     }
   };
 
@@ -2062,6 +2153,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
+
+
 
   const handleLogout = async () => {
     try {
@@ -2713,7 +2806,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <p className="font-bold text-gray-500 tracking-wider uppercase text-[10px] md:text-xs">YOU HAVE ADDED {(hostelLocations.length > 0 ? hostelLocations.length : 3)} LOCATION</p>
                     </div>
 
-                    <div className="space-y-2 mb-8 text-gray-600">
+                    <div className="space-y-2 mb-3 text-gray-600">
                       {(hostelLocations.length > 0 ? hostelLocations : [
                         { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
                         { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
@@ -2748,9 +2841,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <p className="font-bold text-gray-900 tracking-wider uppercase text-xs">CURRENTLY YOU ARE ON</p>
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="space-y-1 md:space-y-3">
                           {locationVerificationResults.map((result, index) => (
-                            <div key={index} className="flex flex-col gap-1 group relative p-2 rounded bg-gray-50/50">
+                            <div key={index} className="flex flex-col gap-1 group relative p-1.5 md:p-2 rounded bg-gray-50/50">
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="font-bold text-gray-500">{index + 1}.</span>
                                 {result.isVerified ? (
@@ -2785,40 +2878,42 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </div>
                       </>
                     ) : (
-                      <p className="text-center text-gray-400 italic py-4">Click the test button above to verify proximity</p>
+                      <p className="text-center text-gray-400 italic py-2 border-b border-dashed border-gray-200 mb-2">Click the GPS test button above to verify proximity</p>
                     )}
+
+
                   </div>
                 </div>
               )}
 
               {/* Tab Navigation */}
-              <div className="flex items-center gap-1 bg-filler p-1 rounded-xl mb-6">
+              <div className="flex items-center gap-0.5 md:gap-1 bg-filler p-1 rounded-xl mb-6">
                 <button
                   onClick={() => setCurrentTab('permissions')}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${currentTab === 'permissions' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                  className={`flex-1 py-1.5 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all ${currentTab === 'permissions' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
                 >
                   Permissions
                 </button>
                 <button
                   onClick={() => setCurrentTab('attendance')}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${currentTab === 'attendance' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                  className={`flex-1 py-1.5 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all ${currentTab === 'attendance' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
                 >
                   Attendance
                 </button>
                 <button
                   onClick={() => setCurrentTab('messaging')}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${currentTab === 'messaging' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                  className={`flex-1 py-1.5 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all ${currentTab === 'messaging' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
                 >
                   Broadcast
                 </button>
-                {title === "Developer Dashboard" && (
+                {(title === "Developer Dashboard" || title === "Dean Dashboard") && (
                   <button
                     onClick={() => window.open('/getpass', '_blank')}
-                    className="flex-1 py-2.5 rounded-lg text-sm font-black transition-all text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-2 group"
+                    className="flex-1 py-1.5 md:py-2.5 rounded-lg text-[11px] md:text-sm font-black transition-all text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-1.5 group"
                   >
-                    <div className="relative flex h-2 w-2">
+                    <div className="relative flex h-1.5 w-1.5 md:h-2 md:w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 md:h-2 md:w-2 bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]"></span>
                     </div>
                     GATEPASS
                   </button>
@@ -2826,7 +2921,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 {!isWarden && title === "Developer Dashboard" && (
                   <button
                     onClick={() => setCurrentTab('settings')}
-                    className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                    className={`flex-1 py-1.5 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all ${currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
                   >
                     Settings
                   </button>
@@ -2836,58 +2931,60 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               {currentTab === 'permissions' && (
                 <>
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex gap-2 md:gap-3 flex-wrap items-center">
+                    <div className="flex w-full gap-1.5 md:gap-3 items-center">
                       <button
                         onClick={() => setFilter("all")}
-                        className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                        className={`flex-1 px-2 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-sm font-medium transition-colors ${filter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                       >
                         All
                       </button>
                       <button
                         onClick={() => setFilter("pending")}
-                        className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "pending" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                        className={`flex-1 px-2 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-sm font-medium transition-colors ${filter === "pending" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                       >
                         Pending
                       </button>
                       <button
                         onClick={() => setFilter("allowed")}
-                        className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "allowed" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                        className={`flex-1 px-2 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-sm font-medium transition-colors ${filter === "allowed" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                       >
                         Accepted
                       </button>
                       <button
                         onClick={() => setFilter("rejected")}
-                        className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm font-medium transition-colors ${filter === "rejected" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                        className={`flex-1 px-2 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-sm font-medium transition-colors ${filter === "rejected" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                       >
                         Rejected
                       </button>
+                    </div>
 
+                    <div className="flex items-center gap-2 flex-1 max-w-sm md:max-w-md w-full">
                       <select
                         value={hostelFilter}
                         onChange={(e) => setHostelFilter(e.target.value)}
                         disabled={isWarden}
-                        className={`h-9 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground min-w-[120px] ${isWarden ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        className={`h-9 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground min-w-[100px] md:min-w-[120px] ${isWarden ? 'opacity-70 cursor-not-allowed' : ''}`}
                       >
                         <option value="all">Hostel</option>
                         {hostels.map((h) => (
                           <option key={h._id || h.name} value={h.name}>{h.name}</option>
                         ))}
                       </select>
-                    </div>
 
-                    <div className="relative flex-1 max-w-sm">
-                      <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                        <svg className="w-4 h-4 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
+                      <div className="relative flex-1">
+                        <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                          <svg className="w-4 h-4 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Search student..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 h-9 text-sm rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
+                        />
                       </div>
-                      <input
-                        type="text"
-                        placeholder="Search student..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-3 h-9 text-sm rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
-                      />
                     </div>
                   </div>
 
@@ -2992,6 +3089,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           </span>
                                         )}
                                       </div>
+
+                                      {/* ⚡ NEW: Manual Campus Toggle for Wardens */}
+                                      {student.studentStatus === 'out' && (
+                                        <div className="flex flex-col items-center gap-1">
+                                          <span className="text-[9px] md:text-[10px] font-black text-amber-600 uppercase whitespace-nowrap tracking-tighter">Status</span>
+                                          <button
+                                            onClick={() => handleManualToggle(student._id, "out")}
+                                            className="w-14 md:w-16 py-1.5 rounded-lg bg-amber-500 text-white text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 shadow-sm transition-all active:scale-95"
+                                          >
+                                            MARK IN
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
 
@@ -3345,17 +3455,29 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </h3>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                           {(showAllAbsentees ? displayedAbsentees : displayedAbsentees.slice(0, 9)).map(s => (
-                            <div key={s.id} className="bg-white p-3 rounded-lg border border-red-100 flex items-center gap-3 shadow-sm hover:shadow-md transition-shadow">
-                              <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-[10px] font-black">
-                                {getInitials(s.name)}
+                            <div key={s.id} className="bg-white p-3 rounded-lg border border-red-100 flex flex-col gap-2 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-[10px] font-black">
+                                  {getInitials(s.name)}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[9px] font-bold text-foreground truncate">{s.name}</p>
+                                  <p className="text-[8px] text-secondary truncate uppercase">{s.roomNumber} • {s.floorNumber || s.hostelName}</p>
+                                </div>
+                                <a href={`tel:${s.phoneNumber}`} className="w-7 h-7 bg-green-50 text-green-600 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors flex-shrink-0">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                                </a>
                               </div>
-                              <div className="min-w-0">
-                                <p className="text-[9px] font-bold text-foreground truncate">{s.name}</p>
-                                <p className="text-[8px] text-secondary truncate uppercase">{s.roomNumber} • {s.floorNumber || s.hostelName}</p>
-                              </div>
-                              <a href={`tel:${s.phoneNumber}`} className="ml-auto w-7 h-7 bg-green-50 text-green-600 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors">
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
-                              </a>
+
+                              {/* ⚡ NEW: Manual Campus Toggle for Absentees who are 'OUT' */}
+                              {s.studentStatus === 'out' && (
+                                <button
+                                  onClick={() => handleManualToggle(s.id, "out")}
+                                  className="w-full py-1.5 rounded-lg bg-amber-500 text-white text-[8px] font-black uppercase tracking-widest hover:bg-amber-600 shadow-sm transition-all active:scale-95"
+                                >
+                                  Mark IN (Campus)
+                                </button>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -3617,9 +3739,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-3 gap-2">
                         <div>
-                          <label className="block text-xs font-bold text-secondary uppercase mb-2">Target Audience</label>
+                          <label className="block text-[8px] md:text-xs font-bold text-secondary uppercase mb-1.5 md:mb-2">Target</label>
                           <select
                             value={newMessage.targetType}
                             onChange={(e: any) => {
@@ -3627,104 +3749,122 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               setNewMessage({
                                 ...newMessage,
                                 targetType,
-                                // Auto-set warden's hostel when they select "hostel" or "all"
                                 targetHostel: (isWarden && wardenHostelName && (targetType === "hostel" || targetType === "all"))
                                   ? wardenHostelName
                                   : newMessage.targetHostel
                               });
                             }}
                             disabled={isWarden && authorizedHostels.length === 1}
-                            className={`w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500 ${(isWarden && authorizedHostels.length === 1) ? 'opacity-70 cursor-not-allowed bg-gray-50' : ''}`}
+                            className={`w-full h-9 md:h-11 px-2 md:px-4 rounded-lg md:rounded-xl border border-gray-200 text-[10px] md:text-sm focus:outline-none focus:border-blue-500 ${(isWarden && authorizedHostels.length === 1) ? 'opacity-70 cursor-not-allowed bg-gray-50' : ''}`}
                           >
                             {isWarden ? (
                               <>
                                 <option value="hostel">
-                                  {authorizedHostels.length > 1 ? "All Authorized Hostels" : `${authorizedHostels[0]} Students`}
+                                  {authorizedHostels.length > 1 ? "Auth Hostels" : `Hostel`}
                                 </option>
                                 {authorizedHostels.length > 1 && (
-                                  <option value="specific_hostel">Specific Hostel</option>
+                                  <option value="specific_hostel">Specific</option>
                                 )}
                               </>
                             ) : (
                               <>
-                                <option value="all">All Students</option>
-                                <option value="hostel">Specific Hostel</option>
-                                <option value="individual">Individual Student</option>
+                                <option value="all">All</option>
+                                <option value="hostel">Hostel</option>
+                                <option value="individual">ID</option>
                               </>
                             )}
                           </select>
                         </div>
 
-                        {(newMessage.targetType === "hostel" || newMessage.targetType === "specific_hostel") && (
-                          <div>
-                            <label className="block text-xs font-bold text-secondary uppercase mb-2">Select Hostel</label>
-                            <select
-                              value={newMessage.targetHostel}
-                              onChange={(e) => setNewMessage({ ...newMessage, targetHostel: e.target.value })}
-                              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500"
-                              disabled={isWarden && newMessage.targetType === "hostel" && authorizedHostels.length === 1}
-                            >
-                              <option value="">Choose Hostel...</option>
-                              {(isWarden ? authorizedHostels : hostels.map(h => h.name)).map((hName) => (
-                                <option key={hName} value={hName}>
-                                  {hName}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-
-                        {newMessage.targetType === "individual" && (
-                          <div>
-                            <label className="block text-xs font-bold text-secondary uppercase mb-2">Student ID/Email</label>
-                            <input
-                              type="text"
-                              value={newMessage.targetStudentId}
-                              onChange={(e) => setNewMessage({ ...newMessage, targetStudentId: e.target.value })}
-                              placeholder="Enter Student ID (e.g. BOYS-0001)"
-                              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500"
-                            />
-                          </div>
-                        )}
-
                         <div>
-                          <label className="block text-xs font-bold text-secondary uppercase mb-2">Priority</label>
+                          <label className="block text-[8px] md:text-xs font-bold text-secondary uppercase mb-1.5 md:mb-2">Priority</label>
                           <select
                             value={newMessage.priority}
                             onChange={(e: any) => setNewMessage({ ...newMessage, priority: e.target.value })}
-                            className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500"
+                            className="w-full h-9 md:h-11 px-2 md:px-4 rounded-lg md:rounded-xl border border-gray-200 text-[10px] md:text-sm focus:outline-none focus:border-blue-500"
                           >
                             <option value="normal">Normal</option>
-                            <option value="urgent">Urgent (Orange)</option>
-                            <option value="critical">Critical (Red)</option>
+                            <option value="urgent">Urgent</option>
+                            <option value="critical">Critical</option>
                           </select>
                         </div>
 
                         <div>
-                          <label className="block text-xs font-bold text-secondary uppercase mb-2">Display Duration</label>
+                          <label className="block text-[8px] md:text-xs font-bold text-secondary uppercase mb-1.5 md:mb-2">Duration</label>
                           <select
                             value={newMessage.expiryHours}
                             onChange={(e) => setNewMessage({ ...newMessage, expiryHours: e.target.value })}
-                            className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500"
+                            className="w-full h-9 md:h-11 px-2 md:px-4 rounded-lg md:rounded-xl border border-gray-200 text-[10px] md:text-sm focus:outline-none focus:border-blue-500"
                           >
-                            <option value="1">1 Hour</option>
-                            <option value="6">6 Hours</option>
-                            <option value="12">12 Hours</option>
-                            <option value="24">1 Day</option>
-                            <option value="72">3 Days</option>
-                            <option value="168">1 Week</option>
-                            <option value="never">Never (Manual Delete)</option>
+                            <option value="1">1H</option>
+                            <option value="6">6H</option>
+                            <option value="12">12H</option>
+                            <option value="24">1D</option>
+                            <option value="72">3D</option>
+                            <option value="168">1W</option>
+                            <option value="never">∞ </option>
                           </select>
                         </div>
                       </div>
 
+                      {(newMessage.targetType === "hostel" || newMessage.targetType === "specific_hostel") && (
+                        <div>
+                          <label className="block text-xs font-bold text-secondary uppercase mb-2">Select Hostel</label>
+                          <select
+                            value={newMessage.targetHostel}
+                            onChange={(e) => setNewMessage({ ...newMessage, targetHostel: e.target.value })}
+                            className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500"
+                            disabled={isWarden && newMessage.targetType === "hostel" && authorizedHostels.length === 1}
+                          >
+                            <option value="">Choose Hostel...</option>
+                            {(isWarden ? authorizedHostels : hostels.map(h => h.name)).map((hName) => (
+                              <option key={hName} value={hName}>
+                                {hName}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {newMessage.targetType === "individual" && (
+                        <div>
+                          <label className="block text-xs font-bold text-secondary uppercase mb-2">Student ID/Email</label>
+                          <input
+                            type="text"
+                            value={newMessage.targetStudentId}
+                            onChange={(e) => setNewMessage({ ...newMessage, targetStudentId: e.target.value })}
+                            placeholder="Enter Student ID (e.g. BOYS-0001)"
+                            className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      )}
+
                       <button
                         onClick={handleSendMessage}
                         disabled={sendingMessage || !newMessage.message}
-                        className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 disabled:bg-gray-300 disabled:shadow-none"
+                        className={`w-full py-3.5 ${editingNotificationId ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'} text-white rounded-xl font-bold transition-all shadow-lg disabled:bg-gray-300 disabled:shadow-none`}
                       >
-                        {sendingMessage ? "Sending..." : "Send Notification"}
+                        {sendingMessage ? "Processing..." : editingNotificationId ? "Update Broadcast" : "Send Notification"}
                       </button>
+                      {editingNotificationId && (
+                        <button
+                          onClick={() => {
+                            setEditingNotificationId(null);
+                            setNewMessage({
+                              message: "",
+                              targetType: "all",
+                              targetHostel: "",
+                              targetStudentId: "",
+                              priority: "normal",
+                              image: "",
+                              expiryHours: "24"
+                            });
+                          }}
+                          className="w-full py-2 text-xs font-bold text-gray-400 hover:text-gray-600 uppercase tracking-widest mt-2"
+                        >
+                          Cancel Editing
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -3761,7 +3901,35 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 <img src={notif.image} alt="Broadcast" className="max-h-20 rounded-lg border border-gray-100" />
                               </div>
                             )}
-                            <div className="mt-2 text-[10px] font-bold text-blue-600">Acknowledged by: {notif.acknowledgedBy?.length || 0} students</div>
+                            <div className="flex justify-between items-end mt-2">
+                              <div className="text-[10px] font-bold text-blue-600">Acknowledged by: {notif.acknowledgedBy?.length || 0} students</div>
+                              <div className="flex gap-4">
+                                <button
+                                  onClick={() => {
+                                    setEditingNotificationId(notif._id);
+                                    setNewMessage({
+                                      message: notif.message,
+                                      targetType: notif.targetType,
+                                      targetHostel: notif.targetHostel || "",
+                                      targetStudentId: typeof notif.targetStudentId === 'string' ? notif.targetStudentId : (notif.targetStudentId?.registrationId || ""),
+                                      priority: notif.priority || "normal",
+                                      image: notif.image || "",
+                                      expiryHours: "24" // Default or extract from record if available
+                                    });
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                  }}
+                                  className="text-[10px] font-black text-amber-600 uppercase hover:underline"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteNotification(notif._id)}
+                                  className="text-[10px] font-black text-red-600 uppercase hover:underline"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       ))
@@ -4323,6 +4491,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </button>
                       {selectedStudent.isProfileLocked && (
                         <p className="text-[10px] text-amber-600 font-bold uppercase tracking-tight">Student cannot edit profile anymore</p>
+                      )}
+
+                      {/* ⚡ NEW: Manual Campus Toggle for Wardens/Admins in Details View */}
+                      {selectedStudent.studentStatus === 'out' && (
+                        <button
+                          onClick={() => handleManualToggle(selectedStudent.id, "out")}
+                          disabled={isTogglingStatus}
+                          className="w-full max-w-[240px] py-3 mt-1 rounded-xl bg-amber-500 text-white text-[11px] font-black uppercase tracking-widest hover:bg-amber-600 shadow-lg shadow-amber-100 transition-all active:scale-95 flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+                          Mark as IN (Campus)
+                        </button>
                       )}
                     </div>
 
@@ -6197,6 +6377,109 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           />
                           <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                         </label>
+                      </div>
+
+                      {/* ⚡ NEW: WiFi IP Whitelist Management */}
+                      <div className="bg-white p-6 rounded-2xl border-2 border-amber-100 shadow-sm hover:border-amber-200 transition-all space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-amber-50 rounded-lg text-amber-600 font-bold">📶</div>
+                            <div>
+                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Campus WiFi IP Whitelist</h3>
+                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Enable 100% reliable tracking via Network IP</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              const ip = prompt("Enter Public IP address (e.g. 157.34.12.193):");
+                              const name = prompt("Enter Label (e.g. Main Hostel WiFi):");
+                              if (ip && name) {
+                                const updated = [...wifiWhitelist, { name, ip }];
+                                setWifiWhitelist(updated);
+                                handleUpdateSettings({ wifiWhitelist: updated });
+                              }
+                            }}
+                            className="px-4 py-2 bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all opacity-100"
+                          >
+                            + Add IP
+                          </button>
+                        </div>
+
+                        <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                          {wifiWhitelist.length === 0 ? (
+                            <p className="text-[10px] text-slate-400 italic text-center py-4 uppercase font-bold">No whitelisted networks configured</p>
+                          ) : (
+                            wifiWhitelist.map((item, idx) => (
+                              <div key={idx} className="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-100 group transition-all">
+                                <div className="flex-1">
+                                  {item.hostelName ? (
+                                    <>
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-[11px] font-black text-amber-900 uppercase">{item.hostelName}</p>
+                                        <span className="px-1.5 py-0.5 bg-amber-200 text-amber-700 rounded text-[8px] font-black uppercase">WIFI BSSID</span>
+                                      </div>
+                                      <p className="text-[9px] font-bold text-amber-600 mt-0.5">
+                                        {item.bssids?.length || 0} Routers Configured
+                                        {item.description && <span className="text-slate-400 ml-1 italic">({item.description})</span>}
+                                      </p>
+                                      <div className="mt-2 flex flex-wrap gap-1.5 p-2 bg-white/40 rounded-lg border border-amber-100/50 border-dashed">
+                                        {item.bssids?.map((b: string, i: number) => (
+                                          <span key={i} className="text-[9px] font-mono font-bold bg-amber-100/80 text-amber-900 px-2 py-0.5 rounded shadow-sm border border-amber-200/50">
+                                            {b}
+                                          </span>
+                                        ))}
+                                        {(!item.bssids || item.bssids.length === 0) && (
+                                          <span className="text-[9px] text-amber-400 italic">No MAC addresses configured</span>
+                                        )}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-[11px] font-black text-amber-900 uppercase">{item.name || 'Campus IP'}</p>
+                                        <span className="px-1.5 py-0.5 bg-indigo-200 text-indigo-700 rounded text-[8px] font-black uppercase">IP NETWORK</span>
+                                      </div>
+                                      <p className="text-[10px] font-bold text-amber-600 bg-white/40 px-2 py-1 rounded inline-block mt-1 border border-indigo-100 border-dashed">{item.ip}</p>
+                                    </>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5 ml-4">
+                                  {item.hostelName && (
+                                    <button
+                                      onClick={() => {
+                                        const current = item.bssids?.join(", ") || "";
+                                        const newVal = prompt(`Edit BSSIDs for ${item.hostelName} (comma separated):`, current);
+                                        if (newVal !== null) {
+                                          const updatedBssids = newVal.split(",").map(s => s.trim()).filter(s => s !== "");
+                                          const updatedWhitelist = [...wifiWhitelist];
+                                          updatedWhitelist[idx] = { ...item, bssids: updatedBssids };
+                                          setWifiWhitelist(updatedWhitelist);
+                                          handleUpdateSettings({ wifiWhitelist: updatedWhitelist });
+                                        }
+                                      }}
+                                      className="p-1.5 bg-amber-200/50 text-amber-700 hover:bg-amber-200 rounded-lg transition-colors border border-amber-200/50"
+                                      title="Edit MAC Addresses"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      if (confirm(`Remove ${item.hostelName || item.name || 'this entry'}?`)) {
+                                        const updated = wifiWhitelist.filter((_, i) => i !== idx);
+                                        setWifiWhitelist(updated);
+                                        handleUpdateSettings({ wifiWhitelist: updated });
+                                      }
+                                    }}
+                                    className="p-1.5 text-red-400 hover:text-red-600 rounded-lg transition-colors bg-red-50 sm:opacity-0 group-hover:opacity-100"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
                       </div>
                     </div>
 

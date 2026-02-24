@@ -58,7 +58,8 @@ export async function POST(request: NextRequest) {
             isPaymentEnabled,
             overlapRadius,
             prioritizeAssignedHostel,
-            getpassPassword
+            getpassPassword,
+            wifiWhitelist
         } = body;
 
         const updateData: any = {};
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
         if (overlapRadius !== undefined) updateData.overlapRadius = overlapRadius;
         if (prioritizeAssignedHostel !== undefined) updateData.prioritizeAssignedHostel = prioritizeAssignedHostel;
         if (getpassPassword !== undefined) updateData.getpassPassword = getpassPassword;
+        if (wifiWhitelist !== undefined) updateData.wifiWhitelist = wifiWhitelist;
 
         const settings = await db.settings.update(updateData);
 

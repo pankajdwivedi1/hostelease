@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
         };
       });
 
-      const completedCount = fieldStatuses.filter((fs) => fs.isCompleted).length;
+      const completedCount = fieldStatuses.filter((fs: any) => fs.isCompleted).length;
       const allCompleted = completedCount === fieldStatuses.length;
 
       return {
@@ -90,12 +90,13 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Calculate completion stats
-    const totalStudents = students.length;
-    const totalFields = (enforcement.enforcedFields || []).length;
-    const totalCompletedInDB = fieldProgress.filter((fp: any) => fp.isCompleted).length;
-    const potentialCompletions = totalStudents * totalFields;
-    const pendingCount = potentialCompletions - totalCompletedInDB;
+    // Calculate completion stats accurately based on actual students
+    const totalStudents = studentsCompletionStatus.length;
+    const completedStudentsCount = studentsCompletionStatus.filter((s: any) => s.allCompleted).length;
+    const pendingStudentsCount = totalStudents - completedStudentsCount;
+    const completionPercentage = totalStudents > 0
+      ? Math.round((completedStudentsCount / totalStudents) * 100)
+      : 0;
 
     return NextResponse.json({
       success: true,
@@ -105,10 +106,10 @@ export async function GET(request: NextRequest) {
         studentsCompletionStatus,
         completionStats: {
           totalStudents,
-          totalFields,
-          completedCount: totalCompletedInDB,
-          pendingCount,
-          completionPercentage: potentialCompletions > 0 ? Math.round((totalCompletedInDB / potentialCompletions) * 100) : 0,
+          totalFields: (enforcement.enforcedFields || []).length,
+          completedCount: completedStudentsCount,
+          pendingCount: pendingStudentsCount,
+          completionPercentage,
         },
       },
     });

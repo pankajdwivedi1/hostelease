@@ -59,6 +59,7 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
   hostels = ["Boys Hostel", "Gangotri Hostel", "Gaytri Hostel", "Guest House Boys Hostel"],
 }) => {
   const [selectedHostels, setSelectedHostels] = useState<string[]>([]);
+  const [selectedStatusHostels, setSelectedStatusHostels] = useState<string[]>([]);
   const [availableFields, setAvailableFields] = useState<EnforcedField[]>([]);
 
   const [selectedFields, setSelectedFields] = useState<EnforcedField[]>([]);
@@ -247,6 +248,17 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
   };
 
   const loadCompletionStatus = async (hostel: string) => {
+    // Toggle logic
+    if (selectedStatusHostels.includes(hostel)) {
+      setSelectedStatusHostels(prev => prev.filter(h => h !== hostel));
+      return;
+    }
+
+    setSelectedStatusHostels(prev => [...prev, hostel]);
+
+    // Only fetch if not already in dictionary
+    if (completionStatus[hostel]) return;
+
     try {
       setLoading(true);
       const response = await fetch(`/api/admin/field-enforcement/status?hostelName=${hostel}`);
@@ -278,17 +290,16 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
   return (
     <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl sm:rounded-2xl p-4 sm:p-8 border border-slate-200">
       <div className="mb-6 sm:mb-8">
-        <h2 className="text-xl sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">Field Enforcement Settings</h2>
-        <p className="text-xs sm:text-sm text-slate-600">
+        <h2 className="text-lg sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">Field Enforcement Settings</h2>
+        <p className="text-[10px] sm:text-sm text-slate-600">
           Manage which fields are displayed to students after login, and track completion status
         </p>
       </div>
 
-      {/* Tab Navigation */}
       <div className="flex gap-2 sm:gap-3 mb-6 sm:mb-8 border-b overflow-hidden flex-nowrap">
         <button
           onClick={() => setActiveTab("rules")}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap ${activeTab === "rules"
+          className={`px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-semibold transition whitespace-nowrap ${activeTab === "rules"
             ? "text-blue-600 border-b-2 border-blue-600"
             : "text-slate-600 hover:text-slate-900"
             }`}
@@ -297,7 +308,7 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
         </button>
         <button
           onClick={() => setActiveTab("status")}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap ${activeTab === "status"
+          className={`px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-semibold transition whitespace-nowrap ${activeTab === "status"
             ? "text-blue-600 border-b-2 border-blue-600"
             : "text-slate-600 hover:text-slate-900"
             }`}
@@ -357,13 +368,13 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
               {availableFields.map((field) => (
                 <label
                   key={field.fieldId}
-                  className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 md:p-3 rounded-lg border border-slate-200 hover:bg-blue-50 cursor-pointer transition text-xs"
+                  className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 md:p-3 rounded-lg border border-slate-200 hover:bg-blue-50 cursor-pointer transition text-[10px] sm:text-xs"
                 >
                   <input
                     type="checkbox"
                     checked={selectedFields.some((f) => f.fieldId === field.fieldId)}
                     onChange={() => handleFieldToggle(field.fieldId)}
-                    className="w-4 h-4 rounded"
+                    className="w-3 h-3 sm:w-4 sm:h-4 rounded"
                   />
                   <span className="font-medium text-slate-900">{field.fieldLabel}</span>
                 </label>
@@ -537,87 +548,113 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
               <button
                 key={hostel}
                 onClick={() => loadCompletionStatus(hostel)}
-                className="p-2 sm:p-4 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 font-semibold text-blue-900 transition text-xs sm:text-sm"
+                className={`p-2 sm:p-4 rounded-lg font-semibold transition text-xs sm:text-sm border ${selectedStatusHostels.includes(hostel)
+                  ? "bg-blue-600 text-white border-blue-700 shadow-md"
+                  : "bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100"
+                  }`}
               >
                 {hostel}
               </button>
             ))}
           </div>
 
-          {Object.entries(completionStatus).map(([hostel, status]) => (
-            <div key={hostel} className="bg-white rounded-lg sm:rounded-xl p-4 sm:p-6 border border-slate-200">
-              <h3 className="text-base sm:text-xl font-bold text-slate-900 mb-3 sm:mb-4">{hostel}</h3>
+          {selectedStatusHostels.map((hostel) => {
+            const status = completionStatus[hostel];
+            if (!status) return null;
 
-              {/* Overall Stats */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6">
-                <div className="bg-slate-50 p-2 sm:p-4 rounded-lg">
-                  <p className="text-xs text-slate-600">Total Students</p>
-                  <p className="text-lg sm:text-2xl font-bold text-slate-900">
-                    {status.completionStats.totalStudents}
-                  </p>
+            return (
+              <div key={hostel} className="bg-white rounded-lg sm:rounded-xl p-4 sm:p-6 border border-slate-200 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-base sm:text-xl font-black text-slate-900 uppercase tracking-tighter">{hostel}</h3>
+                  <button
+                    onClick={() => setSelectedStatusHostels(prev => prev.filter(h => h !== hostel))}
+                    className="text-slate-400 hover:text-slate-600 p-1"
+                  >
+                    ✕
+                  </button>
                 </div>
-                <div className="bg-slate-50 p-2 sm:p-4 rounded-lg">
-                  <p className="text-xs text-slate-600">Enforced Fields</p>
-                  <p className="text-lg sm:text-2xl font-bold text-slate-900">
-                    {status.completionStats.totalFields}
-                  </p>
-                </div>
-                <div className="bg-green-50 p-2 sm:p-4 rounded-lg">
-                  <p className="text-xs text-green-600">Completed</p>
-                  <p className="text-lg sm:text-2xl font-bold text-green-900">
-                    {status.completionStats.completedCount}
-                  </p>
-                </div>
-                <div className="bg-blue-50 p-2 sm:p-4 rounded-lg">
-                  <p className="text-xs text-blue-600">Completion %</p>
-                  <p className="text-lg sm:text-2xl font-bold text-blue-900">
-                    {status.completionStats.completionPercentage}%
-                  </p>
-                </div>
-              </div>
 
-              {/* Students Table */}
-              {status.studentsCompletionStatus.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs sm:text-sm">
-                    <thead className="bg-slate-100 border-b">
-                      <tr>
-                        <th className="px-2 sm:px-4 py-2 text-left">Student</th>
-                        <th className="px-2 sm:px-4 py-2 text-center">Progress</th>
-                        <th className="px-2 sm:px-4 py-2 text-center">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {status.studentsCompletionStatus.map((student) => (
-                        <tr key={student.studentId} className="border-b hover:bg-slate-50">
-                          <td className="px-2 sm:px-4 py-2 sm:py-3">
-                            <div>
-                              <p className="font-semibold text-slate-900">{student.name}</p>
-                              <p className="text-xs text-slate-500">{student.registrationId}</p>
-                            </div>
-                          </td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-center">
-                            <p className="font-semibold text-xs sm:text-sm">
-                              {student.completedCount}/{student.totalFields}
-                            </p>
-                          </td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-center">
-                            {student.allCompleted ? (
-                              <Badge className="bg-green-100 text-green-800 text-xs">✓</Badge>
-                            ) : (
-                              <Badge className="bg-yellow-100 text-yellow-800 text-xs">⏳</Badge>
-                            )}
-                          </td>
+                {/* Overall Stats */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6">
+                  <div className="bg-slate-50 p-2 sm:p-4 rounded-lg border border-slate-100">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Students</p>
+                    <p className="text-xl sm:text-3xl font-black text-slate-900">
+                      {status.completionStats.totalStudents}
+                    </p>
+                  </div>
+                  <div className="bg-slate-50 p-2 sm:p-4 rounded-lg border border-slate-100">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Enforced Fields</p>
+                    <p className="text-xl sm:text-3xl font-black text-slate-900">
+                      {status.completionStats.totalFields}
+                    </p>
+                  </div>
+                  <div className="bg-green-50 p-2 sm:p-4 rounded-lg border border-green-100">
+                    <p className="text-[10px] font-black text-green-600/50 uppercase tracking-widest">Completed</p>
+                    <p className="text-xl sm:text-3xl font-black text-green-600">
+                      {status.completionStats.completedCount}
+                    </p>
+                  </div>
+                  <div className="bg-blue-50 p-2 sm:p-4 rounded-lg border border-blue-100">
+                    <p className="text-[10px] font-black text-blue-600/50 uppercase tracking-widest">Completion %</p>
+                    <p className="text-xl sm:text-3xl font-black text-blue-600">
+                      {status.completionStats.completionPercentage}%
+                    </p>
+                  </div>
+                </div>
+
+                {/* Students Table */}
+                {status.studentsCompletionStatus.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-slate-100">
+                    <table className="w-full text-xs sm:text-sm">
+                      <thead className="bg-slate-50/50 border-b">
+                        <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                          <th className="px-2 sm:px-4 py-3 text-left">Student</th>
+                          <th className="px-2 sm:px-4 py-3 text-center">Progress</th>
+                          <th className="px-2 sm:px-4 py-3 text-center">Status</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="text-center text-slate-500 py-6 sm:py-8 text-xs sm:text-sm">No field enforcement rules configured</p>
-              )}
+                      </thead>
+                      <tbody>
+                        {status.studentsCompletionStatus.map((student) => (
+                          <tr key={student.studentId} className="border-b last:border-0 hover:bg-slate-50 transition-colors">
+                            <td className="px-2 sm:px-4 py-3">
+                              <div>
+                                <p className="font-bold text-slate-900 uppercase tracking-tight">{student.name}</p>
+                                <p className="text-[10px] font-bold text-slate-400">{student.registrationId}</p>
+                              </div>
+                            </td>
+                            <td className="px-2 sm:px-4 py-3 text-center">
+                              <p className="font-black text-xs sm:text-sm text-slate-700">
+                                {student.completedCount}/{student.totalFields}
+                              </p>
+                            </td>
+                            <td className="px-2 sm:px-4 py-3 text-center">
+                              {student.allCompleted ? (
+                                <div className="inline-flex items-center justify-center bg-green-100 text-green-700 p-1.5 rounded-lg">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                </div>
+                              ) : (
+                                <div className="inline-flex items-center justify-center bg-amber-100 text-amber-700 p-1.5 rounded-lg">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-center text-slate-500 py-6 sm:py-8 text-xs sm:text-sm italic">No field enforcement rules configured for this hostel</p>
+                )}
+              </div>
+            );
+          })}
+
+          {selectedStatusHostels.length === 0 && (
+            <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
+              <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Select a hostel above to view enrollment status</p>
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>
