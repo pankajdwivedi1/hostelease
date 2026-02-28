@@ -1920,7 +1920,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                             </div>
 
                             {/* Quick Info Grid */}
-                            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-2" style={{ fontFamily: 'Cambria' }}>
+                            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-2" style={{ fontFamily: 'var(--font-lora), Cambria' }}>
                                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-2 md:p-2.5 rounded-2xl border border-blue-100 shadow-sm flex flex-col justify-center">
                                     <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1">Current Status</p>
                                     <div className="flex items-center gap-2">
@@ -3391,7 +3391,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                             <svg className="w-6 h-6 text-white/90 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                            <p className="text-sm font-bold tracking-tight" style={{ fontFamily: 'Cambria' }}>{toastMessage}</p>
+                            <p className="text-sm font-bold tracking-tight" style={{ fontFamily: 'var(--font-lora), Cambria' }}>{toastMessage}</p>
                         </div>
                     </div>
                 )

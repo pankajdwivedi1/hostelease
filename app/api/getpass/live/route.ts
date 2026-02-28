@@ -14,16 +14,35 @@ export async function GET(request: NextRequest) {
     try {
         const searchParams = request.nextUrl.searchParams;
         const hostelName = searchParams.get("hostelName");
+        const isMinimal = searchParams.get("minimal") === "true";
 
-        // 1. Get all currently "out" students using adapter
+        // 1. Prepare common filters
         const filters: any = { status: "out" };
         if (hostelName && hostelName !== "all") {
             filters.hostelName = hostelName;
         }
 
+        const recentFilters: any = {};
+        if (hostelName && hostelName !== "all") {
+            recentFilters.hostelName = hostelName;
+        }
+
+        // ⚡ OPTIMIZATION: Heartbeat Mode (Extremely Low Bandwidth)
+        if (isMinimal) {
+            // Only fetch the latest 5 scans (tiny data packet)
+            const { records: miniRecent } = await db.gatePasses.list(recentFilters, { limit: 5 });
+            return NextResponse.json({
+                success: true,
+                minimal: true,
+                recentActivity: miniRecent,
+                summary: null,
+                currentlyOut: []
+            });
+        }
+
+        // 2. Full Mode (Heavier Data - Runs Infrequently)
         const { records: currentlyOut } = await db.gatePasses.list(filters, { limit: 100 });
 
-        // 2. Get student counts using adapter
         const countFilters: any = {};
         if (hostelName && hostelName !== "all") {
             countFilters.hostelName = hostelName;
@@ -34,15 +53,11 @@ export async function GET(request: NextRequest) {
             db.students.count({ ...countFilters, studentStatus: "out" }),
         ]);
 
-        // 3. Get recent activity (last 20 records - both check-in and check-out)
-        const recentFilters: any = {};
-        if (hostelName && hostelName !== "all") {
-            recentFilters.hostelName = hostelName;
-        }
-
         const { records: recentActivity } = await db.gatePasses.list(recentFilters, { limit: 20 });
 
-        // 4. Calculate duration for students who are still out
+        const leaveCount = currentlyOut.filter((p: any) => p.type === "leave").length;
+        const gatePassCount = currentlyOut.length - leaveCount;
+
         const now = new Date();
         const currentlyOutWithDuration = currentlyOut.map((record: any) => {
             const diffMs = now.getTime() - new Date(record.checkOutTime).getTime();
@@ -74,6 +89,8 @@ export async function GET(request: NextRequest) {
                 totalStudents,
                 studentsIn: (totalStudents || 0) - currentlyOut.length,
                 studentsOut: currentlyOut.length,
+                leaveCount,
+                gatePassCount,
             },
             currentlyOut: currentlyOutWithDuration,
             recentActivity,
@@ -86,4 +103,3 @@ export async function GET(request: NextRequest) {
         );
     }
 }
-

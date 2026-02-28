@@ -177,6 +177,31 @@ export async function GET(request: NextRequest) {
       { light }
     );
 
+    // ⚡ SYNC STATUS: Ensure 'out' status matches open gate passes for everyone in the list
+    // This fixes the discrepancy between Gatepass Count (87) and Dashboard Count (65)
+    try {
+      const { records: openPasses } = await db.gatePasses.list({ status: "out" }, { limit: 1000 });
+      if (openPasses) {
+        // Create a map of studentId -> outingType for efficient lookup
+        const activeOutings = new Map(openPasses.map((p: any) => [p.studentId?.toString(), p.type || "outing"]));
+
+        students.forEach((s: any) => {
+          const sId = (s.id || s._id)?.toString();
+          const outingType = activeOutings.get(sId);
+
+          if (outingType) {
+            s.studentStatus = "out";
+            s.outingType = outingType; // "leave" or "outing"
+          } else {
+            s.studentStatus = "in";
+            s.outingType = null;
+          }
+        });
+      }
+    } catch (syncError) {
+      console.warn("⚠️ Status sync failed in list API:", syncError);
+    }
+
     return NextResponse.json({ students }, { status: 200 });
   } catch (error: any) {
     console.error("❌ Error fetching students:", error.message);

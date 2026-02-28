@@ -536,7 +536,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     container: {
         minHeight: "100vh",
         background: "linear-gradient(180deg, #0a0a1a 0%, #0d1420 100%)",
-        fontFamily: "'Cambria'",
+        fontFamily: "'Lora', Cambria",
         color: "#ffffff",
         paddingBottom: "40px",
     },
@@ -720,7 +720,7 @@ const styles: { [key: string]: React.CSSProperties } = {
         fontWeight: "700",
         minWidth: "35px",
         color: "#00ff88",
-        fontFamily: "'Cambria'",
+        fontFamily: "'Lora', Cambria",
     },
 
     startScanContainer: {

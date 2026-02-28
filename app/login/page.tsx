@@ -538,10 +538,10 @@ function LoginForm() {
                   </div>
 
                   <div className="group cursor-default">
-                    <p className="text-[8px] sm:text-[10px] font-medium text-slate-400 tracking-wider" style={{ fontFamily: 'Cambria' }}>
+                    <p className="text-[8px] sm:text-[10px] font-medium text-slate-400 tracking-wider" style={{ fontFamily: 'var(--font-lora), Cambria' }}>
                       Developed meticulously by
                     </p>
-                    <p className="text-xs sm:text-sm font-bold text-slate-700 mt-0.5 transition-colors group-hover:text-blue-600" style={{ fontFamily: 'Cambria' }}>
+                    <p className="text-xs sm:text-sm font-bold text-slate-700 mt-0.5 transition-colors group-hover:text-blue-600" style={{ fontFamily: 'var(--font-lora), Cambria' }}>
                       Dr. Pankaj Prasad Dwivedi
                     </p>
                   </div>

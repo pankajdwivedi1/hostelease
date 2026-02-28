@@ -361,20 +361,22 @@ export default function OutingHistoryPage() {
                                     <div className="flex justify-between items-center w-full sm:w-auto gap-3 sm:gap-5 pt-2.5 sm:pt-0 border-t border-white/5 sm:border-0">
                                         <div className="flex flex-col items-start sm:items-end gap-1 flex-1">
                                             <div className="flex flex-col items-start sm:items-end">
-                                                <span className="text-[7px] text-white/50 font-medium uppercase tracking-tighter leading-none mb-0.5">{record.checkOutISTDate}</span>
-                                                <div className="flex items-center gap-1.5">
+                                                <div className="flex items-center gap-1.5 whitespace-nowrap">
                                                     <span className="text-[8px] text-white/70 font-black uppercase tracking-tighter">Out:</span>
                                                     <span className="text-[10px] font-bold text-white tabular-nums">{record.checkOutISTTime}</span>
+                                                    <span className="text-white/10 text-[10px]">|</span>
+                                                    <span className="text-[10px] text-white/40 font-bold tabular-nums whitespace-nowrap">{record.checkOutISTDate}</span>
                                                 </div>
                                             </div>
 
                                             {record.status === 'in' ? (
                                                 <div className="flex flex-col items-start sm:items-end mt-0.5">
-                                                    <div className="flex items-center gap-1.5">
+                                                    <div className="flex items-center gap-1.5 whitespace-nowrap">
                                                         <span className="text-[8px] text-white/70 font-black uppercase tracking-tighter">In:</span>
                                                         <span className="text-[10px] font-bold text-green-400 tabular-nums">{record.checkInISTTime}</span>
+                                                        <span className="text-white/10 text-[10px]">|</span>
+                                                        <span className="text-[10px] text-white/40 font-bold tabular-nums whitespace-nowrap">{record.checkInISTDate}</span>
                                                     </div>
-                                                    <span className="text-[7px] text-white/50 font-medium uppercase tracking-tighter leading-none mt-0.5">{record.checkInISTDate}</span>
                                                     {record.type === 'leave' && (
                                                         <div className="flex items-center gap-1 mt-1">
                                                             <span className="text-[7px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20 font-black uppercase tracking-tighter">🏠 Home Leave</span>

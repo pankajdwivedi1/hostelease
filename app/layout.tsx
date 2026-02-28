@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
-
+import { Lora } from "next/font/google";
 import "./globals.css";
 import InstallPWA from "./components/InstallPWA";
+
+const lora = Lora({
+  subsets: ["latin"],
+  variable: "--font-lora",
+  weight: ["400", "500", "600", "700"],
+});
 
 
 
@@ -29,8 +35,8 @@ export function generateViewport() {
   return {
     width: "device-width",
     initialScale: 1,
-    maximumScale: 1, // Prevents auto-zoom on input focus
-    userScalable: false, // Makes it feel like a locked native app
+    maximumScale: 5, // Allows zooming up to 5x
+    userScalable: true, // Enables user zooming
     themeColor: "#2563eb",
     viewportFit: "cover", // Ensures content fills the screen including the notch area
   };
@@ -43,7 +49,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased" suppressHydrationWarning>
+      <body className={`${lora.variable} antialiased`} suppressHydrationWarning>
         <InstallPWA />
         {children}
       </body>

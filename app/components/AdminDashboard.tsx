@@ -351,6 +351,7 @@ interface StudentDetails {
     createdAt: string;
   }[];
   thumbImpressionId?: string; // ⚡ NEW: Thumb biometrics
+  outingType?: string | null;
   permissions: SimplePermission[];
 }
 
@@ -1638,8 +1639,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           email: s.email,
           phoneNumber: s.phoneNumber,
           hostelName: s.hostelName,
-          roomNumber: s.roomNumber,
-          profilePicture: s.profilePicture,
+          roomNumber: s.room_number || s.roomNumber,
+          profilePicture: null, // Defer loading to on-demand fetch (saves bandwidth)
           fatherName: s.fatherName,
           fatherNumber: s.fatherNumber,
           motherName: s.motherName,
@@ -1663,6 +1664,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           deviceResetCount: s.deviceResetCount || 0,
           deviceHistory: s.deviceHistory || [],
           attendanceMode: s.attendanceMode || "default",
+          outingType: s.outingType,
           permissions: []
         }));
         setStudents(formattedStudents);
@@ -2499,6 +2501,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           localGuardianPhoneNumber: "",
           homeState: "",
           studentStatus: s.studentStatus || "in",
+          outingType: (s as any).outingType || null,
           registrationId: (s as any).registrationId || "",
         };
       }
@@ -2653,10 +2656,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       return matchesHostel;
     });
 
+    const outStudents = baseList.filter(s => s.studentStatus === 'out');
+
     return {
       all: baseList.length,
       in: baseList.filter(s => s.studentStatus === 'in').length,
-      out: baseList.filter(s => s.studentStatus === 'out').length
+      out: outStudents.length,
+      leave: outStudents.filter(s => s.outingType === 'leave').length,
+      pass: outStudents.filter(s => s.outingType !== 'leave').length
     };
   }, [dropdownFilteredStudents, hostelFilter, isWarden, authorizedHostels]);
 
@@ -4311,10 +4318,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </button>
                   <button
                     onClick={() => setStatusFilter("out")}
-                    className={`w-full sm:flex-1 px-1 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${statusFilter === "out" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 px-1 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-between min-h-[50px] ${statusFilter === "out" ? "bg-blue-600 text-background shadow-md shadow-blue-200" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
-                    <span>Out</span>
-                    <span className="text-[10px]">{studentsLoading ? "..." : statusCounts.out}</span>
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="leading-none">Out ({studentsLoading ? "..." : statusCounts.out})</span>
+                    </div>
+
+                    {!studentsLoading && (
+                      <div className="w-full flex items-center justify-center border-t border-[rgba(0,0,0,0.1)] mt-1 pt-1 text-[8px] uppercase tracking-tighter font-black">
+                        <div className="flex-1 flex flex-col items-center border-r border-[rgba(0,0,0,0.05)]">
+                          <span className={statusFilter === "out" ? "text-white" : "text-[#7f8c8d]"}>L: {statusCounts.leave}</span>
+                        </div>
+                        <div className="flex-1 flex flex-col items-center">
+                          <span className={statusFilter === "out" ? "text-white" : "text-[#7f8c8d]"}>P: {statusCounts.pass}</span>
+                        </div>
+                      </div>
+                    )}
                   </button>
                   {showRemoveButton && (
                     <button
@@ -5394,6 +5413,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         type="text"
                         value={editStudentForm.name || ""}
                         onChange={(e) => setEditStudentForm(prev => ({ ...prev, name: e.target.value.toUpperCase() }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Email Address</label>
+                      <input
+                        type="email"
+                        value={editStudentForm.email || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, email: e.target.value.toLowerCase() }))}
                         className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
                       />
                     </div>

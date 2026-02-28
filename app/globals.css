@@ -24,7 +24,7 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-ring: var(--ring);
-  --font-sans: "Cambria";
+  --font-sans: var(--font-lora), "Cambria";
 }
 
 @keyframes float {
@@ -62,7 +62,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: "Cambria";
+  font-family: var(--font-lora), "Cambria";
 
   /* PWA Native Feel Optimizations - Restored Selection */
   -webkit-tap-highlight-color: transparent;

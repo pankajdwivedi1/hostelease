@@ -66,6 +66,26 @@ export async function PATCH(
       return NextResponse.json({ error: "Student ID is required" }, { status: 400 });
     }
 
+    // ⚡ SYNC WITH FIREBASE AUTH: If email is being updated, we MUST update it in Firebase too
+    if (body.email) {
+      try {
+        const student = await db.students.getById(studentId);
+        const firebaseUID = student?.firebase_uid || student?.firebaseUID;
+        const currentEmail = student?.email;
+
+        if (firebaseUID && body.email.toLowerCase() !== currentEmail?.toLowerCase()) {
+          console.log(`[AUTH_SYNC] Updating email in Firebase for ${firebaseUID} to ${body.email}`);
+          await adminAuth.updateUser(firebaseUID, {
+            email: body.email.toLowerCase(),
+          });
+        }
+      } catch (authError: any) {
+        console.error("❌ Firebase Auth update failed:", authError);
+        // We don't necessarily block the DB update if Auth fails, but we should log it.
+        // Or should we? If login depends on it, maybe we should.
+      }
+    }
+
     // Use the Database Adapter for a database-aware update (Mongo/Supabase)
     const updatedStudent = await db.students.update(studentId, body);
 
