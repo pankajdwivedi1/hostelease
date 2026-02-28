@@ -49,10 +49,22 @@ export async function GET(request: NextRequest) {
             const durationMinutes = Math.round(diffMs / 60000);
             const hours = Math.floor(durationMinutes / 60);
             const mins = durationMinutes % 60;
+
+            let durationText = "";
+            if (hours >= 24) {
+                const days = Math.floor(hours / 24);
+                const remainingHours = hours % 24;
+                durationText = `${days}d ${remainingHours}h ${mins}m`;
+            } else if (hours > 0) {
+                durationText = `${hours}h ${mins}m`;
+            } else {
+                durationText = `${mins}m`;
+            }
+
             return {
                 ...record,
                 currentDurationMinutes: durationMinutes,
-                currentDurationText: hours > 0 ? `${hours}h ${mins}m` : `${mins}m`,
+                currentDurationText: durationText,
             };
         });
 
@@ -60,8 +72,8 @@ export async function GET(request: NextRequest) {
             success: true,
             summary: {
                 totalStudents,
-                studentsIn: (totalStudents || 0) - (studentsOut || 0),
-                studentsOut: studentsOut || 0,
+                studentsIn: (totalStudents || 0) - currentlyOut.length,
+                studentsOut: currentlyOut.length,
             },
             currentlyOut: currentlyOutWithDuration,
             recentActivity,

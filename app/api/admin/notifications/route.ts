@@ -47,8 +47,16 @@ export async function POST(request: NextRequest) {
     }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const { searchParams } = new URL(request.url);
+        const id = searchParams.get("id");
+
+        if (id) {
+            const notification = await db.notifications.getById(id);
+            return NextResponse.json({ success: true, notification });
+        }
+
         const notifications = await db.notifications.list({}, { limit: 50 });
         return NextResponse.json({ success: true, notifications });
     } catch (error: any) {

@@ -134,6 +134,20 @@ export async function POST(request: NextRequest) {
                 });
             }
 
+            // ⚡ CHECK FOR PERMISSIONS: Is this an approved "Leave" or just a regular Outing?
+            const { records: activePermissions } = await db.permissions.list({
+                studentId: student._id.toString(),
+                status: "allowed"
+            });
+
+            // Find if any permission covers "NOW"
+            const activeLeave = activePermissions?.find((p: any) => {
+                const start = new Date(p.fromDateTime).getTime();
+                const end = new Date(p.toDateTime).getTime();
+                const currentTime = now.getTime();
+                return currentTime >= start && currentTime <= end && p.requestType === "leave";
+            });
+
             // Create new gate pass (check-out)
             const gatePass = await db.gatePasses.create({
                 studentId: student._id.toString(),
@@ -146,6 +160,8 @@ export async function POST(request: NextRequest) {
                 checkOutISTTime: istTime,
                 checkOutISTDate: istDate,
                 status: "out",
+                type: activeLeave ? "leave" : "outing", // ⚡ Type distinction
+                permissionId: activeLeave?._id || null,
                 gateName: parsedQR.g || "Main Gate",
                 qrTokenUsedOut: token,
             });

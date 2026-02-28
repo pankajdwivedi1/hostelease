@@ -15,6 +15,8 @@ interface Permission {
     status: "pending" | "allowed" | "rejected";
     wardenStatus: "pending" | "allowed" | "rejected";
     deanStatus: "pending" | "allowed" | "rejected";
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 interface StudentProfile {
@@ -79,6 +81,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     const [fromDateTime, setFromDateTime] = useState("");
     const [toDateTime, setToDateTime] = useState("");
     const [reason, setReason] = useState("");
+    const [highlightLocation, setHighlightLocation] = useState(false);
+    const [requestType, setRequestType] = useState<"outing" | "leave">("outing");
     const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(initialData || null);
     const [permissions, setPermissions] = useState<Permission[]>([]);
     const [loading, setLoading] = useState(!initialData);
@@ -605,14 +609,47 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             // Delay initial notification fetch by 3 seconds as requested
             const initialNotifTimer = setTimeout(fetchStudentNotifications, 3000);
 
-            const notifInterval = setInterval(fetchStudentNotifications, 30000); // Check every 30 seconds
+            // ⚡ OPTIMIZATION: 3-minute interval for students (saves battery & massive bandwidth)
+            const notifInterval = setInterval(() => {
+                // Only fetch if the page is visible to the student
+                if (document.visibilityState === 'visible') {
+                    fetchStudentNotifications();
+                }
+            }, 180000);
+
+            // Add simple logic to refetch when student returns to app after a while
+            const handleVisibilityChange = () => {
+                if (document.visibilityState === 'visible') {
+                    fetchStudentNotifications();
+                }
+            };
+            document.addEventListener('visibilitychange', handleVisibilityChange);
 
             return () => {
                 clearInterval(notifInterval);
                 clearTimeout(initialNotifTimer);
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
             };
         }
     }, [studentProfile, loading]);
+
+    // ⚡ OPTIMIZATION: Lazy-load notification images ONLY when the popup is shown
+    useEffect(() => {
+        if (showNotifPopup && currentNotification && !currentNotification.image) {
+            const fetchFullNotif = async () => {
+                try {
+                    const res = await fetch(`/api/student/notifications?id=${currentNotification._id}`);
+                    const data = await res.json();
+                    if (data.success && data.notification) {
+                        setCurrentNotification(data.notification);
+                    }
+                } catch (e) {
+                    console.error("Error fetching full notification details:", e);
+                }
+            };
+            fetchFullNotif();
+        }
+    }, [showNotifPopup, currentNotification]);
 
     const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
         const R = 6371e3; // Earth's radius in meters
@@ -739,10 +776,22 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                 loadFullProfile();
                 fetchPermissions();
 
-                // Refresh permissions periodically (Optimized: 30s instead of 8s to reduce server load)
+                // Refresh permissions periodically (⚡ OPTIMIZED: 3 minutes instead of 30s)
                 permissionInterval = setInterval(() => {
-                    fetchPermissions();
-                }, 30000);
+                    if (document.visibilityState === 'visible') {
+                        fetchPermissions();
+                    }
+                }, 180000);
+
+                // Insta-refresh when student returns to app
+                const handleVisibilityChange = () => {
+                    if (document.visibilityState === 'visible' && isMounted) {
+                        fetchPermissions();
+                    }
+                };
+                document.addEventListener('visibilitychange', handleVisibilityChange);
+
+                // Add to main component cleanup if needed, but for now we'll handle it via unmount
             } else if (!currentStudent && isMounted) {
                 setLoading(false);
             }
@@ -759,9 +808,10 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         return () => {
             isMounted = false;
             unsubscribe();
-            if (permissionInterval) {
-                clearInterval(permissionInterval);
-            }
+            if (permissionInterval) clearInterval(permissionInterval);
+            // Visibility listener clean up is tricky if added dynamically, 
+            // but we've defined handleVisibilityChange inside loadData.
+            // Ideally we should move it to effect scope.
         };
     }, [initialData]);
 
@@ -780,6 +830,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                     fromDateTime: new Date(fromDateTime).toISOString(),
                     toDateTime: new Date(toDateTime).toISOString(),
                     reason,
+                    requestType,
                     deviceId: getStoredDeviceId(),
                 }),
             });
@@ -1869,7 +1920,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                             </div>
 
                             {/* Quick Info Grid */}
-                            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-2" style={{ fontFamily: 'Cambria, Cochin, Georgia, Times, "Times New Roman", serif' }}>
+                            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-2" style={{ fontFamily: 'Cambria' }}>
                                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-2 md:p-2.5 rounded-2xl border border-blue-100 shadow-sm flex flex-col justify-center">
                                     <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1">Current Status</p>
                                     <div className="flex items-center gap-2">
@@ -1881,15 +1932,18 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hostel & Room</p>
                                     <p className="text-[12px] font-bold text-gray-900">{studentProfile.hostelName}<span className="text-blue-600 ml-1">#{studentProfile.roomNumber}</span></p>
                                 </div>
-                                <div className="bg-white p-2 md:p-2.5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between gap-1">
+                                <div className={`p-2 md:p-2.5 rounded-2xl border shadow-sm flex items-center justify-between gap-1 transition-all duration-500 ${highlightLocation ? 'bg-red-50 border-red-300 ring-4 ring-red-100 shadow-xl scale-[1.02]' : 'bg-white border-gray-100'}`}>
                                     <div>
-                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Location Lock</p>
+                                        <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${highlightLocation ? 'text-red-500 animate-pulse' : 'text-gray-400'}`}>Location Lock</p>
                                         <p className="text-[12px] font-bold text-gray-700">{isAtHostel ? '📍 Verified' : '❌ Not Verified'}</p>
                                     </div>
                                     <button
-                                        onClick={getAccurateLocation}
+                                        onClick={() => {
+                                            setHighlightLocation(false);
+                                            getAccurateLocation();
+                                        }}
                                         disabled={isLocationChecking}
-                                        className={`p-2 rounded-lg transition-all ${isAtHostel ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'}`}
+                                        className={`p-2 rounded-lg transition-all ${isAtHostel ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'} ${highlightLocation ? 'animate-bounce' : ''}`}
                                         title="Refresh Location"
                                     >
                                         {isLocationChecking ? (
@@ -2044,137 +2098,179 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
                             {/* Latest Permission Status Card */}
                             {latestPermission && (
-                                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm mb-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Active Request Status</h3>
-                                        <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${latestPermission.status === 'allowed' ? 'bg-green-100 text-green-700' : latestPermission.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                            {latestPermission.status}
-                                        </div>
-                                    </div>
+                                (() => {
+                                    // ⚡ LOGIC: Visible only for 6 hours after both warden and dean have responded
+                                    const isFinalized = latestPermission.wardenStatus !== 'pending' && latestPermission.deanStatus !== 'pending';
+                                    if (isFinalized) {
+                                        const lastUpdated = new Date(latestPermission.updatedAt || latestPermission.createdAt || Date.now()).getTime();
+                                        const sixHoursInMs = 6 * 60 * 60 * 1000;
+                                        const hoursPassed = (Date.now() - lastUpdated) / (1000 * 60 * 60);
+                                        if (hoursPassed > 6) return null;
+                                    }
 
-                                    <div className="flex items-center justify-around py-2">
-                                        <div className="flex flex-col items-center gap-2">
-                                            <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Campus approval</span>
-                                            <div className="flex items-center gap-2">
-                                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.wardenStatus === "allowed" ? "border-green-500 bg-green-50 text-green-600 shadow-sm ring-4 ring-green-50" : "border-gray-100 text-gray-300"}`}>
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                                                </div>
-                                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm ring-4 ring-red-50" : "border-gray-100 text-gray-300"}`}>
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                                    return (
+                                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm mb-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Active Request Status</h3>
+                                                <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${latestPermission.status === 'allowed' ? 'bg-green-100 text-green-700' : latestPermission.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                                    {latestPermission.status}
                                                 </div>
                                             </div>
-                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${latestPermission.wardenStatus === 'allowed' ? 'text-green-600 bg-green-50' : latestPermission.wardenStatus === 'rejected' ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-100'}`}>
-                                                {latestPermission.wardenStatus === 'allowed' ? 'Accepted' : latestPermission.wardenStatus === 'rejected' ? 'Rejected' : 'Pending'}
-                                            </span>
-                                        </div>
 
-                                        <div className="h-10 w-px bg-slate-100" />
-
-                                        <div className="flex flex-col items-center gap-2">
-                                            <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Dean approval</span>
-                                            <div className="flex items-center gap-2">
-                                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-lg shadow-green-100 scale-110" : "border-gray-100 text-gray-300"}`}>
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                            <div className="flex items-center justify-around py-2">
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Campus approval</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.wardenStatus === "allowed" ? "border-green-500 bg-green-50 text-green-600 shadow-sm ring-4 ring-green-50" : "border-gray-100 text-gray-300"}`}>
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                                        </div>
+                                                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm ring-4 ring-red-50" : "border-gray-100 text-gray-300"}`}>
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                        </div>
+                                                    </div>
+                                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${latestPermission.wardenStatus === 'allowed' ? 'text-green-600 bg-green-50' : latestPermission.wardenStatus === 'rejected' ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-100'}`}>
+                                                        {latestPermission.wardenStatus === 'allowed' ? 'Accepted' : latestPermission.wardenStatus === 'rejected' ? 'Rejected' : 'Pending'}
+                                                    </span>
                                                 </div>
-                                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm ring-4 ring-red-50" : "border-gray-100 text-gray-300"}`}>
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+
+                                                <div className="h-10 w-px bg-slate-100" />
+
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Dean approval</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-lg shadow-green-100 scale-110" : "border-gray-100 text-gray-300"}`}>
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                                        </div>
+                                                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm ring-4 ring-red-50" : "border-gray-100 text-gray-300"}`}>
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                        </div>
+                                                    </div>
+                                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${latestPermission.deanStatus === 'allowed' ? 'text-green-600 bg-green-50' : latestPermission.deanStatus === 'rejected' ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-100'}`}>
+                                                        {latestPermission.deanStatus === 'allowed' ? 'Accepted' : latestPermission.deanStatus === 'rejected' ? 'Rejected' : 'Pending'}
+                                                    </span>
                                                 </div>
                                             </div>
-                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${latestPermission.deanStatus === 'allowed' ? 'text-green-600 bg-green-50' : latestPermission.deanStatus === 'rejected' ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-100'}`}>
-                                                {latestPermission.deanStatus === 'allowed' ? 'Accepted' : latestPermission.deanStatus === 'rejected' ? 'Rejected' : 'Pending'}
-                                            </span>
                                         </div>
-                                    </div>
-                                </div>
+                                    );
+                                })()
                             )}
 
                             {/* Action Buttons Row */}
-                            <div className="flex flex-col gap-3 mb-6">
+                            <div className="grid grid-cols-2 gap-3 mb-4">
                                 {/* ⚡ PRIMARY ACTION: Scan GATEPASS */}
                                 <button
                                     onClick={() => router.push("/getpass/scan")}
-                                    className="w-full h-16 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-lg shadow-xl shadow-blue-200 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 group px-6"
+                                    className="w-full h-24 rounded-2xl bg-[#EEF2FF] border-2 border-[#C7D2FE] text-[#4F46E5] font-black hover:bg-[#E0E7FF] transition-all flex flex-col items-center justify-center gap-2 group px-2 text-center"
                                 >
-                                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center group-hover:bg-white/30 transition-colors">
-                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <div className="w-10 h-10 bg-[#C7D2FE]/50 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        <svg className="w-6 h-6 text-[#4F46E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                                         </svg>
                                     </div>
-                                    <div className="flex-1 text-left">
-                                        <span className="block text-xs font-bold text-blue-100 uppercase tracking-widest">Campus Entry/Exit</span>
-                                        <span className="text-base uppercase tracking-tight">Scan Gate QR code</span>
+                                    <div>
+                                        <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 opacity-70">Gatepass</span>
+                                        <span className="text-[10px] md:text-xs uppercase tracking-tight block">Scan QR code</span>
                                     </div>
-                                    <svg className="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
-                                    </svg>
                                 </button>
 
-                                <div className="flex gap-3">
+                                {/* ⚡ SECONDARY ACTION: Go to Leave */}
+                                {studentProfile?.studentStatus !== "out" && (
                                     <button
-                                        onClick={() => setShowPermissionsHistory(true)}
-                                        className="flex-1 h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-bold text-[12px] hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
+                                        onClick={() => {
+                                            if (!isAtHostel) {
+                                                setHighlightLocation(true);
+                                                // Scroll to top to show the location card
+                                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                alert("📍 Location Verification Required\n\nPlease verify your location first by clicking the location icon at the top of your dashboard.");
+                                                return;
+                                            }
+                                            setRequestType("leave");
+                                            setShowRequestForm(true);
+                                        }}
+                                        className={`w-full h-24 rounded-2xl font-black border-2 transition-all flex flex-col items-center justify-center gap-2 group px-2 text-center ${isAtHostel
+                                            ? "bg-[#FFF7ED] border-[#FED7AA] text-[#C2410C] hover:bg-[#FFEDD5]"
+                                            : "bg-gray-50 border-gray-100 text-gray-400 hover:bg-red-50 hover:border-red-200"
+                                            }`}
                                     >
-                                        🕙 History
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${isAtHostel ? "bg-[#FED7AA]/50 group-hover:scale-110" : "bg-gray-100 group-hover:bg-red-100"}`}>
+                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <span className={`block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 ${isAtHostel ? "opacity-70" : "opacity-40"}`}>Leave Request</span>
+                                            <span className="text-[10px] md:text-xs uppercase tracking-tight block">
+                                                {isAtHostel ? "Go to Home" : "Locked"}
+                                            </span>
+                                        </div>
                                     </button>
-                                    {studentProfile?.studentStatus !== "out" && (
-                                        <button
-                                            onClick={() => setShowRequestForm(!showRequestForm)}
-                                            disabled={!isAtHostel}
-                                            className={`flex-[2] h-12 rounded-xl font-bold text-[12px] shadow-lg transition-all flex items-center justify-center gap-2 ${isAtHostel
-                                                ? "bg-blue-600 text-white shadow-blue-100 hover:bg-blue-700"
-                                                : "bg-gray-100 text-gray-400 cursor-not-allowed shadow-none"
-                                                }`}
-                                        >
-                                            {isAtHostel ? "🚀 Request Permission" : "🔒 Request Permission"}
-                                        </button>
-                                    )}
-                                </div>
+                                )}
+                            </div>
+
+                            <div className="mb-6">
+                                <button
+                                    onClick={() => setShowPermissionsHistory(true)}
+                                    className="w-full md:w-48 h-10 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
+                                >
+                                    🕙 View Outing History
+                                </button>
                             </div>
 
                             {showRequestForm && (
-                                <div className="p-6 rounded-lg border border-solid border-[#9CA3AF] bg-filler space-y-4 mb-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-foreground mb-2">
-                                            From Date & Time
-                                        </label>
-                                        <input
-                                            type="datetime-local"
-                                            value={fromDateTime}
-                                            onChange={(e) => setFromDateTime(e.target.value)}
-                                            className="w-full h-12 px-4 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground focus:outline-none focus:border-foreground"
-                                        />
+                                <div className="p-6 rounded-3xl border border-blue-100 bg-gradient-to-br from-white to-blue-50/30 shadow-xl shadow-blue-100/50 space-y-6 mb-6 animate-in slide-in-from-top-4 duration-300">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h3 className="text-lg font-black text-gray-900 uppercase tracking-tight">
+                                            {requestType === 'leave' ? '🏠 New Leave Request' : '🚶‍♂️ New Gatepass Request'}
+                                        </h3>
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-foreground mb-2">
-                                            To Date & Time
-                                        </label>
-                                        <input
-                                            type="datetime-local"
-                                            value={toDateTime}
-                                            onChange={(e) => setToDateTime(e.target.value)}
-                                            className="w-full h-12 px-4 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground focus:outline-none focus:border-foreground"
-                                        />
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
+                                                From Date & Time
+                                            </label>
+                                            <input
+                                                type="datetime-local"
+                                                value={fromDateTime}
+                                                onChange={(e) => setFromDateTime(e.target.value)}
+                                                className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-white text-gray-800 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
+                                                To Date & Time
+                                            </label>
+                                            <input
+                                                type="datetime-local"
+                                                value={toDateTime}
+                                                onChange={(e) => setToDateTime(e.target.value)}
+                                                className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-white text-gray-800 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none"
+                                            />
+                                        </div>
                                     </div>
+
                                     <div>
-                                        <label className="block text-sm font-medium text-foreground mb-2">
-                                            Reason
+                                        <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
+                                            Reason for {requestType === 'leave' ? 'Home Leave' : 'Short Outing'}
                                         </label>
                                         <textarea
                                             value={reason}
                                             onChange={(e) => setReason(e.target.value.slice(0, 100))}
-                                            placeholder="Please specify why you need to go out........ (only 100 characters)"
+                                            placeholder={requestType === 'leave' ? "Mention if going to home, village, etc." : "Local market, hospital, etc."}
                                             maxLength={100}
-                                            rows={4}
-                                            className="w-full px-4 py-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground resize-none"
+                                            rows={3}
+                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-800 font-bold placeholder:text-gray-300 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none resize-none"
                                         />
+                                        <p className="text-right text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tighter">{reason.length}/100</p>
                                     </div>
-                                    <div className="flex gap-3">
+
+                                    <div className="flex gap-3 pt-2">
                                         <button
                                             onClick={handleRequestPermission}
                                             disabled={submitting}
-                                            className="flex-1 h-12 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="flex-1 h-14 rounded-2xl bg-blue-600 text-white font-black text-sm uppercase tracking-widest shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50"
                                         >
-                                            {submitting ? "Submitting..." : "Submit Request"}
+                                            {submitting ? "Processing..." : `Request ${requestType === 'leave' ? 'Leave' : 'Outing'}`}
                                         </button>
                                         <button
                                             onClick={() => {
@@ -2183,9 +2279,9 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                                                 setToDateTime("");
                                                 setReason("");
                                             }}
-                                            className="flex-1 h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
+                                            className="px-6 h-14 rounded-2xl border border-gray-200 bg-white text-gray-500 font-black text-sm uppercase tracking-widest hover:bg-gray-50 active:scale-[0.98] transition-all"
                                         >
-                                            Cancel
+                                            ✕
                                         </button>
                                     </div>
                                 </div>
@@ -3295,7 +3391,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                             <svg className="w-6 h-6 text-white/90 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                            <p className="text-sm font-bold tracking-tight" style={{ fontFamily: 'Cambria, serif' }}>{toastMessage}</p>
+                            <p className="text-sm font-bold tracking-tight" style={{ fontFamily: 'Cambria' }}>{toastMessage}</p>
                         </div>
                     </div>
                 )

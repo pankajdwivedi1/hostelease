@@ -6,6 +6,12 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const studentId = searchParams.get("studentId");
         const hostelName = searchParams.get("hostelName");
+        const id = searchParams.get("id");
+
+        if (id) {
+            const notification = await db.notifications.getById(id);
+            return NextResponse.json({ success: true, notification });
+        }
 
         if (!studentId) {
             return NextResponse.json({ error: "Student ID required" }, { status: 400 });

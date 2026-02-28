@@ -9,6 +9,12 @@ export async function GET(request: Request) {
         const endDate = searchParams.get("endDate");
         const hostelName = searchParams.get("hostelName");
         const studentId = searchParams.get("studentId");
+        const id = searchParams.get("id");
+
+        if (id) {
+            const record = await db.attendance.getById(id);
+            return NextResponse.json({ success: true, record });
+        }
 
         // Date Validation Logic
         if (!studentId && !startDate && !date) {

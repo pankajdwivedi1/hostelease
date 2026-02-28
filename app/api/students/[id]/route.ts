@@ -115,6 +115,12 @@ export async function GET(
       );
     }
 
+    // Check for open gate pass to ensure status is accurate
+    const openGatePass = await db.gatePasses.findOne({ studentId, status: "out" });
+    if (openGatePass && student.studentStatus !== 'out') {
+      student.studentStatus = 'out';
+    }
+
     return NextResponse.json({ success: true, student }, { status: 200 });
   } catch (error: any) {
     console.error("Error fetching student:", error);

@@ -1519,6 +1519,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     setShowAllPresent(false);
   }, [selectedAttendanceHostel]);
 
+  // ⚡ OPTIMIZATION: On-demand fetching for large data in modals
+  useEffect(() => {
+    if (reviewingLog && !reviewingLog.flaggedPhotoUrl) {
+      const fetchFullLog = async () => {
+        try {
+          const res = await fetch(`/api/admin/attendance?id=${reviewingLog._id}`);
+          const data = await res.json();
+          if (data.record) {
+            setReviewingLog(data.record);
+          }
+        } catch (e) {
+          console.error("Failed to fetch full attendance log:", e);
+        }
+      };
+      fetchFullLog();
+    }
+  }, [reviewingLog]);
+
   // Handle click outside to deselect hostel
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -2001,11 +2019,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchPermissions();
-      fetchAttendanceSummary();
-      if (currentTab === 'attendance') fetchAttendanceLogs();
-      if (currentTab === 'messaging') fetchAdminNotifications();
-      if (currentTab === 'payments') fetchAdminPayments();
+      // ⚡ OPTIMIZATION: Only poll if the admin is actively viewing the dashboard
+      if (document.visibilityState === 'visible') {
+        fetchPermissions();
+        fetchAttendanceSummary();
+        if (currentTab === 'attendance') fetchAttendanceLogs();
+        if (currentTab === 'messaging') fetchAdminNotifications();
+        if (currentTab === 'payments') fetchAdminPayments();
+      }
     }, 20000);
 
     return () => clearInterval(interval);
@@ -5698,15 +5719,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[9px] font-black uppercase">Registered</span>
                   </div>
                   <div className="aspect-square rounded-2xl overflow-hidden bg-gray-100 border-2 border-dashed border-gray-200 shadow-inner">
-                    {students.find(s => s.id === reviewingLog.studentId?._id)?.profilePicture ? (
-                      <img
-                        src={students.find(s => s.id === reviewingLog.studentId?._id)?.profilePicture}
-                        alt="Profile"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-300">No Photo</div>
-                    )}
+                    {(() => {
+                      const student = students.find(s => s.id === reviewingLog.studentId?._id);
+                      if (student?.profilePicture) {
+                        return <img src={student.profilePicture} alt="Profile" className="w-full h-full object-cover" />;
+                      }
+
+                      // Fallback: If profile picture is missing from current list, fetch full student on demand
+                      // (Wait, we can't easily fetch and update the 'students' list here without a separate state)
+                      // For now, if the admin is reviewing, they usually came from the attendance table which already has basic student info.
+                      return <div className="w-full h-full flex items-center justify-center text-gray-300">No Photo</div>;
+                    })()}
                   </div>
                   <p className="text-center font-bold text-sm text-gray-900">{reviewingLog.studentId?.name}</p>
                 </div>

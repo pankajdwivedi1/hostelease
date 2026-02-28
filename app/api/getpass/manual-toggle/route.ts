@@ -29,29 +29,43 @@ function getISTStrings(date: Date) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { studentId, userType, adminSecret } = body;
+        const { studentId, searchId, action, userType = 'admin' } = body;
 
-        // Simple security check - in a real app, use proper session/token validation
-        const validRoles = ['admin', 'warden', 'developer'];
+        // Simple security check
+        const validRoles = ['admin', 'warden', 'developer', 'gatekeeper'];
         if (!validRoles.includes(userType)) {
             return NextResponse.json(
-                { error: "Unauthorized: Only Wardens and Admins can perform manual overrides." },
+                { error: "Unauthorized access" },
                 { status: 403 }
             );
         }
 
-        if (!studentId) {
-            return NextResponse.json(
-                { error: "Missing studentId" },
-                { status: 400 }
-            );
+        let student;
+
+        // 🔍 SEARCH ACTION: Just find and return student profile for verification
+        if (action === 'find' && searchId) {
+            const results = await db.students.list({ search: searchId.trim() }, { light: false });
+            if (!results || results.length === 0) {
+                return NextResponse.json({ error: "No student found with this name or ID" }, { status: 404 });
+            }
+            // Return the first match for now, or the exact match if possible
+            return NextResponse.json({ success: true, student: results[0] });
         }
 
-        // Find the student
-        const student = await db.students.getById(studentId);
+        if (studentId) {
+            student = await db.students.getById(studentId);
+        } else if (searchId) {
+            // Internal toggle by ID logic
+            const s = searchId.trim();
+            student = await db.students.findOne({ registrationId: s });
+            if (!student) {
+                student = await db.students.findOne({ erpInformation: s });
+            }
+        }
+
         if (!student) {
             return NextResponse.json(
-                { error: "Student not found" },
+                { error: "Student not found with this ID" },
                 { status: 404 }
             );
         }

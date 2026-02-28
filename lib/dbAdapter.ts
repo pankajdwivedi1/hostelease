@@ -249,6 +249,8 @@ const mapGatePassToCamelCase = (g: any) => {
         checkInISTDate: g.check_in_ist_date,
         status: g.status,
         durationMinutes: g.duration_minutes,
+        type: g.type || 'outing',
+        permissionId: g.permission_id,
         gateName: g.gate_name,
         qrTokenUsedOut: g.qr_token_used_out,
         qrTokenUsedIn: g.qr_token_used_in,
@@ -302,6 +304,8 @@ const mapGatePassToSnakeCase = (g: any) => {
         checkInISTDate: 'check_in_ist_date',
         status: 'status',
         durationMinutes: 'duration_minutes',
+        type: 'type',
+        permissionId: 'permission_id',
         gateName: 'gate_name',
         qrTokenUsedOut: 'qr_token_used_out',
         qrTokenUsedIn: 'qr_token_used_in'
@@ -356,6 +360,7 @@ const mapPermissionToCamelCase = (p: any) => {
         status: p.status,
         wardenStatus: p.warden_status,
         deanStatus: p.dean_status,
+        requestType: p.request_type,
         createdAt: p.created_at,
         updatedAt: p.updated_at
     };
@@ -381,7 +386,8 @@ const mapPermissionToSnakeCase = (p: any) => {
         reason: 'reason',
         status: 'status',
         wardenStatus: 'warden_status',
-        deanStatus: 'dean_status'
+        deanStatus: 'dean_status',
+        requestType: 'request_type'
     };
 
     Object.keys(p).forEach(key => {
@@ -734,11 +740,25 @@ export const db = {
             console.log(`[DB_ADAPTER] getById (${id}) using: ${source}`);
 
             if (source === 'SUPABASE') {
-                const { data, error } = await supabase
+                let { data, error } = await supabase
                     .from('students')
                     .select('*')
                     .eq('_id', id)
-                    .single();
+                    .maybeSingle();
+
+                if (error || !data) {
+                    // FALLBACK: Try lookup by firebase_uid if _id lookup fails
+                    // This handles cases where studentId in other tables might be the Firebase UID
+                    console.log(`[DB_ADAPTER] Falling back to firebase_uid lookup for: ${id}`);
+                    const fbLookup = await supabase
+                        .from('students')
+                        .select('*')
+                        .eq('firebase_uid', id)
+                        .maybeSingle();
+
+                    data = fbLookup.data;
+                    error = fbLookup.error;
+                }
 
                 if (error) {
                     console.error("Supabase Error:", error);
@@ -796,8 +816,10 @@ export const db = {
                 if (filter.firebaseUID) query = query.eq('firebase_uid', filter.firebaseUID);
                 if (filter.email) query = query.eq('email', filter.email);
                 if (filter.phoneNumber) query = query.eq('phone_number', filter.phoneNumber);
+                if (filter.registrationId) query = query.eq('registration_id', filter.registrationId);
+                if (filter.erpInformation) query = query.eq('erp_id', filter.erpInformation);
 
-                const { data, error } = await query.single();
+                const { data, error } = await query.maybeSingle();
 
                 if (error) {
                     if (error.code === 'PGRST116') return null; // Not found code
@@ -922,7 +944,7 @@ export const db = {
         list: async (filters: any = {}, options: { light?: boolean } = {}) => {
             const source = await getDbSource();
 
-            // ⚡ Optimized Selection for Light Mode
+            // ⚡ Optimized Selection for Light Mode (Excludes large fields like profilePicture and faceDescriptor)
             const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id';
 
             console.log(`[DB_ADAPTER] list (filters: ${JSON.stringify(filters)}) using: ${source}`);
@@ -1402,16 +1424,41 @@ export const db = {
             }
         },
 
+        // Get a single attendance record by ID
+        getById: async (id: string) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const { data, error } = await supabase
+                    .from('attendance')
+                    .select('*, studentId:students!attendance_student_id_fkey(*)')
+                    .eq('_id', id)
+                    .maybeSingle();
+                if (error) return null;
+                return mapAttendanceToCamelCase(data);
+            } else {
+                await connectDB();
+                const AttendanceModel = (await import('@/models/Attendance')).default;
+                const record = await AttendanceModel.findById(id).populate('studentId').lean();
+                return record ? JSON.parse(JSON.stringify(record)) : null;
+            }
+        },
+
         // Get list of attendance records (Admin Dashboard)
         list: async (filters: any) => {
             const source = await getDbSource();
 
             if (source === 'SUPABASE') {
+                // ⚡ OPTIMIZATION: Use light fields for joined students to save bandwidth/egress
+                const lightStudentFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id';
+
+                // ⚡ OPTIMIZATION: Exclude large flagged_photo_url from logs list
+                const attendanceFields = '_id,student_id,firebase_uid,name,hostel_name,room_number,date,ist_time,ist_date,location,device_id,status,face_match_percentage,face_match_status,needs_review,is_test,timestamp';
+
                 // Query Supabase with Join
                 // We alias the joined 'students' table as 'studentId' to match Mongo's populated structure
                 let query = supabase
                     .from('attendance')
-                    .select('*, studentId:students!attendance_student_id_fkey(*)');
+                    .select(`${attendanceFields}, studentId:students!attendance_student_id_fkey(${lightStudentFields})`);
 
                 if (filters.date) {
                     query = query.eq('date', filters.date);
@@ -2050,7 +2097,9 @@ export const db = {
             const limit = options.limit || 50;
 
             if (source === 'SUPABASE') {
-                let query = supabase.from('notifications').select('*, targetStudentId:students(name, registration_id)');
+                // ⚡ OPTIMIZATION: Exclude large 'image' field (Base64) from notifications list
+                const notificationFields = '_id,sender_id,target_type,target_hostel,target_student_id,message,priority,expires_at,acknowledged_by,created_at,updated_at';
+                let query = supabase.from('notifications').select(`${notificationFields}, targetStudentId:students(name, registration_id)`);
 
                 if (filters.$or) {
                     const orParts = filters.$or.map((part: any) => {
@@ -2091,6 +2140,24 @@ export const db = {
                     .limit(limit)
                     .lean();
                 return JSON.parse(JSON.stringify(records));
+            }
+        },
+
+        getById: async (id: string) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const { data, error } = await supabase
+                    .from('notifications')
+                    .select('*, targetStudentId:students(name, registration_id)')
+                    .eq('_id', id)
+                    .maybeSingle();
+                if (error) return null;
+                return mapNotificationToCamelCase(data);
+            } else {
+                await connectDB();
+                const NotificationModel = (await import('@/models/Notification')).default;
+                const record = await NotificationModel.findById(id).populate("targetStudentId", "name registrationId").lean();
+                return record ? JSON.parse(JSON.stringify(record)) : null;
             }
         },
 
@@ -2162,9 +2229,17 @@ export const db = {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 let query = supabase.from('notifications').delete();
-                if (filter.createdAt && filter.createdAt.$lt) {
+
+                if (filter._id) {
+                    query = query.eq('_id', filter._id);
+                } else if (filter.createdAt && filter.createdAt.$lt) {
                     query = query.lt('created_at', new Date(filter.createdAt.$lt).toISOString());
+                } else {
+                    // Safety check: Supabase delete requires a filter. 
+                    // Use a dummy filter if we really want to delete all, but here we likely want to block accidental wipes.
+                    return { deletedCount: 0 };
                 }
+
                 const { count, error } = await query;
                 if (error) throw error;
                 return { deletedCount: count || 0 };
@@ -2302,7 +2377,10 @@ export const db = {
         list: async (filters: any = {}, options: { limit?: number; offset?: number; populate?: boolean } = {}) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                let query = supabase.from('permissions').select(options.populate ? '*, students!student_id(*)' : '*');
+                // ⚡ OPTIMIZATION: Use light fields for joined students to save bandwidth/egress
+                const lightStudentFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id';
+
+                let query = supabase.from('permissions').select(options.populate ? `*, students!student_id(${lightStudentFields})` : '*');
 
                 if (filters.studentId) query = query.eq('student_id', filters.studentId);
                 if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);

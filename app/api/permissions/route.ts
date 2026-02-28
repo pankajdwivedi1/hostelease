@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { studentId, fromDateTime, toDateTime, reason } = body;
+    const { studentId, fromDateTime, toDateTime, reason, requestType } = body;
 
     if (!studentId || !fromDateTime || !toDateTime || !reason) {
       return NextResponse.json(
@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
       fromDateTime: new Date(fromDateTime),
       toDateTime: new Date(toDateTime),
       reason,
+      requestType: requestType || "outing",
       status: "pending",
     });
 

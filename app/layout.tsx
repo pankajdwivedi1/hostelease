@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
+import "./globals.css";
+import InstallPWA from "./components/InstallPWA";
+
+
 
 export const metadata: Metadata = {
   title: "Hostelease - Hostel Management",
@@ -31,9 +29,10 @@ export function generateViewport() {
   return {
     width: "device-width",
     initialScale: 1,
-    maximumScale: 5,
-    userScalable: true,
+    maximumScale: 1, // Prevents auto-zoom on input focus
+    userScalable: false, // Makes it feel like a locked native app
     themeColor: "#2563eb",
+    viewportFit: "cover", // Ensures content fills the screen including the notch area
   };
 }
 
@@ -44,7 +43,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} antialiased`} suppressHydrationWarning>
+      <body className="antialiased" suppressHydrationWarning>
+        <InstallPWA />
         {children}
       </body>
     </html>

@@ -47,7 +47,7 @@ function QRCodeCanvas({ data, size = 550 }: { data: string; size?: number }) {
             ctx.fillStyle = "#0a0a1a";
             ctx.fillRect(0, 0, size, size);
             ctx.fillStyle = "#00ff88";
-            ctx.font = "bold 24px Inter, system-ui";
+            ctx.font = "bold 24px Cambria";
             ctx.textAlign = "center";
             ctx.fillText("QR Loading...", size / 2, size / 2);
         };
@@ -229,6 +229,7 @@ interface OutingRecord {
     currentDurationMinutes?: number;
     currentDurationText?: string;
     gateName?: string;
+    type?: "outing" | "leave" | string;
 }
 
 interface LiveData {
@@ -266,6 +267,14 @@ export default function GateDesktopPage() {
         timestamp: Date;
     } | null>(null);
     const [mounted, setMounted] = useState(false);
+    const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+    const [manualSearchId, setManualSearchId] = useState("");
+    const [isProcessingManual, setIsProcessingManual] = useState(false);
+    const [manualError, setManualError] = useState("");
+    const [manualSuccess, setManualSuccess] = useState("");
+    const [foundStudent, setFoundStudent] = useState<any>(null);
+    const [showProfileCard, setShowProfileCard] = useState(false);
+    const manualInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         setMounted(true);
@@ -399,6 +408,100 @@ export default function GateDesktopPage() {
         }
     };
 
+    // ===================== Manual Status Toggle =====================
+    // STEP 1: Search for student
+    const handleManualSearch = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!manualSearchId.trim()) return;
+
+        setIsProcessingManual(true);
+        setManualError("");
+        setManualSuccess("");
+        setFoundStudent(null);
+        setShowProfileCard(false);
+
+        try {
+            const res = await fetch("/api/getpass/manual-toggle", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    searchId: manualSearchId.trim(),
+                    action: "find",
+                    userType: "gatekeeper"
+                })
+            });
+
+            const data = await res.json();
+
+            if (data.success && data.student) {
+                setFoundStudent(data.student);
+                setShowProfileCard(true);
+            } else {
+                setManualError(data.error || "No student found with this name or ID");
+            }
+        } catch (err) {
+            setManualError("Network error. Try again.");
+        } finally {
+            setIsProcessingManual(false);
+        }
+    };
+
+    // STEP 2: Final Toggle Action
+    const handleFinalToggle = async () => {
+        if (!foundStudent) return;
+
+        setIsProcessingManual(true);
+        setManualError("");
+
+        try {
+            const res = await fetch("/api/getpass/manual-toggle", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    studentId: foundStudent._id,
+                    userType: "gatekeeper"
+                })
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+                setManualSuccess(data.message);
+                // Refresh data
+                fetchLiveData();
+
+                // Reset after success
+                setTimeout(() => {
+                    setManualSuccess("");
+                    setFoundStudent(null);
+                    setShowProfileCard(false);
+                    setManualSearchId("");
+                    setIsManualModalOpen(false);
+                }, 2500);
+            } else {
+                setManualError(data.error || "Failed to toggle status");
+            }
+        } catch (err) {
+            setManualError("Network error. Try again.");
+        } finally {
+            setIsProcessingManual(false);
+        }
+    };
+
+    const resetManualSearch = () => {
+        setFoundStudent(null);
+        setShowProfileCard(false);
+        setManualSearchId("");
+        setManualError("");
+        setTimeout(() => manualInputRef.current?.focus(), 100);
+    };
+
+    useEffect(() => {
+        if (isManualModalOpen && manualInputRef.current) {
+            manualInputRef.current.focus();
+        }
+    }, [isManualModalOpen]);
+
     // ===================== Format time =====================
     const formatTime = (date: Date) => {
         const raw = date.toLocaleTimeString("en-IN", {
@@ -422,6 +525,12 @@ export default function GateDesktopPage() {
     // ===================== Duration formatter =====================
     const formatDuration = (minutes: number) => {
         if (!minutes) return "Just now";
+        if (minutes >= 1440) {
+            const days = Math.floor(minutes / 1440);
+            const hrs = Math.floor((minutes % 1440) / 60);
+            const mins = minutes % 60;
+            return `${days}d ${hrs}h ${mins}m`;
+        }
         const hrs = Math.floor(minutes / 60);
         const mins = minutes % 60;
         if (hrs > 0) return `${hrs}h ${mins}m`;
@@ -531,6 +640,14 @@ export default function GateDesktopPage() {
                     </h2>
                     <div className="flex gap-2 self-end sm:self-auto">
                         <button
+                            onClick={() => setIsManualModalOpen(true)}
+                            className="bg-[rgba(59,130,246,0.1)] border border-[rgba(59,130,246,0.2)] text-[#60a5fa] px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-bold transition-all hover:bg-[rgba(59,130,246,0.2)] active:scale-95"
+                            title="Manual ID Entry"
+                        >
+                            <span className="text-[10px] uppercase tracking-wider">Manual Entry</span>
+                            <span className="text-sm">⌨️</span>
+                        </button>
+                        <button
                             onClick={handleLogout}
                             className="bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] text-[#ff6b6b] px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-bold transition-all hover:bg-[rgba(255,68,68,0.2)] active:scale-95"
                             title="Logout"
@@ -548,33 +665,168 @@ export default function GateDesktopPage() {
                 </div>
 
                 {liveData && (
-                    <div className="grid grid-cols-2 lg:flex lg:flex-row gap-2 md:gap-3 mb-4">
-                        <div className="p-3 bg-[rgba(255,255,255,0.04)] rounded-2xl border border-[rgba(255,255,255,0.08)] text-center flex flex-col justify-center lg:flex-1">
-                            <div className="text-xl mb-1">👥</div>
-                            <div className="text-2xl font-extrabold text-white tabular-nums leading-tight">{liveData.summary.totalStudents}</div>
-                            <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest mt-0.5">Total</div>
-                        </div>
-                        <div className="p-3 bg-[rgba(0,255,136,0.05)] rounded-2xl border border-[rgba(0,255,136,0.2)] text-center flex flex-col justify-center lg:flex-1">
-                            <div className="text-xl mb-1">🏠</div>
-                            <div className="text-2xl font-extrabold text-[#00ff88] tabular-nums leading-tight">{liveData.summary.studentsIn}</div>
-                            <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest mt-0.5">In Campus</div>
-                        </div>
-                        <div className="p-3 bg-[rgba(255,107,107,0.05)] rounded-2xl border border-[rgba(255,107,107,0.2)] text-center flex flex-col justify-center lg:flex-1">
-                            <div className="text-xl mb-1">🚶</div>
-                            <div className="text-2xl font-extrabold text-[#ff6b6b] tabular-nums leading-tight">{liveData.summary.studentsOut}</div>
-                            <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest mt-0.5">Outside</div>
-                        </div>
-                        <div
-                            onClick={() => router.push('/getpass/history')}
-                            className="p-3 bg-[rgba(59,130,246,0.05)] rounded-2xl border border-[rgba(59,130,246,0.2)] text-center cursor-pointer hover:bg-[rgba(59,130,246,0.1)] transition-all group active:scale-95 flex flex-col justify-center lg:flex-1"
-                        >
-                            <div className="text-xl mb-1 group-hover:scale-110 transition-transform">📜</div>
-                            <div className="text-2xl font-extrabold text-[#3b82f6] tabular-nums group-hover:text-[#60a5fa] transition-colors flex items-center justify-center gap-1 leading-tight">
-                                GO
-                                <span className="text-sm font-black">→</span>
+                    <div className="mb-4">
+                        {!isManualModalOpen ? (
+                            <div className="grid grid-cols-2 lg:flex lg:flex-row gap-2 md:gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                                <div className="p-3 bg-[rgba(255,255,255,0.04)] rounded-2xl border border-[rgba(255,255,255,0.08)] text-center flex flex-col justify-center lg:flex-1">
+                                    <div className="text-xl mb-1">👥</div>
+                                    <div className="text-2xl font-extrabold text-white tabular-nums leading-tight">{liveData.summary.totalStudents}</div>
+                                    <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest mt-0.5">Total</div>
+                                </div>
+                                <div className="p-3 bg-[rgba(0,255,136,0.05)] rounded-2xl border border-[rgba(0,255,136,0.2)] text-center flex flex-col justify-center lg:flex-1">
+                                    <div className="text-xl mb-1">🏠</div>
+                                    <div className="text-2xl font-extrabold text-[#00ff88] tabular-nums leading-tight">{liveData.summary.studentsIn}</div>
+                                    <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest mt-0.5">In Campus</div>
+                                </div>
+                                <div className="p-3 bg-[rgba(255,107,107,0.05)] rounded-2xl border border-[rgba(255,107,107,0.2)] text-center flex flex-col justify-center lg:flex-1">
+                                    <div className="text-xl mb-1">🚶</div>
+                                    <div className="text-2xl font-extrabold text-[#ff6b6b] tabular-nums leading-tight">{liveData.summary.studentsOut}</div>
+                                    <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest mt-0.5">Outside</div>
+                                </div>
+                                <div
+                                    onClick={() => router.push('/getpass/history')}
+                                    className="p-3 bg-[rgba(59,130,246,0.05)] rounded-2xl border border-[rgba(59,130,246,0.2)] text-center cursor-pointer hover:bg-[rgba(59,130,246,0.1)] transition-all group active:scale-95 flex flex-col justify-center lg:flex-1"
+                                >
+                                    <div className="text-xl mb-1 group-hover:scale-110 transition-transform">📜</div>
+                                    <div className="text-2xl font-extrabold text-[#3b82f6] tabular-nums group-hover:text-[#60a5fa] transition-colors flex items-center justify-center gap-1 leading-tight">
+                                        GO
+                                        <span className="text-sm font-black">→</span>
+                                    </div>
+                                    <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest mt-0.5 group-hover:text-[rgba(255,255,255,0.8)] transition-colors">History</div>
+                                </div>
                             </div>
-                            <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest mt-0.5 group-hover:text-[rgba(255,255,255,0.8)] transition-colors">History</div>
-                        </div>
+                        ) : (
+                            <div className="bg-[rgba(59,130,246,0.05)] border border-[rgba(59,130,246,0.3)] rounded-[24px] p-4 md:p-6 animate-in zoom-in-95 duration-300 relative shadow-[0_0_30px_rgba(59,130,246,0.1)]">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xl">🔑</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-black text-white uppercase tracking-wider">
+                                                {showProfileCard ? "Verify Profile" : "Manual Entry"}
+                                            </span>
+                                            <span className="text-[10px] text-gray-400 font-medium tracking-tight whitespace-nowrap">
+                                                {showProfileCard ? "Verify student details below" : "Enter Name, Registration or ERP ID"}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setIsManualModalOpen(false)}
+                                        className="text-gray-500 hover:text-white transition-colors text-xl p-1"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+
+                                {!showProfileCard ? (
+                                    <form onSubmit={handleManualSearch} className="relative animate-in slide-in-from-bottom-2 duration-300">
+                                        <input
+                                            ref={manualInputRef}
+                                            type="text"
+                                            placeholder="Student Name or ID..."
+                                            value={manualSearchId}
+                                            onChange={e => {
+                                                setManualSearchId(e.target.value);
+                                                setManualError("");
+                                            }}
+                                            className="w-full bg-[#0a0f18] border border-white/10 rounded-2xl px-6 py-4 text-xl font-bold text-white placeholder:text-white/10 focus:outline-none focus:border-blue-500 transition-all text-center tracking-wide"
+                                            disabled={isProcessingManual}
+                                            autoComplete="off"
+                                        />
+
+                                        {manualError && (
+                                            <div className="mt-3 text-red-400 text-xs font-bold text-center animate-shake">
+                                                ⚠️ {manualError}
+                                            </div>
+                                        )}
+
+                                        {manualSuccess && (
+                                            <div className="mt-3 text-green-400 text-xs font-bold text-center">
+                                                ✅ {manualSuccess}
+                                            </div>
+                                        )}
+
+                                        <div className="mt-4 flex gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsManualModalOpen(false)}
+                                                className="flex-1 px-4 py-3 bg-white/5 text-white text-sm font-bold rounded-xl hover:bg-white/10 transition-all active:scale-95"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                disabled={isProcessingManual || !manualSearchId.trim()}
+                                                className="flex-[2] px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-black rounded-xl transition-all active:scale-95 disabled:opacity-50"
+                                            >
+                                                {isProcessingManual ? "Searching..." : "FIND STUDENT"}
+                                            </button>
+                                        </div>
+                                    </form>
+                                ) : (
+                                    <div className="animate-in zoom-in-95 duration-200">
+                                        <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/10 mb-4 shadow-inner">
+                                            <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/10 flex-shrink-0 border border-white/20">
+                                                {foundStudent.profilePicture ? (
+                                                    <img src={foundStudent.profilePicture} alt="" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-2xl bg-blue-500/10 text-blue-400 font-bold">
+                                                        {foundStudent.name?.charAt(0)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h4 className="text-lg font-black text-white m-0 truncate">{foundStudent.name}</h4>
+                                                <p className="text-xs text-blue-400 font-bold m-0 mt-0.5 tracking-wider">{foundStudent.registrationId}</p>
+                                                <div className="flex items-center gap-1.5 mt-1.5">
+                                                    <span className={`w-2 h-2 rounded-full ${foundStudent.studentStatus === 'out' ? 'bg-[#ff6b6b]' : 'bg-[#00ff88]'}`} />
+                                                    <span className={`text-[10px] font-black uppercase tracking-widest ${foundStudent.studentStatus === 'out' ? 'text-[#ff6b6b]' : 'text-[#00ff88]'}`}>
+                                                        {foundStudent.studentStatus === 'out' ? 'Currently Outside' : 'Inside Campus'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {manualError && (
+                                            <div className="mb-3 text-red-400 text-xs font-bold text-center">
+                                                ⚠️ {manualError}
+                                            </div>
+                                        )}
+
+                                        {manualSuccess && (
+                                            <div className="mb-3 text-green-400 text-xs font-bold text-center">
+                                                ✅ {manualSuccess}
+                                            </div>
+                                        )}
+
+                                        {!manualSuccess && (
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={resetManualSearch}
+                                                    className="flex-1 px-4 py-3 bg-white/5 text-white text-sm font-bold rounded-xl hover:bg-white/10 transition-all active:scale-95"
+                                                    disabled={isProcessingManual}
+                                                >
+                                                    Back
+                                                </button>
+                                                <button
+                                                    onClick={handleFinalToggle}
+                                                    disabled={isProcessingManual}
+                                                    className={`flex-[2] px-4 py-3 ${foundStudent.studentStatus === 'out' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} text-white text-sm font-black rounded-xl transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2`}
+                                                >
+                                                    {isProcessingManual ? (
+                                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                    ) : (
+                                                        <>
+                                                            <span>{foundStudent.studentStatus === 'out' ? 'MARK CHECK-IN' : 'MARK CHECK-OUT'}</span>
+                                                            <span className="text-lg">{foundStudent.studentStatus === 'out' ? '🏠' : '🚶'}</span>
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -599,12 +851,19 @@ export default function GateDesktopPage() {
                                             {record.studentName?.charAt(0)?.toUpperCase() || "?"}
                                         </div>
                                         <div className="min-w-0">
-                                            <p
-                                                onClick={() => handleStudentClick(record.studentId)}
-                                                className="text-[14px] font-bold text-white m-0 cursor-pointer hover:text-[#ff6b6b] transition-colors leading-tight truncate"
-                                            >
-                                                {record.studentName}
-                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <p
+                                                    onClick={() => handleStudentClick(record.studentId)}
+                                                    className="text-[14px] font-bold text-white m-0 cursor-pointer hover:text-[#ff6b6b] transition-colors leading-tight truncate"
+                                                >
+                                                    {record.studentName}
+                                                </p>
+                                                {record.type === "leave" && (
+                                                    <span className="px-1 py-0.5 bg-blue-500/20 text-blue-400 text-[8px] font-black uppercase rounded border border-blue-500/30">
+                                                        🏠 Home Leave
+                                                    </span>
+                                                )}
+                                            </div>
                                             <p className="text-[10px] text-[rgba(255,255,255,0.35)] mt-0.5 font-medium truncate">
                                                 {record.hostelName} • {record.roomNumber}
                                             </p>
@@ -678,148 +937,118 @@ export default function GateDesktopPage() {
             {/* Student Profile Modal */}
             {isProfileModalOpen && (
                 <div
-                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in transition-all cursor-pointer"
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in fade-in transition-all cursor-pointer"
                     onClick={() => setIsProfileModalOpen(false)}
                 >
                     <div
-                        className="bg-white rounded-3xl w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col relative animate-in zoom-in-95 cursor-default"
+                        className="bg-white rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-[0_0_100px_rgba(0,0,0,0.5)] flex flex-col relative animate-in zoom-in-95 cursor-default text-gray-900 custom-scrollbar"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Close Button */}
-                        <button
-                            onClick={() => setIsProfileModalOpen(false)}
-                            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center text-gray-800 transition-colors z-10"
-                        >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                        {isLoadingProfile ? (
+                            <div className="h-[400px] flex flex-col items-center justify-center gap-4 p-8">
+                                <div className="w-12 h-12 border-4 border-gray-100 border-t-blue-600 rounded-full animate-spin" />
+                                <p className="font-bold text-gray-400 uppercase tracking-widest text-[10px]">Searching Profile...</p>
+                            </div>
+                        ) : selectedStudent ? (
+                            <div className="flex flex-col h-full">
+                                {/* Header Banner */}
+                                <div className="h-16 sm:h-24 bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-950 shrink-0 relative">
+                                    <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white/20 via-transparent to-transparent" />
 
-                        <div className="overflow-hidden">
-                            {isLoadingProfile ? (
-                                <div className="h-[400px] flex flex-col items-center justify-center gap-4 p-8 text-center text-gray-500">
-                                    <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
-                                    <p className="font-medium">Fetching secure profile...</p>
-                                </div>
-                            ) : selectedStudent ? (
-                                <div className="flex flex-col">
-                                    {/* Modal Header/Cover */}
-                                    <div className="h-28 bg-gradient-to-r from-blue-600 to-indigo-700 relative shrink-0" />
-
-                                    {/* Profile Summary & Basic Info in a Row */}
-                                    <div className="px-6 md:px-10 py-6 flex flex-col md:flex-row items-center gap-6 md:gap-10">
-                                        <div className="w-32 h-32 md:w-40 md:h-40 rounded-3xl bg-white p-1.5 shadow-xl shadow-blue-900/10 relative group overflow-hidden shrink-0 -mt-16 md:-mt-20">
-                                            <div className="w-full h-full rounded-2xl bg-gray-50 flex items-center justify-center text-3xl md:text-4xl font-black text-blue-600 overflow-hidden">
-                                                {selectedStudent.profilePicture ? (
-                                                    <img
-                                                        src={selectedStudent.profilePicture}
-                                                        alt={selectedStudent.name}
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                ) : (
-                                                    selectedStudent.name?.charAt(0).toUpperCase()
-                                                )}
-                                            </div>
-                                            <div className="absolute top-2 right-2">
-                                                <div className={`w-4 h-4 md:w-5 md:h-5 rounded-full border-4 border-white shadow-sm ${selectedStudent.studentStatus === 'out' ? 'bg-red-500' : 'bg-green-500'}`} />
-                                            </div>
-                                        </div>
-
-                                        <div className="flex flex-col text-center md:text-left flex-1 w-full">
-                                            <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 mb-3">
-                                                <h2 className="text-2xl md:text-3xl font-black text-gray-900 m-0">{selectedStudent.name}</h2>
-                                                <span className={`inline-block self-center md:self-auto px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider ${selectedStudent.studentStatus === 'out' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                                                    {selectedStudent.studentStatus === 'out' ? 'Currently Outside' : 'Inside Campus'}
-                                                </span>
-                                            </div>
-
-                                            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 md:gap-6">
-                                                <div>
-                                                    <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Registration ID</p>
-                                                    <p className="text-blue-600 font-bold text-base md:text-lg select-all m-0">{selectedStudent.registrationId || "N/A"}</p>
-                                                </div>
-                                                <div className="hidden md:block w-px h-10 bg-gray-100" />
-                                                <div>
-                                                    <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Hostel & Room</p>
-                                                    <p className="text-gray-800 font-bold text-base md:text-lg m-0">{selectedStudent.hostelName || "Official"} • No. {selectedStudent.roomNumber || "0"}</p>
-                                                </div>
-                                                <div className="hidden md:block w-px h-10 bg-gray-100" />
-                                                <div>
-                                                    <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Biometric</p>
-                                                    <div className="flex items-center justify-center md:justify-start gap-1.5">
-                                                        <span className={`w-2 h-2 rounded-full ${selectedStudent.faceDescriptor ? 'bg-green-500' : 'bg-orange-500'}`} />
-                                                        <p className="text-gray-700 font-bold text-sm md:text-base m-0">{selectedStudent.faceDescriptor ? 'Verified' : 'Pending'}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Details Grid - Responsive Columns */}
-                                    <div className="px-6 md:px-10 pb-10">
-                                        <div className="bg-gray-50/50 rounded-3xl border border-gray-100 p-6 md:p-8">
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-6 md:gap-x-12 gap-y-6 md:gap-y-8">
-                                                <DetailItem label="Email Address" value={selectedStudent.email} icon="📧" className="col-span-1 sm:col-span-2" />
-                                                <DetailItem label="Mobile Number" value={selectedStudent.phoneNumber} icon="📱" />
-                                                <DetailItem label="Father's Name" value={selectedStudent.fatherName} icon="👨" />
-
-                                                <div className="hidden sm:block col-span-1 sm:col-span-2 md:col-span-4 h-px bg-gray-100 my-2" />
-
-                                                <DetailItem label="Father's Phone" value={selectedStudent.fatherNumber} icon="📞" />
-                                                <DetailItem label="College Name" value={selectedStudent.collegeName} icon="🎓" className="col-span-1 sm:col-span-2" />
-                                                <DetailItem label="Course / Branch" value={selectedStudent.branch} icon="📚" />
-
-                                                <div className="hidden sm:block col-span-1 sm:col-span-2 md:col-span-4 h-px bg-gray-100 my-2" />
-
-                                                <DetailItem label="Academic Year" value={selectedStudent.year} icon="📅" />
-                                                <DetailItem label="Semester" value={selectedStudent.semester} icon="⏱️" />
-                                                <DetailItem label="Enrollment ID" value={selectedStudent.erpInformation} icon="🆔" textColor="text-blue-600" />
-                                                <DetailItem label="Gender/Category" value={selectedStudent.category || 'N/A'} icon="👤" />
-
-                                                <div className="col-span-1 sm:col-span-2 md:col-span-4 h-px bg-gray-100 my-2" />
-
-                                                <DetailItem label="Permanent Address" value={selectedStudent.permanentAddress} icon="🏠" className="col-span-1 sm:col-span-4" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="p-12 text-center text-gray-500 flex flex-col items-center gap-4">
-                                    <span className="text-5xl">👤</span>
-                                    <div>
-                                        <p className="font-bold text-gray-900">Unable to load profile</p>
-                                        <p className="text-sm mt-1">Please try again or contact system administrator.</p>
-                                    </div>
                                     <button
                                         onClick={() => setIsProfileModalOpen(false)}
-                                        className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm"
+                                        className="absolute top-4 right-4 w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md flex items-center justify-center text-white transition-all z-[110] border border-white/10"
                                     >
-                                        Close Window
+                                        <span className="text-lg sm:text-xl">✕</span>
                                     </button>
                                 </div>
-                            )}
-                        </div>
+
+                                {/* Profile Section */}
+                                <div className="px-4 sm:px-10 pb-6 sm:pb-8 flex flex-col sm:flex-row items-center sm:items-end gap-4 sm:gap-10 relative">
+                                    {/* Profile Picture Box */}
+                                    <div className="w-28 h-28 sm:w-48 sm:h-48 rounded-3xl bg-white p-1.5 sm:p-2 shadow-[0_20px_50px_rgba(0,0,0,0.2)] -mt-10 sm:-mt-12 shrink-0 z-10 border border-white/50">
+                                        <div className="w-full h-full rounded-[1.2rem] sm:rounded-[1.6rem] bg-gray-50 flex items-center justify-center text-3xl sm:text-7xl font-black text-blue-600 overflow-hidden shadow-inner ring-1 ring-black/5">
+                                            {selectedStudent.profilePicture ? (
+                                                <img src={selectedStudent.profilePicture} alt={selectedStudent.name} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <span className="bg-gradient-to-br from-blue-600 to-indigo-700 bg-clip-text text-transparent">
+                                                    {selectedStudent.name?.charAt(0).toUpperCase()}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex-1 text-center sm:text-left pt-1 sm:pt-0 pb-4 sm:pb-0">
+                                        <div className="flex flex-col sm:flex-row items-center sm:items-baseline gap-2 sm:gap-4 mb-3 sm:mb-4">
+                                            <h2 className="text-xl sm:text-5xl font-black text-gray-900 tracking-tight leading-tight uppercase">{selectedStudent.name}</h2>
+                                            <span className={`px-4 py-1.5 rounded-full text-[7px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm ${selectedStudent.studentStatus === 'out' ? 'bg-red-500 text-white shadow-red-200' : 'bg-green-500 text-white shadow-green-200'}`}>
+                                                {selectedStudent.studentStatus === 'out' ? 'Currently Outside' : 'Inside Campus'}
+                                            </span>
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-10">
+                                            <div className="flex flex-col items-center sm:items-start group">
+                                                <p className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1 group-hover:text-blue-500 transition-colors">Registration ID</p>
+                                                <p className="text-blue-600 font-extrabold text-base sm:text-2xl tracking-tight">{selectedStudent.registrationId || "N/A"}</p>
+                                            </div>
+                                            <div className="hidden sm:block w-px h-10 sm:h-12 bg-gray-100/80" />
+                                            <div className="flex flex-col items-center sm:items-start group">
+                                                <p className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1 group-hover:text-blue-500 transition-colors">Hostel & Room</p>
+                                                <p className="text-gray-900 font-extrabold text-base sm:text-2xl tracking-tight">{selectedStudent.hostelName} • {selectedStudent.roomNumber}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="px-4 sm:px-10 pb-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-8 bg-gray-50/50 pt-8 sm:pt-10 border-t border-gray-100">
+                                    {[
+                                        { label: "College Name", value: selectedStudent.collegeName || "N/A", icon: "🎓" },
+                                        { label: "ERP ID", value: selectedStudent.erpInformation || "N/A", icon: "🆔", valueClass: "text-blue-600" },
+                                        { label: "Branch", value: selectedStudent.branch || "N/A", icon: "📚" },
+                                        { label: "Year & Sem", value: `${selectedStudent.year || "N/A"} • ${selectedStudent.semester || "N/A"}`, icon: "📅" },
+                                        { label: "Mobile", value: selectedStudent.phoneNumber || "N/A", icon: "📞" },
+                                        { label: "Email", value: selectedStudent.email || "N/A", icon: "📧" },
+                                        { label: "Father Name", value: selectedStudent.fatherName || "N/A", icon: "👨‍👦" },
+                                        { label: "Father Mobile", value: selectedStudent.fatherNumber || "N/A", icon: "📱" },
+                                        { label: "Mother Name", value: selectedStudent.motherName || "N/A", icon: "👩‍👦" },
+                                        { label: "Mother Mobile", value: selectedStudent.motherNumber || "N/A", icon: "📱" },
+                                        { label: "Permanent Address", value: `${selectedStudent.permanentAddress || "N/A"}${selectedStudent.homeState ? `, ${selectedStudent.homeState}` : ""}`, icon: "🏠", fullWidth: true },
+                                    ].map((item: any, idx) => (
+                                        <div key={idx} className={`flex gap-3 sm:gap-4 items-start bg-white p-4 sm:p-0 rounded-2xl sm:bg-transparent border border-gray-100 sm:border-0 shadow-sm sm:shadow-none ${item.fullWidth ? 'sm:col-span-2 lg:col-span-3' : ''}`}>
+                                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gray-50 flex items-center justify-center text-lg sm:text-xl shrink-0 border border-gray-100/50">{item.icon}</div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-[8px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 sm:mb-1.5">{item.label}</p>
+                                                <p className={`text-xs sm:text-sm font-bold m-0 break-words ${item.fullWidth ? '' : 'line-clamp-2'} ${item.valueClass || 'text-gray-900'}`}>{item.value}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="p-12 text-center text-gray-500 flex flex-col items-center gap-4">
+                                <span className="text-5xl">👤</span>
+                                <div>
+                                    <p className="font-bold text-gray-900">Unable to load profile</p>
+                                    <p className="text-sm mt-1">Please try again or contact system administrator.</p>
+                                </div>
+                                <button
+                                    onClick={() => setIsProfileModalOpen(false)}
+                                    className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm"
+                                >
+                                    Close Window
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
-        </div>
-    );
-}
 
-// Helper component for detail items
-function DetailItem({ label, value, icon, className = "col-span-1", textColor = "text-gray-800" }: { label: string, value?: string, icon: string, className?: string, textColor?: string }) {
-    return (
-        <div className={`${className} flex flex-col gap-1.5 min-w-0`}>
-            <div className="flex items-center gap-2">
-                <span className="text-sm grayscale opacity-70 leading-none">{icon}</span>
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] whitespace-nowrap overflow-hidden text-ellipsis">{label}</span>
-            </div>
-            <p
-                className={`text-[15px] font-bold ${textColor} leading-tight break-words`}
-                title={value || "-"}
-            >
-                {value || "-"}
-            </p>
+            <style jsx global>{`
+                input[type="date"]::-webkit-calendar-picker-indicator {
+                    filter: invert(1);
+                    opacity: 0.5;
+                    cursor: pointer;
+                }
+            `}</style>
         </div>
     );
 }
