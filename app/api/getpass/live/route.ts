@@ -41,16 +41,15 @@ export async function GET(request: NextRequest) {
         }
 
         // 2. Full Mode (Heavier Data - Runs Infrequently)
-        const { records: currentlyOut } = await db.gatePasses.list(filters, { limit: 100 });
+        const { records: currentlyOut, total: totalOut } = await db.gatePasses.list(filters, { limit: 100 });
 
         const countFilters: any = {};
         if (hostelName && hostelName !== "all") {
             countFilters.hostelName = hostelName;
         }
 
-        const [totalStudents, studentsOut] = await Promise.all([
+        const [totalStudents] = await Promise.all([
             db.students.count(countFilters),
-            db.students.count({ ...countFilters, studentStatus: "out" }),
         ]);
 
         const { records: recentActivity } = await db.gatePasses.list(recentFilters, { limit: 20 });
@@ -87,8 +86,8 @@ export async function GET(request: NextRequest) {
             success: true,
             summary: {
                 totalStudents,
-                studentsIn: (totalStudents || 0) - currentlyOut.length,
-                studentsOut: currentlyOut.length,
+                studentsIn: (totalStudents || 0) - totalOut,
+                studentsOut: totalOut,
                 leaveCount,
                 gatePassCount,
             },

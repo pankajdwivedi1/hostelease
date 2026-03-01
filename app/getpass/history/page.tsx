@@ -81,8 +81,10 @@ export default function OutingHistoryPage() {
         setFilters(prev => ({ ...prev, [name]: value }));
     };
 
-    const fetchStudentProfile = async (studentId: string) => {
-        if (!studentId) return;
+    const fetchStudentProfile = async (idOrObject: any) => {
+        const studentId = typeof idOrObject === 'object' ? idOrObject._id || idOrObject.id : idOrObject;
+        if (!studentId || studentId === "[object Object]") return;
+
         setIsLoadingProfile(true);
         setIsProfileModalOpen(true);
         try {
@@ -212,6 +214,13 @@ export default function OutingHistoryPage() {
         return h > 0 ? `${h}h ${m}m` : `${m}m`;
     };
 
+    const formatHostelDisplay = (name: string) => {
+        if (!name) return name;
+        const n = name.toUpperCase();
+        if (n.includes("GUEST") || n.includes("GHB")) return "GHB Hostel";
+        return name;
+    };
+
     return (
         <div className="min-h-screen bg-[#0d1117] text-white font-sans selection:bg-blue-500/30">
             {/* Header */}
@@ -271,7 +280,7 @@ export default function OutingHistoryPage() {
                             className="bg-[#121421] border border-white/10 rounded-xl px-2.5 sm:px-4 py-2.5 text-[12px] sm:text-sm focus:outline-none focus:border-blue-500/50 transition-all appearance-none cursor-pointer"
                         >
                             <option value="all">All Hostels</option>
-                            {hostelsList.map(h => <option key={h._id} value={h.name}>{h.name}</option>)}
+                            {hostelsList.map(h => <option key={h._id} value={h.name}>{formatHostelDisplay(h.name)}</option>)}
                         </select>
                     </div>
 
@@ -350,7 +359,7 @@ export default function OutingHistoryPage() {
                                                 {record.studentName}
                                             </p>
                                             <p className="text-[10px] text-white/70 mt-1 font-medium truncate uppercase tracking-tighter">
-                                                {record.hostelName} • Room {record.roomNumber}
+                                                {formatHostelDisplay(record.hostelName)} • Room {record.roomNumber}
                                             </p>
                                             <p className="text-[9px] text-blue-400 font-medium truncate uppercase tracking-tighter mt-0.5">
                                                 {record.registrationId}
@@ -500,7 +509,7 @@ export default function OutingHistoryPage() {
                                             <div className="hidden sm:block w-px h-10 sm:h-12 bg-gray-100/80" />
                                             <div className="flex flex-col items-center sm:items-start group">
                                                 <p className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1 group-hover:text-blue-500 transition-colors">Hostel & Room</p>
-                                                <p className="text-gray-900 font-extrabold text-lg sm:text-2xl tracking-tight">{selectedStudent.hostelName} • {selectedStudent.roomNumber}</p>
+                                                <p className="text-gray-900 font-extrabold text-lg sm:text-2xl tracking-tight">{formatHostelDisplay(selectedStudent.hostelName)} • {selectedStudent.roomNumber}</p>
                                             </div>
                                         </div>
                                     </div>

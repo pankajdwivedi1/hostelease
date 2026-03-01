@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
                 { name: "Gangotri Hostel" },
                 { name: "Gaytri Hostel" },
                 { name: "Boys Hostel" },
-                { name: "Guest House Boys Hostel" },
+                { name: "GHB Hostel" },
             ];
 
             for (const h of defaultHostels) {

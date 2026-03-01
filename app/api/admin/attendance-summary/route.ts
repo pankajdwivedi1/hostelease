@@ -34,55 +34,104 @@ export async function GET(request: NextRequest) {
 
         // Fetch hostels for mapping and category initialization
         const hostelsList = await db.hostels.getAll();
-        const canonicalHostelNames = hostelsList.map((h: any) => h.name);
 
-        const getHostelCategory = (rawName: string): string => {
-            const name = (rawName || "").toLowerCase().trim();
-            const exactMatch = canonicalHostelNames.find(h => h.toLowerCase() === name);
+        if (!Array.isArray(hostelsList)) {
+            console.error("[ATTENDANCE_SUMMARY] hostelsList is not an array:", hostelsList);
+            throw new Error("Failed to retrieve hostels list");
+        }
+
+        const canonicalHostelNames = hostelsList
+            .filter(h => h && h.name)
+            .map((h: any) => h.name);
+
+        console.log(`[ATTENDANCE_SUMMARY] Canonical Hostels:`, canonicalHostelNames);
+
+        // 3. Helper to categorize hostel names (handling old data variations)
+        const getHostelCategory = (rawName: string) => {
+            if (!rawName) return "Other";
+            const name = rawName.toUpperCase();
+
+            // Priority 1: Match canonical names exactly first
+            const exactMatch = canonicalHostelNames.find(c => c.toUpperCase() === name);
             if (exactMatch) return exactMatch;
 
-            if (name.includes("gaytri") || name.includes("hostel a")) return "Gaytri Hostel";
-            if (name.includes("gangotri") || name.includes("hostel b")) return "Gangotri Hostel";
-            if (name.includes("guest") || name.includes("guess") || name.includes("hostel d")) return "Guest House Boys Hostel";
-            if (name.includes("boys") || name.includes("hostel c")) return "Boys Hostel";
+            // Priority 2: Fuzzy matching for known categories
+            if (name.includes("GUEST") || name.includes("GHB")) return "GHB Hostel";
+            if (name.includes("GANGOTRI")) return "Gangotri Hostel";
+            if (name.includes("GAYATRI") || name.includes("GAYTRI")) return "Gaytri Hostel";
+            if (name.includes("BOYS")) return "Boys Hostel";
 
-            const closeMatch = canonicalHostelNames.find(h => name.includes(h.toLowerCase()) || h.toLowerCase().includes(name));
-            return closeMatch || rawName;
+            return rawName; // Fallback to raw name if no category matches
         };
 
+        // 4. Initialize summary with 0 for all canonical hostels
         const formattedSummary: Record<string, number> = {};
         canonicalHostelNames.forEach(name => {
             formattedSummary[name] = 0;
         });
 
+        // 5. Fetch Attendance Summary from DB
+        console.log(`[ATTENDANCE_SUMMARY] Fetching for date: ${date}`);
         const result = await db.attendance.summary(date);
+
+        if (!result) {
+            console.error("[ATTENDANCE_SUMMARY] db.attendance.summary returned null/undefined");
+            throw new Error("Database returned no result for summary");
+        }
 
         let presentStudentIds: string[] = result.presentStudentIds || [];
 
-        if (result.records) {
-            // Supabase style return
+        // 6. Aggregate results into categories
+        if (result.records && Array.isArray(result.records)) {
+            // Supabase style return: records array
+            // Optimization: Count unique students per hostel category
+            const processedStudentsPerHostel = new Map<string, Set<string>>();
+
             result.records.forEach((record: any) => {
-                const category = getHostelCategory(record.hostel_name);
-                formattedSummary[category] = (formattedSummary[category] || 0) + 1;
+                const category = getHostelCategory(record.hostel_name || record.hostelName);
+                const studentId = record.student_id || record.studentId || "unknown";
+
+                if (!processedStudentsPerHostel.has(category)) {
+                    processedStudentsPerHostel.set(category, new Set());
+                }
+                processedStudentsPerHostel.get(category)!.add(studentId);
             });
-        } else if (result.summary) {
-            // MongoDB style return
+
+            // Convert sets to counts
+            processedStudentsPerHostel.forEach((studentSet, category) => {
+                formattedSummary[category] = studentSet.size;
+            });
+        } else if (result.summary && Array.isArray(result.summary)) {
+            // Mongo style return: [{_id: 'Hostel Name', count: 10}]
+            // Note: MongoDB aggregation with $group might already count unique students if written that way,
+            // but for safety we'll assume item.count is correct or re-calculate if possible.
+            // In MongoAdapter, it's just a count. Let's trust $group { $sum: 1 } for now but keep fuzzy matching.
             result.summary.forEach((item: any) => {
                 const category = getHostelCategory(item._id);
-                formattedSummary[category] = (formattedSummary[category] || 0) + item.count;
+                formattedSummary[category] = (formattedSummary[category] || 0) + (item.count || 0);
             });
         }
+
+        // 7. Get global settings for manual attendance toggle
+        const settings = await db.settings.get();
+        const enableManualAttendance = settings?.enableManualAttendance ?? false;
 
         return NextResponse.json({
             success: true,
             summary: formattedSummary,
             presentStudentIds,
-            date: date
+            enableManualAttendance,
+            date
         });
+
     } catch (error: any) {
-        console.error("Error fetching attendance summary:", error);
+        console.error("❌ [ATTENDANCE_SUMMARY_ERROR]:", error);
         return NextResponse.json(
-            { error: error.message || "Failed to fetch attendance summary" },
+            {
+                success: false,
+                error: error.message || "Internal Server Error",
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            },
             { status: 500 }
         );
     }

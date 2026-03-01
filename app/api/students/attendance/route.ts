@@ -181,21 +181,34 @@ export async function POST(request: NextRequest) {
         if (wifiBSSID) {
             // Check if student's hostel has WiFi whitelist configured
             const wifiWhitelist = adminSettings?.wifiWhitelist || [];
+
+            // ✅ FIX: Normalize WiFi BSSID for comparison
+            const normalizedBSSID = wifiBSSID.toUpperCase().trim();
+
+            // 1. Check Student's specific hostel WiFi
             const studentHostelWifi = wifiWhitelist.find(
                 (wl: any) => wl.hostelName?.toLowerCase() === student.hostelName?.toLowerCase()
             );
-
-            // ✅ FIX: Normalize WiFi BSSID to uppercase for consistent comparison
-            const normalizedBSSID = wifiBSSID.toUpperCase().trim();
             const storedBSSIDs = studentHostelWifi?.bssids?.map((b: string) => b.toUpperCase().trim()) || [];
 
-            if (studentHostelWifi && storedBSSIDs.includes(normalizedBSSID)) {
+            // 2. Check Global/General WiFi BSSIDs (entries without hostelName but with bssids)
+            const isGlobalBSSID = wifiWhitelist.some((wl: any) =>
+                !wl.hostelName &&
+                wl.bssids &&
+                wl.bssids.some((b: string) => b.toUpperCase().trim() === normalizedBSSID)
+            );
+
+            if ((studentHostelWifi && storedBSSIDs.includes(normalizedBSSID)) || isGlobalBSSID) {
                 isLocationVerified = true;
                 verifiedBy = 'wifi';
-                console.log(`✅ WiFi Verified: ${student.name} on ${studentHostelWifi.hostelName} WiFi (BSSID: ${normalizedBSSID})`);
+                const label = isGlobalBSSID
+                    ? wifiWhitelist.find((wl: any) => !wl.hostelName && wl.bssids?.some((b: string) => b.toUpperCase().trim() === normalizedBSSID))?.name || "Campus WiFi"
+                    : studentHostelWifi.hostelName;
+
+                console.log(`✅ WiFi Verified: ${student.name} on ${label} (BSSID: ${normalizedBSSID})`);
             } else {
                 console.log(`⚠️ WiFi BSSID not whitelisted: ${normalizedBSSID} for ${student.hostelName}`);
-                // WiFi failed, will try GPS fallback below
+                // WiFi failed, will try GPS fallback
             }
         }
 

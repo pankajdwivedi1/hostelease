@@ -188,7 +188,7 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
         prefix: String
       }],
       default: [
-        { hostelName: "Guest House Boys Hostel", prefix: "GUEST" },
+        { hostelName: "GHB Hostel", prefix: "GUEST" },
         { hostelName: "Boys Hostel", prefix: "BOYS" },
         { hostelName: "Gangotri Hostel", prefix: "GANGOTRI" },
         { hostelName: "Gaytri Hostel", prefix: "GAYTRI" }

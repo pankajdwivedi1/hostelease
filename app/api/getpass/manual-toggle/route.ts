@@ -76,6 +76,27 @@ export async function POST(request: NextRequest) {
 
         if (currentStatus === "in") {
             // MANUALLY MARK OUT
+            // ⚡ FIX: Find and close any existing open passes before creating a new one
+            const { records: existingPasses } = await db.gatePasses.list({
+                studentId: student._id.toString(),
+                status: "out",
+            });
+
+            if (existingPasses && existingPasses.length > 0) {
+                for (const oldPass of existingPasses) {
+                    if (!oldPass) continue;
+                    const diffMs = now.getTime() - new Date(oldPass.checkOutTime).getTime();
+                    await db.gatePasses.update(oldPass._id, {
+                        checkInTime: now,
+                        checkInISTTime: istTime,
+                        checkInISTDate: istDate,
+                        status: "in",
+                        durationMinutes: Math.round(diffMs / 60000),
+                        qrTokenUsedIn: "SYSTEM_AUTO_CLOSE_ON_MANUAL_OUT"
+                    });
+                }
+            }
+
             const gatePass = await db.gatePasses.create({
                 studentId: student._id.toString(),
                 firebaseUID: student.firebaseUID,
@@ -102,24 +123,27 @@ export async function POST(request: NextRequest) {
             });
         } else {
             // MANUALLY MARK IN
-            // Find the open gate pass
-            const openPass = await db.gatePasses.findOne({
-                studentId: student._id,
+            // ⚡ FIX: Find ALL open gate passes for this student
+            const { records: openPasses } = await db.gatePasses.list({
+                studentId: student._id.toString(),
                 status: "out",
             });
 
-            if (openPass) {
-                const diffMs = now.getTime() - new Date(openPass.checkOutTime).getTime();
-                const durationMinutes = Math.round(diffMs / 60000);
+            if (openPasses && openPasses.length > 0) {
+                for (const pass of openPasses) {
+                    if (!pass) continue;
+                    const diffMs = now.getTime() - new Date(pass.checkOutTime).getTime();
+                    const durationMinutes = Math.round(diffMs / 60000);
 
-                await db.gatePasses.update(openPass._id, {
-                    checkInTime: now,
-                    checkInISTTime: istTime,
-                    checkInISTDate: istDate,
-                    status: "in",
-                    qrTokenUsedIn: "MANUAL_BY_" + userType.toUpperCase(),
-                    durationMinutes
-                });
+                    await db.gatePasses.update(pass._id, {
+                        checkInTime: now,
+                        checkInISTTime: istTime,
+                        checkInISTDate: istDate,
+                        status: "in",
+                        qrTokenUsedIn: "MANUAL_BY_" + userType.toUpperCase(),
+                        durationMinutes
+                    });
+                }
             }
 
             // Update student status to "in"

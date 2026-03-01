@@ -166,7 +166,7 @@ Your hostelease application has been comprehensively audited and fixed. All **cr
 **New Field in AdminSettings:**
 ```javascript
 hostelPrefixMap: [
-  { hostelName: "Guest House Boys Hostel", prefix: "GUEST" },
+  { hostelName: "GHB Hostel", prefix: "GUEST" },
   { hostelName: "Boys Hostel", prefix: "BOYS" },
   { hostelName: "Gangotri Hostel", prefix: "GANGOTRI" },
   { hostelName: "Gaytri Hostel", prefix: "GAYTRI" }

@@ -37,3 +37,58 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
+export async function POST(request: Request) {
+    try {
+        const body = await request.json();
+        const { studentIds, markedBy } = body;
+
+        if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+            return NextResponse.json({ error: "Student IDs are required" }, { status: 400 });
+        }
+
+        const now = new Date();
+        const istDate = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric" }).split('/').join('-');
+        const istTime = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
+        const today = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
+
+        const results = [];
+        for (const studentId of studentIds) {
+            const student = await db.students.getById(studentId);
+            if (!student) continue;
+
+            // Only mark if "IN"
+            if (student.studentStatus !== 'in') continue;
+
+            // Check if already marked
+            const existing = await db.attendance.checkToday(studentId, today);
+            if (existing) continue;
+
+            const attendanceData = {
+                studentId: student._id.toString(),
+                firebaseUID: student.firebaseUID,
+                name: student.name,
+                hostelName: student.hostelName,
+                roomNumber: student.roomNumber,
+                date: today,
+                istTime: istTime,
+                istDate: istDate,
+                location: { lat: 0, lng: 0, accuracy: 0 },
+                status: "present",
+                faceMatchStatus: "manual-override",
+                needsReview: false,
+                isTest: false,
+                timestamp: now.toISOString(),
+                verificationMethod: "warden",
+                markedBy: markedBy || "Warden"
+            };
+
+            const record = await db.attendance.mark(attendanceData);
+            results.push(record);
+        }
+
+        return NextResponse.json({ success: true, count: results.length });
+    } catch (error: any) {
+        console.error("Error marking manual attendance:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}

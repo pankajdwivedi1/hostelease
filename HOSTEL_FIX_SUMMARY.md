@@ -1,7 +1,7 @@
 # Hostel Selection Fix - Implementation Summary
 
 ## Problem
-When students were filling out the onboarding form and selecting a hostel name (particularly "Boys Hostel" and "Guest House Boys Hostel"), the data wasn't displaying properly. The hostel names were hardcoded and not connected to any API.
+When students were filling out the onboarding form and selecting a hostel name (particularly "Boys Hostel" and "GHB Hostel"), the data wasn't displaying properly. The hostel names were hardcoded and not connected to any API.
 
 ## Solution Implemented
 
@@ -16,7 +16,7 @@ When students were filling out the onboarding form and selecting a hostel name (
     - Gangotri Hostel
     - Gaytri Hostel
     - Boys Hostel
-    - Guest House Boys Hostel
+    - GHB Hostel
 - **POST**: Allows adding new hostels
 - **DELETE**: Allows removing hostels
 
@@ -40,7 +40,7 @@ When students were filling out the onboarding form and selecting a hostel name (
 ## Testing Steps
 1. Navigate to the onboarding page
 2. Check that the hostel dropdown shows all four hostels
-3. Select "Boys Hostel" or "Guest House Boys Hostel"
+3. Select "Boys Hostel" or "GHB Hostel"
 4. Complete the form and submit
 5. Verify the data saves correctly
 6. Check that existing students with these hostel names display properly

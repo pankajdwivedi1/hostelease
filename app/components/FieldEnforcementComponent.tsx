@@ -56,7 +56,7 @@ interface FieldEnforcementProps {
 
 const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
   adminPassword = "",
-  hostels = ["Boys Hostel", "Gangotri Hostel", "Gaytri Hostel", "Guest House Boys Hostel"],
+  hostels = ["Boys Hostel", "Gangotri Hostel", "Gaytri Hostel", "GHB Hostel"],
 }) => {
   const [selectedHostels, setSelectedHostels] = useState<string[]>([]);
   const [selectedStatusHostels, setSelectedStatusHostels] = useState<string[]>([]);

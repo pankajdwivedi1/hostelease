@@ -5,6 +5,15 @@ import { headers } from 'next/headers'; // To check for secret header
 import crypto from 'crypto';
 
 // Note: We might need to ensure mongoose models are imported correctly
+/**
+ * Normalizes hostel names to GHB Hostel for consistency
+ */
+const formatHostelName = (name: string) => {
+    if (!name) return name;
+    const n = name.toUpperCase();
+    if (n.includes("GUEST") || n.includes("GHB")) return "GHB Hostel";
+    return name;
+};
 
 /**
  * Maps Supabase snake_case student data to camelCase for frontend compatibility
@@ -12,44 +21,47 @@ import crypto from 'crypto';
 const mapStudentToCamelCase = (s: any) => {
     if (!s) return null;
     return {
-        id: s._id,
-        _id: s._id,
-        firebaseUID: s.firebase_uid,
+        id: s._id || s.id,
+        _id: s._id || s.id,
+        firebaseUID: s.firebase_uid || s.firebaseUID,
         name: s.name,
         email: s.email,
-        phoneNumber: s.phone_number,
-        hostelName: s.hostel_name,
-        roomNumber: s.room_number,
-        profilePicture: s.profile_picture,
-        studentStatus: s.student_status,
+        phoneNumber: s.phone_number || s.phoneNumber,
+        hostelName: formatHostelName(s.hostel_name || s.hostelName),
+        roomNumber: s.room_number || s.roomNumber,
+        profilePicture: s.profile_picture || s.profilePicture,
+        studentStatus: s.student_status || s.studentStatus,
         dob: s.dob,
         category: s.category,
-        fatherName: s.father_name,
-        fatherNumber: s.father_number,
-        motherName: s.mother_name,
-        motherNumber: s.mother_number,
-        permanentAddress: s.permanent_address,
-        homeState: s.home_state,
-        erpInformation: s.erp_id,
+        fatherName: s.father_name || s.fatherName,
+        fatherNumber: s.father_number || s.fatherNumber,
+        motherName: s.mother_name || s.motherName,
+        motherNumber: s.mother_number || s.motherNumber,
+        permanentAddress: s.permanent_address || s.permanentAddress,
+        homeState: s.home_state || s.homeState,
+        erpInformation: s.erp_id || s.erpInformation,
         branch: s.branch,
-        collegeName: s.college_name,
+        collegeName: s.college_name || s.collegeName,
         year: s.year,
         semester: s.semester,
         section: s.section,
-        floorNumber: s.floor_number,
-        joiningDate: s.joining_date,
-        localGuardianAddress: s.local_guardian_address,
-        localGuardianPhoneNumber: s.local_guardian_phone_number,
-        deviceId: s.device_id,
-        registrationId: s.registration_id,
-        isProfileLocked: s.is_profile_locked,
-        faceDescriptor: s.face_descriptor,
-        attendanceMode: s.attendance_mode,
-        webAuthnCredentials: s.web_authn_credentials,
-        deviceResetCount: s.device_reset_count,
-        deviceHistory: s.device_history,
-        thumbImpressionId: s.thumb_impression_id,
-        dynamicFields: s.dynamic_fields || {}
+        floorNumber: s.floor_number || s.floorNumber,
+        joiningDate: s.joining_date || s.joiningDate,
+        localGuardianAddress: s.local_guardian_address || s.localGuardianAddress,
+        localGuardianPhoneNumber: s.local_guardian_phone_number || s.localGuardianPhoneNumber,
+        deviceId: s.device_id || s.deviceId,
+        registrationId: s.registration_id || s.registrationId,
+        isProfileLocked: s.is_profile_locked || s.isProfileLocked,
+        faceDescriptor: s.face_descriptor || s.faceDescriptor,
+        attendanceMode: s.attendance_mode || s.attendanceMode,
+        webAuthnCredentials: s.web_authn_credentials || s.webAuthnCredentials,
+        deviceResetCount: s.device_reset_count || s.deviceResetCount,
+        deviceHistory: s.device_history || s.deviceHistory,
+        thumbImpressionId: s.thumb_impression_id || s.thumbImpressionId,
+        faceEnrolled: s.face_enrolled || s.faceEnrolled,
+        dynamicFields: s.dynamic_fields || s.dynamicFields || {},
+        createdAt: s.created_at || s.createdAt,
+        updatedAt: s.updated_at || s.updatedAt
     };
 };
 
@@ -108,35 +120,31 @@ const mapStudentToSnakeCase = (data: any) => {
  */
 const mapAttendanceToCamelCase = (a: any) => {
     if (!a) return null;
-
-    // Handle Supabase join which might return array or object
-    let studentData = a.studentId;
-    if (Array.isArray(studentData)) {
-        studentData = studentData.length > 0 ? studentData[0] : null;
-    }
-
     return {
         _id: a._id,
-        // If studentId is populated (joined), map it too. If it's just an ID string, keep it.
-        studentId: (studentData && typeof studentData === 'object')
-            ? mapStudentToCamelCase(studentData)
-            : a.student_id,
-        firebaseUID: a.firebase_uid,
-        name: a.name,
-        hostelName: a.hostel_name,
-        roomNumber: a.room_number,
-        date: a.date,
-        istTime: a.ist_time,
-        istDate: a.ist_date,
-        location: a.location,
-        deviceId: a.device_id,
+        studentId: a.studentId && typeof a.studentId === 'object' ? mapStudentToCamelCase(a.studentId) : (a.student_id || a.studentId),
+        firebaseUID: a.firebase_uid || a.firebaseUID,
+        studentName: a.name || a.student_name || a.studentName || "Unknown",
+        hostelName: formatHostelName(a.hostel_name || a.hostelName),
+        roomNumber: a.room_number || a.roomNumber,
         status: a.status,
-        faceMatchPercentage: a.face_match_percentage,
-        faceMatchStatus: a.face_match_status,
-        flaggedPhotoUrl: a.flagged_photo_url,
-        needsReview: a.needs_review,
-        isTest: a.is_test,
-        timestamp: a.timestamp
+        date: a.date,
+        istDate: a.ist_date || a.istDate,
+        time: a.time,
+        istTime: a.ist_time || a.istTime,
+        location: a.location,
+        faceMatchPercentage: a.face_match_percentage || a.faceMatchPercentage,
+        faceMatchStatus: a.face_match_status || a.faceMatchStatus,
+        needsReview: a.needs_review || a.needsReview,
+        isTest: a.is_test || a.isTest,
+        timestamp: a.timestamp,
+        method: a.method,
+        wardenId: a.warden_id || a.wardenId,
+        semester: a.semester,
+        branch: a.branch,
+        collegeName: a.college_name || a.collegeName,
+        createdAt: a.created_at || a.createdAt,
+        updatedAt: a.updated_at || a.updatedAt
     };
 };
 
@@ -165,6 +173,7 @@ const mapSettingsToCamelCase = (s: any) => {
         overlapRadius: s.overlap_radius,
         prioritizeAssignedHostel: s.prioritize_assigned_hostel,
         getpassPassword: s.getpass_password,
+        enableManualAttendance: s.enable_manual_attendance,
         createdAt: s.created_at,
         updatedAt: s.updated_at
     };
@@ -194,7 +203,8 @@ const mapSettingsToSnakeCase = (s: any) => {
         hostelPrefixMap: 'hostel_prefix_map',
         overlapRadius: 'overlap_radius',
         prioritizeAssignedHostel: 'prioritize_assigned_hostel',
-        getpassPassword: 'getpass_password'
+        getpassPassword: 'getpass_password',
+        enableManualAttendance: 'enable_manual_attendance'
     };
 
     Object.keys(s).forEach(key => {
@@ -214,14 +224,14 @@ const mapSettingsToSnakeCase = (s: any) => {
 const mapHostelToCamelCase = (h: any) => {
     if (!h) return null;
     return {
-        _id: h._id,
-        name: h.name,
-        totalRooms: h.total_rooms,
-        wardenUsername: h.warden_username,
-        wardenPassword: h.warden_password,
-        attendanceMode: h.attendance_mode,
-        createdAt: h.created_at,
-        updatedAt: h.updated_at
+        _id: h._id || h.id,
+        name: formatHostelName(h.name),
+        totalRooms: h.total_rooms || h.totalRooms,
+        wardenUsername: h.warden_username || h.wardenUsername,
+        wardenPassword: h.warden_password || h.wardenPassword,
+        attendanceMode: h.attendance_mode || h.attendanceMode,
+        createdAt: h.created_at || h.createdAt,
+        updatedAt: h.updated_at || h.updatedAt
     };
 };
 
@@ -230,32 +240,31 @@ const mapHostelToCamelCase = (h: any) => {
  */
 const mapGatePassToCamelCase = (g: any) => {
     if (!g) return null;
-    const student = Array.isArray(g.students) ? g.students[0] : g.students;
-
     return {
-        _id: g._id,
-        studentId: g.student_id,
-        firebaseUID: g.firebase_uid,
-        studentName: g.student_name,
-        hostelName: g.hostel_name,
-        roomNumber: g.room_number,
-        phoneNumber: student?.phone_number || null,
-        registrationId: g.registration_id,
-        checkOutTime: g.check_out_time,
-        checkOutISTTime: g.check_out_ist_time,
-        checkOutISTDate: g.check_out_ist_date,
-        checkInTime: g.check_in_time,
-        checkInISTTime: g.check_in_ist_time,
-        checkInISTDate: g.check_in_ist_date,
+        _id: g._id || g.id,
+        studentId: g.student_id && typeof g.student_id === 'string' ? g.student_id :
+            (g.students && typeof g.students === 'object' ? (g.students._id || g.students.id) : (g.student_id || g.studentId)),
+        firebaseUID: g.firebase_uid || g.firebaseUID,
+        studentName: g.student_name || g.studentName,
+        hostelName: formatHostelName(g.hostel_name || g.hostelName),
+        roomNumber: g.room_number || g.roomNumber,
+        registrationId: g.registration_id || g.registrationId,
+        type: g.type,
         status: g.status,
-        durationMinutes: g.duration_minutes,
-        type: g.type || 'outing',
-        permissionId: g.permission_id,
-        gateName: g.gate_name,
-        qrTokenUsedOut: g.qr_token_used_out,
-        qrTokenUsedIn: g.qr_token_used_in,
-        createdAt: g.created_at,
-        updatedAt: g.updated_at
+        checkOutTime: g.check_out_time || g.checkOutTime,
+        checkInTime: g.check_in_time || g.checkInTime,
+        checkOutISTTime: g.check_out_ist_time || g.checkOutISTTime,
+        checkInISTTime: g.check_in_ist_time || g.checkInISTTime,
+        checkOutISTDate: g.check_out_ist_date || g.check_out_date || g.checkOutISTDate || g.checkOutDate,
+        checkInISTDate: g.check_in_ist_date || g.check_in_date || g.checkInISTDate || g.checkInDate,
+        durationMinutes: g.duration_minutes || g.durationMinutes,
+        reason: g.reason,
+        parentMobile: g.parent_mobile || g.parentMobile,
+        destination: g.destination,
+        manualUpdate: g.manual_update || g.manualUpdate,
+        updatedBy: g.updated_by || g.updatedBy,
+        createdAt: g.created_at || g.createdAt,
+        updatedAt: g.updated_at || g.updatedAt
     };
 };
 
@@ -772,7 +781,7 @@ export const db = {
                 const StudentModel = (await import('@/models/Student')).default;
                 try {
                     const student = await StudentModel.findById(id).lean();
-                    return student ? JSON.parse(JSON.stringify(student)) : null;
+                    return mapStudentToCamelCase(student);
                 } catch (e) {
                     console.error("MongoDB Error:", e);
                     return null;
@@ -802,7 +811,7 @@ export const db = {
                 const student = await StudentModel.findOne({
                     'webAuthnCredentials.credentialID': credentialId
                 }).lean();
-                return student ? JSON.parse(JSON.stringify(student)) : null;
+                return mapStudentToCamelCase(student);
             }
         },
 
@@ -834,7 +843,7 @@ export const db = {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
                 const student = await StudentModel.findOne(filter).lean();
-                return student ? JSON.parse(JSON.stringify(student)) : null;
+                return mapStudentToCamelCase(student);
             }
         },
 
@@ -898,7 +907,7 @@ export const db = {
                     studentData,
                     { upsert: true, new: true, setDefaultsOnInsert: true }
                 );
-                return JSON.parse(JSON.stringify(student));
+                return mapStudentToCamelCase(student);
             }
         },
 
@@ -922,7 +931,7 @@ export const db = {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
                 const newStudent = await StudentModel.create(studentData);
-                return JSON.parse(JSON.stringify(newStudent));
+                return mapStudentToCamelCase(newStudent);
             }
         },
 
@@ -936,7 +945,7 @@ export const db = {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
                 const students = await StudentModel.find({}).limit(limit).lean();
-                return JSON.parse(JSON.stringify(students));
+                return students.map(mapStudentToCamelCase);
             }
         },
 
@@ -1004,7 +1013,7 @@ export const db = {
                 if (options.light) q = q.select("-profilePicture");
 
                 const students = await q.lean();
-                return JSON.parse(JSON.stringify(students));
+                return students.map(mapStudentToCamelCase);
             }
         },
 
@@ -1120,16 +1129,16 @@ export const db = {
                 if (updateData.action === 'resetDevice') {
                     // Fetch existing to handle history
                     const student = await db.students.getById(id, true);
-                    const oldDeviceId = student?.device_id;
+                    const oldDeviceId = student?.deviceId;
 
                     const supabaseUpdate: any = {
                         device_id: "",
                         web_authn_credentials: [],
-                        device_reset_count: (student?.device_reset_count || 0) + 1
+                        device_reset_count: (student?.deviceResetCount || 0) + 1
                     };
 
                     if (oldDeviceId) {
-                        const history = student?.device_history || [];
+                        const history = student?.deviceHistory || [];
                         supabaseUpdate.device_history = [...history, {
                             deviceId: oldDeviceId,
                             action: "reset",
@@ -1211,7 +1220,7 @@ export const db = {
                 }
 
                 const updated = await StudentModel.findByIdAndUpdate(id, mongoUpdate, { new: true });
-                return JSON.parse(JSON.stringify(updated));
+                return mapStudentToCamelCase(updated);
             }
         },
 
@@ -1347,7 +1356,7 @@ export const db = {
                         if (mashPatterns.some(p => name.includes(p))) return true;
                         if (name.length > 8 && vowels.length < 2) return true;
                         return false;
-                    });
+                    }).map(mapStudentToCamelCase);
                 }
             }
             return [];
@@ -1397,7 +1406,7 @@ export const db = {
                 await connectDB();
                 const AttendanceModel = (await import('@/models/Attendance')).default;
                 const record = await AttendanceModel.create(attendanceData);
-                return JSON.parse(JSON.stringify(record));
+                return mapAttendanceToCamelCase(record);
             }
         },
 
@@ -1420,7 +1429,7 @@ export const db = {
                 await connectDB();
                 const AttendanceModel = (await import('@/models/Attendance')).default;
                 const record = await AttendanceModel.findOne({ studentId, date }).lean();
-                return record ? JSON.parse(JSON.stringify(record)) : null;
+                return mapAttendanceToCamelCase(record);
             }
         },
 
@@ -1439,7 +1448,7 @@ export const db = {
                 await connectDB();
                 const AttendanceModel = (await import('@/models/Attendance')).default;
                 const record = await AttendanceModel.findById(id).populate('studentId').lean();
-                return record ? JSON.parse(JSON.stringify(record)) : null;
+                return mapAttendanceToCamelCase(record);
             }
         },
 
@@ -1619,7 +1628,7 @@ export const db = {
                 await connectDB();
                 const HostelModel = (await import('@/models/Hostel')).default;
                 const hostel = await HostelModel.findById(id).lean();
-                return hostel ? JSON.parse(JSON.stringify(hostel)) : null;
+                return mapHostelToCamelCase(hostel);
             }
         },
 
@@ -1636,7 +1645,7 @@ export const db = {
                 await connectDB();
                 const HostelModel = (await import('@/models/Hostel')).default;
                 const hostels = await HostelModel.find({}).sort({ name: 1 }).lean();
-                return JSON.parse(JSON.stringify(hostels));
+                return hostels.map(mapHostelToCamelCase);
             }
         },
 
@@ -1653,7 +1662,7 @@ export const db = {
                 await connectDB();
                 const HostelModel = (await import('@/models/Hostel')).default;
                 const hostel = await HostelModel.findOne(filter).lean();
-                return hostel ? JSON.parse(JSON.stringify(hostel)) : null;
+                return mapHostelToCamelCase(hostel);
             }
         },
 
@@ -1749,20 +1758,32 @@ export const db = {
             const page = options.page || 1;
             const skip = (page - 1) * limit;
 
+            console.log(`[GATEPASS_LIST_ENTRY] source=${source}, filters=${JSON.stringify(filters)}`);
+
             if (source === 'SUPABASE') {
                 const needsStudentJoin = (filters.collegeName && filters.collegeName !== 'all') || filters.erpId;
-                const studentFields = 'phone_number, college_name, erp_id';
-                let query = supabase.from('gate_passes').select(
-                    needsStudentJoin ? `*, students!student_id!inner(${studentFields})` : `*, students!student_id(${studentFields})`,
-                    { count: 'exact' }
-                );
+                const studentFields = '_id, name, phone_number, college_name, erp_id';
+
+                // ⚡ OPTIMIZATION: Only perform heavy join if we NEED to filter by joined fields
+                // This prevents the whole query from failing if the FK is missing but we only need basic data
+                let selectString = needsStudentJoin
+                    ? `*, students!student_id!inner(${studentFields})`
+                    : `*`;
+
+                let query = supabase.from('gate_passes').select(selectString, { count: 'exact' });
 
                 if (filters.firebaseUID) query = query.eq('firebase_uid', filters.firebaseUID);
                 if (filters.studentId) query = query.eq('student_id', filters.studentId);
                 if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
                 if (filters.registrationId) query = query.ilike('registration_id', `%${filters.registrationId}%`);
                 if (filters.erpId) query = query.ilike('students.erp_id', `%${filters.erpId}%`);
-                if (filters.hostelName && filters.hostelName !== 'all') query = query.ilike('hostel_name', `%${filters.hostelName}%`);
+                if (filters.hostelName && filters.hostelName !== 'all') {
+                    if (typeof filters.hostelName === 'object' && filters.hostelName.$in) {
+                        query = query.in('hostel_name', filters.hostelName.$in);
+                    } else {
+                        query = query.ilike('hostel_name', `%${filters.hostelName}%`);
+                    }
+                }
                 if (filters.collegeName && filters.collegeName !== 'all') query = query.ilike('students.college_name', `%${filters.collegeName}%`);
 
                 if (filters.search) {
@@ -1786,7 +1807,15 @@ export const db = {
                     .order('check_out_time', { ascending: false })
                     .range(skip, skip + limit - 1);
 
-                if (error) throw error;
+                if (error) {
+                    console.error("❌ [SUPABASE_GATEPASS_LIST_ERROR]:", error);
+                    return { records: [], total: 0 };
+                }
+
+                if (filters.status === "out") {
+                    console.log(`[SYNC_GATEPASSES] Found ${data?.length || 0} open passes in Supabase.`);
+                }
+
                 return {
                     records: (data || []).map(mapGatePassToCamelCase),
                     total: count || 0
@@ -1812,6 +1841,14 @@ export const db = {
                     }
                 }
 
+                if (filters.search) {
+                    const searchRegex = { $regex: filters.search, $options: "i" };
+                    mongoQuery.$or = [
+                        { studentName: searchRegex },
+                        { registrationId: searchRegex }
+                    ];
+                }
+
                 const records = await GatePassModel.find(mongoQuery)
                     .sort({ checkOutTime: -1 })
                     .skip(skip)
@@ -1821,7 +1858,7 @@ export const db = {
                 const total = await GatePassModel.countDocuments(mongoQuery);
 
                 return {
-                    records: JSON.parse(JSON.stringify(records)),
+                    records: records.map(mapGatePassToCamelCase),
                     total
                 };
             }
@@ -1925,7 +1962,7 @@ export const db = {
                     query = query.eq('status', filter.status);
                 } else {
                     // Supabase requires a filter for delete. neq _id to empty string effectively selects all.
-                    query = query.neq('_id', '');
+                    return { deletedCount: 0 }; // Block accidental full table delete
                 }
                 const { error, count } = await query;
                 if (error) throw error;
@@ -1988,7 +2025,16 @@ export const db = {
         deleteMany: async (filter: any = {}) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                let query = supabase.from('gate_pass_tokens').delete().neq('_id', '');
+                let query = supabase.from('gate_pass_tokens').delete();
+                if (Object.keys(filter).length === 0) {
+                    // Supabase delete requires a filter. Block accidental full table delete.
+                    return { deletedCount: 0 };
+                }
+                // Apply filters for Supabase
+                if (filter._id) query = query.eq('_id', filter._id);
+                if (filter.token) query = query.eq('token', filter.token);
+                // Add other filters as needed for Supabase
+
                 const { error, count } = await query;
                 if (error) throw error;
                 return { deletedCount: count || 0 };
@@ -2068,13 +2114,21 @@ export const db = {
         findOneAndDelete: async (filter: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                const hostelName = filter.hostelName?.$regex ? filter.hostelName.$regex.replace(/^\^|\$$/g, '') : (typeof filter.hostelName === 'string' ? filter.hostelName : null);
-                if (!hostelName) return null;
+                let hostelNameFilter;
+                if (filter.hostelName) {
+                    if (typeof filter.hostelName === 'object' && filter.hostelName.$regex) {
+                        hostelNameFilter = filter.hostelName.$regex.replace(/^\^|\$$/g, '');
+                    } else if (typeof filter.hostelName === 'string') {
+                        hostelNameFilter = filter.hostelName;
+                    }
+                }
+
+                if (!hostelNameFilter) return null;
 
                 const { data, error } = await supabase
                     .from('field_enforcement')
                     .delete()
-                    .ilike('hostel_name', hostelName)
+                    .ilike('hostel_name', hostelNameFilter)
                     .select()
                     .maybeSingle();
                 if (error) throw error;
@@ -2391,7 +2445,13 @@ export const db = {
                 if (options.offset) query = query.range(options.offset, options.offset + (options.limit || 10) - 1);
 
                 const { data, error, count } = await query;
-                if (error) throw error;
+
+                if (error) {
+                    console.error("❌ [SUPABASE_GATEPASS_LIST_ERROR]:", error);
+                    return { records: [], total: 0 };
+                }
+
+                console.log(`[SUPABASE_GATEPASS_LIST_DEBUG] filters=${JSON.stringify(filters)}, found=${data?.length || 0}`);
 
                 return {
                     records: (data || []).map(mapPermissionToCamelCase),

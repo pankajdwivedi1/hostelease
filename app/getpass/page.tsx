@@ -256,6 +256,7 @@ export default function GateDesktopPage() {
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<any>(null);
+    const [lastOuting, setLastOuting] = useState<OutingRecord | null>(null);
     const [isLoadingProfile, setIsLoadingProfile] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
@@ -310,7 +311,10 @@ export default function GateDesktopPage() {
     }, [gateName]);
 
     // ===================== Fetch live data =====================
-    const fetchStudentProfile = async (studentId: string) => {
+    const fetchStudentProfile = async (idOrObject: any) => {
+        const studentId = typeof idOrObject === 'object' ? idOrObject._id || idOrObject.id : idOrObject;
+        if (!studentId || studentId === "[object Object]") return;
+
         setIsLoadingProfile(true);
         setIsProfileModalOpen(true);
         try {
@@ -319,13 +323,29 @@ export default function GateDesktopPage() {
 
             if (data.student) {
                 setSelectedStudent(data.student);
+
+                // ⚡ Fetch last history record
+                try {
+                    const historyRes = await fetch(`/api/getpass/history?studentId=${studentId}&limit=1`);
+                    const historyData = await historyRes.json();
+                    if (historyData.success && historyData.records && historyData.records.length > 0) {
+                        setLastOuting(historyData.records[0]);
+                    } else {
+                        setLastOuting(null);
+                    }
+                } catch (hErr) {
+                    console.error("Error fetching student history:", hErr);
+                    setLastOuting(null);
+                }
             } else {
                 console.error("Student not found");
                 setSelectedStudent(null);
+                setLastOuting(null);
             }
         } catch (err) {
             console.error("Error fetching student profile:", err);
             setSelectedStudent(null);
+            setLastOuting(null);
         } finally {
             setIsLoadingProfile(false);
         }
@@ -586,6 +606,13 @@ export default function GateDesktopPage() {
         const mins = minutes % 60;
         if (hrs > 0) return `${hrs}h ${mins}m`;
         return `${mins}m`;
+    };
+
+    const formatHostelDisplay = (name: string) => {
+        if (!name) return name;
+        const n = name.toUpperCase();
+        if (n.includes("GUEST") || n.includes("GHB")) return "GHB Hostel";
+        return name;
     };
 
     return (
@@ -952,7 +979,7 @@ export default function GateDesktopPage() {
                                                 </span>
                                             </div>
                                             <p className="text-[10px] text-[rgba(255,255,255,0.4)] tracking-widest uppercase m-0 mt-0.5 font-bold">
-                                                {record.hostelName} • {record.roomNumber}
+                                                {formatHostelDisplay(record.hostelName)} • {record.roomNumber}
                                             </p>
                                         </div>
                                     </div>
@@ -1028,7 +1055,7 @@ export default function GateDesktopPage() {
                     onClick={() => setIsProfileModalOpen(false)}
                 >
                     <div
-                        className="bg-white rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-[0_0_100px_rgba(0,0,0,0.5)] flex flex-col relative animate-in zoom-in-95 cursor-default text-gray-900 custom-scrollbar"
+                        className="bg-white rounded-3xl w-full max-w-5xl max-h-[95vh] overflow-y-auto shadow-[0_0_100px_rgba(0,0,0,0.5)] flex flex-col relative animate-in zoom-in-95 cursor-default text-gray-900 custom-scrollbar"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {isLoadingProfile ? (
@@ -1037,24 +1064,25 @@ export default function GateDesktopPage() {
                                 <p className="font-bold text-gray-400 uppercase tracking-widest text-[10px]">Searching Profile...</p>
                             </div>
                         ) : selectedStudent ? (
-                            <div className="flex flex-col h-full">
+                            <div className="flex flex-col">
                                 {/* Header Banner */}
-                                <div className="h-16 sm:h-24 bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-950 shrink-0 relative">
+                                <div className="h-14 bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-950 shrink-0 relative">
                                     <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white/20 via-transparent to-transparent" />
 
+                                    {/* Sticky Close Button inside scrollable area */}
                                     <button
                                         onClick={() => setIsProfileModalOpen(false)}
-                                        className="absolute top-4 right-4 w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md flex items-center justify-center text-white transition-all z-[110] border border-white/10"
+                                        className="absolute top-4 right-4 w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md flex items-center justify-center text-white transition-all z-[110] border border-white/10"
                                     >
-                                        <span className="text-lg sm:text-xl">✕</span>
+                                        <span className="text-xl">✕</span>
                                     </button>
                                 </div>
 
                                 {/* Profile Section */}
-                                <div className="px-4 sm:px-10 pb-6 sm:pb-8 flex flex-col sm:flex-row items-center sm:items-end gap-4 sm:gap-10 relative">
+                                <div className="px-5 sm:px-10 pb-8 flex flex-col sm:flex-row items-center sm:items-end gap-6 sm:gap-10 relative">
                                     {/* Profile Picture Box */}
-                                    <div className="w-28 h-28 sm:w-48 sm:h-48 rounded-3xl bg-white p-1.5 sm:p-2 shadow-[0_20px_50px_rgba(0,0,0,0.2)] -mt-10 sm:-mt-12 shrink-0 z-10 border border-white/50">
-                                        <div className="w-full h-full rounded-[1.2rem] sm:rounded-[1.6rem] bg-gray-50 flex items-center justify-center text-3xl sm:text-7xl font-black text-blue-600 overflow-hidden shadow-inner ring-1 ring-black/5">
+                                    <div className="w-32 h-32 sm:w-48 sm:h-48 rounded-[2rem] bg-white p-2 shadow-[0_20px_50px_rgba(0,0,0,0.2)] -mt-8 shrink-0 z-10 border border-white/50">
+                                        <div className="w-full h-full rounded-[1.6rem] bg-gray-50 flex items-center justify-center text-4xl sm:text-7xl font-black text-blue-600 overflow-hidden shadow-inner ring-1 ring-black/5">
                                             {selectedStudent.profilePicture ? (
                                                 <img src={selectedStudent.profilePicture} alt={selectedStudent.name} className="w-full h-full object-cover" />
                                             ) : (
@@ -1065,28 +1093,46 @@ export default function GateDesktopPage() {
                                         </div>
                                     </div>
 
-                                    <div className="flex-1 text-center sm:text-left pt-1 sm:pt-0 pb-4 sm:pb-0">
+                                    <div className="flex-1 text-center sm:text-left pt-2 sm:pt-0">
                                         <div className="flex flex-col sm:flex-row items-center sm:items-baseline gap-2 sm:gap-4 mb-3 sm:mb-4">
-                                            <h2 className="text-xl sm:text-5xl font-black text-gray-900 tracking-tight leading-tight uppercase">{selectedStudent.name}</h2>
-                                            <span className={`px-4 py-1.5 rounded-full text-[7px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm ${selectedStudent.studentStatus === 'out' ? 'bg-red-500 text-white shadow-red-200' : 'bg-green-500 text-white shadow-green-200'}`}>
-                                                {selectedStudent.studentStatus === 'out' ? 'Currently Outside' : 'Inside Campus'}
+                                            <h2 className="text-2xl sm:text-5xl font-black text-gray-900 tracking-tight leading-tight uppercase">{selectedStudent.name}</h2>
+                                            <span className={`px-4 py-1 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm ${selectedStudent.studentStatus === 'out' ? 'bg-red-500 text-white shadow-red-200' : 'bg-green-500 text-white shadow-green-200'}`}>
+                                                {selectedStudent.studentStatus === 'out' ? 'Outside' : 'Inside Campus'}
                                             </span>
                                         </div>
-                                        <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-10">
+                                        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-10">
                                             <div className="flex flex-col items-center sm:items-start group">
-                                                <p className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1 group-hover:text-blue-500 transition-colors">Registration ID</p>
-                                                <p className="text-blue-600 font-extrabold text-base sm:text-2xl tracking-tight">{selectedStudent.registrationId || "N/A"}</p>
+                                                <p className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1 group-hover:text-blue-500 transition-colors">Registration ID</p>
+                                                <p className="text-blue-600 font-extrabold text-lg sm:text-2xl tracking-tight">{selectedStudent.registrationId || "N/A"}</p>
                                             </div>
                                             <div className="hidden sm:block w-px h-10 sm:h-12 bg-gray-100/80" />
                                             <div className="flex flex-col items-center sm:items-start group">
-                                                <p className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1 group-hover:text-blue-500 transition-colors">Hostel & Room</p>
-                                                <p className="text-gray-900 font-extrabold text-base sm:text-2xl tracking-tight">{selectedStudent.hostelName} • {selectedStudent.roomNumber}</p>
+                                                <p className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1 group-hover:text-blue-500 transition-colors">Hostel & Room</p>
+                                                <p className="text-gray-900 font-extrabold text-lg sm:text-2xl tracking-tight">{formatHostelDisplay(selectedStudent.hostelName)} • {selectedStudent.roomNumber}</p>
                                             </div>
+
+                                            {/* ⚡ Recent History Section */}
+                                            {lastOuting && (
+                                                <>
+                                                    <div className="hidden sm:block w-px h-10 sm:h-12 bg-gray-100/80" />
+                                                    <div className="flex flex-col items-center sm:items-start p-2 sm:p-3 bg-red-50/50 rounded-2xl border border-red-100/50 group hover:bg-red-50 transition-colors min-w-[140px]">
+                                                        <p className="text-[8px] sm:text-[9px] font-black text-red-500 uppercase tracking-widest mb-1 group-hover:text-red-600 transition-colors">Recent History</p>
+                                                        <div className="flex flex-col items-center sm:items-start gap-1">
+                                                            <p className="text-gray-900 font-extrabold text-[11px] sm:text-sm tracking-tight leading-none">
+                                                                Date: <span className="text-red-600">{lastOuting.checkInISTDate || lastOuting.checkOutISTDate || "N/A"}</span>
+                                                            </p>
+                                                            <p className="text-gray-900 font-extrabold text-[11px] sm:text-sm tracking-tight leading-none">
+                                                                Time: <span className="text-red-600">{lastOuting.checkInISTTime || lastOuting.checkOutISTTime || "N/A"}</span>
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="px-4 sm:px-10 pb-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-8 bg-gray-50/50 pt-8 sm:pt-10 border-t border-gray-100">
+                                <div className="px-4 sm:px-10 pb-8 grid grid-cols-2 lg:grid-cols-3 gap-x-4 sm:gap-x-12 gap-y-4 sm:gap-y-8 bg-gray-50/50 pt-6 sm:pt-8 border-t border-gray-100">
                                     {[
                                         { label: "College Name", value: selectedStudent.collegeName || "N/A", icon: "🎓" },
                                         { label: "ERP ID", value: selectedStudent.erpInformation || "N/A", icon: "🆔", valueClass: "text-blue-600" },
@@ -1100,26 +1146,38 @@ export default function GateDesktopPage() {
                                         { label: "Mother Mobile", value: selectedStudent.motherNumber || "N/A", icon: "📱" },
                                         { label: "Permanent Address", value: `${selectedStudent.permanentAddress || "N/A"}${selectedStudent.homeState ? `, ${selectedStudent.homeState}` : ""}`, icon: "🏠", fullWidth: true },
                                     ].map((item: any, idx) => (
-                                        <div key={idx} className={`flex gap-3 sm:gap-4 items-start bg-white p-4 sm:p-0 rounded-2xl sm:bg-transparent border border-gray-100 sm:border-0 shadow-sm sm:shadow-none ${item.fullWidth ? 'sm:col-span-2 lg:col-span-3' : ''}`}>
-                                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gray-50 flex items-center justify-center text-lg sm:text-xl shrink-0 border border-gray-100/50">{item.icon}</div>
+                                        <div key={idx} className={`flex gap-3 sm:gap-4 items-start bg-white/60 p-2.5 sm:p-0 rounded-xl sm:bg-transparent border border-white sm:border-0 shadow-sm sm:shadow-none ${item.fullWidth ? 'col-span-2 lg:col-span-3' : ''}`}>
+                                            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-white shadow-sm flex items-center justify-center text-base sm:text-lg shrink-0 border border-gray-50">{item.icon}</div>
                                             <div className="min-w-0 flex-1">
-                                                <p className="text-[8px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 sm:mb-1.5">{item.label}</p>
-                                                <p className={`text-xs sm:text-sm font-bold m-0 break-words ${item.fullWidth ? '' : 'line-clamp-2'} ${item.valueClass || 'text-gray-900'}`}>{item.value}</p>
+                                                <p className="text-[7px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1">{item.label}</p>
+                                                <p className={`text-[10px] sm:text-sm font-black m-0 break-words ${item.fullWidth ? '' : 'line-clamp-2'} ${item.valueClass || 'text-gray-900'}`}>
+                                                    {item.value !== "N/A" && (item.label.toLowerCase().includes("mobile") || item.label.toLowerCase().includes("phone")) ? (
+                                                        <a href={`tel:${item.value}`} className="hover:text-blue-600 transition-colors flex items-center gap-1.5 group/link">
+                                                            {item.value}
+                                                            <span className="text-[10px] sm:text-[12px] text-gray-400 group-hover/link:text-blue-500 transition-colors">📞</span>
+                                                        </a>
+                                                    ) : item.value !== "N/A" && item.label.toLowerCase().includes("email") ? (
+                                                        <a href={`mailto:${item.value}`} className="hover:text-blue-600 transition-colors flex items-center gap-1.5 group/link">
+                                                            {item.value}
+                                                            <span className="text-[10px] sm:text-[12px] text-gray-400 group-hover/link:text-blue-500 transition-colors">✉️</span>
+                                                        </a>
+                                                    ) : (
+                                                        item.value
+                                                    )}
+                                                </p>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         ) : (
-                            <div className="p-12 text-center text-gray-500 flex flex-col items-center gap-4">
-                                <span className="text-5xl">👤</span>
-                                <div>
-                                    <p className="font-bold text-gray-900">Unable to load profile</p>
-                                    <p className="text-sm mt-1">Please try again or contact system administrator.</p>
-                                </div>
+                            <div className="h-[300px] flex flex-col items-center justify-center p-8 text-center">
+                                <span className="text-4xl mb-4">🔍</span>
+                                <h3 className="text-lg font-bold text-gray-800">Profile Not Found</h3>
+                                <p className="text-gray-500 text-sm mt-1">Could not retrieve detailed information for this student ID.</p>
                                 <button
                                     onClick={() => setIsProfileModalOpen(false)}
-                                    className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm"
+                                    className="mt-6 px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold text-xs"
                                 >
                                     Close Window
                                 </button>

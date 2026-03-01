@@ -63,7 +63,7 @@ Your hostelease application has **8 API endpoints** organized into the following
   - Gangotri Hostel
   - Gaytri Hostel
   - Boys Hostel
-  - Guest House Boys Hostel
+  - GHB Hostel
 
 **GET Response:**
 ```json

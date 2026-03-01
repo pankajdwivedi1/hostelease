@@ -13,7 +13,9 @@
               "bssids": [
                 "64:29:95:4d:d2:80"
               ],
-              "bands": ["2.4GHz"]
+              "bands": [
+                "2.4GHz"
+              ]
             }
           ]
         },
@@ -26,7 +28,10 @@
               "bssids": [
                 "64:29:95:4d:ef:f0"
               ],
-              "bands": ["2.4GHz", "5GHz"]
+              "bands": [
+                "2.4GHz",
+                "5GHz"
+              ]
             },
             {
               "routerId": "NGH_F3_2",
@@ -34,7 +39,9 @@
               "bssids": [
                 "64:29:95:4d:aef:a0"
               ],
-              "bands": ["2.4GHz"]
+              "bands": [
+                "2.4GHz"
+              ]
             },
             {
               "routerId": "NGH_F3_5",
@@ -42,7 +49,9 @@
               "bssids": [
                 "64:29:43:bb:6b:88"
               ],
-              "bands": ["5GHz"]
+              "bands": [
+                "5GHz"
+              ]
             }
           ]
         },
@@ -55,7 +64,9 @@
               "bssids": [
                 "64:29:43:bb:6b:00"
               ],
-              "bands": ["2.4GHz"]
+              "bands": [
+                "2.4GHz"
+              ]
             }
           ]
         }
@@ -74,7 +85,9 @@
               "bssids": [
                 "64:29:43:bb:84:b0"
               ],
-              "bands": ["2.4GHz"]
+              "bands": [
+                "2.4GHz"
+              ]
             },
             {
               "routerId": "BH_F0_2",
@@ -82,7 +95,9 @@
               "bssids": [
                 "64:29:43:bb:89:70"
               ],
-              "bands": ["2.4GHz"]
+              "bands": [
+                "2.4GHz"
+              ]
             },
             {
               "routerId": "BH_F0_3",
@@ -90,7 +105,9 @@
               "bssids": [
                 "64:ed:07:cc:ee:00"
               ],
-              "bands": ["2.4GHz"]
+              "bands": [
+                "2.4GHz"
+              ]
             }
           ]
         },
@@ -103,7 +120,9 @@
               "bssids": [
                 "64:29:43:bb:88:e0"
               ],
-              "bands": ["2.4GHz"]
+              "bands": [
+                "2.4GHz"
+              ]
             },
             {
               "routerId": "BH_F1_2",
@@ -111,7 +130,9 @@
               "bssids": [
                 "64:29:43:bb:89:10"
               ],
-              "bands": ["2.4GHz"]
+              "bands": [
+                "2.4GHz"
+              ]
             }
           ]
         }
@@ -131,7 +152,10 @@
                 "64:29:43:bb:78:60",
                 "64:29:43:bb:78:68"
               ],
-              "bands": ["2.4GHz", "5GHz"]
+              "bands": [
+                "2.4GHz",
+                "5GHz"
+              ]
             },
             {
               "routerId": "GH_F0_2",
@@ -140,7 +164,10 @@
                 "64:29:43:bb:79:40",
                 "64:29:43:bb:79:48"
               ],
-              "bands": ["2.4GHz", "5GHz"]
+              "bands": [
+                "2.4GHz",
+                "5GHz"
+              ]
             }
           ]
         },
@@ -154,7 +181,10 @@
                 "64:29:43:bb:79:20",
                 "64:29:43:bb:79:a8"
               ],
-              "bands": ["2.4GHz", "5GHz"]
+              "bands": [
+                "2.4GHz",
+                "5GHz"
+              ]
             },
             {
               "routerId": "GH_F1_3",
@@ -163,7 +193,10 @@
                 "64:29:43:bb:78:b0",
                 "64:29:43:bb:78:b8"
               ],
-              "bands": ["2.4GHz", "5GHz"]
+              "bands": [
+                "2.4GHz",
+                "5GHz"
+              ]
             }
           ]
         },
@@ -177,7 +210,10 @@
                 "64:29:43:bb:6f:40",
                 "64:29:43:bb:6f:48"
               ],
-              "bands": ["2.4GHz", "5GHz"]
+              "bands": [
+                "2.4GHz",
+                "5GHz"
+              ]
             },
             {
               "routerId": "GH_F2_4",
@@ -185,7 +221,9 @@
               "bssids": [
                 "64:29:43:bb:79:58"
               ],
-              "bands": ["5GHz"]
+              "bands": [
+                "5GHz"
+              ]
             }
           ]
         },
@@ -199,7 +237,10 @@
                 "64:29:43:bb:84:f0",
                 "64:29:43:bb:84:f8"
               ],
-              "bands": ["2.4GHz", "5GHz"]
+              "bands": [
+                "2.4GHz",
+                "5GHz"
+              ]
             },
             {
               "routerId": "GH_F3_4",
@@ -208,14 +249,17 @@
                 "64:29:43:bb:85:50",
                 "64:29:43:bb:85:58"
               ],
-              "bands": ["2.4GHz", "5GHz"]
+              "bands": [
+                "2.4GHz",
+                "5GHz"
+              ]
             }
           ]
         }
       ]
     },
     {
-      "hostelName": "Guest House Boys Hostel",
+      "hostelName": "GHB Hostel",
       "description": "GHBH",
       "floors": [
         {
@@ -227,7 +271,9 @@
               "bssids": [
                 "64:29:43:bb:7d:78"
               ],
-              "bands": ["5GHz"]
+              "bands": [
+                "5GHz"
+              ]
             },
             {
               "routerId": "GH_F1_2",
@@ -236,7 +282,10 @@
                 "64:29:45:bb:76:a0",
                 "64:29:2b:3b:bb:76:a8"
               ],
-              "bands": ["2.4GHz", "5GHz"]
+              "bands": [
+                "2.4GHz",
+                "5GHz"
+              ]
             },
             {
               "routerId": "GH_F1_3",
@@ -244,7 +293,9 @@
               "bssids": [
                 "64:29:43:bb:7d:70"
               ],
-              "bands": ["2.4GHz"]
+              "bands": [
+                "2.4GHz"
+              ]
             },
             {
               "routerId": "GH_F1_5",
@@ -252,7 +303,9 @@
               "bssids": [
                 "64:29:43:bb:8b:c8"
               ],
-              "bands": ["5GHz"]
+              "bands": [
+                "5GHz"
+              ]
             }
           ]
         }

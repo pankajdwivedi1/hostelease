@@ -516,6 +516,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [prioritizeAssignedHostel, setPrioritizeAssignedHostel] = useState(false); // ⚡ NEW
   const [getpassPassword, setGetpassPassword] = useState("GET456"); // ⚡ NEW
   const [wifiWhitelist, setWifiWhitelist] = useState<any[]>([]); // ⚡ NEW: Global IP Whitelist
+  const [enableManualAttendance, setEnableManualAttendance] = useState(false); // ⚡ NEW: Toggle for Manual Marking Toolbar
 
 
   // Audit States
@@ -590,6 +591,40 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [isWarden, setIsWarden] = useState(false);
   const [dashboardTitle, setDashboardTitle] = useState(title);
 
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]); // ⚡ NEW: Manual Selection
+  const [isBulkMarking, setIsBulkMarking] = useState(false); // ⚡ NEW: Loading State
+
+  const handleMarkBulkAttendance = async (studentIds: string[]) => {
+    if (!studentIds || studentIds.length === 0) return;
+
+    if (!confirm(`Are you sure you want to mark attendance for ${studentIds.length} students?`)) return;
+
+    setIsBulkMarking(true);
+    try {
+      const res = await fetch("/api/admin/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentIds, markedBy: "Warden" }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Update local state
+        setPresentStudentIds((prev) => [...prev, ...studentIds]);
+        setSelectedStudentIds([]); // Clear selection
+        fetchAttendanceSummary(); // Refresh counts
+        alert(`Successfully marked attendance for ${data.count} students.`);
+      } else {
+        alert(data.error || "Failed to mark attendance");
+      }
+    } catch (error) {
+      console.error("Bulk marking error:", error);
+      alert("An error occurred while marking attendance.");
+    } finally {
+      setIsBulkMarking(false);
+    }
+  };
+
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -605,9 +640,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     if (exactMatch) return exactMatch.name;
     if (name.includes("gaytri") || name.includes("hostel a")) return "Gaytri Hostel";
     if (name.includes("gangotri") || name.includes("hostel b")) return "Gangotri Hostel";
-    if (name.includes("guest") || name.includes("guess") || name.includes("hostel d")) return "Guest House Boys Hostel";
+    if (name.includes("guest") || name.includes("ghb") || name.includes("hostel d")) return "GHB Hostel";
     if (name.includes("boys") || name.includes("hostel c")) return "Boys Hostel";
     return null;
+  };
+
+  const formatHostelDisplay = (name: string) => {
+    if (!name) return name;
+    const n = name.toUpperCase();
+    if (n.includes("GUEST") || n.includes("GHB")) return "GHB Hostel";
+    return name;
   };
 
   const formatDate = (dateString: string | undefined) => {
@@ -831,6 +873,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (settingsData.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(settingsData.prioritizeAssignedHostel);
         if (settingsData.getpassPassword) setGetpassPassword(settingsData.getpassPassword);
         if (settingsData.wifiWhitelist) setWifiWhitelist(settingsData.wifiWhitelist);
+        if (settingsData.enableManualAttendance !== undefined) setEnableManualAttendance(settingsData.enableManualAttendance);
       }
 
       // Fetch Hostels (with warden/room info)
@@ -862,9 +905,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (data.success) {
         if (key === 'overlapRadius') setOverlapRadius(value);
         if (key === 'prioritizeAssignedHostel') setPrioritizeAssignedHostel(value);
+        if (key === 'enableManualAttendance') setEnableManualAttendance(value);
+      } else {
+        alert("Failed to update setting: " + (data.error || "Unknown error"));
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to update setting", e);
+      alert("Error: " + (e.message || "Network error"));
     } finally {
       setIsUpdatingSettings(false);
     }
@@ -1712,6 +1759,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (data.success) {
         setAttendanceSummary(data.summary);
         setPresentStudentIds(data.presentStudentIds);
+        // ⚡ Sync Global Toggle across all dashboards (Wardens & Admins)
+        if (data.enableManualAttendance !== undefined) {
+          setEnableManualAttendance(data.enableManualAttendance);
+        }
       }
     } catch (error: any) {
       console.error("Error fetching attendance summary:", error.message);
@@ -2381,7 +2432,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         Email: log.studentId?.email || "N/A",
         Hostel: log.studentId?.hostelName || "N/A",
         Time: log.istTime,
-        Accuracy: log.location.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"
+        Accuracy: log.location?.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"
       }));
       setExportPreviewData(data);
       setExportType('attendance');
@@ -2575,6 +2626,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       return student.studentStatus === statusFilter;
     });
   }, [permissions, filter, statusFilter, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter, sectionFilter, isWarden, authorizedHostels]);
+
 
   // Base list filtered by Search, College, Semester, Branch, and Section
   const totalHostelStudents = useMemo(() => {
@@ -3241,7 +3293,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     return authorizedHostels.some(h => h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase());
                                   }).length
                                   : students.length)
-                                : students.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === attendanceHostelFilter).length;
+                                : students.filter(s => {
+                                  const studentHostel = (getHostelCategory(s.hostelName) || s.hostelName || "").toLowerCase().trim();
+                                  const filterHostel = attendanceHostelFilter.toLowerCase().trim();
+                                  return studentHostel === filterHostel;
+                                }).length;
                               const present = attendanceHostelFilter === 'all'
                                 ? filteredPresentCount
                                 : (attendanceSummary[attendanceHostelFilter] || 0);
@@ -3268,9 +3324,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           })
                           .map(([hostel, count]) => {
                             // Calculate total students in this hostel
-                            const totalInHostel = students.filter(s =>
-                              (getHostelCategory(s.hostelName) || s.hostelName) === hostel
-                            ).length;
+                            const totalInHostel = students.filter(s => {
+                              const studentHostel = (getHostelCategory(s.hostelName) || s.hostelName || "").toLowerCase().trim();
+                              const cardHostel = hostel.toLowerCase().trim();
+                              return studentHostel === cardHostel;
+                            }).length;
                             const percentage = totalInHostel > 0 ? Math.round((count / totalInHostel) * 100) : 0;
                             const isSelected = selectedAttendanceHostel === hostel;
 
@@ -3317,8 +3375,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   <p className="text-[9px] font-bold text-gray-900 truncate">{log.studentId?.name || "Unknown"}</p>
                                   <p className="text-[9px] font-bold truncate">
                                     <span className="text-gray-900">{log.istTime}, {log.studentId?.roomNumber}, </span>
-                                    <span className={`${(!log.location?.accuracy || log.location.accuracy < 50) ? "text-green-600" : "text-orange-500"}`}>
-                                      {log.location?.accuracy ? Math.round(log.location.accuracy) : 0}m
+                                    <span className={`${(!log.location?.accuracy || log.location?.accuracy < 50) ? "text-green-600" : "text-orange-500"}`}>
+                                      {log.location?.accuracy ? `${Math.round(log.location.accuracy)}m` : "0m"}
                                     </span>
                                   </p>
                                 </div>
@@ -3437,8 +3495,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             }
                                             return null;
                                           })()}
-                                          <span className={`text-[8px] md:text-[9px] font-bold ${log.location.accuracy < 50 ? "text-green-500" : "text-orange-400"}`}>
-                                            Acc: {log.location.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"}
+                                          <span className={`text-[8px] md:text-[9px] font-bold ${(log.location?.accuracy || 0) < 50 ? "text-green-500" : "text-orange-400"}`}>
+                                            Acc: {log.location?.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"}
                                           </span>
                                         </div>
                                       </td>
@@ -3684,7 +3742,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           </span>
                                         )}
                                         {log.location?.accuracy ? (
-                                          <span className={`text-[10px] font-black ${log.location.accuracy < 50 ? "text-green-600" : "text-amber-500"}`}>
+                                          <span className={`text-[10px] font-black ${log.location?.accuracy < 50 ? "text-green-600" : "text-amber-500"}`}>
                                             GPS: {Math.round(log.location.accuracy)}m
                                           </span>
                                         ) : (
@@ -4237,7 +4295,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                   {/* Move Guest House to second position in first row */}
                   {hostels.filter(h => {
-                    const isGuest = h.name.toLowerCase().includes("guest");
+                    const name = h.name.toLowerCase();
+                    const isGuest = name.includes("guest") || name.includes("ghb");
                     if (isWarden && authorizedHostels.length > 0) {
                       return isGuest && authorizedHostels.some(ah => ah === h.name || ah.toLowerCase() === h.name.toLowerCase());
                     }
@@ -4266,7 +4325,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   {/* Render Boys, Gangotri, Gaytri in Row 2 (3 columns) */}
                   {hostels
                     .filter(h => {
-                      const isNotGuest = !h.name.toLowerCase().includes("guest");
+                      const name = h.name.toLowerCase();
+                      const isNotGuest = !name.includes("guest") && !name.includes("ghb");
                       if (isWarden && authorizedHostels.length > 0) {
                         return isNotGuest && authorizedHostels.some(ah => ah === h.name || ah.toLowerCase() === h.name.toLowerCase());
                       }
@@ -4327,10 +4387,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     {!studentsLoading && (
                       <div className="w-full flex items-center justify-center border-t border-[rgba(0,0,0,0.1)] mt-1 pt-1 text-[8px] uppercase tracking-tighter font-black">
                         <div className="flex-1 flex flex-col items-center border-r border-[rgba(0,0,0,0.05)]">
-                          <span className={statusFilter === "out" ? "text-white" : "text-[#7f8c8d]"}>L: {statusCounts.leave}</span>
+                          <span className={statusFilter === "out" ? "text-white" : "text-[#7f8c8d]"}>Leave: {statusCounts.leave}</span>
                         </div>
                         <div className="flex-1 flex flex-col items-center">
-                          <span className={statusFilter === "out" ? "text-white" : "text-[#7f8c8d]"}>P: {statusCounts.pass}</span>
+                          <span className={statusFilter === "out" ? "text-white" : "text-[#7f8c8d]"}>G-Pass: {statusCounts.pass}</span>
                         </div>
                       </div>
                     )}
@@ -4349,6 +4409,55 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   )}
                 </div>
 
+                {/* ⚡ NEW: Warden Bulk Attendance Actions */}
+                {enableManualAttendance && !studentsLoading && filteredStudents.length > 0 && (statusFilter === 'all' || statusFilter === 'in') && (
+                  <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 p-3 bg-blue-50/50 rounded-2xl border border-blue-100">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        checked={selectedStudentIds.length > 0 && filteredStudents.filter(s => s.studentStatus !== 'out' && !presentStudentIds.includes(s.id)).every(s => selectedStudentIds.includes(s.id))}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            const eligible = filteredStudents
+                              .filter(s => s.studentStatus !== 'out' && !presentStudentIds.includes(s.id))
+                              .map(s => s.id);
+                            setSelectedStudentIds(eligible);
+                          } else {
+                            setSelectedStudentIds([]);
+                          }
+                        }}
+                      />
+                      <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest">Select All (Eligible)</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={isBulkMarking}
+                        onClick={() => {
+                          const eligible = filteredStudents
+                            .filter(s => s.studentStatus !== 'out' && !presentStudentIds.includes(s.id))
+                            .map(s => s.id);
+                          if (eligible.length > 0) handleMarkBulkAttendance(eligible);
+                        }}
+                        className="px-4 py-1.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-sm shadow-indigo-200 disabled:opacity-50"
+                      >
+                        {isBulkMarking ? "Processing..." : "Mark All Presence"}
+                      </button>
+
+                      {selectedStudentIds.length > 0 && (
+                        <button
+                          disabled={isBulkMarking}
+                          onClick={() => handleMarkBulkAttendance(selectedStudentIds)}
+                          className="px-4 py-1.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-all shadow-sm shadow-green-200 disabled:opacity-50"
+                        >
+                          Mark Selected ({selectedStudentIds.length})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <div className="space-y-3">
                     {studentsLoading ? (
@@ -4366,64 +4475,98 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             return typeof p.studentId === "object" ? p.studentId._id === student.id : p.studentId === student.id;
                           });
                           return (
-                            <button
-                              key={student.id}
-                              onClick={() => handleProfileClick(student.id)}
-                              className="w-full text-left rounded-xl border border-gray-200 bg-white p-3 hover:shadow-md hover:border-blue-200 transition-all group"
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className="w-10 h-10 rounded-full bg-gray-100 text-gray-600 border border-gray-200 flex items-center justify-center font-bold text-xs flex-shrink-0 overflow-hidden">
-                                  {student.profilePicture ? (
-                                    <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
-                                  ) : (
-                                    getInitials(student.name)
-                                  )}
-                                </div>
+                            <div key={student.id} className="flex items-center gap-2 group/card">
+                              {/* ⚡ NEW: Selection Checkbox */}
+                              {enableManualAttendance && !presentStudentIds.includes(student.id) && student.studentStatus !== 'out' && (
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer transition-all shrink-0"
+                                  checked={selectedStudentIds.includes(student.id)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedStudentIds((prev) => [...prev, student.id]);
+                                    } else {
+                                      setSelectedStudentIds((prev) => prev.filter((id) => id !== student.id));
+                                    }
+                                  }}
+                                />
+                              )}
 
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex justify-between items-start">
-                                    <div className="pr-2">
-                                      <h3 className="text-[11px] font-bold text-gray-900 leading-tight group-hover:text-blue-600 transition-colors">{student.name}</h3>
-                                      <p className="text-[10px] text-gray-500 mt-0.5 truncate">{student.email}</p>
-                                    </div>
-                                    <span className={`flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${student.studentStatus === 'out' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
-                                      {student.studentStatus || 'in'}
-                                    </span>
-                                  </div>
-
-                                  <div className="flex flex-wrap items-center gap-2 mt-2 text-[10px] font-medium text-gray-500">
-                                    <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">
-                                      {getHostelCategory(student.hostelName) || student.hostelName}
-                                    </span>
-                                    <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">
-                                      Room {student.roomNumber}
-                                    </span>
-                                    {student.floorNumber && (
-                                      <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">
-                                        {student.floorNumber}
-                                      </span>
+                              <div
+                                onClick={() => handleProfileClick(student.id)}
+                                className="flex-1 text-left rounded-xl border border-gray-200 bg-white p-3 hover:shadow-md hover:border-blue-200 transition-all group cursor-pointer"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className="w-10 h-10 rounded-full bg-gray-100 text-gray-600 border border-gray-200 flex items-center justify-center font-bold text-xs flex-shrink-0 overflow-hidden">
+                                    {student.profilePicture ? (
+                                      <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
+                                    ) : (
+                                      getInitials(student.name)
                                     )}
-                                    <a
-                                      href={`tel:${student.phoneNumber}`}
-                                      onClick={(e) => e.stopPropagation()}
-                                      title="Click to call"
-                                      className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 hover:bg-blue-100 transition-colors whitespace-nowrap"
-                                    >
-                                      {student.phoneNumber}
-                                    </a>
                                   </div>
 
-                                  {presentStudentIds.includes(student.id) && (
-                                    <div className="mt-1.5 flex items-center">
-                                      <span className="flex items-center gap-1 text-[9px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100">
-                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                        Present Today
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex justify-between items-start">
+                                      <div className="pr-2">
+                                        <h3 className="text-[11px] font-bold text-gray-900 leading-tight group-hover:text-blue-600 transition-colors">{student.name}</h3>
+                                        <p className="text-[10px] text-gray-500 mt-0.5 truncate">{student.email}</p>
+                                      </div>
+                                      <span className={`flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${student.studentStatus === 'out' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
+                                        {student.studentStatus || 'in'}
                                       </span>
                                     </div>
-                                  )}
+
+                                    <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-50">
+                                      <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium text-gray-500">
+                                        <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">
+                                          {getHostelCategory(student.hostelName) || student.hostelName}
+                                        </span>
+                                        <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">
+                                          Room {student.roomNumber}
+                                        </span>
+                                        {student.floorNumber && (
+                                          <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">
+                                            {student.floorNumber}
+                                          </span>
+                                        )}
+                                        <a
+                                          href={`tel:${student.phoneNumber}`}
+                                          onClick={(e) => e.stopPropagation()}
+                                          title="Click to call"
+                                          className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 hover:bg-blue-100 transition-colors whitespace-nowrap flex items-center gap-1"
+                                        >
+                                          <span>📞</span>
+                                          {student.phoneNumber}
+                                        </a>
+                                      </div>
+
+                                      {/* ⚡ NEW: Individual Mark Button */}
+                                      {enableManualAttendance && !presentStudentIds.includes(student.id) && student.studentStatus !== 'out' && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleMarkBulkAttendance([student.id]);
+                                          }}
+                                          className="px-3 py-1 bg-green-50 text-green-600 rounded-lg text-[9px] font-black uppercase tracking-widest border border-green-100 hover:bg-green-600 hover:text-white transition-all shadow-sm"
+                                        >
+                                          Mark
+                                        </button>
+                                      )}
+
+                                      {presentStudentIds.includes(student.id) && (
+                                        <div className="flex items-center">
+                                          <span className="flex items-center gap-1 text-[9px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100">
+                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                            Present
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
-                            </button>
+                            </div>
                           );
                         })}
                         {!isListExpanded && filteredStudents.length > 10 && (
@@ -6043,7 +6186,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       {hostelsConfig.map((hostel) => (
                         <div key={hostel._id} className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex items-center justify-between">
                           <div className="flex-1 min-w-0 pr-4">
-                            <h4 className="font-black text-gray-900 uppercase tracking-tight truncate">{hostel.name}</h4>
+                            <h4 className="font-black text-gray-900 uppercase tracking-tight truncate">{formatHostelDisplay(hostel.name)}</h4>
                             <p className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest truncate">Total Rooms</p>
                           </div>
                           <div className="flex items-center gap-3 sm:gap-4 bg-white px-3 sm:px-4 py-2 rounded-2xl border-2 border-gray-100 shadow-sm focus-within:border-indigo-400 transition-all shrink-0">
@@ -6431,6 +6574,27 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </label>
                       </div>
 
+                      <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-green-100 transition-all">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-green-50 rounded-lg text-green-600">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Manual Attendance Mode</h3>
+                            <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Enable warden to manually mark attendance toolbar</p>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={enableManualAttendance}
+                            onChange={(e) => handleToggleDeveloperSetting('enableManualAttendance', e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                        </label>
+                      </div>
+
                       {/* ⚡ NEW: WiFi IP Whitelist Management */}
                       <div className="bg-white p-6 rounded-2xl border-2 border-amber-100 shadow-sm hover:border-amber-200 transition-all space-y-4">
                         <div className="flex items-center justify-between">
@@ -6443,17 +6607,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           </div>
                           <button
                             onClick={() => {
-                              const ip = prompt("Enter Public IP address (e.g. 157.34.12.193):");
-                              const name = prompt("Enter Label (e.g. Main Hostel WiFi):");
-                              if (ip && name) {
-                                const updated = [...wifiWhitelist, { name, ip }];
+                              const bssid = prompt("Enter WIFI BSSID (e.g. 64:29:43:bb:78:60):");
+                              const name = prompt("Enter Label (e.g. Campus Area WiFi):");
+                              if (bssid && name) {
+                                // Save as a BSSID entry (using the bssids array format)
+                                const updated = [...wifiWhitelist, { name, bssids: [bssid.trim().toLowerCase()] }];
                                 setWifiWhitelist(updated);
                                 handleUpdateSettings({ wifiWhitelist: updated });
                               }
                             }}
                             className="px-4 py-2 bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all opacity-100"
                           >
-                            + Add IP
+                            + ADD WIFI BSSID
                           </button>
                         </div>
 
@@ -6464,10 +6629,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             wifiWhitelist.map((item, idx) => (
                               <div key={idx} className="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-100 group transition-all">
                                 <div className="flex-1">
-                                  {item.hostelName ? (
+                                  {item.hostelName || item.bssids ? (
                                     <>
                                       <div className="flex items-center gap-2">
-                                        <p className="text-[11px] font-black text-amber-900 uppercase">{item.hostelName}</p>
+                                        <p className="text-[11px] font-black text-amber-900 uppercase">{item.hostelName || item.name}</p>
                                         <span className="px-1.5 py-0.5 bg-amber-200 text-amber-700 rounded text-[8px] font-black uppercase">WIFI BSSID</span>
                                       </div>
                                       <p className="text-[9px] font-bold text-amber-600 mt-0.5">
@@ -6496,11 +6661,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   )}
                                 </div>
                                 <div className="flex items-center gap-1.5 ml-4">
-                                  {item.hostelName && (
+                                  {(item.hostelName || item.bssids) && (
                                     <button
                                       onClick={() => {
                                         const current = item.bssids?.join(", ") || "";
-                                        const newVal = prompt(`Edit BSSIDs for ${item.hostelName} (comma separated):`, current);
+                                        const newVal = prompt(`Edit BSSIDs for ${item.hostelName || item.name} (comma separated):`, current);
                                         if (newVal !== null) {
                                           const updatedBssids = newVal.split(",").map(s => s.trim()).filter(s => s !== "");
                                           const updatedWhitelist = [...wifiWhitelist];
@@ -6966,7 +7131,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 <div className="flex items-center gap-3 w-full">
                                   <div className="p-2.5 bg-white rounded-xl shadow-sm border border-slate-200 text-xl shrink-0">🏢</div>
                                   <div className="min-w-0 flex-1">
-                                    <h4 className="font-black text-slate-800 text-lg uppercase tracking-tight truncate">{hostel.name}</h4>
+                                    <h4 className="font-black text-slate-800 text-lg uppercase tracking-tight truncate">{formatHostelDisplay(hostel.name)}</h4>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Hostel ID: {hostel._id.slice(-6)}</p>
                                   </div>
                                 </div>
@@ -7114,7 +7279,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       }}
                                       className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
                                     />
-                                    <span className="font-bold text-sm text-slate-700">{h.name}</span>
+                                    <span className="font-bold text-sm text-slate-700">{formatHostelDisplay(h.name)}</span>
                                   </label>
                                 ))}
                               </div>
@@ -7167,7 +7332,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 <div className="flex flex-wrap gap-2">
                                   {acc.hostels.map(h => (
                                     <span key={h} className="px-2.5 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wider rounded-lg">
-                                      {h}
+                                      {formatHostelDisplay(h)}
                                     </span>
                                   ))}
                                 </div>

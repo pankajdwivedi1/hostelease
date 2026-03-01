@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       // ✅ NEW FIX #13: Load hostel prefix mapping from AdminSettings (configurable)
       const adminSettings = await db.settings.get();
       let hostelPrefixMap = adminSettings?.hostelPrefixMap || [
-        { hostelName: "Guest House Boys Hostel", prefix: "GUEST" },
+        { hostelName: "GHB Hostel", prefix: "GUEST" },
         { hostelName: "Boys Hostel", prefix: "BOYS" },
         { hostelName: "Gangotri Hostel", prefix: "GANGOTRI" },
         { hostelName: "Gaytri Hostel", prefix: "GAYTRI" }
@@ -178,12 +178,27 @@ export async function GET(request: NextRequest) {
     );
 
     // ⚡ SYNC STATUS: Ensure 'out' status matches open gate passes for everyone in the list
-    // This fixes the discrepancy between Gatepass Count (87) and Dashboard Count (65)
+    let openPasses: any[] = [];
+    let activeOutings = new Map<string, string>();
+    let syncCount = 0;
+
+    // ⚡ SYNC STATUS: Ensure 'out' status matches open gate passes for everyone in the list
     try {
-      const { records: openPasses } = await db.gatePasses.list({ status: "out" }, { limit: 1000 });
-      if (openPasses) {
+      const result = await db.gatePasses.list({ status: "out" }, { limit: 1000 });
+      openPasses = result.records || [];
+      if (openPasses.length > 0) {
         // Create a map of studentId -> outingType for efficient lookup
-        const activeOutings = new Map(openPasses.map((p: any) => [p.studentId?.toString(), p.type || "outing"]));
+        activeOutings = new Map(openPasses.map((p: any) => {
+          const sId = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
+          return [sId?.toString(), p.type || "outing"];
+        }));
+
+        console.log(`[SYNC_DEBUG] Open Passes: ${openPasses?.length || 0}, Active Outings Map Size: ${activeOutings.size}`);
+        if (openPasses && openPasses.length > 0 && openPasses[0]) {
+          const firstPass = openPasses[0];
+          const sIdSample = typeof firstPass.studentId === 'object' ? ((firstPass.studentId as any)?._id || (firstPass.studentId as any)?.id) : firstPass.studentId;
+          console.log(`[SYNC_DEBUG] Sample Mapping: p.studentId=${JSON.stringify(firstPass.studentId)} -> sId=${sIdSample}`);
+        }
 
         students.forEach((s: any) => {
           const sId = (s.id || s._id)?.toString();
@@ -191,18 +206,30 @@ export async function GET(request: NextRequest) {
 
           if (outingType) {
             s.studentStatus = "out";
-            s.outingType = outingType; // "leave" or "outing"
+            s.outingType = outingType;
+            syncCount++;
           } else {
             s.studentStatus = "in";
-            s.outingType = null;
+            s.outingType = undefined;
           }
         });
+        console.log(`[SYNC_DEBUG] Total Students Synced to 'out': ${syncCount}`);
       }
     } catch (syncError) {
       console.warn("⚠️ Status sync failed in list API:", syncError);
     }
 
-    return NextResponse.json({ students }, { status: 200 });
+    return NextResponse.json({
+      success: true,
+      students,
+      total: students.length,
+      debug: {
+        syncTotal: openPasses?.length || 0,
+        uniqueStudentsOut: activeOutings?.size || 0,
+        matchedStudentsInList: typeof syncCount !== 'undefined' ? syncCount : 0
+      },
+      count: students.length,
+    }, { status: 200 });
   } catch (error: any) {
     console.error("❌ Error fetching students:", error.message);
     return NextResponse.json(

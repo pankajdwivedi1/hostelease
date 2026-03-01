@@ -7,7 +7,14 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
     try {
         const hostels = await db.hostels.getAll();
-        return NextResponse.json({ success: true, hostels });
+        const mappedHostels = hostels.map((h: any) => {
+            const n = h.name.toUpperCase();
+            if (n.includes("GUEST") || n.includes("GHB")) {
+                return { ...h, name: "GHB Hostel" };
+            }
+            return h;
+        });
+        return NextResponse.json({ success: true, hostels: mappedHostels });
     } catch (error: any) {
         return NextResponse.json(
             { error: error.message || "Failed to fetch hostels" },

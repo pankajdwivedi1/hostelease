@@ -115,23 +115,25 @@ export async function POST(request: NextRequest) {
 
         if (currentStatus === "in") {
             // STUDENT IS GOING OUT (CHECK-OUT)
-            // Double check: ensure no open gate pass exists
-            const existingOpenPass = await db.gatePasses.findOne({
-                studentId: student._id,
+            // ⚡ FIX: Find ALL open passes and close them before starting a new one
+            const { records: openPasses } = await db.gatePasses.list({
+                studentId: student._id.toString(),
                 status: "out",
             });
 
-            if (existingOpenPass) {
-                // Close the old one first
-                const diffMs = now.getTime() - new Date(existingOpenPass.checkOutTime).getTime();
-                await db.gatePasses.update(existingOpenPass._id, {
-                    checkInTime: now,
-                    checkInISTTime: istTime,
-                    checkInISTDate: istDate,
-                    status: "in",
-                    durationMinutes: Math.round(diffMs / 60000),
-                    qrTokenUsedIn: token
-                });
+            if (openPasses && openPasses.length > 0) {
+                for (const oldPass of openPasses) {
+                    if (!oldPass) continue;
+                    const diffMs = now.getTime() - new Date(oldPass.checkOutTime).getTime();
+                    await db.gatePasses.update(oldPass._id, {
+                        checkInTime: now,
+                        checkInISTTime: istTime,
+                        checkInISTDate: istDate,
+                        status: "in",
+                        durationMinutes: Math.round(diffMs / 60000),
+                        qrTokenUsedIn: "SYSTEM_AUTO_CLOSE_ON_NEW_OUTING"
+                    });
+                }
             }
 
             // ⚡ CHECK FOR PERMISSIONS: Is this an approved "Leave" or just a regular Outing?
@@ -187,13 +189,13 @@ export async function POST(request: NextRequest) {
             });
         } else {
             // STUDENT IS COMING BACK (CHECK-IN)
-            // Find the open gate pass for this student
-            const openPass = await db.gatePasses.findOne({
-                studentId: student._id,
+            // ⚡ FIX: Find ALL open gate passes for this student to resolve mismatches
+            const { records: openPasses } = await db.gatePasses.list({
+                studentId: student._id.toString(),
                 status: "out",
             });
 
-            if (!openPass) {
+            if (!openPasses || openPasses.length === 0) {
                 // No open pass found but status is "out" - fix status
                 await db.students.update(student._id.toString(), { studentStatus: "in" });
 
@@ -209,26 +211,32 @@ export async function POST(request: NextRequest) {
                 });
             }
 
-            // Calculate duration
-            const diffMs = now.getTime() - new Date(openPass.checkOutTime).getTime();
-            const durationMinutes = Math.round(diffMs / 60000);
+            // Close ALL open gate passes found
+            let totalDuration = 0;
+            let lastUpdatedPass: any = null;
 
-            // Close the gate pass
-            const updatedPass = await db.gatePasses.update(openPass._id, {
-                checkInTime: now,
-                checkInISTTime: istTime,
-                checkInISTDate: istDate,
-                status: "in",
-                qrTokenUsedIn: token,
-                durationMinutes
-            });
+            for (const pass of openPasses) {
+                if (!pass) continue;
+                const diffMs = now.getTime() - new Date(pass.checkOutTime).getTime();
+                const durationMinutes = Math.round(diffMs / 60000);
+                totalDuration = durationMinutes; // Use the most relevant duration
+
+                lastUpdatedPass = await db.gatePasses.update(pass._id, {
+                    checkInTime: now,
+                    checkInISTTime: istTime,
+                    checkInISTDate: istDate,
+                    status: "in",
+                    qrTokenUsedIn: token,
+                    durationMinutes
+                });
+            }
 
             // Update student status to "in"
             await db.students.update(student._id.toString(), { studentStatus: "in" });
 
-            // Format duration for display
-            const hours = Math.floor(durationMinutes / 60);
-            const mins = durationMinutes % 60;
+            // Format duration for display (using last/most relevant)
+            const hours = Math.floor(totalDuration / 60);
+            const mins = totalDuration % 60;
             const durationText = hours > 0
                 ? `${hours}h ${mins}m`
                 : `${mins} minutes`;
@@ -237,20 +245,20 @@ export async function POST(request: NextRequest) {
                 success: true,
                 action: "checkin",
                 message: `Welcome back, ${student.name}! You were out for ${durationText}.`,
-                gatePass: {
-                    id: updatedPass._id,
-                    checkOutTime: updatedPass.checkOutISTTime,
-                    checkOutDate: updatedPass.checkOutISTDate,
-                    checkInTime: updatedPass.checkInISTTime,
-                    checkInDate: updatedPass.checkInISTDate,
-                    durationMinutes,
-                    gateName: updatedPass.gateName,
-                },
+                gatePass: lastUpdatedPass ? {
+                    id: lastUpdatedPass._id,
+                    checkOutTime: lastUpdatedPass.checkOutISTTime,
+                    checkOutDate: lastUpdatedPass.checkOutISTDate,
+                    checkInTime: lastUpdatedPass.checkInISTTime,
+                    checkInDate: lastUpdatedPass.checkInISTDate,
+                    durationMinutes: totalDuration,
+                    gateName: lastUpdatedPass.gateName,
+                } : null,
                 studentName: student.name,
                 hostelName: student.hostelName,
                 roomNumber: student.roomNumber,
                 newStatus: "in",
-                durationMinutes,
+                durationMinutes: totalDuration,
                 durationText,
             });
         }

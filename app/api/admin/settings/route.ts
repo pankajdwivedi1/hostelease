@@ -31,7 +31,8 @@ export async function GET(request: NextRequest) {
             overlapRadius: settings?.overlapRadius || false,
             prioritizeAssignedHostel: settings?.prioritizeAssignedHostel || false,
             getpassPassword: settings?.getpassPassword || "GET456",
-            wifiWhitelist: settings?.wifiWhitelist || []
+            wifiWhitelist: settings?.wifiWhitelist || [],
+            enableManualAttendance: settings?.enableManualAttendance ?? false
         });
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);
@@ -59,7 +60,8 @@ export async function POST(request: NextRequest) {
             overlapRadius,
             prioritizeAssignedHostel,
             getpassPassword,
-            wifiWhitelist
+            wifiWhitelist,
+            enableManualAttendance
         } = body;
 
         const updateData: any = {};
@@ -76,6 +78,7 @@ export async function POST(request: NextRequest) {
         if (prioritizeAssignedHostel !== undefined) updateData.prioritizeAssignedHostel = prioritizeAssignedHostel;
         if (getpassPassword !== undefined) updateData.getpassPassword = getpassPassword;
         if (wifiWhitelist !== undefined) updateData.wifiWhitelist = wifiWhitelist;
+        if (enableManualAttendance !== undefined) updateData.enableManualAttendance = enableManualAttendance;
 
         const settings = await db.settings.update(updateData);
 
