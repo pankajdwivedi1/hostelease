@@ -642,6 +642,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     if (name.includes("gangotri") || name.includes("hostel b")) return "Gangotri Hostel";
     if (name.includes("guest") || name.includes("ghb") || name.includes("hostel d")) return "GHB Hostel";
     if (name.includes("boys") || name.includes("hostel c")) return "Boys Hostel";
+
+    // Default: try to match exactly from standard keys if capitalization is just different
+    const standardKeys = ["Boys Hostel", "Gangotri Hostel", "Gaytri Hostel", "GHB Hostel"];
+    const standardMatch = standardKeys.find(k => k.toLowerCase() === name);
+    if (standardMatch) return standardMatch;
+
     return null;
   };
 
@@ -3237,14 +3243,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             />
                             <select
                               value={attendanceHostelFilter}
-                              onChange={(e) => setAttendanceHostelFilter(e.target.value)}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                // Normalize selection before setting state
+                                const normalized = val === 'all' ? 'all' : (getHostelCategory(val) || val);
+                                setAttendanceHostelFilter(normalized);
+                              }}
                               disabled={isWarden}
                               className={`w-full appearance-none bg-blue-50 border-0 text-blue-900 px-4 py-2.5 rounded-xl font-bold text-sm focus:ring-0 focus:outline-none ${isWarden ? 'opacity-70 cursor-not-allowed' : ''}`}
                             >
                               <option value="all">All Hostels</option>
-                              {hostels.map((h) => (
-                                <option key={h._id || h.name} value={h.name}>{h.name}</option>
-                              ))}
+                              {hostels.map((h) => {
+                                // Normalize the display name and value
+                                const normalizedName = getHostelCategory(h.name) || h.name;
+                                return (
+                                  <option key={h._id || h.name} value={normalizedName}>{normalizedName}</option>
+                                );
+                              })}
                             </select>
                           </div>
                         </div>
