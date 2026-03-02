@@ -22,7 +22,20 @@ export async function GET(request: NextRequest) {
             filters.hostelName = hostelName;
         }
 
-        const recentFilters: any = {};
+        // ⚡ TODAY ONLY LOGIC (IST Midnight Refresh)
+        // We want the Activity Log to show only scans from the current IST day
+        const now = new Date();
+        const istOffset = 5.5 * 60 * 60 * 1000;
+        const istNow = new Date(now.getTime() + istOffset);
+        const istTodayStart = new Date(istNow);
+        istTodayStart.setUTCHours(0, 0, 0, 0); // Start of day in IST
+
+        // Convert back to UTC for DB query (since check_out_time is TIMESTAMPTZ)
+        const utcTodayStart = new Date(istTodayStart.getTime() - istOffset);
+
+        const recentFilters: any = {
+            startDate: utcTodayStart.toISOString()
+        };
         if (hostelName && hostelName !== "all") {
             recentFilters.hostelName = hostelName;
         }
@@ -57,7 +70,6 @@ export async function GET(request: NextRequest) {
         const leaveCount = currentlyOut.filter((p: any) => p.type === "leave").length;
         const gatePassCount = currentlyOut.length - leaveCount;
 
-        const now = new Date();
         const currentlyOutWithDuration = currentlyOut.map((record: any) => {
             const diffMs = now.getTime() - new Date(record.checkOutTime).getTime();
             const durationMinutes = Math.round(diffMs / 60000);
