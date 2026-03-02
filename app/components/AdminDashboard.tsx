@@ -635,18 +635,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const getHostelCategory = (hostelName: string): string | null => {
+    if (!hostelName) return null;
     const name = hostelName.toLowerCase();
-    const exactMatch = hostels.find(h => h.name.toLowerCase() === name);
-    if (exactMatch) return exactMatch.name;
+
+    // Priority: Always return the Standardized Mixed-Case version first
     if (name.includes("gaytri") || name.includes("hostel a")) return "Gaytri Hostel";
     if (name.includes("gangotri") || name.includes("hostel b")) return "Gangotri Hostel";
     if (name.includes("guest") || name.includes("ghb") || name.includes("hostel d")) return "GHB Hostel";
     if (name.includes("boys") || name.includes("hostel c")) return "Boys Hostel";
 
-    // Default: try to match exactly from standard keys if capitalization is just different
-    const standardKeys = ["Boys Hostel", "Gangotri Hostel", "Gaytri Hostel", "GHB Hostel"];
-    const standardMatch = standardKeys.find(k => k.toLowerCase() === name);
-    if (standardMatch) return standardMatch;
+    // Fallback: Check if it matches any existing hostel record
+    const exactMatch = hostels.find(h => h.name.toLowerCase() === name);
+    if (exactMatch) return exactMatch.name;
 
     return null;
   };
@@ -3288,7 +3288,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <p className="text-lg font-black text-blue-600 mt-1">
                             {attendanceHostelFilter === 'all'
                               ? filteredPresentCount
-                              : (attendanceSummary[attendanceHostelFilter] || 0)}
+                              : (() => {
+                                // Find the count in summary using case-insensitive lookup
+                                const normalizedKey = getHostelCategory(attendanceHostelFilter) || attendanceHostelFilter;
+                                const entry = Object.entries(attendanceSummary).find(
+                                  ([k]) => k.toLowerCase() === normalizedKey.toLowerCase()
+                                );
+                                return entry ? entry[1] : (attendanceSummary[attendanceHostelFilter] || 0);
+                              })()}
                           </p>
                         </div>
                         <div className="bg-filler p-2.5 rounded-lg border border-gray-100 shadow-sm text-red-600 text-center">
@@ -3315,12 +3322,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 }).length;
                               const present = attendanceHostelFilter === 'all'
                                 ? filteredPresentCount
-                                : (attendanceSummary[attendanceHostelFilter] || 0);
+                                : (() => {
+                                  const normalizedKey = getHostelCategory(attendanceHostelFilter) || attendanceHostelFilter;
+                                  const entry = Object.entries(attendanceSummary).find(
+                                    ([k]) => k.toLowerCase() === normalizedKey.toLowerCase()
+                                  );
+                                  return entry ? entry[1] : (attendanceSummary[attendanceHostelFilter] || 0);
+                                })();
 
                               return total > 0 ? Math.round((present / total) * 100) : 0;
                             })()}%
                           </p>
                         </div>
+                      </div>
+
+                      <div className="bg-blue-50/50 p-2 rounded-lg text-center mb-2 border border-blue-100">
+                        <p className="text-[10px] text-blue-600 font-bold">💡 Tip: If you see old hostel names, logout once to refresh your system cache.</p>
                       </div>
 
                       {/* Hostel Breakdown */}

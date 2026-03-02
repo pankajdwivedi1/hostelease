@@ -403,19 +403,19 @@ export default function GateDesktopPage() {
     useEffect(() => {
         if (!mounted) return;
 
-        // Listen for new scans in the gate_passes table
+        // Listen for BOTH Check-outs (INSERT) and Check-ins (UPDATE)
         const channel = supabase
             .channel('gatepass-updates')
             .on(
                 'postgres_changes',
                 {
-                    event: 'INSERT',
+                    event: '*', // ⚡ Listen for all changes (Insert/Update)
                     schema: 'public',
                     table: 'gate_passes'
                 },
                 (payload) => {
-                    console.log('⚡ New Scan Detected via Realtime:', payload.new);
-                    // When a new scan is inserted, refresh the dashboard immediately
+                    console.log('⚡ Scan Detected via Realtime:', payload.eventType, payload.new);
+                    // Refresh the dashboard instantly
                     fetchLiveData();
                 }
             )
