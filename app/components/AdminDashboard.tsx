@@ -8,6 +8,7 @@ import { auth } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 import Barcode from "react-barcode";
 import dynamic from "next/dynamic";
+import { supabase } from "@/lib/supabase";
 
 const LocationPickerMap = dynamic(() => import("./LocationPickerMap"), {
   ssr: false,
@@ -2076,9 +2077,64 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   }, [selectedDate, attendanceHostelFilter, currentTab, paymentStatusFilter, paymentSearch]);
 
+  // ===================== Supabase Realtime Subscription =====================
+  // ⚡ Provides INSTANT updates for Staff (Dean/Warden/Developer)
   useEffect(() => {
+    // 1. Listen for Attendance, Permissions, Notifications, and Payments
+    const channel = supabase
+      .channel('admin-dashboard-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'attendance_logs' },
+        () => {
+          console.log('⚡ Attendance Update Detected');
+          fetchAttendanceSummary();
+          if (currentTab === 'attendance') fetchAttendanceLogs();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'permissions' },
+        () => {
+          console.log('⚡ Permission Update Detected');
+          fetchPermissions();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications' },
+        () => {
+          console.log('⚡ Notification Update Detected');
+          fetchAdminNotifications();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'gate_passes' },
+        () => {
+          console.log('⚡ GatePass Update Detected');
+          fetchAttendanceSummary(); // Affects IN/OUT counts
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'payments' },
+        () => {
+          console.log('⚡ Payment Update Detected');
+          if (currentTab === 'payments') fetchAdminPayments();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentTab, selectedDate]);
+
+  useEffect(() => {
+    // ⚡ OPTIMIZATION: Safety refresh every 5 minutes (was 20s)
+    // Realtime now handles the "Instant" part.
     const interval = setInterval(() => {
-      // ⚡ OPTIMIZATION: Only poll if the admin is actively viewing the dashboard
       if (document.visibilityState === 'visible') {
         fetchPermissions();
         fetchAttendanceSummary();
@@ -2086,7 +2142,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (currentTab === 'messaging') fetchAdminNotifications();
         if (currentTab === 'payments') fetchAdminPayments();
       }
-    }, 20000);
+    }, 300000); // 5 Minutes
 
     return () => clearInterval(interval);
   }, [currentTab, selectedDate, paymentStatusFilter, paymentSearch]);
