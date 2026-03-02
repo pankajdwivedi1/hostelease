@@ -54,21 +54,33 @@ export async function GET(request: NextRequest) {
         }
 
         // 2. Full Mode (Heavier Data - Runs Infrequently)
-        const { records: currentlyOut, total: totalOut } = await db.gatePasses.list(filters, { limit: 100 });
+        // ⚡ SMART FIX: Fetch full counts separately from the visible list
+        // This ensures the summary (116) matches the breakdown labels (Pass/Leave count)
+        // even if we only download 100 profiles to save bandwidth.
+        const [listData, summaryData] = await Promise.all([
+            db.gatePasses.list(filters, { limit: 100 }), // Get profiles (Limit 100 for speed/bandwidth)
+            db.gatePasses.list(filters, { limit: 1, countOnly: true }) // Get TRUE counts (Extremely tiny data)
+        ]);
+
+        const { records: currentlyOut } = listData;
+        const totalOut = summaryData.total || 0;
 
         const countFilters: any = {};
         if (hostelName && hostelName !== "all") {
             countFilters.hostelName = hostelName;
         }
 
-        const [totalStudents] = await Promise.all([
+        const [totalStudents, fullOutListForBreakdown] = await Promise.all([
             db.students.count(countFilters),
+            // Light-weight query for true Pass vs Leave split
+            db.gatePasses.list({ ...filters, light: true }, { limit: 500 })
         ]);
 
         const { records: recentActivity } = await db.gatePasses.list(recentFilters, { limit: 20 });
 
-        const leaveCount = currentlyOut.filter((p: any) => p.type === "leave").length;
-        const gatePassCount = currentlyOut.length - leaveCount;
+        // Calculate split from the FULL list (lightweight records) instead of the limited profile list
+        const leaveCount = fullOutListForBreakdown.records.filter((p: any) => p.type === "leave").length;
+        const gatePassCount = totalOut - leaveCount;
 
         const currentlyOutWithDuration = currentlyOut.map((record: any) => {
             const diffMs = now.getTime() - new Date(record.checkOutTime).getTime();
