@@ -1139,7 +1139,7 @@ export default function GateDesktopPage() {
                                         { label: "Branch", value: selectedStudent.branch || "N/A", icon: "📚" },
                                         { label: "Year & Sem", value: `${selectedStudent.year || "N/A"} • ${selectedStudent.semester || "N/A"}`, icon: "📅" },
                                         { label: "Mobile", value: selectedStudent.phoneNumber || "N/A", icon: "📞" },
-                                        { label: "Email", value: selectedStudent.email || "N/A", icon: "📧" },
+                                        { label: "Email", value: selectedStudent.email || "N/A", icon: <span className="text-[#FBBC05]">📧</span> },
                                         { label: "Father Name", value: selectedStudent.fatherName || "N/A", icon: "👨‍👦" },
                                         { label: "Father Mobile", value: selectedStudent.fatherNumber || "N/A", icon: "📱" },
                                         { label: "Mother Name", value: selectedStudent.motherName || "N/A", icon: "👩‍👦" },
@@ -1154,12 +1154,12 @@ export default function GateDesktopPage() {
                                                     {item.value !== "N/A" && (item.label.toLowerCase().includes("mobile") || item.label.toLowerCase().includes("phone")) ? (
                                                         <a href={`tel:${item.value}`} className="hover:text-blue-600 transition-colors flex items-center gap-1.5 group/link">
                                                             {item.value}
-                                                            <span className="text-[10px] sm:text-[12px] text-gray-400 group-hover/link:text-blue-500 transition-colors">📞</span>
+                                                            <span className="text-[10px] sm:text-[12px] text-[#FBBC05] group-hover/link:text-yellow-600 transition-colors">📞</span>
                                                         </a>
                                                     ) : item.value !== "N/A" && item.label.toLowerCase().includes("email") ? (
                                                         <a href={`mailto:${item.value}`} className="hover:text-blue-600 transition-colors flex items-center gap-1.5 group/link">
                                                             {item.value}
-                                                            <span className="text-[10px] sm:text-[12px] text-gray-400 group-hover/link:text-blue-500 transition-colors">✉️</span>
+                                                            <span className="text-[10px] sm:text-[12px] text-[#FBBC05] group-hover/link:text-yellow-600 transition-colors">✉️</span>
                                                         </a>
                                                     ) : (
                                                         item.value
