@@ -947,7 +947,7 @@ export default function GateDesktopPage() {
                 {/* Currently Outside */}
                 <div className="mb-2.5">
                     <h3 className="text-base font-semibold text-[rgba(255,255,255,0.9)] m-0">
-                        🔴 Currently Outside ({liveData?.currentlyOut?.length || 0})
+                        🔴 Currently Outside ({liveData?.summary?.studentsOut || 0})
                     </h3>
                 </div>
 
