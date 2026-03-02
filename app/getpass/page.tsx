@@ -357,13 +357,23 @@ export default function GateDesktopPage() {
         fetchStudentProfile(studentId);
     };
 
-    const fetchLiveData = useCallback(async () => {
+    const fetchLiveData = useCallback(async (isMinimal = false) => {
         try {
-            const res = await fetch("/api/getpass/live");
+            const res = await fetch(`/api/getpass/live?minimal=${isMinimal}`);
             const data = await res.json();
 
             if (data.success) {
-                setLiveData(data);
+                // ⚡ SMART MERGE: If it's a minimal update, keep the old summary/currentlyOut
+                // to prevent the UI from "emptying" while background updates happen.
+                setLiveData(prev => {
+                    if (data.minimal && prev) {
+                        return {
+                            ...prev,
+                            recentActivity: data.recentActivity || prev.recentActivity
+                        };
+                    }
+                    return data;
+                });
                 setLoading(false);
             }
         } catch (err) {
@@ -387,12 +397,12 @@ export default function GateDesktopPage() {
 
     // ===================== Timer: Refresh live data every 60 seconds =====================
     useEffect(() => {
-        fetchLiveData();
+        // ⚡ Initial load is ALWAYS FULL for instant visibility
+        fetchLiveData(false);
         const liveInterval = setInterval(() => {
-            // ⚡ OPTIMIZATION: Safety refresh every 60s (was 20s)
-            // Realtime subscription handles instant updates now.
             if (document.visibilityState === 'visible') {
-                fetchLiveData();
+                // Background updates are MINIMAL to save 90% bandwidth
+                fetchLiveData(true);
             }
         }, 60000);
         return () => clearInterval(liveInterval);
@@ -415,8 +425,8 @@ export default function GateDesktopPage() {
                 },
                 (payload) => {
                     console.log('⚡ Scan Detected via Realtime:', payload.eventType, payload.new);
-                    // Refresh the dashboard instantly
-                    fetchLiveData();
+                    // Refresh the dashboard FULLY when a scan happens
+                    fetchLiveData(false);
                 }
             )
             .subscribe();
