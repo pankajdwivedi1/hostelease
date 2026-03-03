@@ -14,6 +14,7 @@ import { db } from "@/lib/dbAdapter";
 export async function GET(request: NextRequest) {
     try {
         const searchParams = request.nextUrl.searchParams;
+        const studentId = searchParams.get("studentId");
         const firebaseUID = searchParams.get("firebaseUID");
         const hostelName = searchParams.get("hostelName");
         const status = searchParams.get("status");
@@ -27,6 +28,10 @@ export async function GET(request: NextRequest) {
         const page = parseInt(searchParams.get("page") || "1");
 
         const filters: any = {};
+
+        if (studentId) {
+            filters.studentId = studentId;
+        }
 
         if (firebaseUID) {
             filters.firebaseUID = firebaseUID;
@@ -47,7 +52,7 @@ export async function GET(request: NextRequest) {
         if (startDate) filters.startDate = startDate;
         if (endDate) filters.endDate = endDate;
 
-        const { records, total } = await db.gatePasses.list(filters, { page, limit });
+        const { records, total } = await db.gatePasses.list(filters, { page, limit, populate: true });
 
         return NextResponse.json({
             success: true,

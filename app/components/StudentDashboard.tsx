@@ -3396,6 +3396,16 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                     </div>
                 )
             }
+            <footer className="mt-12 mb-8 py-6 border-t border-gray-100/10">
+                <div className="flex flex-col items-center gap-1.5 text-center px-4">
+                    <p className="text-[9px] sm:text-[10px] font-bold tracking-[0.15em] text-white/30 uppercase">
+                        &copy; 2026 HOSTELEASE. All Rights Reserved.
+                    </p>
+                    <p className="text-[8px] font-medium text-white/10 uppercase tracking-wider leading-tight">
+                        Unauthorized copying, modification, or distribution is strictly prohibited
+                    </p>
+                </div>
+            </footer>
         </div >
     );
 }

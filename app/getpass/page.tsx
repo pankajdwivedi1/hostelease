@@ -628,7 +628,7 @@ export default function GateDesktopPage() {
     return (
         <div className="flex flex-col md:flex-row w-screen min-h-screen md:h-screen bg-[#0a0a1a] font-sans text-white overflow-y-auto md:overflow-hidden">
             {/* =================== LEFT PANEL: QR CODE =================== */}
-            <div className="w-full md:w-1/2 flex flex-col items-center justify-center gap-6 p-6 md:p-10 bg-gradient-to-b from-[#0a0a1a] via-[#0d1420] to-[#0a0a1a] border-b md:border-b-0 md:border-r border-[#00ff881a] relative shrink-0 transition-all duration-300 overflow-hidden">
+            <div className="w-full md:w-[42%] flex flex-col items-center justify-center gap-6 p-6 md:p-6 bg-gradient-to-b from-[#0a0a1a] via-[#0d1420] to-[#0a0a1a] border-b md:border-b-0 md:border-r border-[#00ff881a] relative shrink-0 transition-all duration-300 overflow-hidden">
 
                 {/* ── TOP ROW: Logo left + Instructions right ── */}
                 <div className="flex items-start justify-between w-full mb-2">
@@ -648,20 +648,20 @@ export default function GateDesktopPage() {
                     </div>
 
                     {/* Instructions bar */}
-                    <div className="hidden sm:flex items-center gap-3 px-4 py-3 bg-[rgba(0,255,136,0.07)] rounded-2xl border border-[rgba(0,255,136,0.3)] shadow-[0_0_16px_rgba(0,255,136,0.10)] flex-shrink-0">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                            <span className="text-base">📱</span>
-                            <span>Open HostelEase App</span>
+                    <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-[rgba(0,255,136,0.07)] rounded-xl border border-[rgba(0,255,136,0.3)] shadow-[0_0_12px_rgba(0,255,136,0.08)] flex-shrink-0">
+                        <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
+                            <span className="text-sm">📱</span>
+                            <span>Open App</span>
                         </div>
-                        <div className="text-[#00ff88] font-black text-sm">→</div>
-                        <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                            <span className="text-base">📸</span>
-                            <span>Tap &quot;Scan GATEPASS&quot;</span>
+                        <div className="text-[#00ff88] font-black text-xs">→</div>
+                        <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
+                            <span className="text-sm">📸</span>
+                            <span>Scan QR</span>
                         </div>
-                        <div className="text-[#00ff88] font-black text-sm">→</div>
-                        <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                        <div className="text-[#00ff88] font-black text-xs">→</div>
+                        <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold text-white">
                             <span className="text-base">✅</span>
-                            <span>Done!</span>
+                            <span>Done</span>
                         </div>
                     </div>
                 </div>
@@ -697,7 +697,7 @@ export default function GateDesktopPage() {
 
                 {/* QR Code */}
                 <div className="flex-1 flex flex-col items-center justify-center w-full py-4 min-h-0">
-                    <div className="p-3 md:p-4 bg-white rounded-[24px] md:rounded-[28px] border-[8px] md:border-[12px] border-[#00ff88] shadow-[0_0_60px_rgba(0,255,136,0.15)] md:shadow-[0_0_100px_rgba(0,255,136,0.25)] relative flex items-center justify-center w-full max-w-[min(70vw,50vh,580px)] md:max-w-[min(44vw,62vh,580px)]"
+                    <div className="p-3 md:p-4 bg-white rounded-[24px] md:rounded-[28px] border-[8px] md:border-[12px] border-[#00ff88] shadow-[0_0_60px_rgba(0,255,136,0.15)] md:shadow-[0_0_100px_rgba(0,255,136,0.25)] relative flex items-center justify-center w-full max-w-[min(70vw,50vh,580px)] md:max-w-[min(40vw,62vh,580px)]"
                         style={{ aspectRatio: '1/1' }}>
                         {qrData ? (
                             <QRCodeCanvas data={qrData} size={550} />
@@ -719,9 +719,9 @@ export default function GateDesktopPage() {
             </div>
 
             {/* =================== RIGHT PANEL: LIVE OUTING HISTORY =================== */}
-            <div className="w-full md:w-1/2 flex flex-col p-6 md:p-8 bg-gradient-to-b from-[#0d1117] to-[#0a0e14] overflow-hidden min-h-[500px] md:h-full">
+            <div className="w-full md:w-[58%] flex flex-col p-6 md:p-8 bg-gradient-to-b from-[#0d1117] to-[#0a0e14] overflow-hidden min-h-[500px] md:h-full">
                 {/* Summary Cards */}
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-2">
                     <h2 className="text-lg md:text-xl font-bold text-white m-0 flex items-center gap-2">
                         <span className="p-2 bg-[rgba(59,130,246,0.1)] rounded-lg text-blue-400">📊</span>
                         Live Campus Status
@@ -756,7 +756,7 @@ export default function GateDesktopPage() {
                 </div>
 
                 {liveData && (
-                    <div className="mb-4">
+                    <div className="mb-2">
                         {!isManualModalOpen ? (
                             <div className="grid grid-cols-2 lg:flex lg:flex-row gap-2 md:gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
                                 <div className="py-1.5 px-3 bg-[rgba(255,255,255,0.04)] rounded-2xl border border-[rgba(255,255,255,0.08)] text-center flex flex-col justify-center lg:flex-1">
@@ -954,107 +954,120 @@ export default function GateDesktopPage() {
                 )}
 
 
-                {/* Currently Outside */}
-                <div className="mb-2.5">
-                    <h3 className="text-base font-semibold text-[rgba(255,255,255,0.9)] m-0">
-                        🔴 Currently Outside ({liveData?.summary?.studentsOut || 0})
-                    </h3>
-                </div>
+                {/* Side-by-Side Lists Container */}
+                <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0 overflow-hidden">
+                    {/* LEFT COLUMN: Currently Outside */}
+                    <div className="flex-1 flex flex-col min-h-0">
+                        <div className="mb-2">
+                            <h3 className="text-sm font-semibold text-[rgba(255,255,255,0.9)] m-0 flex items-center gap-2">
+                                🔴 Outside ({liveData?.summary?.studentsOut || 0})
+                            </h3>
+                        </div>
 
-                <div className="flex-1 overflow-y-auto mb-4 min-h-[200px] border border-[rgba(255,255,255,0.05)] rounded-xl p-2 bg-[#0a0a1a]/30 custom-scrollbar">
-                    {liveData?.currentlyOut && liveData.currentlyOut.length > 0 ? (
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-                            {liveData.currentlyOut.map((record) => (
-                                <div key={record._id} className="flex justify-between items-center py-2.5 px-3 bg-[#161b2e] rounded-2xl border border-[#ff6b6b15] transition-all hover:border-[#ff6b6b30] group">
-                                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                                        <div
-                                            onClick={() => handleStudentClick(record.studentId)}
-                                            className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#ff6b6b] to-[#ee5253] flex items-center justify-center font-black text-sm text-white cursor-pointer shadow-[0_4px_12px_rgba(238,82,83,0.3)] transition-transform hover:scale-105 shrink-0"
-                                        >
-                                            {record.studentName?.charAt(0)?.toUpperCase() || "?"}
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-2">
-                                                <h4
+                        <div className="flex-1 overflow-y-auto border border-[rgba(255,255,255,0.05)] rounded-xl p-2 bg-[#0a0a1a]/30 custom-scrollbar">
+                            {liveData?.currentlyOut && liveData.currentlyOut.length > 0 ? (
+                                <div className="flex flex-col gap-1.5">
+                                    {liveData.currentlyOut.map((record) => (
+                                        <div key={record._id} className="flex justify-between items-center py-1.5 px-2.5 bg-[#161b2e] rounded-xl border border-[#ff6b6b15] transition-all hover:border-[#ff6b6b30] group">
+                                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                <div
                                                     onClick={() => handleStudentClick(record.studentId)}
-                                                    className="text-[14px] font-bold text-white m-0 cursor-pointer hover:text-[#ff6b6b] transition-colors leading-tight truncate tracking-wide"
+                                                    className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#ff6b6b] to-[#ee5253] flex items-center justify-center font-black text-[10px] text-white cursor-pointer shadow-[0_4px_12px_rgba(238,82,83,0.3)] transition-transform hover:scale-105 shrink-0"
                                                 >
-                                                    {record.studentName}
-                                                </h4>
-                                                <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all ${record.type === "leave"
-                                                    ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                                                    : "bg-blue-500/20 text-blue-400 border-blue-500/30"
-                                                    }`}>
-                                                    {record.type === "leave" ? "🏠 LEAVE" : "🎫 PASS"}
+                                                    {record.studentName?.charAt(0)?.toUpperCase() || "?"}
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <h4
+                                                            onClick={() => handleStudentClick(record.studentId)}
+                                                            className="text-[12px] font-bold text-white m-0 cursor-pointer hover:text-[#ff6b6b] transition-colors leading-tight truncate tracking-wide"
+                                                        >
+                                                            {record.studentName}
+                                                        </h4>
+                                                        <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${record.type === "leave"
+                                                            ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                                            : "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                                                            }`}>
+                                                            <span className="text-[9px]">{record.type === "leave" ? "🏠" : "🎫"}</span>
+                                                            <span>{record.type === "leave" ? "LEAVE" : "PASS"}</span>
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-[9px] text-[rgba(255,255,255,0.3)] tracking-tight uppercase m-0 mt-0.5 font-bold truncate">
+                                                        {formatHostelDisplay(record.hostelName)} • {record.roomNumber}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col items-end shrink-0">
+                                                <span className="text-[12px] font-black text-[#ff6b6b] tabular-nums tracking-tighter">
+                                                    {record.currentDurationText || formatDuration(record.currentDurationMinutes || 0)}
+                                                </span>
+                                                <span className="text-[8px] text-[rgba(255,255,255,0.25)] font-bold uppercase tracking-widest">
+                                                    {record.checkOutISTTime}
                                                 </span>
                                             </div>
-                                            <p className="text-[10px] text-[rgba(255,255,255,0.4)] tracking-widest uppercase m-0 mt-0.5 font-bold">
-                                                {formatHostelDisplay(record.hostelName)} • {record.roomNumber}
-                                            </p>
                                         </div>
-                                    </div>
-                                    <div className="flex flex-col items-end gap-0.5 shrink-0">
-                                        <span className="text-[14px] font-black text-[#ff6b6b] tabular-nums tracking-tight">
-                                            {record.currentDurationText || formatDuration(record.currentDurationMinutes || 0)}
-                                        </span>
-                                        <span className="text-[9px] text-[rgba(255,255,255,0.3)] font-bold uppercase tracking-wider">
-                                            {record.checkOutISTTime}
-                                        </span>
-                                    </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center h-full gap-3 py-10">
-                            <span className="text-4xl">✅</span>
-                            <p className="text-sm text-[rgba(255,255,255,0.4)]">All students are in campus</p>
-                        </div>
-                    )}
-                </div>
-
-                {/* Recent Activity */}
-                <div className="mb-2.5">
-                    <h3 className="text-base font-semibold text-[rgba(255,255,255,0.9)] m-0">📋 Recent Activity</h3>
-                </div>
-
-                <div className="flex-1 overflow-y-auto max-h-[250px] min-h-[150px] border border-[rgba(255,255,255,0.05)] rounded-xl p-2 bg-[#0a0a1a]/30 custom-scrollbar">
-                    {liveData?.recentActivity && liveData.recentActivity.length > 0 ? (
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-4 gap-y-1">
-                            {liveData.recentActivity.map((record) => (
-                                <div key={record._id} className="flex items-center gap-2 py-1.5 px-2 border-b border-[rgba(255,255,255,0.03)] hover:bg-[rgba(255,255,255,0.02)] transition-all min-w-0">
-                                    <span
-                                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                                        style={{
-                                            background: record.status === "out" ? "#ff6b6b" : "#00ff88",
-                                            boxShadow: record.status === "in" ? "0 0 10px rgba(0,255,136,0.25)" : "0 0 10px rgba(255,107,107,0.25)"
-                                        }}
-                                    />
-                                    <span
-                                        onClick={() => handleStudentClick(record.studentId)}
-                                        className="text-[13px] font-bold text-[rgba(255,255,255,0.9)] flex-1 cursor-pointer hover:text-[#00ff88] transition-colors truncate"
-                                    >
-                                        {record.studentName}
-                                    </span>
-
-                                    <div className="flex items-center gap-2 shrink-0">
-                                        <span className="text-[11px] text-[rgba(255,255,255,0.4)] tabular-nums font-bold min-w-[60px] text-right">
-                                            {record.status === "out" ? record.checkOutISTTime : record.checkInISTTime}
-                                        </span>
-                                        {record.status === "in" && record.durationMinutes !== undefined && (
-                                            <span className="px-1.5 py-0.5 bg-[rgba(0,255,136,0.08)] rounded text-[#00ff88] text-[10px] font-black uppercase tracking-tighter">
-                                                {formatDuration(record.durationMinutes)}
-                                            </span>
-                                        )}
-                                    </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full gap-2 py-6">
+                                    <span className="text-3xl">✅</span>
+                                    <p className="text-[11px] text-[rgba(255,255,255,0.3)] font-bold uppercase tracking-widest text-center px-4">All students are in campus</p>
                                 </div>
-                            ))}
+                            )}
                         </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center h-full gap-3 py-10">
-                            <span className="text-4xl">📭</span>
-                            <p className="text-sm text-[rgba(255,255,255,0.4)]">No activity yet today</p>
+                    </div>
+
+                    {/* RIGHT COLUMN: Recent Returns */}
+                    <div className="flex-1 flex flex-col min-h-0">
+                        <div className="mb-2">
+                            <h3 className="text-sm font-semibold text-[rgba(255,255,255,0.9)] m-0 flex items-center gap-2">
+                                🟢 Returns Today
+                            </h3>
                         </div>
-                    )}
+
+                        <div className="flex-1 overflow-y-auto border border-[rgba(255,255,255,0.05)] rounded-xl p-2 bg-[#0a0a1a]/30 custom-scrollbar">
+                            {liveData?.recentActivity && liveData.recentActivity.length > 0 ? (
+                                <div className="flex flex-col gap-1.5">
+                                    {liveData.recentActivity.map((record) => (
+                                        <div key={record._id} className="flex justify-between items-center py-1.5 px-2.5 bg-[#161b2e] rounded-xl border border-[#00ff8815] transition-all hover:border-[#00ff8830] group">
+                                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                <div
+                                                    onClick={() => handleStudentClick(record.studentId)}
+                                                    className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#00ff88] to-[#00cc6a] flex items-center justify-center font-black text-[10px] text-white cursor-pointer shadow-[0_4px_12px_rgba(0,255,136,0.3)] transition-transform hover:scale-105 shrink-0"
+                                                >
+                                                    {record.studentName?.charAt(0)?.toUpperCase() || "?"}
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <h4
+                                                        onClick={() => handleStudentClick(record.studentId)}
+                                                        className="text-[12px] font-bold text-white m-0 cursor-pointer hover:text-[#00ff88] transition-colors leading-tight truncate tracking-wide"
+                                                    >
+                                                        {record.studentName}
+                                                    </h4>
+                                                    <p className="text-[9px] text-[rgba(255,255,255,0.3)] tracking-tight uppercase m-0 mt-0.5 font-bold truncate">
+                                                        {formatHostelDisplay(record.hostelName)} • {record.roomNumber}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col items-end shrink-0">
+                                                <span className="text-[12px] font-black text-[#00ff88] tabular-nums tracking-tighter">
+                                                    {record.durationMinutes !== undefined ? formatDuration(record.durationMinutes) : '-'}
+                                                </span>
+                                                <span className="text-[8px] text-[rgba(255,255,255,0.25)] font-bold uppercase tracking-widest">
+                                                    {record.checkInISTTime}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full gap-2 py-6">
+                                    <span className="text-3xl">📭</span>
+                                    <p className="text-[11px] text-[rgba(255,255,255,0.3)] font-bold uppercase tracking-widest">No returns yet</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
 

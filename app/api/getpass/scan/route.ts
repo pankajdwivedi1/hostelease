@@ -113,6 +113,43 @@ export async function POST(request: NextRequest) {
         // Check student's current campus status
         const currentStatus = student.studentStatus || "in";
 
+        // 🔥 DOUBLE SCAN GUARD: Prevent duplicate entries from double-tapping or network lag
+        // We block any scan action (Outing or Return) if the student did something within the last 8 seconds
+        try {
+            const { records: activity } = await db.gatePasses.list({
+                firebaseUID: student.firebaseUID
+            }, { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc' });
+
+            if (activity && activity.length > 0) {
+                const last = activity[0];
+                const nowMs = Date.now();
+                const lastOutMs = new Date(last.checkOutTime).getTime();
+                const lastInMs = last.checkInTime ? new Date(last.checkInTime).getTime() : 0;
+                const mostRecentMs = Math.max(lastOutMs, lastInMs);
+                const timeDiff = nowMs - mostRecentMs;
+
+                // Check for token reuse - prevents same QR code image being scanned twice instantly
+                const isTokenReuse = last.qrTokenUsedOut === token || last.qrTokenUsedIn === token;
+
+                // If activity was within 8 seconds OR the token is the same, assume it's a duplicate
+                if (isTokenReuse || (timeDiff < 8000)) {
+                    console.log(`🚫 [SCAN_GUARD]: Blocked duplicate scan for ${student.name}. Reason: ${isTokenReuse ? 'Token Reused' : `Fast Scan (${timeDiff}ms)`}`);
+                    return NextResponse.json({
+                        success: true, // Show success to user so they stop clicking
+                        action: "duplicate_blocked",
+                        message: "Processing your scan...",
+                        newStatus: currentStatus,
+                        studentName: student.name,
+                        hostelName: student.hostelName,
+                        isDuplicate: true
+                    });
+                }
+            }
+        } catch (guardError) {
+            console.warn("⚠️ Scan guard check failed (skipping):", guardError);
+            // We continue anyway if the check fails to avoid blocking legitimate users
+        }
+
         if (currentStatus === "in") {
             // STUDENT IS GOING OUT (CHECK-OUT)
             // ⚡ FIX: Find ALL open passes and close them before starting a new one
@@ -158,6 +195,7 @@ export async function POST(request: NextRequest) {
                 hostelName: student.hostelName,
                 roomNumber: student.roomNumber,
                 registrationId: student.registrationId,
+                phoneNumber: student.phoneNumber, // Added phoneNumber
                 checkOutTime: now,
                 checkOutISTTime: istTime,
                 checkOutISTDate: istDate,
@@ -215,20 +253,27 @@ export async function POST(request: NextRequest) {
             let totalDuration = 0;
             let lastUpdatedPass: any = null;
 
-            for (const pass of openPasses) {
+            for (let i = 0; i < openPasses.length; i++) {
+                const pass = openPasses[i];
                 if (!pass) continue;
                 const diffMs = now.getTime() - new Date(pass.checkOutTime).getTime();
                 const durationMinutes = Math.round(diffMs / 60000);
                 totalDuration = durationMinutes; // Use the most relevant duration
 
-                lastUpdatedPass = await db.gatePasses.update(pass._id, {
+                // ⚡ FIX: Only mark the FIRST (most recent) record as "in"
+                // Subsequent ones are marked as "auto-resolved" to hide them from the dashboard
+                const isMainRecord = i === 0;
+
+                const updated = await db.gatePasses.update(pass._id, {
                     checkInTime: now,
                     checkInISTTime: istTime,
                     checkInISTDate: istDate,
-                    status: "in",
+                    status: isMainRecord ? "in" : "auto-resolved", // Only one "in" record
                     qrTokenUsedIn: token,
                     durationMinutes
                 });
+
+                if (isMainRecord) lastUpdatedPass = updated;
             }
 
             // Update student status to "in"

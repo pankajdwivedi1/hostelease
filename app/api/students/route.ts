@@ -184,37 +184,54 @@ export async function GET(request: NextRequest) {
 
     // ⚡ SYNC STATUS: Ensure 'out' status matches open gate passes for everyone in the list
     try {
-      const result = await db.gatePasses.list({ status: "out" }, { limit: 1000 });
-      openPasses = result.records || [];
-      if (openPasses.length > 0) {
-        // Create a map of studentId -> outingType for efficient lookup
-        activeOutings = new Map(openPasses.map((p: any) => {
-          const sId = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
-          return [sId?.toString(), p.type || "outing"];
-        }));
+      // 1. Fetch Open Passes
+      const gatePassResult = await db.gatePasses.list({ status: "out" }, { limit: 1000 });
+      openPasses = gatePassResult.records || [];
 
-        console.log(`[SYNC_DEBUG] Open Passes: ${openPasses?.length || 0}, Active Outings Map Size: ${activeOutings.size}`);
-        if (openPasses && openPasses.length > 0 && openPasses[0]) {
-          const firstPass = openPasses[0];
-          const sIdSample = typeof firstPass.studentId === 'object' ? ((firstPass.studentId as any)?._id || (firstPass.studentId as any)?.id) : firstPass.studentId;
-          console.log(`[SYNC_DEBUG] Sample Mapping: p.studentId=${JSON.stringify(firstPass.studentId)} -> sId=${sIdSample}`);
-        }
-
-        students.forEach((s: any) => {
-          const sId = (s.id || s._id)?.toString();
-          const outingType = activeOutings.get(sId);
-
-          if (outingType) {
-            s.studentStatus = "out";
-            s.outingType = outingType;
-            syncCount++;
-          } else {
-            s.studentStatus = "in";
-            s.outingType = undefined;
-          }
-        });
-        console.log(`[SYNC_DEBUG] Total Students Synced to 'out': ${syncCount}`);
+      // 2. Fetch Present IDs for Today (to detect stale gate passes)
+      const now = new Date();
+      // ⚡ Robust Date Parsing (Sync with attendance-summary API)
+      const istDateStr = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" });
+      const dateParts = istDateStr.split(/[^0-9]/).filter(p => p.length > 0);
+      let today = "";
+      if (dateParts.length >= 3) {
+        if (dateParts[0].length === 4) today = `${dateParts[0]}-${dateParts[1]}-${dateParts[2]}`; // YYYY-MM-DD
+        else today = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; // DD-MM-YYYY -> YYYY-MM-DD
+      } else {
+        today = now.toISOString().split('T')[0];
       }
+
+      console.log(`[SYNC_DEBUG] Today Date String determined as: ${today}`);
+      const attendanceSummary = await db.attendance.summary(today);
+      const presentIdsSet = new Set((attendanceSummary?.presentStudentIds || []).map((id: any) => id?.toString()));
+
+      // Create a map of studentId -> outingType for efficient lookup
+      activeOutings = new Map(openPasses.map((p: any) => {
+        const sId = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
+        return [sId?.toString(), p.type || "outing"];
+      }));
+
+      console.log(`[SYNC_DEBUG] Open Passes: ${openPasses?.length || 0}, Active Outings: ${activeOutings.size}, Present Students Today: ${presentIdsSet.size}`);
+
+      students.forEach((s: any) => {
+        const sId = (s.id || s._id)?.toString();
+        const outingType = activeOutings.get(sId);
+
+        // ⚡ DATA CONSISTENCY FIX:
+        // A student CANNOT be 'OUT' (red) if they are already marked 'Present' (today)!
+        const isActuallyPresent = presentIdsSet.has(sId);
+
+        if (outingType && !isActuallyPresent) {
+          s.studentStatus = "out";
+          s.outingType = outingType;
+          syncCount++;
+        } else {
+          // If they are present OR have no open pass, they are 'in'
+          s.studentStatus = "in";
+          s.outingType = undefined;
+        }
+      });
+      console.log(`[SYNC_DEBUG] Total Students Synced to 'out': ${syncCount}`);
     } catch (syncError) {
       console.warn("⚠️ Status sync failed in list API:", syncError);
     }

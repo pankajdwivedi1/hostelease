@@ -7,6 +7,7 @@ export interface IGatePass extends Document {
     hostelName: string;
     roomNumber: string;
     registrationId?: string;
+    phoneNumber?: string;
     // Check-out details
     checkOutTime: Date;
     checkOutISTTime: string; // Format: HH:mm:ss
@@ -54,6 +55,10 @@ const GatePassSchema = new Schema<IGatePass>(
             required: true,
         },
         registrationId: {
+            type: String,
+            required: false,
+        },
+        phoneNumber: {
             type: String,
             required: false,
         },

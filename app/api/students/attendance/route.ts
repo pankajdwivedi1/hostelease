@@ -108,9 +108,17 @@ export async function POST(request: NextRequest) {
         // 🔥 SECURITY RESTRICTION: Mandatory Check-In First
         // If a student is marked as "out" in the gate system, they must scan the entry QR code 
         // to come "inside" before the daily attendance can be marked.
-        if (!isTester && student.studentStatus === 'out') {
+        const openGatePass = await db.gatePasses.findOne({ studentId, status: "out" });
+        const isActuallyOut = student.studentStatus === 'out' || !!openGatePass;
+
+        if (!isTester && isActuallyOut) {
             return NextResponse.json(
-                { error: "Access Denied: You are currently marked as OUT in the gate pass system. Please scan the entry QR code at the main gate to check-in first before marking daily attendance." },
+                {
+                    error: "Access Denied: You are currently marked as OUT in the gate pass system. Please scan the entry QR code at the main gate to check-in first before marking daily attendance.",
+                    isActuallyOut: true,
+                    hasOpenPass: !!openGatePass,
+                    studentStatus: student.studentStatus
+                },
                 { status: 403 }
             );
         }

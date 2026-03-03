@@ -362,7 +362,7 @@ const CACHE_KEYS = {
   HOSTELS: 'hostelease_hostels_cache',
   TIMESTAMP: 'hostelease_cache_timestamp'
 };
-const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
+const CACHE_DURATION = 0; // ⚡ CACHE DISABLED: Enforces live data on every load/refresh
 
 export default function AdminDashboard({ title = "Admin Dashboard", showRemoveButton = false }: { title?: string; showRemoveButton?: boolean }) {
   const router = useRouter();
@@ -2080,16 +2080,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   // ===================== Supabase Realtime Subscription =====================
   // ⚡ Provides INSTANT updates for Staff (Dean/Warden/Developer)
   useEffect(() => {
-    // 1. Listen for Attendance, Permissions, Notifications, and Payments
+    // 1. Listen for Attendance, Permissions, Notifications, and Transactions
     const channel = supabase
       .channel('admin-dashboard-realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'attendance_logs' },
-        () => {
+        { event: '*', schema: 'public', table: 'attendance' }, // ⚡ Correct Table Name
+        (payload) => {
           console.log('⚡ Attendance Update Detected');
           fetchAttendanceSummary();
           if (currentTab === 'attendance') fetchAttendanceLogs();
+
+          // ⚡ SYNC: If attendance record is inserted, student MUST be 'in'
+          if (payload.eventType === 'INSERT' && payload.new && (payload.new as any).student_id) {
+            const sid = (payload.new as any).student_id;
+            setStudents(prev => prev.map(s =>
+              s.id === sid ? { ...s, studentStatus: 'in' } : s
+            ));
+          }
         }
       )
       .on(
@@ -2111,17 +2119,44 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'gate_passes' },
-        () => {
-          console.log('⚡ GatePass Update Detected');
+        (payload) => {
+          console.log('⚡ GatePass Update Detected:', payload.eventType);
           fetchAttendanceSummary(); // Affects IN/OUT counts
+
+          // ⚡ SYNC: Update student status (in/out) locally for instant UI update
+          if (payload.new && (payload.new as any).student_id && (payload.new as any).status) {
+            const sid = (payload.new as any).student_id;
+            const newStatus = (payload.new as any).status;
+            setStudents(prev => prev.map(s =>
+              s.id === sid ? { ...s, studentStatus: newStatus } : s
+            ));
+          }
         }
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'payments' },
+        { event: '*', schema: 'public', table: 'transactions' }, // ⚡ Corrected: 'transactions' instead of 'payments'
         () => {
           console.log('⚡ Payment Update Detected');
           if (currentTab === 'payments') fetchAdminPayments();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'students' },
+        (payload) => {
+          console.log('⚡ Student Profile Update Detected:', payload.eventType);
+          if (payload.eventType === 'INSERT') {
+            // New student registered! Refresh the list to update counts (757 -> 761 fix)
+            fetchStudents(true);
+          } else if (payload.eventType === 'UPDATE') {
+            const updated = payload.new as any;
+            setStudents(prev => prev.map(s =>
+              (s.id === updated._id || s.id === updated.id)
+                ? { ...s, studentStatus: updated.student_status || s.studentStatus, roomNumber: updated.room_number || s.roomNumber }
+                : s
+            ));
+          }
         }
       )
       .subscribe();
@@ -4600,8 +4635,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <h3 className="text-[11px] font-bold text-gray-900 leading-tight group-hover:text-blue-600 transition-colors">{student.name}</h3>
                                         <p className="text-[10px] text-gray-500 mt-0.5 truncate">{student.email}</p>
                                       </div>
-                                      <span className={`flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${student.studentStatus === 'out' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
-                                        {student.studentStatus || 'in'}
+                                      <span className={`flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${(student.studentStatus === 'out' && !presentStudentIds.includes(student.id)) ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
+                                        {(student.studentStatus === 'out' && !presentStudentIds.includes(student.id)) ? 'out' : 'in'}
                                       </span>
                                     </div>
 
@@ -8054,6 +8089,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           </div>
         </div>
       )}
+      <footer className="mt-8 py-6 border-t border-gray-100/50">
+        <div className="flex flex-col items-center gap-1.5 text-center">
+          <p className="text-[9px] sm:text-[11px] font-bold tracking-widest text-gray-400/80 uppercase">
+            &copy; 2026 HOSTELEASE. All Rights Reserved.
+          </p>
+          <p className="text-[8px] sm:text-[9px] font-medium text-gray-300 uppercase tracking-[0.15em] opacity-60">
+            Unauthorized copying, modification, or distribution is strictly prohibited
+          </p>
+        </div>
+      </footer>
     </div >
   );
 }

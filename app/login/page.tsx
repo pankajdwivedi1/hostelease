@@ -529,12 +529,13 @@ function LoginForm() {
             <footer className="w-full max-w-sm mt-2 sm:mt-4 pb-4 sm:pb-8">
               <div className="flex flex-col items-center space-y-2 sm:space-y-4 text-center">
                 <div className="space-y-1.5 sm:space-y-3">
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="h-px w-4 sm:w-6 bg-slate-200" />
-                    <p className="text-[8px] sm:text-[10px] font-bold tracking-[0.2em] text-slate-400 uppercase">
-                      &copy; 2026 Hostelease Cloud
+                  <div className="flex flex-col items-center gap-1">
+                    <p className="text-[8px] sm:text-[10px] font-bold tracking-[0.1em] text-slate-400 uppercase">
+                      &copy; 2026 HOSTELEASE. All Rights Reserved.
                     </p>
-                    <div className="h-px w-4 sm:w-6 bg-slate-200" />
+                    <p className="text-[7px] sm:text-[9px] font-medium text-slate-300 uppercase tracking-wider">
+                      Unauthorized copying, modification, or distribution is strictly prohibited
+                    </p>
                   </div>
 
                   <div className="group cursor-default">

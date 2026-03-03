@@ -27,6 +27,65 @@ export default function OutingHistoryPage() {
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
     const [isLoadingProfile, setIsLoadingProfile] = useState(false);
 
+    // Export Modal State
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [exportData, setExportData] = useState<any[]>([]);
+    const [isExporting, setIsExporting] = useState(false);
+
+    // Dynamic Columns for Export
+    const availableColumnsData = [
+        { id: "name", label: "Student Name", width: 25 },
+        { id: "phone", label: "Mobile", width: 15 },
+        { id: "regId", label: "Reg. ID", width: 18 },
+        { id: "erpId", label: "ERP ID", width: 18 },
+        { id: "hostel", label: "Hostel", width: 25 },
+        { id: "room", label: "Room", width: 10 },
+        { id: "outTime", label: "Out Time", width: 25 },
+        { id: "inTime", label: "In Time", width: 25 },
+        { id: "duration", label: "Duration", width: 12 },
+        { id: "status", label: "Status", width: 10 },
+        { id: "fatherName", label: "Father Name", width: 20 },
+        { id: "fatherNumber", label: "Father Mobile", width: 15 },
+        { id: "motherName", label: "Mother Name", width: 20 },
+        { id: "motherNumber", label: "Mother Mobile", width: 15 }
+    ];
+
+    const [selectedColumns, setSelectedColumns] = useState<Set<string>>(new Set([
+        "name", "phone", "regId", "erpId", "hostel", "room", "outTime", "inTime", "duration", "status"
+    ]));
+
+    const [columnOrder, setColumnOrder] = useState<string[]>(availableColumnsData.map(c => c.id));
+    const [draggedColumnId, setDraggedColumnId] = useState<string | null>(null);
+
+    const toggleColumn = (id: string) => {
+        const newSet = new Set(selectedColumns);
+        if (newSet.has(id)) {
+            if (newSet.size > 1) newSet.delete(id);
+        } else {
+            newSet.add(id);
+        }
+        setSelectedColumns(newSet);
+    };
+
+    const handleDragStart = (id: string) => {
+        setDraggedColumnId(id);
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+    };
+
+    const handleDrop = (id: string) => {
+        if (!draggedColumnId || draggedColumnId === id) return;
+        const oldIdx = columnOrder.indexOf(draggedColumnId);
+        const newIdx = columnOrder.indexOf(id);
+        const newOrder = [...columnOrder];
+        newOrder.splice(oldIdx, 1);
+        newOrder.splice(newIdx, 0, draggedColumnId);
+        setColumnOrder(newOrder);
+        setDraggedColumnId(null);
+    };
+
     const colleges = ["OIST", "OCT", "OCP", "OPM", "OIPR"];
 
     useEffect(() => {
@@ -103,7 +162,8 @@ export default function OutingHistoryPage() {
         }
     };
 
-    const handleExport = async () => {
+    const handleExportPreview = async () => {
+        setIsExporting(true);
         try {
             const params = new URLSearchParams({
                 limit: "10000",
@@ -119,82 +179,99 @@ export default function OutingHistoryPage() {
             const data = await response.json();
 
             if (data.success && data.records.length > 0) {
-                const workbook = new ExcelJS.Workbook();
-                const worksheet = workbook.addWorksheet("Outing History");
-
-                // Define Columns
-                worksheet.columns = [
-                    { header: "Student Name", key: "name", width: 25 },
-                    { header: "Mobile number", key: "phone", width: 15 },
-                    { header: "Registration ID", key: "regId", width: 18 },
-                    { header: "Hostel", key: "hostel", width: 25 },
-                    { header: "Room", key: "room", width: 10 },
-                    { header: "Out Time", key: "outTime", width: 22 },
-                    { header: "In Time", key: "inTime", width: 22 },
-                    { header: "Duration", key: "duration", width: 12 },
-                    { header: "Status", key: "status", width: 10 }
-                ];
-
-                // Add Data
-                data.records.forEach((r: any) => {
-                    worksheet.addRow({
-                        name: r.studentName,
-                        phone: r.phoneNumber || "",
-                        regId: r.registrationId,
-                        hostel: r.hostelName,
-                        room: r.roomNumber,
-                        outTime: `${r.checkOutISTTime} ${r.checkOutISTDate}`,
-                        inTime: r.status === 'in' ? `${r.checkInISTTime} ${r.checkInISTDate}` : "Still Outside",
-                        duration: formatDuration(r.durationMinutes),
-                        status: r.status === 'out' ? "OUT" : "IN"
-                    });
-                });
-
-                // Styling
-                const headerRow = worksheet.getRow(1);
-                headerRow.eachCell((cell) => {
-                    cell.font = { name: 'Cambria', size: 10, bold: true };
-                    cell.alignment = { vertical: 'middle', horizontal: 'center' };
-                    cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FFD3D3D3' } // Light Grey
-                    };
-                    cell.border = {
-                        top: { style: 'thin' },
-                        left: { style: 'thin' },
-                        bottom: { style: 'thin' },
-                        right: { style: 'thin' }
-                    };
-                });
-
-                worksheet.eachRow((row, rowNumber) => {
-                    if (rowNumber > 1) {
-                        row.eachCell((cell) => {
-                            cell.font = { name: 'Cambria', size: 10 };
-                            cell.alignment = { vertical: 'middle', horizontal: 'center' };
-                            cell.border = {
-                                top: { style: 'thin' },
-                                left: { style: 'thin' },
-                                bottom: { style: 'thin' },
-                                right: { style: 'thin' }
-                            };
-                        });
-                    }
-                });
-
-                // Generate Buffer and Download
-                const buffer = await workbook.xlsx.writeBuffer();
-                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                const url = window.URL.createObjectURL(blob);
-                const anchor = document.createElement('a');
-                anchor.href = url;
-                anchor.download = `Outing_History_${new Date().toISOString().split('T')[0]}.xlsx`;
-                anchor.click();
-                window.URL.revokeObjectURL(url);
+                setExportData(data.records);
+                setIsExportModalOpen(true);
             } else {
                 alert("No records found to export");
             }
+        } catch (error) {
+            console.error("Export failed:", error);
+            alert("Failed to fetch export data");
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const performDownload = async () => {
+        try {
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet("Outing History");
+
+            // Define Columns dynamically based on order and selection
+            const activeColumnObjects = columnOrder
+                .map(id => availableColumnsData.find(c => c.id === id))
+                .filter(col => col && selectedColumns.has(col.id));
+
+            worksheet.columns = activeColumnObjects.map(col => ({
+                header: col!.label,
+                key: col!.id,
+                width: col!.width
+            }));
+
+            // Add Data dynamically
+            exportData.forEach((r: any) => {
+                const row: any = {};
+                if (selectedColumns.has("name")) row.name = r.studentName;
+                if (selectedColumns.has("phone")) row.phone = r.phoneNumber || "";
+                if (selectedColumns.has("regId")) row.regId = r.registrationId;
+                if (selectedColumns.has("erpId")) row.erpId = r.erpId || "";
+                if (selectedColumns.has("hostel")) row.hostel = formatHostelDisplay(r.hostelName);
+                if (selectedColumns.has("room")) row.room = r.roomNumber;
+                if (selectedColumns.has("outTime")) row.outTime = `${r.checkOutISTTime} ${r.checkOutISTDate}`;
+                if (selectedColumns.has("inTime")) row.inTime = r.status === 'in' ? `${r.checkInISTTime} ${r.checkInISTDate}` : "Still Outside";
+                if (selectedColumns.has("duration")) row.duration = formatDuration(r.durationMinutes);
+                if (selectedColumns.has("status")) row.status = r.status === 'out' ? "OUT" : "IN";
+                if (selectedColumns.has("fatherName")) row.fatherName = r.fatherName || "";
+                if (selectedColumns.has("fatherNumber")) row.fatherNumber = r.fatherNumber || "";
+                if (selectedColumns.has("motherName")) row.motherName = r.motherName || "";
+                if (selectedColumns.has("motherNumber")) row.motherNumber = r.motherNumber || "";
+
+                worksheet.addRow(row);
+            });
+
+            // Styling
+            const headerRow = worksheet.getRow(1);
+            headerRow.eachCell((cell) => {
+                cell.font = { name: 'Cambria', size: 10, bold: true };
+                cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFD3D3D3' } // Light Grey
+                };
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                };
+            });
+
+            worksheet.eachRow((row, rowNumber) => {
+                if (rowNumber > 1) {
+                    row.eachCell((cell) => {
+                        cell.font = { name: 'Cambria', size: 10 };
+                        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                        cell.border = {
+                            top: { style: 'thin' },
+                            left: { style: 'thin' },
+                            bottom: { style: 'thin' },
+                            right: { style: 'thin' }
+                        };
+                    });
+                }
+            });
+
+            // Generate Buffer and Download
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = `Outing_History_${new Date().toISOString().split('T')[0]}.xlsx`;
+            anchor.click();
+            window.URL.revokeObjectURL(url);
+            setIsExportModalOpen(false);
         } catch (error) {
             console.error("Export failed:", error);
             alert("Export failed. Please try again.");
@@ -243,10 +320,16 @@ export default function OutingHistoryPage() {
 
                 <div className="flex items-center gap-3 sm:gap-6">
                     <button
-                        onClick={handleExport}
-                        className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-600/10 border border-blue-500/20 rounded-xl text-blue-400 text-[10px] sm:text-xs font-black uppercase tracking-widest hover:bg-blue-600/20 transition-all active:scale-95"
+                        onClick={handleExportPreview}
+                        disabled={isExporting}
+                        className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-600/10 border border-blue-500/20 rounded-xl text-blue-400 text-[10px] sm:text-xs font-black uppercase tracking-widest hover:bg-blue-600/20 transition-all active:scale-95 disabled:opacity-50"
                     >
-                        <span className="hidden sm:inline">📥</span> Export
+                        {isExporting ? (
+                            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                            <span className="hidden sm:inline">📥</span>
+                        )}
+                        Export
                     </button>
                     <div className="hidden sm:flex flex-col items-end">
                         <span className="text-[10px] text-white/30 font-black uppercase tracking-widest">Total Logs</span>
@@ -518,7 +601,7 @@ export default function OutingHistoryPage() {
                                 <div className="px-4 sm:px-10 pb-8 grid grid-cols-2 lg:grid-cols-3 gap-x-4 sm:gap-x-12 gap-y-4 sm:gap-y-8 bg-gray-50/50 pt-6 sm:pt-8 border-t border-gray-100 flex-1">
                                     {[
                                         { label: "College Name", value: selectedStudent.collegeName || "N/A", icon: "🎓" },
-                                        { label: "ERP ID", value: selectedStudent.erpInformation || "N/A", icon: "🆔", valueClass: "text-blue-600" },
+                                        { label: "ERP ID", value: selectedStudent.erpId || selectedStudent.erpInformation || "N/A", icon: "🆔", valueClass: "text-blue-600" },
                                         { label: "Branch", value: selectedStudent.branch || "N/A", icon: "📚" },
                                         { label: "Year & Sem", value: `${selectedStudent.year || "N/A"} • ${selectedStudent.semester || "N/A"}`, icon: "📅" },
                                         { label: "Mobile", value: selectedStudent.phoneNumber || "N/A", icon: "📞" },
@@ -552,6 +635,139 @@ export default function OutingHistoryPage() {
                                 </button>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Export Preview Modal */}
+            {isExportModalOpen && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in fade-in transition-all">
+                    <div className="bg-[#121421] rounded-3xl w-full max-w-6xl h-[85vh] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-white/10 flex flex-col relative animate-in zoom-in-95">
+                        <div className="px-8 py-5 border-b border-white/10 bg-[#161a29]">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h2 className="text-xl font-black text-white m-0">📥 Export Data Preview</h2>
+                                    <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">Reviewing {exportData.length} records before download</p>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <button
+                                        onClick={() => setIsExportModalOpen(false)}
+                                        className="px-6 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold transition-all"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={performDownload}
+                                        className="px-8 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-black uppercase tracking-widest transition-all shadow-xl shadow-blue-500/20 active:scale-95"
+                                    >
+                                        🔥 Confirm & Download
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col gap-3 p-4 bg-black/40 rounded-2xl border border-white/10">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em]">1. Select Columns & Drag to Reorder</span>
+                                    <span className="text-[9px] text-blue-400/60 font-medium italic">Tip: Drag items left/right to change position in Excel</span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {columnOrder.map((colId) => {
+                                        const col = availableColumnsData.find(c => c.id === colId)!;
+                                        const isSelected = selectedColumns.has(col.id);
+                                        return (
+                                            <div
+                                                key={col.id}
+                                                draggable
+                                                onDragStart={() => handleDragStart(col.id)}
+                                                onDragOver={handleDragOver}
+                                                onDrop={() => handleDrop(col.id)}
+                                                className={`group flex items-center gap-2 px-3 py-2 rounded-xl border transition-all cursor-move select-none animate-in fade-in duration-300 ${isSelected
+                                                    ? "bg-blue-600/20 border-blue-500/40 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.1)]"
+                                                    : "bg-white/5 border-white/10 text-white/20 opacity-60 hover:opacity-100"
+                                                    } ${draggedColumnId === col.id ? "opacity-30 scale-95 border-dashed border-blue-500" : ""}`}
+                                            >
+                                                <div className="flex flex-col gap-0.5 opacity-40 group-hover:opacity-100 transition-opacity">
+                                                    <div className="w-2.5 h-0.5 bg-current rounded-full" />
+                                                    <div className="w-2.5 h-0.5 bg-current rounded-full" />
+                                                    <div className="w-2.5 h-0.5 bg-current rounded-full" />
+                                                </div>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isSelected}
+                                                    onChange={(e) => { e.stopPropagation(); toggleColumn(col.id); }}
+                                                    className="w-3.5 h-3.5 rounded-md border-white/20 bg-transparent text-blue-600 focus:ring-0 cursor-pointer"
+                                                />
+                                                <span className="text-[10px] font-bold uppercase tracking-tight">{col.label}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-auto custom-scrollbar p-0">
+                            <table className="w-full text-left border-collapse min-w-max">
+                                <thead className="sticky top-0 bg-[#121421] z-10">
+                                    <tr>
+                                        {columnOrder.map((colId) => {
+                                            const col = availableColumnsData.find(c => c.id === colId)!;
+                                            return selectedColumns.has(col.id) && (
+                                                <th key={col.id} className="px-6 py-5 text-[10px] font-black text-white/30 uppercase tracking-[0.2em] border-b border-white/5 bg-[#121421]">{col.label}</th>
+                                            );
+                                        })}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {exportData.map((r, i) => (
+                                        <tr key={i} className="hover:bg-white/5 transition-colors group">
+                                            {columnOrder.map((colId) => {
+                                                if (!selectedColumns.has(colId)) return null;
+
+                                                switch (colId) {
+                                                    case "name": return <td key="name" className="px-6 py-4 text-xs font-bold text-white border-b border-white/5">{r.studentName}</td>;
+                                                    case "phone": return <td key="phone" className="px-6 py-4 text-xs font-medium text-blue-400 border-b border-white/5 font-mono">{r.phoneNumber || r.phone || "---"}</td>;
+                                                    case "regId": return <td key="regId" className="px-6 py-4 text-[10px] font-bold text-white/40 border-b border-white/5 uppercase">{r.registrationId}</td>;
+                                                    case "erpId": return <td key="erpId" className="px-6 py-4 text-[10px] font-bold text-indigo-400/80 border-b border-white/5 uppercase">{r.erpId || "---"}</td>;
+                                                    case "hostel": return <td key="hostel" className="px-6 py-4 text-[10px] font-bold text-white/70 border-b border-white/5">{formatHostelDisplay(r.hostelName)}</td>;
+                                                    case "room": return <td key="room" className="px-6 py-4 text-xs font-bold text-white/90 border-b border-white/5">{r.roomNumber}</td>;
+                                                    case "outTime": return (
+                                                        <td key="outTime" className="px-6 py-4 text-[11px] font-medium text-white/40 border-b border-white/5">
+                                                            <span className="text-white/80">{r.checkOutISTTime}</span> <br /> {r.checkOutISTDate}
+                                                        </td>
+                                                    );
+                                                    case "inTime": return (
+                                                        <td key="inTime" className="px-6 py-4 text-[11px] font-medium text-white/40 border-b border-white/5">
+                                                            {r.status === 'in' ? (
+                                                                <>
+                                                                    <span className="text-green-400">{r.checkInISTTime}</span> <br /> {r.checkInISTDate}
+                                                                </>
+                                                            ) : "---"}
+                                                        </td>
+                                                    );
+                                                    case "duration": return (
+                                                        <td key="duration" className="px-6 py-4 text-[10px] font-black border-b border-white/5">
+                                                            <span className={r.status === 'out' ? 'text-red-400' : 'text-blue-400'}>{formatDuration(r.durationMinutes)}</span>
+                                                        </td>
+                                                    );
+                                                    case "status": return (
+                                                        <td key="status" className="px-6 py-4 border-b border-white/5">
+                                                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${r.status === 'out' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-green-500/10 text-green-500 border border-green-500/20'}`}>
+                                                                {r.status === 'out' ? 'OUT' : 'IN'}
+                                                            </span>
+                                                        </td>
+                                                    );
+                                                    case "fatherName": return <td key="fatherName" className="px-6 py-4 text-[10px] font-bold text-white/60 border-b border-white/5">{r.fatherName || "---"}</td>;
+                                                    case "fatherNumber": return <td key="fatherNumber" className="px-6 py-4 text-[10px] font-medium text-blue-400/70 border-b border-white/5 font-mono">{r.fatherNumber || "---"}</td>;
+                                                    case "motherName": return <td key="motherName" className="px-6 py-4 text-[10px] font-bold text-white/60 border-b border-white/5">{r.motherName || "---"}</td>;
+                                                    case "motherNumber": return <td key="motherNumber" className="px-6 py-4 text-[10px] font-medium text-blue-400/70 border-b border-white/5 font-mono">{r.motherNumber || "---"}</td>;
+                                                    default: return null;
+                                                }
+                                            })}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             )}

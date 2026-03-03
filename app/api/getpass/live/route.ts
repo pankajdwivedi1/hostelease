@@ -12,6 +12,7 @@ import { db } from "@/lib/dbAdapter";
  */
 export async function GET(request: NextRequest) {
     try {
+        const source = await db.getDbSource ? await db.getDbSource() : 'SUPABASE'; // Fallback to Supabase
         const searchParams = request.nextUrl.searchParams;
         const hostelName = searchParams.get("hostelName");
         const isMinimal = searchParams.get("minimal") === "true";
@@ -42,8 +43,20 @@ export async function GET(request: NextRequest) {
 
         // ⚡ OPTIMIZATION: Heartbeat Mode (Extremely Low Bandwidth)
         if (isMinimal) {
+            const returnsFilters: any = {
+                status: "in",
+                startDate: utcTodayStart.toISOString()
+            };
+            if (hostelName && hostelName !== "all") {
+                returnsFilters.hostelName = hostelName;
+            }
+
             // Only fetch the latest 5 scans (tiny data packet)
-            const { records: miniRecent } = await db.gatePasses.list(recentFilters, { limit: 5 });
+            const { records: miniRecent } = await db.gatePasses.list(returnsFilters, {
+                limit: 5,
+                sortField: source === 'SUPABASE' ? 'check_in_time' : 'checkInTime',
+                sortOrder: 'desc'
+            });
             return NextResponse.json({
                 success: true,
                 minimal: true,
@@ -76,7 +89,19 @@ export async function GET(request: NextRequest) {
             db.gatePasses.list({ ...filters, light: true }, { limit: 500 })
         ]);
 
-        const { records: recentActivity } = await db.gatePasses.list(recentFilters, { limit: 20 });
+        const returnsFilters: any = {
+            status: "in",
+            startDate: utcTodayStart.toISOString()
+        };
+        if (hostelName && hostelName !== "all") {
+            returnsFilters.hostelName = hostelName;
+        }
+
+        const { records: recentActivity } = await db.gatePasses.list(returnsFilters, {
+            limit: 20,
+            sortField: source === 'SUPABASE' ? 'check_in_time' : 'checkInTime',
+            sortOrder: 'desc'
+        });
 
         // Calculate split from the FULL list (lightweight records) instead of the limited profile list
         const leaveCount = fullOutListForBreakdown.records.filter((p: any) => p.type === "leave").length;
