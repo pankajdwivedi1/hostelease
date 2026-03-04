@@ -15,6 +15,14 @@ const LocationPickerMap = dynamic(() => import("./LocationPickerMap"), {
   loading: () => <div className="h-64 w-full bg-gray-100 animate-pulse rounded-xl flex items-center justify-center text-gray-400 text-xs">Loading Map...</div>
 });
 
+const GateDesktopPage = dynamic(() => import("../getpass/page"), {
+  ssr: false,
+  loading: () => <div className="fixed inset-0 bg-[#0a0a1a] z-[9999] flex flex-col items-center justify-center gap-4 text-white">
+    <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+    <p className="font-bold tracking-widest animate-pulse">BOOTING LIVE GATE...</p>
+  </div>
+});
+
 
 const FieldEnforcementComponent = dynamic(() => import("./FieldEnforcementComponent"), {
   ssr: false,
@@ -448,6 +456,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [exportPreviewData, setExportPreviewData] = useState<any[]>([]);
   const [exportType, setExportType] = useState<'students' | 'attendance'>('students');
   const [isListExpanded, setIsListExpanded] = useState(false);
+  const [showGatepassOverlay, setShowGatepassOverlay] = useState(false);
   const [showAllPresent, setShowAllPresent] = useState(false);
   const [locationVerificationResults, setLocationVerificationResults] = useState<{
     name: string;
@@ -2077,109 +2086,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   }, [selectedDate, attendanceHostelFilter, currentTab, paymentStatusFilter, paymentSearch]);
 
-  // ===================== Supabase Realtime Subscription =====================
-  // ⚡ Provides INSTANT updates for Staff (Dean/Warden/Developer)
-  useEffect(() => {
-    // 1. Listen for Attendance, Permissions, Notifications, and Transactions
-    const channel = supabase
-      .channel('admin-dashboard-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'attendance' }, // ⚡ Correct Table Name
-        (payload) => {
-          console.log('⚡ Attendance Update Detected');
-          fetchAttendanceSummary();
-          if (currentTab === 'attendance') fetchAttendanceLogs();
-
-          // ⚡ SYNC: If attendance record is inserted, student MUST be 'in'
-          if (payload.eventType === 'INSERT' && payload.new && (payload.new as any).student_id) {
-            const sid = (payload.new as any).student_id;
-            setStudents(prev => prev.map(s =>
-              s.id === sid ? { ...s, studentStatus: 'in' } : s
-            ));
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'permissions' },
-        () => {
-          console.log('⚡ Permission Update Detected');
-          fetchPermissions();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notifications' },
-        () => {
-          console.log('⚡ Notification Update Detected');
-          fetchAdminNotifications();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'gate_passes' },
-        (payload) => {
-          console.log('⚡ GatePass Update Detected:', payload.eventType);
-          fetchAttendanceSummary(); // Affects IN/OUT counts
-
-          // ⚡ SYNC: Update student status (in/out) locally for instant UI update
-          if (payload.new && (payload.new as any).student_id && (payload.new as any).status) {
-            const sid = (payload.new as any).student_id;
-            const newStatus = (payload.new as any).status;
-            setStudents(prev => prev.map(s =>
-              s.id === sid ? { ...s, studentStatus: newStatus } : s
-            ));
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'transactions' }, // ⚡ Corrected: 'transactions' instead of 'payments'
-        () => {
-          console.log('⚡ Payment Update Detected');
-          if (currentTab === 'payments') fetchAdminPayments();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'students' },
-        (payload) => {
-          console.log('⚡ Student Profile Update Detected:', payload.eventType);
-          if (payload.eventType === 'INSERT') {
-            // New student registered! Refresh the list to update counts (757 -> 761 fix)
-            fetchStudents(true);
-          } else if (payload.eventType === 'UPDATE') {
-            const updated = payload.new as any;
-            setStudents(prev => prev.map(s =>
-              (s.id === updated._id || s.id === updated.id)
-                ? { ...s, studentStatus: updated.student_status || s.studentStatus, roomNumber: updated.room_number || s.roomNumber }
-                : s
-            ));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentTab, selectedDate]);
+  // ⚡ OPTIMIZATION: Supabase Realtime Subscription removed to save massive bandwidth. 
+  // Gatepass remains live, but other dashboards now use manual refresh.
 
   useEffect(() => {
-    // ⚡ OPTIMIZATION: Safety refresh every 5 minutes (was 20s)
-    // Realtime now handles the "Instant" part.
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        fetchPermissions();
-        fetchAttendanceSummary();
-        if (currentTab === 'attendance') fetchAttendanceLogs();
-        if (currentTab === 'messaging') fetchAdminNotifications();
-        if (currentTab === 'payments') fetchAdminPayments();
-      }
-    }, 300000); // 5 Minutes
-
-    return () => clearInterval(interval);
+    // ⚡ OPTIMIZATION: Periodic polling removed to save massive bandwidth.
+    // Data is now fetched only on initial load or manual refresh.
+    console.log("Dashboard loaded in bandwidth-optimized mode.");
   }, [currentTab, selectedDate, paymentStatusFilter, paymentSearch]);
 
   // Click outside to collapse expanded sections
@@ -2920,6 +2833,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <LiveDbSwitch />
                   )}
 
+                  <button
+                    onClick={() => {
+                      fetchPermissions();
+                      fetchAttendanceSummary();
+                      fetchStudents(true);
+                      if (currentTab === 'attendance') fetchAttendanceLogs();
+                      if (currentTab === 'messaging') fetchAdminNotifications();
+                      if (currentTab === 'payments') fetchAdminPayments();
+                    }}
+                    className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95"
+                  >
+                    🔄 Sync Data
+                  </button>
+
 
                   <button
                     onClick={() => setShowAllStudents(true)}
@@ -3085,7 +3012,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </button>
                 {(title === "Developer Dashboard" || title === "Dean Dashboard") && (
                   <button
-                    onClick={() => window.open('/getpass', '_blank')}
+                    onClick={() => setShowGatepassOverlay(true)}
                     className="flex-1 py-1.5 md:py-2.5 rounded-lg text-[11px] md:text-sm font-black transition-all text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-1.5 group"
                   >
                     <div className="relative flex h-1.5 w-1.5 md:h-2 md:w-2">
@@ -8099,6 +8026,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           </p>
         </div>
       </footer>
+
+      {/* ⚡ LIVE GATEPASS OVERLAY */}
+      {showGatepassOverlay && (
+        <div className="fixed inset-0 z-[9999] bg-[#0a0a1a] overflow-y-auto animate-in fade-in duration-300">
+          <GateDesktopPage onClose={() => setShowGatepassOverlay(false)} />
+        </div>
+      )}
     </div >
   );
 }

@@ -246,7 +246,7 @@ interface LiveData {
 }
 
 // ===================== Main Component =====================
-export default function GateDesktopPage() {
+export default function GateDesktopPage({ onClose }: { onClose?: () => void }) {
     const router = useRouter();
     const [qrData, setQrData] = useState<string>("");
     const [qrToken, setQrToken] = useState<string>("");
@@ -626,17 +626,30 @@ export default function GateDesktopPage() {
     };
 
     return (
-        <div className="flex flex-col md:flex-row w-screen min-h-screen md:h-screen bg-[#0a0a1a] font-sans text-white overflow-y-auto md:overflow-hidden">
+        <div className="flex flex-col md:flex-row w-screen min-h-screen md:h-screen bg-[#0a0a1a] font-sans text-white overflow-y-auto scrollbar-thin scrollbar-thumb-blue-500/20 scrollbar-track-transparent">
             {/* =================== LEFT PANEL: QR CODE =================== */}
-            <div className="w-full md:w-[42%] flex flex-col items-center justify-center gap-6 p-6 md:p-6 bg-gradient-to-b from-[#0a0a1a] via-[#0d1420] to-[#0a0a1a] border-b md:border-b-0 md:border-r border-[#00ff881a] relative shrink-0 transition-all duration-300 overflow-hidden">
+            <div className="w-full md:w-[42%] flex flex-col items-center justify-center gap-6 p-6 md:p-6 bg-gradient-to-b from-[#0a0a1a] via-[#0d1420] to-[#0a0a1a] border-b md:border-b-0 md:border-r border-[#00ff881a] relative shrink-0 transition-all duration-300 overflow-visible">
 
                 {/* ── TOP ROW: Logo left + Instructions right ── */}
                 <div className="flex items-start justify-between w-full mb-2">
                     {/* Logo block */}
                     <div className="flex flex-col">
-                        <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-br from-[#00ff88] to-[#00cc6a] bg-clip-text text-transparent tracking-widest m-0 leading-tight">
-                            GATEPASS
-                        </h1>
+                        <div className="flex items-center gap-3">
+                            {onClose && (
+                                <button
+                                    onClick={onClose}
+                                    className="md:hidden p-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400 active:scale-90 transition-all"
+                                    title="Back to Dashboard"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                </button>
+                            )}
+                            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-br from-[#00ff88] to-[#00cc6a] bg-clip-text text-transparent tracking-widest m-0 leading-tight">
+                                GATEPASS
+                            </h1>
+                        </div>
                         <div className="flex flex-wrap items-center gap-2 mt-1">
                             <span className="inline-block px-2 py-0.5 bg-[rgba(0,255,136,0.1)] border border-[rgba(0,255,136,0.3)] rounded-full text-[10px] md:text-xs text-[#00ff88] font-bold">
                                 📍 {gateName}
@@ -719,7 +732,7 @@ export default function GateDesktopPage() {
             </div>
 
             {/* =================== RIGHT PANEL: LIVE OUTING HISTORY =================== */}
-            <div className="w-full md:w-[58%] flex flex-col p-6 md:p-8 bg-gradient-to-b from-[#0d1117] to-[#0a0e14] overflow-hidden min-h-[500px] md:h-full">
+            <div className="w-full md:w-[58%] flex flex-col p-6 md:p-8 bg-gradient-to-b from-[#0d1117] to-[#0a0e14] min-h-[500px] md:h-full md:overflow-hidden overflow-visible">
                 {/* Summary Cards */}
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-2">
                     <h2 className="text-lg md:text-xl font-bold text-white m-0 flex items-center gap-2">
@@ -738,6 +751,15 @@ export default function GateDesktopPage() {
                             <span className="text-[10px] uppercase tracking-wider">Manual Entry</span>
                             <span className="text-sm">⌨️</span>
                         </button>
+                        {onClose && (
+                            <button
+                                onClick={onClose}
+                                className="hidden md:flex bg-[rgba(59,130,246,0.1)] border border-[rgba(59,130,246,0.3)] text-[#60a5fa] px-4 py-1.5 rounded-xl items-center gap-2 font-black transition-all hover:bg-[rgba(59,130,246,0.2)] active:scale-95 shadow-[0_0_15px_rgba(59,130,246,0.15)] group"
+                            >
+                                <span className="text-sm transition-transform group-hover:-translate-x-1">🔙</span>
+                                <span className="text-[10px] uppercase tracking-wider">Back Dashboard</span>
+                            </button>
+                        )}
                         <button
                             onClick={handleLogout}
                             className="bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] text-[#ff6b6b] px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-bold transition-all hover:bg-[rgba(255,68,68,0.2)] active:scale-95"

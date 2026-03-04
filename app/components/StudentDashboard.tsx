@@ -610,12 +610,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             const initialNotifTimer = setTimeout(fetchStudentNotifications, 3000);
 
             // ⚡ OPTIMIZATION: 3-minute interval for students (saves battery & massive bandwidth)
-            const notifInterval = setInterval(() => {
-                // Only fetch if the page is visible to the student
-                if (document.visibilityState === 'visible') {
-                    fetchStudentNotifications();
-                }
-            }, 180000);
+            // ⚡ OPTIMIZATION: Background polling removed to save massive bandwidth. 
+            // Student can pull-to-refresh to see new notifications.
 
             // Add simple logic to refetch when student returns to app after a while
             const handleVisibilityChange = () => {
@@ -626,7 +622,6 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             document.addEventListener('visibilitychange', handleVisibilityChange);
 
             return () => {
-                clearInterval(notifInterval);
                 clearTimeout(initialNotifTimer);
                 document.removeEventListener('visibilitychange', handleVisibilityChange);
             };
@@ -777,11 +772,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                 fetchPermissions();
 
                 // Refresh permissions periodically (⚡ OPTIMIZED: 3 minutes instead of 30s)
-                permissionInterval = setInterval(() => {
-                    if (document.visibilityState === 'visible') {
-                        fetchPermissions();
-                    }
-                }, 180000);
+                // ⚡ OPTIMIZATION: Periodic polling removed to save massive bandwidth.
+                // Profile & Permissions update on initial load or manual refresh.
 
                 // Insta-refresh when student returns to app
                 const handleVisibilityChange = () => {
@@ -808,7 +800,6 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         return () => {
             isMounted = false;
             unsubscribe();
-            if (permissionInterval) clearInterval(permissionInterval);
             // Visibility listener clean up is tricky if added dynamically, 
             // but we've defined handleVisibilityChange inside loadData.
             // Ideally we should move it to effect scope.
