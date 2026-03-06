@@ -370,7 +370,7 @@ const CACHE_KEYS = {
   HOSTELS: 'hostelease_hostels_cache',
   TIMESTAMP: 'hostelease_cache_timestamp'
 };
-const CACHE_DURATION = 0; // ⚡ CACHE DISABLED: Enforces live data on every load/refresh
+const CACHE_DURATION = 1800000; // ⚡ CACHE ENABLED: 30-minute TTL to save bandwidth across tab switches
 
 export default function AdminDashboard({ title = "Admin Dashboard", showRemoveButton = false }: { title?: string; showRemoveButton?: boolean }) {
   const router = useRouter();
@@ -400,6 +400,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
   const [attendanceLogsLoading, setAttendanceLogsLoading] = useState(false);
   const [adminNotifications, setAdminNotifications] = useState<DBNotification[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null); // ⚡ NEW: Tracking data freshness
   const [editingNotificationId, setEditingNotificationId] = useState<string | null>(null);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [showEditStudentModal, setShowEditStudentModal] = useState(false);
@@ -1731,6 +1732,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           permissions: []
         }));
         setStudents(formattedStudents);
+        setLastUpdated(new Date());
 
         try {
           localStorage.setItem(CACHE_KEYS.STUDENTS, JSON.stringify(formattedStudents));
@@ -1746,15 +1748,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const fetchPermissions = async () => {
+  const fetchPermissions = async (forceRefresh = false) => {
     try {
+      // ⚡ OPTIMIZATION: Check cache for Permissions
+      if (!forceRefresh) {
+        const cached = sessionStorage.getItem('hostelease_permissions_cache');
+        if (cached) {
+          setPermissions(JSON.parse(cached));
+          return;
+        }
+      }
+
       // ⚡ OPTIMIZED: Fetch light permissions data (no images) to save massive bandwidth
       const response = await fetch("/api/permissions?light=true", { cache: "no-store" });
       const data = await response.json();
 
       // Handle both success and error responses
       if (data.permissions !== undefined) {
-        setPermissions(Array.isArray(data.permissions) ? data.permissions : []);
+        const list = Array.isArray(data.permissions) ? data.permissions : [];
+        setPermissions(list);
+        sessionStorage.setItem('hostelease_permissions_cache', JSON.stringify(list));
       } else if (!response.ok) {
         console.warn(`Permissions API returned status ${response.status}`);
         setPermissions([]);
@@ -1949,6 +1962,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           setSelectedStudent({ ...selectedStudent, isProfileLocked: !currentStatus });
         }
         alert(`Profile ${!currentStatus ? 'Locked' : 'Unlocked'} successfully!`);
+        // 🔄 REFRESH CACHE
+        fetchStudents(true);
       }
     } catch (error) {
       console.error("Error toggling profile lock:", error);
@@ -2076,11 +2091,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   }, [title]);
 
   useEffect(() => {
-    fetchAttendanceSummary();
-    if (currentTab === "attendance") {
+    // ⚡ OPTIMIZATION: Tab Persistence
+    // Only fetch if tab changed AND we don't have data yet OR if filters changed.
+    const shouldFetchSummary = !attendanceSummary || Object.keys(attendanceSummary).length === 0;
+    if (shouldFetchSummary) fetchAttendanceSummary();
+
+    if (currentTab === "attendance" && (!attendanceLogs || attendanceLogs.length === 0)) {
       fetchAttendanceLogs();
     }
-    if (currentTab === 'payments') {
+    if (currentTab === 'payments' && (!payments || payments.length === 0)) {
       fetchAdminPayments();
       fetchBankSettings();
     }
@@ -2243,8 +2262,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      // ⚡ CLEAR ALL CACHES ON LOGOUT
       localStorage.removeItem("userType");
       localStorage.removeItem("firebaseUID");
+      localStorage.removeItem(CACHE_KEYS.STUDENTS);
+      localStorage.removeItem(CACHE_KEYS.HOSTELS);
+      localStorage.removeItem(CACHE_KEYS.TIMESTAMP);
+      sessionStorage.removeItem('hostelease_permissions_cache');
+
       router.push("/login?logout=success");
     } catch (error) {
       console.error("Logout error:", error);
@@ -2265,12 +2290,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
 
       const data = JSON.parse(await response.text() || "{}");
-
       setSelectedStudent(null);
       setShowDeleteConfirm(false);
-      setSelectedStudent(null);
-      setShowDeleteConfirm(false);
-      await Promise.all([fetchPermissions(), fetchStudents(true)]);
+      await Promise.all([fetchPermissions(true), fetchStudents(true)]);
     } catch (error: any) {
       console.error("Error deleting student:", error);
       alert(error.message || "Failed to delete student. Please try again.");
@@ -2305,6 +2327,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
       setShowAttendanceModeSelector(false);
       alert(`Attendance Mode Updated to: ${mode}`);
+      // 🔄 REFRESH CACHE: Ensure the updated mode is stored locally
+      fetchStudents(true);
     } catch (error) {
       console.error("Error updating attendance mode:", error);
       alert("Failed to update attendance mode");
@@ -2747,7 +2771,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       {studentsLoading ? (
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></span>
                       ) : (
-                        <p className="text-sm text-secondary">{filteredStudents.length} Students</p>
+                        <div className="flex flex-col">
+                          <p className="text-sm text-secondary">{filteredStudents.length} Students</p>
+                          {lastUpdated && (
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                              Updated: {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -2835,12 +2866,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                   <button
                     onClick={() => {
-                      fetchPermissions();
+                      // ⚡ FORCE REFRESH: Manually bypass all caches
+                      sessionStorage.removeItem('hostelease_permissions_cache');
+                      fetchPermissions(true);
+                      fetchHostels(true);
                       fetchAttendanceSummary();
                       fetchStudents(true);
                       if (currentTab === 'attendance') fetchAttendanceLogs();
                       if (currentTab === 'messaging') fetchAdminNotifications();
-                      if (currentTab === 'payments') fetchAdminPayments();
+                      if (currentTab === 'payments') {
+                        fetchAdminPayments();
+                        fetchBankSettings();
+                      }
+                      setLastUpdated(new Date());
                     }}
                     className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95"
                   >

@@ -383,7 +383,7 @@ export default function GateDesktopPage({ onClose }: { onClose?: () => void }) {
 
     // ⚡ CLEANUP: fetchActivityHeartbeat removed. Realtime is now used.
 
-    // ===================== Timer: Rotate QR every 10 seconds =====================
+    // ===================== Timer: Rotate QR every 30 seconds (Optimized for Bandwidth) =====================
     useEffect(() => {
         fetchNewQR();
         const qrInterval = setInterval(() => {
@@ -391,20 +391,21 @@ export default function GateDesktopPage({ onClose }: { onClose?: () => void }) {
             if (document.visibilityState === 'visible') {
                 fetchNewQR();
             }
-        }, 10000); // 10 seconds (Standard Security Window)
+        }, 30000); // 30 seconds (Balances Security and Bandwidth)
         return () => clearInterval(qrInterval);
     }, [fetchNewQR]);
 
-    // ===================== Timer: Refresh live data every 60 seconds =====================
+    // ===================== Timer: Refresh live data every 5 minutes =====================
     useEffect(() => {
         // ⚡ Initial load is ALWAYS FULL for instant visibility
         fetchLiveData(false);
         const liveInterval = setInterval(() => {
             if (document.visibilityState === 'visible') {
-                // Background updates are MINIMAL to save 90% bandwidth
+                // Background updates are MINIMAL and infrequent (5m) to save 90% bandwidth
+                // Realtime handles the instant updates for scans.
                 fetchLiveData(true);
             }
-        }, 60000);
+        }, 300000); // 5 Minutes (Massive Bandwidth Saving)
         return () => clearInterval(liveInterval);
     }, [fetchLiveData]);
 
@@ -444,7 +445,7 @@ export default function GateDesktopPage({ onClose }: { onClose?: () => void }) {
         const countdownInterval = setInterval(() => {
             // Only countdown if page is active
             if (document.visibilityState === 'visible') {
-                setTimeLeft((prev) => (prev > 0 ? prev - 1 : 10));
+                setTimeLeft((prev) => (prev > 0 ? prev - 1 : 30));
             }
             setCurrentTime(new Date());
         }, 1000);
@@ -684,7 +685,7 @@ export default function GateDesktopPage({ onClose }: { onClose?: () => void }) {
                     <div className="flex items-center justify-center gap-3 md:gap-4 w-full px-2">
                         {/* Timer */}
                         <div className="scale-75 md:scale-100 origin-center shrink-0">
-                            <RectangleTimer timeLeft={timeLeft} maxTime={10} />
+                            <RectangleTimer timeLeft={timeLeft} maxTime={30} />
                         </div>
 
                         {/* Divider */}
