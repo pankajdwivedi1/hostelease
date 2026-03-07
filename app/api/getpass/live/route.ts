@@ -12,7 +12,7 @@ import { db } from "@/lib/dbAdapter";
  */
 export async function GET(request: NextRequest) {
     try {
-        const source = await db.getDbSource ? await db.getDbSource() : 'SUPABASE'; // Fallback to Supabase
+        const source = await db.getSource ? await db.getSource() : 'SUPABASE'; // Fallback to Supabase
         const searchParams = request.nextUrl.searchParams;
         const hostelName = searchParams.get("hostelName");
         const isMinimal = searchParams.get("minimal") === "true";
@@ -103,11 +103,59 @@ export async function GET(request: NextRequest) {
             sortOrder: 'desc'
         });
 
-        // Calculate split from the FULL list (lightweight records) instead of the limited profile list
-        const leaveCount = fullOutListForBreakdown.records.filter((p: any) => p.type === "leave").length;
-        const gatePassCount = totalOut - leaveCount;
+        // ⚡ SELF-HEALING & DEDUPLICATION LOGIC
+        // Some students might have duplicate 'out' records due to race conditions.
+        // We deduplicate them here for the UI and identify records that need closing.
+        const uniqueStudentsMap = new Map();
+        const duplicatesToClose: string[] = [];
 
-        const currentlyOutWithDuration = currentlyOut.map((record: any) => {
+        // Note: currentlyOut is limited to 100, but fullOutListForBreakdown has more for analysis
+        const allOutRecords = fullOutListForBreakdown.records || [];
+
+        allOutRecords.forEach((record: any) => {
+            const sId = record.studentId?.toString();
+            if (!uniqueStudentsMap.has(sId)) {
+                uniqueStudentsMap.set(sId, record);
+            } else {
+                // This is a duplicate! We keep the newest one (based on sort) and mark this for closing
+                duplicatesToClose.push(record._id);
+            }
+        });
+
+        // Fix the true unique counts
+        const uniqueStudentsOut = uniqueStudentsMap.size;
+
+        // ⚡ ASYNC SELF-HEALING: Close duplicates in the background
+        if (duplicatesToClose.length > 0) {
+            console.log(`[SELF_HEAL] Found ${duplicatesToClose.length} duplicate 'out' records. Resolving...`);
+            // We don't await this to keep the API fast
+            Promise.all(duplicatesToClose.map(id =>
+                db.gatePasses.update(id, {
+                    status: 'auto-resolved',
+                    checkInTime: now,
+                    qrTokenUsedIn: 'SYSTEM_SELF_HEAL_DUPLICATE'
+                })
+            )).catch(err => console.error("[SELF_HEAL_ERROR]", err));
+        }
+
+        // Filter the visible list to be unique as well
+        const uniqueVisibleList: any[] = [];
+        const seenInVisible = new Set();
+        currentlyOut.forEach((record: any) => {
+            const sId = record.studentId?.toString();
+            if (!seenInVisible.has(sId)) {
+                uniqueVisibleList.push(record);
+                seenInVisible.add(sId);
+            }
+        });
+
+        // Calculate split from the FULL list (lightweight records) instead of the limited profile list
+        // Calculate split from the UNIQUE map
+        const uniqueRecords = Array.from(uniqueStudentsMap.values());
+        const leaveCount = uniqueRecords.filter((p: any) => p.type === "leave").length;
+        const gatePassCount = uniqueStudentsOut - leaveCount;
+
+        const currentlyOutWithDuration = uniqueVisibleList.map((record: any) => {
             const diffMs = now.getTime() - new Date(record.checkOutTime).getTime();
             const durationMinutes = Math.round(diffMs / 60000);
             const hours = Math.floor(durationMinutes / 60);
@@ -135,8 +183,8 @@ export async function GET(request: NextRequest) {
             success: true,
             summary: {
                 totalStudents,
-                studentsIn: (totalStudents || 0) - totalOut,
-                studentsOut: totalOut,
+                studentsIn: (totalStudents || 0) - uniqueStudentsOut,
+                studentsOut: uniqueStudentsOut,
                 leaveCount,
                 gatePassCount,
             },

@@ -120,10 +120,10 @@ export async function POST(request: NextRequest) {
                 firebaseUID: student.firebaseUID
             }, { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc' });
 
-            if (activity && activity.length > 0) {
-                const last = activity[0];
+            if (activity && activity.length > 0 && activity[0]) {
+                const last = activity[0] as any;
                 const nowMs = Date.now();
-                const lastOutMs = new Date(last.checkOutTime).getTime();
+                const lastOutMs = last.checkOutTime ? new Date(last.checkOutTime).getTime() : 0;
                 const lastInMs = last.checkInTime ? new Date(last.checkInTime).getTime() : 0;
                 const mostRecentMs = Math.max(lastOutMs, lastInMs);
                 const timeDiff = nowMs - mostRecentMs;
@@ -159,6 +159,7 @@ export async function POST(request: NextRequest) {
             });
 
             if (openPasses && openPasses.length > 0) {
+                console.log(`[SCAN_OUT] Found ${openPasses.length} stale passes for ${student.name}. Resolving...`);
                 for (const oldPass of openPasses) {
                     if (!oldPass) continue;
                     const diffMs = now.getTime() - new Date(oldPass.checkOutTime).getTime();
@@ -166,7 +167,7 @@ export async function POST(request: NextRequest) {
                         checkInTime: now,
                         checkInISTTime: istTime,
                         checkInISTDate: istDate,
-                        status: "in",
+                        status: "auto-resolved", // Use auto-resolved to keep history clean
                         durationMinutes: Math.round(diffMs / 60000),
                         qrTokenUsedIn: "SYSTEM_AUTO_CLOSE_ON_NEW_OUTING"
                     });
@@ -195,14 +196,14 @@ export async function POST(request: NextRequest) {
                 hostelName: student.hostelName,
                 roomNumber: student.roomNumber,
                 registrationId: student.registrationId,
-                phoneNumber: student.phoneNumber, // Added phoneNumber
+                phoneNumber: student.phoneNumber,
                 checkOutTime: now,
                 checkOutISTTime: istTime,
                 checkOutISTDate: istDate,
                 status: "out",
-                type: activeLeave ? "leave" : "outing", // ⚡ Type distinction
+                type: activeLeave ? "leave" : "outing",
                 permissionId: activeLeave?._id || null,
-                gateName: parsedQR.g || "Main Gate",
+                gateName: gateName,
                 qrTokenUsedOut: token,
             });
 

@@ -70,6 +70,8 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        const source = await db.getSource ? await db.getSource() : 'SUPABASE';
+
         const now = new Date();
         const { istTime, istDate } = getISTStrings(now);
         const currentStatus = student.studentStatus || "in";
@@ -83,6 +85,7 @@ export async function POST(request: NextRequest) {
             });
 
             if (existingPasses && existingPasses.length > 0) {
+                console.log(`[MANUAL_TOGGLE] Found ${existingPasses.length} stale passes for ${student.name}. Resolving...`);
                 for (const oldPass of existingPasses) {
                     if (!oldPass) continue;
                     const diffMs = now.getTime() - new Date(oldPass.checkOutTime).getTime();
@@ -90,7 +93,7 @@ export async function POST(request: NextRequest) {
                         checkInTime: now,
                         checkInISTTime: istTime,
                         checkInISTDate: istDate,
-                        status: "in",
+                        status: "auto-resolved", // Use auto-resolved for stale entries
                         durationMinutes: Math.round(diffMs / 60000),
                         qrTokenUsedIn: "SYSTEM_AUTO_CLOSE_ON_MANUAL_OUT"
                     });
