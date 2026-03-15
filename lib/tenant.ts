@@ -14,10 +14,20 @@ export async function getTenantFromRequest() {
         const host = headersList.get('host') || '';
         if (host.includes('.localhost')) {
             slug = host.split('.localhost')[0];
-        } else if (host.includes('.hostelease.com')) {
-            slug = host.split('.hostelease.com')[0];
         } else if (host.includes('.hostelease.vercel.app')) {
             slug = host.split('.hostelease.vercel.app')[0];
+        } else if (host.includes('.vercel.app')) {
+            // Support any .vercel.app domain
+            slug = host.split('.vercel.app')[0];
+        }
+
+        // ⚡ NEW FALLBACK: Check for x-url-tenant header (passed from middleware) or query param logic
+        if (!slug || slug === 'default' || slug === 'hostelease-silk') {
+            const fullUrl = headersList.get('x-url'); // If middleware passes it
+            if (fullUrl) {
+                const url = new URL(fullUrl);
+                slug = url.searchParams.get('tenant') || 'default';
+            }
         }
     }
 

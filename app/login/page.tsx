@@ -69,10 +69,16 @@ function LoginForm() {
       setError("");
 
       console.log("Initiating Supabase Login...");
+      
+      // Preserve tenant context in redirect
+      const tenant = searchParams.get('tenant');
+      const redirectUrl = new URL(`${window.location.origin}/auth/callback`);
+      if (tenant) redirectUrl.searchParams.set('tenant', tenant);
+
       const { data, error: sbError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`
+          redirectTo: redirectUrl.toString()
         }
       });
 

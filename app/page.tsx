@@ -19,13 +19,19 @@ export default function Dashboard() {
   useEffect(() => {
     // Check if we are on the main domain (landing page)
     const hostname = window.location.hostname;
-    const mainDomains = ['hostelease.com', 'localhost', 'hostelease.vercel.app'];
+    const urlParams = new URLSearchParams(window.location.search);
+    const tenantParam = urlParams.get('tenant');
+
+    const mainDomains = ['hostelease.com', 'localhost', 'hostelease.vercel.app', 'hostelease-silk.vercel.app'];
     const parts = hostname.split('.');
 
-    // If it's just 'localhost' or 'hostelease.com' with no subdomain (or just 'www')
-    const isRoot = parts.length === 1 || (parts.length === 2 && parts[0] === 'www');
+    // If it's the root domain AND no tenant parameter is provided
+    const isRoot = (parts.length === 1 || (parts.length === 2 && (parts[0] === 'www' || parts[1] === 'localhost'))) && !tenantParam;
+    
+    // Explicitly check if we are on one of the main domains without a subdomain
+    const isMainBase = mainDomains.includes(hostname) && !tenantParam;
 
-    if (isRoot) {
+    if (isMainBase || isRoot) {
       setIsMainDomain(true);
       setLoading(false);
       return;
