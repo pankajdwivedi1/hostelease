@@ -7,6 +7,7 @@ export interface IStudentBase {
   firebaseUID: string;
   name: string;
   email: string;
+  tenantId?: string; // Reference to university ID
   phoneNumber: string;
   dob?: Date;
   category?: string;
@@ -80,6 +81,12 @@ const StudentSchema = new Schema<IStudent>(
       type: String,
       required: true,
       unique: true,
+      index: true,
+    },
+    tenantId: {
+      type: String,
+      required: true, // Every student MUST belong to a college
+      default: "default", // For existing students
       index: true,
     },
     phoneNumber: {

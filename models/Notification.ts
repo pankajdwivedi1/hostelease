@@ -2,6 +2,7 @@ import mongoose, { Schema, Model, Document } from "mongoose";
 
 export interface INotification extends Document {
     senderId: string; // The person sending the message (Dean/Developer)
+    tenantId: string; // Reference to university ID
     targetType: "all" | "hostel" | "individual";
     targetHostel?: string;
     targetStudentId?: mongoose.Types.ObjectId;
@@ -22,6 +23,12 @@ const NotificationSchema = new Schema<INotification>(
         senderId: {
             type: String,
             required: true,
+        },
+        tenantId: {
+            type: String,
+            required: true,
+            default: "default",
+            index: true,
         },
         targetType: {
             type: String,

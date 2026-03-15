@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { auth } from "@/lib/firebase";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { auth as firebaseAuth } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 
 import { useRef } from "react";
 import * as faceMatching from "@/lib/faceMatching";
@@ -36,7 +37,8 @@ export default function OnboardingPage() {
     const fetchHostels = async () => {
       try {
         setHostelsLoading(true);
-        const response = await fetch("/api/hostels");
+        const url = new URL("/api/hostels", window.location.origin);
+        const response = await fetch(url.href);
 
         if (!response.ok) {
           throw new Error(`API error: ${response.status}`);
@@ -57,7 +59,8 @@ export default function OnboardingPage() {
 
     const fetchConfig = async () => {
       try {
-        const response = await fetch("/api/admin/settings");
+        const url = new URL("/api/admin/settings", window.location.origin);
+        const response = await fetch(url.href);
 
         if (!response.ok) {
           throw new Error(`API error: ${response.status}`);
@@ -78,11 +81,17 @@ export default function OnboardingPage() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
+    const initAuth = async () => {
+      // 1. Check Supabase First
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        const currentUser = session.user;
+        setUser({ uid: currentUser.id, email: currentUser.email, source: 'supabase' });
+
         try {
-          const response = await fetch(`/api/students?firebaseUID=${currentUser.uid}`);
+          // Identify by email for silent handoff compatibility
+          const response = await fetch(`/api/students?email=${encodeURIComponent(currentUser.email || "")}`);
           const data = await response.json();
           if (data.student) {
             setIsExistingStudent(true);
@@ -92,22 +101,46 @@ export default function OnboardingPage() {
               dob: data.student.dob ? new Date(data.student.dob).toISOString().split("T")[0] : "",
               joiningDate: data.student.joiningDate ? new Date(data.student.joiningDate).toISOString().split("T")[0] : "",
             });
-            if (data.student.profilePicture) {
-              setCapturedImage(data.student.profilePicture);
-            }
-            if (data.student.isProfileLocked) {
-              setIsProfileLocked(true);
-            }
+            if (data.student.profilePicture) setCapturedImage(data.student.profilePicture);
+            if (data.student.isProfileLocked) setIsProfileLocked(true);
           }
         } catch (error) {
-          console.error("Error fetching existing student data:", error);
+          console.error("Error fetching Supabase student data:", error);
         }
-      } else {
-        router.push("/login");
+        return;
       }
-    });
 
-    return () => unsubscribe();
+      // 2. Fallback to Firebase for legacy sessions
+      const unsubscribe = onAuthStateChanged(firebaseAuth, async (currentUser) => {
+        if (currentUser) {
+          setUser({ uid: currentUser.uid, email: currentUser.email, source: 'firebase' });
+          try {
+            const response = await fetch(`/api/students?email=${encodeURIComponent(currentUser.email || "")}`);
+            const data = await response.json();
+            if (data.student) {
+              setIsExistingStudent(true);
+              // ... set form data ...
+              setFormData({
+                ...data.student,
+                ...(data.student.dynamicFields || {}),
+                dob: data.student.dob ? new Date(data.student.dob).toISOString().split("T")[0] : "",
+                joiningDate: data.student.joiningDate ? new Date(data.student.joiningDate).toISOString().split("T")[0] : "",
+              });
+              if (data.student.profilePicture) setCapturedImage(data.student.profilePicture);
+              if (data.student.isProfileLocked) setIsProfileLocked(true);
+            }
+          } catch (error) {
+            console.error("Error fetching Firebase student data:", error);
+          }
+        } else {
+          router.push("/login");
+        }
+      });
+
+      return () => unsubscribe();
+    };
+
+    initAuth();
   }, [router]);
 
   const validateForm = () => {
@@ -151,14 +184,14 @@ export default function OnboardingPage() {
   };
 
   const handleBack = async () => {
-    // ⚡ FIX: If existing student (editing profile), just go back to dashboard
     if (isExistingStudent) {
       router.push("/");
       return;
     }
 
     try {
-      await signOut(auth);
+      await supabase.auth.signOut();
+      await firebaseSignOut(firebaseAuth);
       localStorage.clear();
       router.push("/login");
     } catch (error) {
@@ -219,6 +252,7 @@ export default function OnboardingPage() {
         },
         body: JSON.stringify({
           firebaseUID: user.uid,
+          supabase_id: user.source === 'supabase' ? user.uid : undefined,
           name: formData.name,
           email: user.email || "",
           phoneNumber: formData.phoneNumber,

@@ -18,7 +18,7 @@ export async function DELETE(
     }
 
     // Get Firebase UID for deletion from Auth
-    const firebaseUID = student.firebase_uid || student.firebaseUID;
+    const firebaseUID = student.firebaseUID;
 
     if (firebaseUID) {
       try {
@@ -70,7 +70,7 @@ export async function PATCH(
     if (body.email) {
       try {
         const student = await db.students.getById(studentId);
-        const firebaseUID = student?.firebase_uid || student?.firebaseUID;
+        const firebaseUID = student?.firebaseUID;
         const currentEmail = student?.email;
 
         if (firebaseUID && body.email.toLowerCase() !== currentEmail?.toLowerCase()) {

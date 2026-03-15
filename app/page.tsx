@@ -4,16 +4,33 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import StudentDashboard from "./components/StudentDashboard";
 import AdminDashboard from "./components/AdminDashboard";
+import LandingPage from "./components/LandingPage";
 
 export default function Dashboard() {
   const [userType, setUserType] = useState<string | null>(null);
   const [studentData, setStudentData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isMainDomain, setIsMainDomain] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
+    // Check if we are on the main domain (landing page)
+    const hostname = window.location.hostname;
+    const mainDomains = ['hostelease.com', 'localhost', 'hostelease.vercel.app'];
+    const parts = hostname.split('.');
+
+    // If it's just 'localhost' or 'hostelease.com' with no subdomain (or just 'www')
+    const isRoot = parts.length === 1 || (parts.length === 2 && parts[0] === 'www');
+
+    if (isRoot) {
+      setIsMainDomain(true);
+      setLoading(false);
+      return;
+    }
+
     const checkAuth = async () => {
       if (typeof window === "undefined") return;
 
@@ -45,49 +62,71 @@ export default function Dashboard() {
       }
 
       if (storedUserType === "student") {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-          if (user) {
+        // ⚡ NEW: Try Supabase Auth First
+        const fetchSupabaseSession = async () => {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session && session.user.email) {
             try {
-              // ⚡ NEW: Check by EMAIL as requested (to identify existing records)
-              const response = await fetch(`/api/students?email=${encodeURIComponent(user.email || "")}&minimal=true`);
-
-              // ⚡ FIX: Handle 404 (Not Found) as a valid state for new users -> Redirect to Onboarding
+              const response = await fetch(`/api/students?email=${encodeURIComponent(session.user.email)}&minimal=true`);
               if (response.status === 404) {
                 router.push("/onboarding");
                 setLoading(false);
-                return;
+                return true;
               }
-
-              if (!response.ok) {
-                throw new Error(`API error: ${response.status}`);
+              if (response.ok) {
+                const data = await response.json();
+                if (data.student) {
+                  setStudentData(data.student);
+                  setUserType("student");
+                  setLoading(false);
+                  return true;
+                }
               }
+            } catch (e) {
+              console.error("Supabase user fetch failed", e);
+            }
+          }
+          return false;
+        };
 
-              const contentType = response.headers.get("content-type");
-              if (!contentType?.includes("application/json")) {
-                throw new Error("API returned non-JSON response");
+        fetchSupabaseSession().then(success => {
+          if (success) return;
+
+          // ⚡ FALLBACK: Check Firebase for backward compatibility
+          const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+              try {
+                const response = await fetch(`/api/students?email=${encodeURIComponent(user.email || "")}&minimal=true`);
+                if (response.status === 404) {
+                  router.push("/onboarding");
+                  setLoading(false);
+                  return;
+                }
+
+                if (response.ok) {
+                  const data = await response.json();
+                  if (data.student) {
+                    setStudentData(data.student);
+                    setUserType("student");
+                    setLoading(false);
+                  } else {
+                    router.push("/onboarding");
+                  }
+                }
+              } catch (error) {
+                console.error("Error fetching student data from Firebase session:", error);
+                router.push("/login");
+                setLoading(false);
               }
-
-              const data = await response.json();
-
-              if (data.student) {
-                setStudentData(data.student);
-                setUserType("student");
-                setLoading(false); // ⚡ Set loading false immediately, StudentDashboard will load its own data
-              } else {
-                router.push("/onboarding");
-              }
-            } catch (error) {
-              console.error("Error fetching student data:", error);
+            } else {
+              // No session found in either system
               router.push("/login");
               setLoading(false);
             }
-          } else {
-            router.push("/login");
-            setLoading(false);
-          }
-        });
+          });
 
-        return () => unsubscribe();
+          return () => unsubscribe();
+        });
       } else {
         router.push("/login");
         setLoading(false);
@@ -99,10 +138,14 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <p className="text-sm text-secondary">Loading...</p>
+      <div className="min-h-screen bg-[#050510] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
       </div>
     );
+  }
+
+  if (isMainDomain) {
+    return <LandingPage />;
   }
 
   if (!userType) {

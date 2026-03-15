@@ -9,9 +9,9 @@ export async function GET(request: NextRequest) {
         console.log("🏨 [API/hostels] Fetching all hostels...");
         const hostels = await db.hostels.getAll();
 
-        // If no hostels exist, create the default ones
+        // If no hostels exist for this tenant, create the default ones
         if (!hostels || hostels.length === 0) {
-            console.log("🏨 [API/hostels] No hostels found, creating defaults...");
+            console.log("🏨 [API/hostels] No hostels found for this tenant, creating defaults...");
             const defaultHostels = [
                 { name: "Gangotri Hostel" },
                 { name: "Gaytri Hostel" },
@@ -20,7 +20,17 @@ export async function GET(request: NextRequest) {
             ];
 
             for (const h of defaultHostels) {
-                await db.hostels.create(h);
+                try {
+                    // We check if it exists globally first or just use a safe create
+                    // Since the current schema has a global unique constraint on 'name',
+                    // we should be careful.
+                    const existing = await db.hostels.findOne({ name: h.name });
+                    if (!existing) {
+                        await db.hostels.create(h);
+                    }
+                } catch (e: any) {
+                    console.warn(`⚠️ [API/hostels] Could not create default hostel ${h.name}:`, e.message);
+                }
             }
 
             const newHostels = await db.hostels.getAll();

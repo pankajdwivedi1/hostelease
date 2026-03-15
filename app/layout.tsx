@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import { Lora } from "next/font/google";
 import "./globals.css";
 import InstallPWA from "./components/InstallPWA";
+import TenantGuard from "./components/TenantGuard";
+import { AuthProvider } from "./components/AuthProvider";
 
 const lora = Lora({
   subsets: ["latin"],
   variable: "--font-lora",
   weight: ["400", "500", "600", "700"],
 });
-
-
 
 export const metadata: Metadata = {
   title: "Hostelease - Hostel Management",
@@ -51,7 +51,11 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${lora.variable} antialiased`} suppressHydrationWarning>
         <InstallPWA />
-        {children}
+        <AuthProvider>
+          <TenantGuard>
+            {children}
+          </TenantGuard>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -8,6 +8,7 @@ export interface IWardenAccount {
 
 export interface IAdminSettings {
   _id?: string;
+  tenantId?: string; // Reference to university ID
   hostelLocations?: {
     lat: number;
     lng: number;
@@ -70,6 +71,13 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
       type: String,
       enum: ['MONGODB', 'SUPABASE'],
       default: 'MONGODB'
+    },
+    tenantId: {
+      type: String,
+      required: true,
+      unique: true, // Only one settings document per university
+      default: "default",
+      index: true,
     },
     hostelLocations: [
       {

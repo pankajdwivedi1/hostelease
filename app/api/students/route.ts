@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { validators, validateStudentRegistration } from "@/lib/validation";
+import { getCurrentTenantId } from "@/lib/tenant";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { firebaseUID, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, permanentAddress, homeState, erpInformation, joiningDate, branch, collegeName, year, semester, section, localGuardianAddress, localGuardianPhoneNumber, dob, category, deviceId, faceDescriptor, floorNumber } = body;
+    const tenantId = await getCurrentTenantId();
+    const { firebaseUID, supabase_id, name, email, phoneNumber, hostelName, roomNumber, profilePicture, fatherName, fatherNumber, motherName, motherNumber, permanentAddress, homeState, erpInformation, joiningDate, branch, collegeName, year, semester, section, localGuardianAddress, localGuardianPhoneNumber, dob, category, deviceId, faceDescriptor, floorNumber } = body;
 
     // ✅ NEW: Input validation & sanitization
     const validation = validateStudentRegistration(body);
@@ -98,6 +100,7 @@ export async function POST(request: NextRequest) {
       roomNumber: String(roomNumber).trim(),
       registrationId,
       studentStatus: "in",
+      tenantId,
       // ✅ OPTIONAL FIELDS: Only include if provided
       ...(name && { name: validators.sanitizeInput(name) }),
       ...(profilePicture && { profilePicture }),
@@ -120,6 +123,8 @@ export async function POST(request: NextRequest) {
       ...(dob && { dob: validators.formatDateForDB(dob) }),
       ...(category && { category: validators.sanitizeInput(category) }),
       ...(faceDescriptor && { faceDescriptor }),
+      ...(supabase_id && { supabaseId: supabase_id }),
+      authProvider: supabase_id ? 'supabase' : 'firebase',
       dynamicFields: body.dynamicFields || {}, // Preserve all form data
     };
 
@@ -145,10 +150,19 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const firebaseUID = searchParams.get("firebaseUID");
+    const supabaseId = searchParams.get("supabaseId");
     const email = searchParams.get("email");
 
     if (firebaseUID) {
       const student = await db.students.findOne({ firebaseUID });
+      if (!student) {
+        return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      }
+      return NextResponse.json({ student }, { status: 200 });
+    }
+
+    if (supabaseId) {
+      const student = await db.students.findOne({ supabaseId });
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }

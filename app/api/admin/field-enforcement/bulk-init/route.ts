@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     let skippedCount = 0;
 
     // For each student, initialize field progress
-    for (const student of students) {
+    for (const student of (students as any[])) {
       for (const enforcedField of (enforcement.enforcedFields || [])) {
         // Upsert handles checking if it exists
         try {

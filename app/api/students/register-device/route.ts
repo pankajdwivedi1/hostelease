@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Student not found" }, { status: 404 });
         }
 
-        const deviceIdField = existingStudent.device_id || existingStudent.deviceId;
+        const deviceIdField = existingStudent.deviceId;
         if (deviceIdField && deviceIdField.trim() !== "") {
             return NextResponse.json(
                 { error: "Your account is already registered with a device. Please contact the administrator to reset your device link." },
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
         // CRITICAL: Check if THIS deviceId is already used by ANY other student
         const studentsWithThisDevice = await db.students.list({ search: deviceId });
         const deviceUsedBy = studentsWithThisDevice.find((s: any) =>
-            (s.device_id === deviceId || s.deviceId === deviceId) && s._id !== studentId
+            s.deviceId === deviceId && s._id !== studentId
         );
 
         if (deviceUsedBy) {

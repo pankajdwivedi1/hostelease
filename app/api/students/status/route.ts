@@ -19,7 +19,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Verify deviceId if it exists in the record
-    const recordDeviceId = studentRecord.deviceId || studentRecord.device_id;
+    const recordDeviceId = studentRecord.deviceId;
     if (recordDeviceId && recordDeviceId !== deviceId) {
       return NextResponse.json(
         { error: "This device is not registered for this student." },

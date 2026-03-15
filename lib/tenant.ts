@@ -1,0 +1,130 @@
+import { headers } from 'next/headers';
+import { getSupabaseAdmin } from './supabaseServer';
+
+/**
+ * Resolves the current tenant from the request headers
+ * injected by the global Next.js middleware.
+ */
+export async function getTenantFromRequest() {
+    const headersList = await (headers as any)();
+    let slug = headersList.get('x-tenant-slug');
+
+    // ⚡ FALLBACK: Resolve from Host header if x-tenant-slug is missing (useful if middleware is off)
+    if (!slug || slug === 'default') {
+        const host = headersList.get('host') || '';
+        if (host.includes('.localhost')) {
+            slug = host.split('.localhost')[0];
+        } else if (host.includes('.hostelease.com')) {
+            slug = host.split('.hostelease.com')[0];
+        } else if (host.includes('.hostelease.vercel.app')) {
+            slug = host.split('.hostelease.vercel.app')[0];
+        }
+    }
+
+    // 🛠️ DEVELOPMENT FALLBACK: If resolving via plain localhost (no subdomain), 
+    // pick the first active tenant so the app doesn't crash with a 500 error.
+    if ((!slug || slug === 'default' || slug === 'www' || slug.includes(':')) && process.env.NODE_ENV === 'development') {
+        const supabase = getSupabaseAdmin();
+        const { data: firstTenant } = await supabase
+            .from('tenants')
+            .select('slug')
+            .eq('is_active', true)
+            .limit(1)
+            .maybeSingle();
+        
+        if (firstTenant) {
+            slug = firstTenant.slug;
+            console.log(`🛠️ [Tenant] Dev Fallback: No subdomain found, defaulting to "${slug}"`);
+        }
+    }
+
+    if (!slug || slug === 'default') {
+        console.warn(`⚠️ [Tenant] No tenant slug found in headers (slug: "${slug}")`);
+        return null;
+    }
+
+    console.log(`🔍 [Tenant] Searching for tenant with slug: "${slug}"`);
+
+    const supabase = getSupabaseAdmin();
+    const { data: tenant, error } = await supabase
+        .from('tenants')
+        .select('*')
+        .eq('slug', slug.toLowerCase())
+        .eq('is_active', true)
+        .single();
+
+    if (error || !tenant) {
+        return null;
+    }
+
+    // Map Supabase snake_case to camelCase for compatibility with rest of app logic
+    return {
+        _id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+        logo: tenant.logo_url,
+        primaryColor: tenant.primary_color,
+        secondaryColor: tenant.secondary_color,
+        subscriptionStatus: tenant.subscription_status,
+        subscriptionEndDate: tenant.subscription_end_date,
+        isActive: tenant.is_active,
+        adminEmail: tenant.admin_email
+    };
+}
+
+/**
+ * Gets the tenantId string from the current request context.
+ * Useful for filtering database queries.
+ */
+export async function getCurrentTenantId() {
+    const tenant = await getTenantFromRequest();
+    return tenant ? tenant._id.toString() : null;
+}
+
+/**
+ * Returns tenant-specific UI configurations like branding colors and name.
+ */
+export async function getTenantConfig() {
+    const tenant = await getTenantFromRequest();
+    if (!tenant) {
+        return {
+            name: 'Hostelease',
+            logo: null,
+            primaryColor: '#3b82f6',
+            secondaryColor: '#1e40af',
+        };
+    }
+
+    return {
+        name: tenant.name,
+        logo: tenant.logo,
+        primaryColor: tenant.primaryColor,
+        secondaryColor: tenant.secondaryColor,
+    };
+}
+
+/**
+ * Returns the subscription status and days remaining for the current tenant.
+ */
+export async function getSubscriptionStatus() {
+    const tenant = await getTenantFromRequest();
+    if (!tenant) return null;
+
+    const now = new Date();
+    const endDate = tenant.subscriptionEndDate ? new Date(tenant.subscriptionEndDate) : null;
+
+    let daysRemaining = null;
+    if (endDate) {
+        const diffTime = endDate.getTime() - now.getTime();
+        daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    }
+
+    return {
+        status: tenant.subscriptionStatus,
+        isActive: tenant.isActive,
+        endDate: endDate,
+        daysRemaining: daysRemaining,
+        isWarning: daysRemaining !== null && daysRemaining <= 7 && daysRemaining > 0,
+        isExpired: (endDate && now > endDate) || tenant.subscriptionStatus === 'expired' || !tenant.isActive
+    };
+}

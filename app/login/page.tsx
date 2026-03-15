@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
@@ -66,47 +67,24 @@ function LoginForm() {
     try {
       setLoading(true);
       setError("");
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
 
-      if (user) {
-        // ⚡ OPTIMIZED: Only check if student exists, don't load full profile
-        // Profile data will be loaded asynchronously after redirect
-        const response = await fetch(`/api/students?firebaseUID=${user.uid}&minimal=true`);
-        const data = await response.json();
-
-        // Store session data and redirect immediately
-        localStorage.setItem("userType", "student");
-        localStorage.setItem("firebaseUID", user.uid);
-
-        if (data.student) {
-          // User exists - go to dashboard (profile loads there)
-          router.push("/");
-        } else {
-          // New user - go to onboarding
-          router.push("/onboarding");
+      console.log("Initiating Supabase Login...");
+      const { data, error: sbError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`
         }
-      }
+      });
+
+      if (sbError) throw sbError;
+      
     } catch (error: any) {
-      console.error("Login error:", error);
-
-      let friendlyMessage = "Failed to sign in with Google. Please try again.";
-
-      if (error.code === 'auth/popup-closed-by-user') {
-        friendlyMessage = "The login popup was closed before completion. Please try again.";
-      } else if (error.code === 'auth/cancelled-popup-request') {
-        friendlyMessage = "Login request cancelled. Please try again.";
-      } else if (error.code === 'auth/popup-blocked') {
-        friendlyMessage = "Login popup was blocked by your browser. Please allow popups for this site.";
-      } else if (error.code === 'auth/unauthorized-domain') {
-        friendlyMessage = "This domain is not authorized for authentication. Please contact the administrator.";
-      }
-
-      setError(friendlyMessage);
+      console.error("Supabase Login error:", error);
+      setError(`Supabase Error: ${error.message || "Failed to initialize login"}`);
       setLoading(false);
     }
-    // Note: Don't setLoading(false) on success - let the redirect handle it
   };
+
 
   const handleAdminLogin = async () => {
     if (!showAdminPassword) {

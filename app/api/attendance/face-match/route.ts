@@ -63,11 +63,7 @@ async function loadServerModels() {
 
 export async function POST(request: NextRequest) {
     try {
-        // Dynamic imports for runtime-only modules
-        const { default: connectDB } = await import("@/lib/mongodb");
-        const { default: Student } = await import("@/models/Student");
-
-        await connectDB();
+        const { db } = await import("@/lib/dbAdapter");
         const { image, firebaseUID } = await request.json();
 
         if (!image || !firebaseUID) {
@@ -119,8 +115,7 @@ export async function POST(request: NextRequest) {
             }
 
             // 4. Fetch Student's Locked Descriptor (⚡ Database Aware)
-            const { db } = await import("@/lib/dbAdapter");
-            const student = await db.students.findOne({ firebaseUID });
+            const student = await db.students.getById(firebaseUID);
             if (!student || !student.faceDescriptor) {
                 return NextResponse.json({ error: "Student profile or face lock-in not found" }, { status: 404 });
             }

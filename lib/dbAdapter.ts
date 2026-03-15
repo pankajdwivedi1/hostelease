@@ -1,8 +1,10 @@
-
-import { supabase } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabaseServer';
 import connectDB from '@/lib/mongodb';
 import { headers } from 'next/headers'; // To check for secret header
 import crypto from 'crypto';
+import { getCurrentTenantId } from './tenant';
+
+const supabase = getSupabaseAdmin();
 
 // Note: We might need to ensure mongoose models are imported correctly
 /**
@@ -60,6 +62,8 @@ const mapStudentToCamelCase = (s: any) => {
         thumbImpressionId: s.thumb_impression_id || s.thumbImpressionId,
         faceEnrolled: s.face_enrolled || s.faceEnrolled,
         dynamicFields: s.dynamic_fields || s.dynamicFields || {},
+        supabaseId: s.supabase_id || s.supabaseId,
+        authProvider: s.auth_provider || s.authProvider,
         createdAt: s.created_at || s.createdAt,
         updatedAt: s.updated_at || s.updatedAt
     };
@@ -97,7 +101,9 @@ const mapStudentToSnakeCase = (data: any) => {
         deviceHistory: 'device_history',
         deviceId: 'device_id',
         studentStatus: 'student_status',
-        dynamicFields: 'dynamic_fields'
+        dynamicFields: 'dynamic_fields',
+        supabaseId: 'supabase_id',
+        authProvider: 'auth_provider'
     };
     const forbidden = [
         'id', '_id', 'firebaseuid', 'firebase_uid', 'createdat', 'updatedat',
@@ -120,9 +126,9 @@ const mapStudentToSnakeCase = (data: any) => {
  */
 const mapAttendanceToCamelCase = (a: any) => {
     if (!a) return null;
-    return {
+    const mapped: any = {
         _id: a._id,
-        studentId: a.studentId && typeof a.studentId === 'object' ? mapStudentToCamelCase(a.studentId) : (a.student_id || a.studentId),
+        studentId: a.student_id || a.studentId,
         firebaseUID: a.firebase_uid || a.firebaseUID,
         studentName: a.name || a.student_name || a.studentName || "Unknown",
         hostelName: formatHostelName(a.hostel_name || a.hostelName),
@@ -146,6 +152,49 @@ const mapAttendanceToCamelCase = (a: any) => {
         createdAt: a.created_at || a.createdAt,
         updatedAt: a.updated_at || a.updatedAt
     };
+
+    if (a.students) {
+        // Handle joined student data (Supabase)
+        mapped.studentId = mapStudentToCamelCase(a.students);
+    } else if (a.studentId && typeof a.studentId === 'object') {
+        // Handle populated student data (MongoDB)
+        mapped.studentId = mapStudentToCamelCase(a.studentId);
+    }
+
+    return mapped;
+};
+
+/**
+ * Maps camelCase attendance data to Supabase snake_case
+ */
+const mapAttendanceToSnakeCase = (a: any) => {
+    if (!a) return null;
+    const mapped: any = {};
+    const fieldMap: any = {
+        studentId: 'student_id',
+        firebaseUID: 'firebase_uid',
+        studentName: 'student_name',
+        hostelName: 'hostel_name',
+        roomNumber: 'room_number',
+        istDate: 'ist_date',
+        istTime: 'ist_time',
+        faceMatchPercentage: 'face_match_percentage',
+        faceMatchStatus: 'face_match_status',
+        needsReview: 'needs_review',
+        isTest: 'is_test',
+        wardenId: 'warden_id',
+        collegeName: 'college_name'
+    };
+
+    Object.keys(a).forEach(key => {
+        if (fieldMap[key]) {
+            mapped[fieldMap[key]] = a[key];
+        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
+            mapped[key] = a[key];
+        }
+    });
+
+    return mapped;
 };
 
 /**
@@ -383,8 +432,11 @@ const mapPermissionToCamelCase = (p: any) => {
     };
 
     if (p.students) {
-        // Handle joined student data if present
+        // Handle joined student data if present (Supabase)
         mapped.studentId = mapStudentToCamelCase(p.students);
+    } else if (p.studentId && typeof p.studentId === 'object') {
+        // Handle populated student data if present (MongoDB)
+        mapped.studentId = mapStudentToCamelCase(p.studentId);
     }
 
     return mapped;
@@ -408,10 +460,15 @@ const mapPermissionToSnakeCase = (p: any) => {
     };
 
     Object.keys(p).forEach(key => {
+        let value = p[key];
+        if (value instanceof Date) {
+            value = value.toISOString();
+        }
+
         if (fieldMap[key]) {
-            mapped[fieldMap[key]] = p[key];
+            mapped[fieldMap[key]] = value;
         } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
-            mapped[key] = p[key];
+            mapped[key] = value;
         }
     });
 
@@ -517,7 +574,7 @@ const mapNotificationToSnakeCase = (n: any) => {
  */
 const mapTransactionToCamelCase = (t: any) => {
     if (!t) return null;
-    return {
+    const mapped: any = {
         _id: t._id,
         studentId: t.student_id,
         registrationId: t.registration_id,
@@ -532,6 +589,16 @@ const mapTransactionToCamelCase = (t: any) => {
         createdAt: t.created_at,
         updatedAt: t.updated_at
     };
+
+    if (t.students) {
+        // Handle joined student data (Supabase)
+        mapped.studentId = mapStudentToCamelCase(t.students);
+    } else if (t.studentId && typeof t.studentId === 'object') {
+        // Handle populated student data (MongoDB)
+        mapped.studentId = mapStudentToCamelCase(t.studentId);
+    }
+
+    return mapped;
 };
 
 /**
@@ -629,54 +696,24 @@ let cachedDbSource: string | null = null;
 let lastDbSourceCheck = 0;
 const SOURCE_CACHE_TTL = 30000; // 30 seconds (Reduce load on Mongo)
 
-// Helper to determine Source PER REQUEST
-// This allows you to test Supabase without switching for everyone
-// Helper to determine Source PER REQUEST
-// This allows you to test Supabase without switching for everyone
+/**
+ * Helper to determine Source PER REQUEST
+ * This allows you to test Supabase without switching for everyone
+ */
+/**
+ * Ensures a tenant context is present or throws a clear error.
+ */
+const getTenantIdOrThrow = async () => {
+    const tid = await getCurrentTenantId();
+    if (!tid) {
+        throw new Error("Multi-Tenant Context Missing: Please access through a university subdomain (e.g., college.hostelease.com)");
+    }
+    return tid;
+};
+
 const getDbSource = async () => {
-    // 🔥 FORCE SUPABASE via ENV if set
-    if (GLOBAL_DB_SOURCE === 'SUPABASE') {
-        return 'SUPABASE';
-    }
-
-    try {
-        const headersList = await headers();
-        const forceSupabase = headersList.get('x-force-db') === 'supabase';
-        if (forceSupabase) return 'SUPABASE';
-    } catch (e) {
-        // headers() only works in server components/actions
-    }
-
-    // Check Cache first
-    if (cachedDbSource && (Date.now() - lastDbSourceCheck < SOURCE_CACHE_TTL)) {
-        return cachedDbSource;
-    }
-
-    // Check AdminSettings in MongoDB with Timeout
-    try {
-        await connectDB();
-
-        // Dynamic import
-        const AdminSettings = (await import('@/models/AdminSettings')).default;
-
-        // Race Mongo fetch against a 2-second timeout
-        const fetchSettings = AdminSettings.findOne().select('activeDatabaseSource').lean();
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Mongo Timeout")), 2000));
-
-        const settings: any = await Promise.race([fetchSettings, timeoutPromise]);
-
-        if (settings?.activeDatabaseSource) {
-            cachedDbSource = settings.activeDatabaseSource;
-            lastDbSourceCheck = Date.now();
-            console.log(`[DB_ADAPTER] Active Source from DB: ${cachedDbSource}`);
-            return settings.activeDatabaseSource;
-        }
-    } catch (error) {
-        console.warn("⚠️ Failed to fetch DB Source from AdminSettings (using fallback):", error);
-    }
-
-    console.log(`[DB_ADAPTER] Fallback to Source: ${GLOBAL_DB_SOURCE}`);
-    return GLOBAL_DB_SOURCE;
+    // 🔥 PERMANENTLY FORCED TO SUPABASE AS PER USER REQUEST
+    return 'SUPABASE';
 };
 
 export const db = {
@@ -690,9 +727,11 @@ export const db = {
         get: async () => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 const { data, error } = await supabase
                     .from('admin_settings')
                     .select('*')
+                    .eq('tenant_id', tenantId)
                     .limit(1)
                     .maybeSingle();
 
@@ -712,10 +751,11 @@ export const db = {
         update: async (updateData: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                const snakeData = mapSettingsToSnakeCase(updateData);
+                const tenantId = await getTenantIdOrThrow();
+                const snakeData = { ...mapSettingsToSnakeCase(updateData), tenant_id: tenantId };
 
-                // Fetch first to get the ID if not provided
-                const { data: existing } = await supabase.from('admin_settings').select('_id').limit(1).single();
+                // Fetch first to get the ID if not provided, scoped by tenant
+                const { data: existing } = await supabase.from('admin_settings').select('_id').eq('tenant_id', tenantId).limit(1).maybeSingle();
 
                 if (!existing) {
                     // Create if doesn't exist
@@ -732,6 +772,7 @@ export const db = {
                     .from('admin_settings')
                     .update(snakeData)
                     .eq('_id', existing._id)
+                    .eq('tenant_id', tenantId)
                     .select()
                     .single();
 
@@ -757,10 +798,12 @@ export const db = {
             console.log(`[DB_ADAPTER] getById (${id}) using: ${source}`);
 
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 let { data, error } = await supabase
                     .from('students')
                     .select('*')
                     .eq('_id', id)
+                    .eq('tenant_id', tenantId)
                     .maybeSingle();
 
                 if (error || !data) {
@@ -771,6 +814,7 @@ export const db = {
                         .from('students')
                         .select('*')
                         .eq('firebase_uid', id)
+                        .eq('tenant_id', tenantId)
                         .maybeSingle();
 
                     data = fbLookup.data;
@@ -801,10 +845,12 @@ export const db = {
         getByCredentialId: async (credentialId: string) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 // Querying JSONB in Supabase
                 const { data, error } = await supabase
                     .from('students')
                     .select('*')
+                    .eq('tenant_id', tenantId)
                     .contains('web_authn_credentials', JSON.stringify([{ credentialID: credentialId }]))
                     .maybeSingle(); // Use maybeSingle to avoid error if not found
 
@@ -828,7 +874,9 @@ export const db = {
             const source = await getDbSource();
             console.log(`[DB_ADAPTER] findOne (${JSON.stringify(filter)}) using: ${source}`);
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('students').select('*');
+                query = query.eq('tenant_id', tenantId);
 
                 if (filter.firebaseUID) query = query.eq('firebase_uid', filter.firebaseUID);
                 if (filter.email) query = query.eq('email', filter.email);
@@ -868,11 +916,13 @@ export const db = {
                 // Supabase upsert's ON CONFLICT DO UPDATE SET includes _id → violates attendance FK.
                 // Instead: check if student exists, then UPDATE or INSERT cleanly.
 
-                // Step 1: Check if student already exists
+                // Step 1: Check if student already exists in this university
+                const tenantId = await getTenantIdOrThrow();
                 const { data: existingStudent } = await supabase
                     .from('students')
                     .select('_id')
                     .eq('firebase_uid', firebaseUID)
+                    .eq('tenant_id', tenantId)
                     .maybeSingle();
 
                 let data: any;
@@ -883,8 +933,9 @@ export const db = {
                     console.log(`[DB_ADAPTER] Existing student found (_id=${existingStudent._id}), doing UPDATE`);
                     const result = await supabase
                         .from('students')
-                        .update(supabaseData)
+                        .update({ ...supabaseData, tenant_id: tenantId })
                         .eq('firebase_uid', firebaseUID)
+                        .eq('tenant_id', tenantId)
                         .select()
                         .single();
                     data = result.data;
@@ -892,10 +943,10 @@ export const db = {
                 } else {
                     // ✅ New student → INSERT with a fresh UUID _id
                     const newId = crypto.randomUUID();
-                    console.log(`[DB_ADAPTER] New student, doing INSERT with _id=${newId}`);
+                    console.log(`[DB_ADAPTER] New student for university ${tenantId}, doing INSERT with _id=${newId}`);
                     const result = await supabase
                         .from('students')
-                        .insert({ ...supabaseData, _id: newId, firebase_uid: firebaseUID })
+                        .insert({ ...supabaseData, _id: newId, firebase_uid: firebaseUID, tenant_id: tenantId })
                         .select()
                         .single();
                     data = result.data;
@@ -923,7 +974,8 @@ export const db = {
         create: async (studentData: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                const finalData = { ...studentData };
+                const tenantId = await getTenantIdOrThrow();
+                const finalData = { ...studentData, tenant_id: tenantId };
                 if (!finalData._id) {
                     finalData._id = crypto.randomUUID();
                 }
@@ -946,7 +998,8 @@ export const db = {
         // 🔥 Used for the Secret Test Page
         getAll: async (limit = 50, useSupabase = false) => {
             if (useSupabase) {
-                const { data, error } = await supabase.from('students').select('*').limit(limit);
+                const tenantId = await getTenantIdOrThrow();
+                const { data, error } = await supabase.from('students').select('*').eq('tenant_id', tenantId).limit(limit);
                 if (error) throw error;
                 return data;
             } else {
@@ -966,7 +1019,9 @@ export const db = {
 
             console.log(`[DB_ADAPTER] list (filters: ${JSON.stringify(filters)}) using: ${source}`);
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('students').select(options.light ? lightFields : '*');
+                query = query.eq('tenant_id', tenantId);
 
                 if (filters.hostelName && filters.hostelName !== 'all') {
                     // Handle regex-like search for hostel name
@@ -1028,7 +1083,9 @@ export const db = {
         count: async (filters: any = {}) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('students').select('*', { count: 'exact', head: true });
+                query = query.eq('tenant_id', tenantId);
                 if (filters.hostelName && filters.hostelName !== 'all') {
                     query = query.ilike('hostel_name', `%${filters.hostelName}%`);
                 }
@@ -1056,10 +1113,12 @@ export const db = {
         delete: async (id: string) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 const { error } = await supabase
                     .from('students')
                     .delete()
-                    .eq('_id', id);
+                    .eq('_id', id)
+                    .eq('tenant_id', tenantId);
                 if (error) throw error;
                 return true;
             } else {
@@ -1134,6 +1193,8 @@ export const db = {
                 };
 
                 // Handle specific actions like resetDevice if passed in updateData
+                const tenantId = await getTenantIdOrThrow();
+
                 if (updateData.action === 'resetDevice') {
                     // Fetch existing to handle history
                     const student = await db.students.getById(id, true);
@@ -1158,6 +1219,7 @@ export const db = {
                         .from('students')
                         .update(supabaseUpdate)
                         .eq('_id', id)
+                        .eq('tenant_id', tenantId)
                         .select()
                         .single();
 
@@ -1174,6 +1236,7 @@ export const db = {
                     .from('students')
                     .update(cleanUpdate)
                     .eq('_id', id)
+                    .eq('tenant_id', tenantId)
                     .select()
                     .single();
 
@@ -1237,12 +1300,14 @@ export const db = {
             const source = await getDbSource();
 
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 // Convert camelCase keys to snake_case for Supabase
                 const snakeUpdate = mapStudentToSnakeCase(updateData);
                 // ⚡ Do NOT use .select() after bulk update — it causes Supabase to
                 // stream back ALL rows which hits the statement timeout on large tables.
                 // Instead: update without returning rows, then do a cheap count.
                 let updateQuery = supabase.from('students').update(snakeUpdate);
+                updateQuery = updateQuery.eq('tenant_id', tenantId);
 
                 if (filter?.hostelName) {
                     updateQuery = updateQuery.ilike('hostel_name', filter.hostelName);
@@ -1256,6 +1321,7 @@ export const db = {
 
                 // Get a lightweight count of students (to return how many were affected)
                 let countQuery = supabase.from('students').select('_id', { count: 'exact', head: true });
+                countQuery = countQuery.eq('tenant_id', tenantId);
                 if (filter?.hostelName) {
                     countQuery = countQuery.ilike('hostel_name', filter.hostelName);
                 }
@@ -1383,10 +1449,11 @@ export const db = {
             // Force update student status and close any open gate passes.
             try {
                 if (source === 'SUPABASE') {
+                    const tenantId = await getTenantIdOrThrow();
                     // 1. Update Student Table
-                    await supabase.from('students').update({ student_status: 'in' }).eq('_id', sid);
+                    await supabase.from('students').update({ student_status: 'in' }).eq('_id', sid).eq('tenant_id', tenantId);
                     // 2. Close stale gate passes
-                    await supabase.from('gate_passes').update({ status: 'in', check_in_ist_time: attendanceData.istTime, qr_token_used_in: 'ATTENDANCE_OVERRIDE' }).eq('student_id', sid).eq('status', 'out');
+                    await supabase.from('gate_passes').update({ status: 'in', check_in_ist_time: attendanceData.istTime, qr_token_used_in: 'ATTENDANCE_OVERRIDE' }).eq('student_id', sid).eq('status', 'out').eq('tenant_id', tenantId);
                 } else {
                     await connectDB();
                     const [StudentModel, GatePassModel] = await Promise.all([
@@ -1421,6 +1488,7 @@ export const db = {
                     flagged_photo_url: attendanceData.flaggedPhotoUrl,
                     needs_review: attendanceData.needsReview,
                     is_test: attendanceData.isTest,
+                    tenant_id: await getTenantIdOrThrow(),
                     timestamp: attendanceData.timestamp ? new Date(attendanceData.timestamp).toISOString() : new Date().toISOString()
                 };
 
@@ -1484,10 +1552,12 @@ export const db = {
         },
 
         // Get list of attendance records (Admin Dashboard)
-        list: async (filters: any) => {
+        list: async (filters: any = {}, options: { limit?: number } = {}) => {
             const source = await getDbSource();
+            const limit = options.limit || 500;
 
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 // ⚡ OPTIMIZATION: Use light fields for joined students to save bandwidth/egress
                 const lightStudentFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id';
 
@@ -1500,8 +1570,14 @@ export const db = {
                     .from('attendance')
                     .select(`${attendanceFields}, studentId:students!attendance_student_id_fkey(${lightStudentFields})`);
 
+                query = query.eq('tenant_id', tenantId);
+
                 if (filters.date) {
                     query = query.eq('date', filters.date);
+                }
+
+                if (limit) {
+                    query = query.limit(limit);
                 }
 
                 if (filters.startDate && filters.endDate) {
@@ -1564,6 +1640,7 @@ export const db = {
                         select: "name email hostelName roomNumber phoneNumber registrationId",
                     })
                     .sort({ date: -1, timestamp: -1 })
+                    .limit(limit)
                     .lean();
 
                 return JSON.parse(JSON.stringify(attendance));
@@ -1573,9 +1650,11 @@ export const db = {
         summary: async (date: string) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 const { data, error } = await supabase
                     .from('attendance')
                     .select('student_id, hostel_name')
+                    .eq('tenant_id', tenantId)
                     .eq('date', date)
                     .neq('is_test', true);
 
@@ -1605,10 +1684,12 @@ export const db = {
         delete: async (id: string) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 const { error } = await supabase
                     .from('attendance')
                     .delete()
-                    .eq('_id', id);
+                    .eq('_id', id)
+                    .eq('tenant_id', tenantId);
                 if (error) throw error;
                 return true;
             } else {
@@ -1622,7 +1703,9 @@ export const db = {
         deleteMany: async (filter: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('attendance').delete();
+                query = query.eq('tenant_id', tenantId);
 
                 if (filter?.timestamp?.$lt) {
                     query = query.lt('timestamp', filter.timestamp.$lt.toISOString());
@@ -1637,6 +1720,28 @@ export const db = {
                 const result = await AttendanceModel.deleteMany(filter);
                 return { count: result.deletedCount };
             }
+        },
+
+        update: async (id: string, updateData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
+                const snakeUpdate = mapAttendanceToSnakeCase(updateData);
+                const { data, error } = await supabase
+                    .from('attendance')
+                    .update(snakeUpdate)
+                    .eq('_id', id)
+                    .eq('tenant_id', tenantId)
+                    .select()
+                    .single();
+                if (error) throw error;
+                return mapAttendanceToCamelCase(data);
+            } else {
+                await connectDB();
+                const AttendanceModel = (await import('@/models/Attendance')).default;
+                const updated = await AttendanceModel.findByIdAndUpdate(id, updateData, { new: true });
+                return JSON.parse(JSON.stringify(updated));
+            }
         }
     },
 
@@ -1648,10 +1753,12 @@ export const db = {
         getById: async (id: string) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 const { data, error } = await supabase
                     .from('hostels')
                     .select('*')
                     .eq('_id', id)
+                    .eq('tenant_id', tenantId)
                     .single();
                 if (error) return null;
                 return mapHostelToCamelCase(data);
@@ -1666,9 +1773,11 @@ export const db = {
         getAll: async () => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 const { data, error } = await supabase
                     .from('hostels')
                     .select('*')
+                    .eq('tenant_id', tenantId)
                     .order('name', { ascending: true });
                 if (error) throw error;
                 return (data || []).map(mapHostelToCamelCase);
@@ -1683,7 +1792,9 @@ export const db = {
         findOne: async (filter: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('hostels').select('*');
+                query = query.eq('tenant_id', tenantId);
                 if (filter.name) query = query.eq('name', filter.name);
 
                 const { data, error } = await query.maybeSingle();
@@ -1700,7 +1811,8 @@ export const db = {
         create: async (hostelData: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                const snakeData = mapHostelToSnakeCase(hostelData);
+                const tenantId = await getTenantIdOrThrow();
+                const snakeData = { ...mapHostelToSnakeCase(hostelData), tenant_id: tenantId };
                 if (!snakeData._id) {
                     snakeData._id = crypto.randomUUID();
                 }
@@ -1722,11 +1834,13 @@ export const db = {
         update: async (id: string, updateData: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 const snakeData = mapHostelToSnakeCase(updateData);
                 const { data, error } = await supabase
                     .from('hostels')
                     .update(snakeData)
                     .eq('_id', id)
+                    .eq('tenant_id', tenantId)
                     .select()
                     .single();
                 if (error) throw error;
@@ -1742,10 +1856,12 @@ export const db = {
         delete: async (id: string) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 const { error } = await supabase
                     .from('hostels')
                     .delete()
-                    .eq('_id', id);
+                    .eq('_id', id)
+                    .eq('tenant_id', tenantId);
                 if (error) throw error;
                 return true;
             } else {
@@ -1792,6 +1908,7 @@ export const db = {
             console.log(`[GATEPASS_LIST_ENTRY] source=${source}, filters=${JSON.stringify(filters)}`);
 
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 const studentFields = '_id, name, phone_number, college_name, erp_id, father_name, father_number, mother_name, mother_number';
                 const shouldJoin = (filters.collegeName && filters.collegeName !== 'all') || filters.erpId || options.populate;
 
@@ -1802,6 +1919,8 @@ export const db = {
                     : `*`;
 
                 let query = supabase.from('gate_passes').select(selectString, { count: 'exact' });
+
+                query = query.eq('tenant_id', tenantId);
 
                 if (filters.firebaseUID) query = query.eq('firebase_uid', filters.firebaseUID);
                 if (filters.studentId) query = query.eq('student_id', filters.studentId);
@@ -1929,7 +2048,10 @@ export const db = {
         create: async (gatePassData: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 const snakeData = mapGatePassToSnakeCase(gatePassData);
+                snakeData.tenant_id = tenantId;
+
                 // Ensure _id is generated for Supabase if not provided
                 if (!snakeData._id) {
                     snakeData._id = crypto.randomUUID();
@@ -1953,11 +2075,13 @@ export const db = {
         update: async (id: string, updateData: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 const snakeData = mapGatePassToSnakeCase(updateData);
                 const { data, error } = await supabase
                     .from('gate_passes')
                     .update(snakeData)
                     .eq('_id', id)
+                    .eq('tenant_id', tenantId)
                     .select()
                     .single();
                 if (error) throw error;
@@ -1973,7 +2097,9 @@ export const db = {
         findOne: async (filter: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('gate_passes').select('*');
+                query = query.eq('tenant_id', tenantId);
                 if (filter.studentId) query = query.eq('student_id', filter.studentId);
                 if (filter.firebaseUID) query = query.eq('firebase_uid', filter.firebaseUID);
                 if (filter.status) query = query.eq('status', filter.status);
@@ -1996,7 +2122,9 @@ export const db = {
         count: async (filters: any = {}) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('gate_passes').select('*', { count: 'exact', head: true });
+                query = query.eq('tenant_id', tenantId);
                 if (filters.status) query = query.eq('status', filters.status);
                 if (filters.hostelName && filters.hostelName !== 'all') {
                     query = query.ilike('hostel_name', `%${filters.hostelName}%`);
@@ -2116,7 +2244,9 @@ export const db = {
         find: async (filter: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('field_enforcement').select('*');
+                query = query.eq('tenant_id', tenantId);
                 if (filter.hostelName) {
                     if (typeof filter.hostelName === 'object' && filter.hostelName.$regex) {
                         const pattern = filter.hostelName.$regex.replace(/^\^|\$$/g, '');
@@ -2144,13 +2274,14 @@ export const db = {
 
                 if (!hostelName) return null;
 
-                const { data: existing } = await supabase.from('field_enforcement').select('_id').ilike('hostel_name', hostelName).maybeSingle();
+                const { data: existing } = await supabase.from('field_enforcement').select('_id').ilike('hostel_name', hostelName).eq('tenant_id', tenantId).maybeSingle();
 
                 if (existing) {
                     const { data, error } = await supabase
                         .from('field_enforcement')
                         .update(snakeUpdate)
                         .eq('_id', existing._id)
+                        .eq('tenant_id', tenantId)
                         .select()
                         .single();
                     if (error) throw error;
@@ -2158,7 +2289,7 @@ export const db = {
                 } else if (options.upsert) {
                     const { data, error } = await supabase
                         .from('field_enforcement')
-                        .insert([{ ...snakeUpdate, hostel_name: hostelName }])
+                        .insert([{ ...snakeUpdate, hostel_name: hostelName, tenant_id: tenantId }])
                         .select()
                         .single();
                     if (error) throw error;
@@ -2191,6 +2322,7 @@ export const db = {
                     .from('field_enforcement')
                     .delete()
                     .ilike('hostel_name', hostelNameFilter)
+                    .eq('tenant_id', tenantId)
                     .select()
                     .maybeSingle();
                 if (error) throw error;
@@ -2213,9 +2345,14 @@ export const db = {
             const limit = options.limit || 50;
 
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 // ⚡ OPTIMIZATION: Exclude large 'image' field (Base64) from notifications list
                 const notificationFields = '_id,sender_id,target_type,target_hostel,target_student_id,message,priority,expires_at,acknowledged_by,created_at,updated_at';
-                let query = supabase.from('notifications').select(`${notificationFields}, targetStudentId:students(name, registration_id)`);
+
+                // Explicitly use the column name in the relation join if needed, or simple join
+                let query = supabase.from('notifications').select(`${notificationFields}, target_student_id:students(name, registration_id)`);
+
+                query = query.eq('tenant_id', tenantId);
 
                 if (filters.$or) {
                     const orParts = filters.$or.map((part: any) => {
@@ -2242,12 +2379,17 @@ export const db = {
                     .order('created_at', { ascending: false })
                     .limit(limit);
 
-                if (error) throw error;
+                if (error) {
+                    console.error("Supabase notifications list Error:", error);
+                    throw error;
+                }
+
                 return (data || []).map(n => ({
                     ...mapNotificationToCamelCase(n),
-                    targetStudentId: n.targetStudentId
+                    targetStudentId: n.target_student_id
                 }));
-            } else {
+            }
+            else {
                 await connectDB();
                 const NotificationModel = (await import('@/models/Notification')).default;
                 const records = await NotificationModel.find(filters)
@@ -2280,7 +2422,8 @@ export const db = {
         create: async (notificationData: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                const snakeData = mapNotificationToSnakeCase(notificationData);
+                const tenantId = await getTenantIdOrThrow();
+                const snakeData = { ...mapNotificationToSnakeCase(notificationData), tenant_id: tenantId };
                 if (!snakeData._id) {
                     snakeData._id = crypto.randomUUID();
                 }
@@ -2378,7 +2521,11 @@ export const db = {
             const limit = options.limit || 100;
 
             if (source === 'SUPABASE') {
-                let query = supabase.from('transactions').select('*, studentId:students!student_id(name, hostel_name, room_number, email)');
+                const tenantId = await getTenantIdOrThrow();
+                // 🔄 ROBUSTNESS: Use join with students to filter by tenant if table might miss column
+                let query = supabase.from('transactions').select('*, students!student_id!inner(tenant_id, name, hostel_name, room_number, email)');
+
+                query = query.eq('students.tenant_id', tenantId);
 
                 if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
                 if (filters.studentId) query = query.eq('student_id', filters.studentId);
@@ -2394,10 +2541,19 @@ export const db = {
                     .order('created_at', { ascending: false })
                     .limit(limit);
 
-                if (error) throw error;
+                if (error) {
+                    console.error("❌ [SUPABASE_TRANSACTION_LIST_ERROR]:", error);
+                    // Fallback to simple list if join fails
+                    const { data: fallbackData } = await supabase.from('transactions').select('*, students!student_id(name, hostel_name, room_number, email)').limit(limit);
+                    return (fallbackData || []).map(t => ({
+                        ...mapTransactionToCamelCase(t),
+                        studentId: (t as any).students
+                    }));
+                }
+
                 return (data || []).map(t => ({
                     ...mapTransactionToCamelCase(t),
-                    studentId: t.studentId
+                    studentId: (t as any).students
                 }));
             } else {
                 await connectDB();
@@ -2427,7 +2583,9 @@ export const db = {
         findOne: async (filter: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('transactions').select('*');
+                query = query.eq('tenant_id', tenantId);
                 if (filter.utrNumber) query = query.eq('utr_number', filter.utrNumber);
                 if (filter.status && filter.status.$ne) query = query.neq('status', filter.status.$ne);
                 if (filter.status && typeof filter.status === 'string') query = query.eq('status', filter.status);
@@ -2493,10 +2651,20 @@ export const db = {
         list: async (filters: any = {}, options: { limit?: number; offset?: number; populate?: boolean } = {}) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 // ⚡ OPTIMIZATION: Use light fields for joined students to save bandwidth/egress
                 const lightStudentFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id';
 
-                let query = supabase.from('permissions').select(options.populate ? `*, students!student_id(${lightStudentFields})` : '*');
+                // 🔄 ROBUSTNESS: If permissions table is missing tenant_id column, we join with students to filter by its tenant_id
+                // Using !inner forces the join and allows filtering by the joined table
+                let selectStr = options.populate 
+                    ? `*, students!student_id!inner(${lightStudentFields}, tenant_id)` 
+                    : `*, students!student_id!inner(tenant_id)`;
+
+                let query = supabase.from('permissions').select(selectStr);
+
+                // Filter by joined student's tenant_id for data isolation
+                query = query.eq('students.tenant_id', tenantId);
 
                 if (filters.studentId) query = query.eq('student_id', filters.studentId);
                 if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
@@ -2509,15 +2677,15 @@ export const db = {
                 const { data, error, count } = await query;
 
                 if (error) {
-                    console.error("❌ [SUPABASE_GATEPASS_LIST_ERROR]:", error);
-                    return { records: [], total: 0 };
+                    console.error("❌ [SUPABASE_PERMISSION_LIST_ERROR]:", error);
+                    // Fallback to direct query if join fails (e.g. if students relationship is weird)
+                    const { data: fallbackData } = await supabase.from('permissions').select('*').limit(options.limit || 100);
+                    return { records: (fallbackData || []).map(mapPermissionToCamelCase), total: (fallbackData || []).length };
                 }
-
-                console.log(`[SUPABASE_GATEPASS_LIST_DEBUG] filters=${JSON.stringify(filters)}, found=${data?.length || 0}`);
 
                 return {
                     records: (data || []).map(mapPermissionToCamelCase),
-                    total: count || 0
+                    total: count || (data?.length || 0)
                 };
             } else {
                 await connectDB();
@@ -2561,15 +2729,32 @@ export const db = {
         create: async (permissionData: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                const snakeData = mapPermissionToSnakeCase(permissionData);
+                const tenantId = await getTenantIdOrThrow();
+                const permissionWithDefaults = {
+                    wardenStatus: 'pending',
+                    deanStatus: 'pending',
+                    ...permissionData
+                };
+                let snakeData = { ...mapPermissionToSnakeCase(permissionWithDefaults), tenant_id: tenantId };
                 if (!snakeData._id) {
                     snakeData._id = crypto.randomUUID();
                 }
-                const { data, error } = await supabase
+                
+                let { data, error } = await supabase
                     .from('permissions')
                     .insert([snakeData])
                     .select()
                     .single();
+                
+                // If it fails because tenant_id column is missing, retry without it
+                if (error && error.message?.includes('column "tenant_id" of relation "permissions" does not exist')) {
+                    console.warn("⚠️ [DB] permissions table missing tenant_id column, retrying create without it");
+                    delete snakeData.tenant_id;
+                    const retry = await supabase.from('permissions').insert([snakeData]).select().single();
+                    data = retry.data;
+                    error = retry.error;
+                }
+
                 if (error) throw error;
                 return mapPermissionToCamelCase(data);
             } else {
@@ -2603,9 +2788,25 @@ export const db = {
         deleteMany: async (filters: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('permissions').delete();
-                if (filters.studentId) query = query.eq('student_id', filters.studentId);
+                
+                // Only filter by tenant_id if we specify studentId or if we are sure it exists
+                // For safety on missing column, we wrap in try-catch or just allow studentId filter
+                if (filters.studentId) {
+                    query = query.eq('student_id', filters.studentId);
+                } else {
+                    query = query.eq('tenant_id', tenantId);
+                }
+
                 const { error } = await query;
+                
+                // If column missing, retry without tenant filter if studentId is present
+                if (error && error.message?.includes('column "tenant_id" does not exist') && filters.studentId) {
+                    await supabase.from('permissions').delete().eq('student_id', filters.studentId);
+                    return true;
+                }
+
                 if (error) throw error;
                 return true;
             } else {
@@ -2624,7 +2825,9 @@ export const db = {
         find: async (filter: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('student_field_progress').select('*');
+                query = query.eq('tenant_id', tenantId);
                 if (filter.studentId) query = query.eq('student_id', filter.studentId);
                 if (filter.firebaseUID) query = query.eq('firebase_uid', filter.firebaseUID);
                 if (filter.fieldId) query = query.eq('field_id', filter.fieldId);
@@ -2688,7 +2891,9 @@ export const db = {
         deleteMany: async (filter: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('student_field_progress').delete();
+                query = query.eq('tenant_id', tenantId);
                 if (filter.hostelName) query = query.eq('hostel_name', filter.hostelName);
                 if (filter.studentId) query = query.eq('student_id', filter.studentId);
 

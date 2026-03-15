@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { auth } from "@/lib/firebase";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
+import { auth as firebaseAuth } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import Barcode from "react-barcode";
 import * as faceMatching from "@/lib/faceMatching";
 
@@ -663,7 +664,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
     const handleLogout = async () => {
         try {
-            await signOut(auth);
+            await supabase.auth.signOut();
+            await firebaseSignOut(firebaseAuth);
             localStorage.clear();
             router.push("/login?logout=success");
         } catch (error) {
@@ -673,17 +675,18 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     };
 
     useEffect(() => {
-        let permissionInterval: NodeJS.Timeout | null = null;
         let isMounted = true;
+        let unsubscribeFirebase: (() => void) | null = null;
 
-        const loadData = async (user: any) => {
+        const loadData = async (user: { uid: string; email: string | null; source: 'firebase' | 'supabase' }) => {
             // If we have initialData, we skip the minimal fetch!
             let currentStudent = initialData;
 
             if (!currentStudent) {
                 try {
                     // ⚡ STEP 1: Load MINIMAL data first if not provided
-                    const minimalResponse = await fetch(`/api/students?firebaseUID=${user.uid}&minimal=true`, { cache: 'no-store' });
+                    const queryParam = user.source === 'supabase' ? `supabaseId=${user.uid}` : `firebaseUID=${user.uid}`;
+                    const minimalResponse = await fetch(`/api/students?${queryParam}&minimal=true`, { cache: 'no-store' });
                     if (!minimalResponse.ok) throw new Error(`Failed to fetch minimal data: ${minimalResponse.status}`);
                     const minimalData = await minimalResponse.json();
                     if (minimalData.student) {
@@ -711,7 +714,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                 // ⚡ STEP 2: Load FULL profile data asynchronously in background
                 const loadFullProfile = async () => {
                     try {
-                        const fullResponse = await fetch(`/api/students?firebaseUID=${user.uid}`, { cache: 'no-store' });
+                        const queryParam = user.source === 'supabase' ? `supabaseId=${user.uid}` : `firebaseUID=${user.uid}`;
+                        const fullResponse = await fetch(`/api/students?${queryParam}`, { cache: 'no-store' });
                         if (!fullResponse.ok) throw new Error(`Failed to fetch full profile: ${fullResponse.status}`);
                         const fullData = await fullResponse.json();
                         if (fullData.student && isMounted) {
@@ -789,17 +793,31 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             }
         };
 
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            if (user) {
-                loadData(user);
-            } else {
-                if (isMounted) setLoading(false);
+        const initAuth = async () => {
+            // 1. Try Supabase session first
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                loadData({ uid: session.user.id, email: session.user.email, source: 'supabase' });
+                return;
             }
-        });
+
+            // 2. Fallback to Firebase session
+            unsubscribeFirebase = onAuthStateChanged(firebaseAuth, (user) => {
+                if (user) {
+                    loadData({ uid: user.uid, email: user.email, source: 'firebase' });
+                } else {
+                    if (isMounted) setLoading(false);
+                }
+            });
+        };
+
+        initAuth();
 
         return () => {
             isMounted = false;
-            unsubscribe();
+            if (unsubscribeFirebase) {
+                unsubscribeFirebase();
+            }
             // Visibility listener clean up is tricky if added dynamically, 
             // but we've defined handleVisibilityChange inside loadData.
             // Ideally we should move it to effect scope.
@@ -827,7 +845,8 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             });
 
             if (!response.ok) {
-                throw new Error(`Failed to create permission: ${response.status}`);
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `Failed to create permission: ${response.status}`);
             }
 
             const data = await response.json();

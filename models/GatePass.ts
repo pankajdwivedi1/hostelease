@@ -2,6 +2,7 @@ import mongoose, { Schema, Model, Document } from "mongoose";
 
 export interface IGatePass extends Document {
     studentId: mongoose.Types.ObjectId;
+    tenantId: string; // Reference to university ID
     firebaseUID: string;
     studentName: string;
     hostelName: string;
@@ -34,6 +35,12 @@ const GatePassSchema = new Schema<IGatePass>(
             type: Schema.Types.ObjectId,
             ref: "Student",
             required: true,
+            index: true,
+        },
+        tenantId: {
+            type: String,
+            required: true,
+            default: "default",
             index: true,
         },
         firebaseUID: {
@@ -119,8 +126,8 @@ const GatePassSchema = new Schema<IGatePass>(
 );
 
 // Indexes for common queries
-GatePassSchema.index({ status: 1, hostelName: 1 }); // Live: who's outside per hostel
-GatePassSchema.index({ studentId: 1, status: 1 }); // Check if student is already out
+GatePassSchema.index({ tenantId: 1, status: 1, hostelName: 1 }); // Live: who's outside per hostel
+GatePassSchema.index({ tenantId: 1, studentId: 1, status: 1 }); // Check if student is already out
 GatePassSchema.index({ checkOutTime: -1 }); // Recent outings
 GatePassSchema.index({ firebaseUID: 1, checkOutTime: -1 }); // Student's outing history
 GatePassSchema.index({ checkOutISTDate: 1 }); // Daily reports

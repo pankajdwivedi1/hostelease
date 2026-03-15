@@ -7,13 +7,13 @@ export async function GET(request: NextRequest) {
     try {
         // Get client IP
         const forwarded = request.headers.get("x-forwarded-for");
-        const ip = forwarded ? forwarded.split(",")[0] : request.ip || "127.0.0.1";
+        const ip = forwarded ? forwarded.split(",")[0] : (request as any).ip || "127.0.0.1";
 
         const settings = await db.settings.get();
         const whitelist = settings?.wifiWhitelist || [];
 
         // Support both old string format and new object format
-        let matchingEntry = null;
+        let matchingEntry: any = null;
         const isWhitelisted = whitelist.some((w: any) => {
             if (typeof w === 'string') {
                 return w.trim() === ip.trim();
