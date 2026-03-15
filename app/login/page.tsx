@@ -70,6 +70,9 @@ function LoginForm() {
 
       console.log("Initiating Supabase Login...");
       
+      // ⚡ IMPORTANT: Set userType to student so the dashboard knows how to handle the session
+      localStorage.setItem("userType", "student");
+
       // Preserve tenant context in redirect
       const tenant = searchParams.get('tenant');
       const redirectUrl = new URL(`${window.location.origin}/auth/callback`);

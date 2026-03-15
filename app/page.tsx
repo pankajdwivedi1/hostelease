@@ -46,8 +46,70 @@ export default function Dashboard() {
     const checkAuth = async () => {
       if (typeof window === "undefined") return;
 
-      // ⚡ CHANGED: Use localStorage instead of sessionStorage to stay logged in "always"
+      // 1. ⚡ REGARDLESS of localStorage, Check Supabase Session First
+      // If a Supabase session exists, this user IS a student
+      const { data: { session: sbSession } } = await supabase.auth.getSession();
+      
+      if (sbSession && sbSession.user.email) {
+        try {
+          const response = await fetch(`/api/students?email=${encodeURIComponent(sbSession.user.email)}&minimal=true`);
+          if (response.status === 404) {
+            router.push("/onboarding");
+            setLoading(false);
+            return;
+          }
+          if (response.ok) {
+            const data = await response.json();
+            if (data.student) {
+              setStudentData(data.student);
+              setUserType("student");
+              localStorage.setItem("userType", "student"); // Keep in sync
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (e) {
+          console.error("Supabase user fetch failed", e);
+        }
+      }
+
+      // 2. ⚡ Check Staff Roles in localStorage
       const storedUserType = localStorage.getItem("userType");
+
+      if (storedUserType === "student") {
+        // Handle Firebase Fallback for existing users during migration
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+          if (user) {
+            try {
+              const response = await fetch(`/api/students?email=${encodeURIComponent(user.email || "")}&minimal=true`);
+              if (response.status === 404) {
+                router.push("/onboarding");
+                setLoading(false);
+                return;
+              }
+
+              if (response.ok) {
+                const data = await response.json();
+                if (data.student) {
+                  setStudentData(data.student);
+                  setUserType("student");
+                  setLoading(false);
+                } else {
+                  router.push("/onboarding");
+                }
+              }
+            } catch (error) {
+              console.error("Error fetching student data from Firebase session:", error);
+              router.push("/login");
+              setLoading(false);
+            }
+          } else {
+            router.push("/login");
+            setLoading(false);
+          }
+        });
+        return () => unsubscribe();
+      }
 
       if (storedUserType === "admin") {
         setUserType("admin");
@@ -73,76 +135,9 @@ export default function Dashboard() {
         return;
       }
 
-      if (storedUserType === "student") {
-        // ⚡ NEW: Try Supabase Auth First
-        const fetchSupabaseSession = async () => {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session && session.user.email) {
-            try {
-              const response = await fetch(`/api/students?email=${encodeURIComponent(session.user.email)}&minimal=true`);
-              if (response.status === 404) {
-                router.push("/onboarding");
-                setLoading(false);
-                return true;
-              }
-              if (response.ok) {
-                const data = await response.json();
-                if (data.student) {
-                  setStudentData(data.student);
-                  setUserType("student");
-                  setLoading(false);
-                  return true;
-                }
-              }
-            } catch (e) {
-              console.error("Supabase user fetch failed", e);
-            }
-          }
-          return false;
-        };
-
-        fetchSupabaseSession().then(success => {
-          if (success) return;
-
-          // ⚡ FALLBACK: Check Firebase for backward compatibility
-          const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-              try {
-                const response = await fetch(`/api/students?email=${encodeURIComponent(user.email || "")}&minimal=true`);
-                if (response.status === 404) {
-                  router.push("/onboarding");
-                  setLoading(false);
-                  return;
-                }
-
-                if (response.ok) {
-                  const data = await response.json();
-                  if (data.student) {
-                    setStudentData(data.student);
-                    setUserType("student");
-                    setLoading(false);
-                  } else {
-                    router.push("/onboarding");
-                  }
-                }
-              } catch (error) {
-                console.error("Error fetching student data from Firebase session:", error);
-                router.push("/login");
-                setLoading(false);
-              }
-            } else {
-              // No session found in either system
-              router.push("/login");
-              setLoading(false);
-            }
-          });
-
-          return () => unsubscribe();
-        });
-      } else {
-        router.push("/login");
-        setLoading(false);
-      }
+      // 3. Fallback to login
+      router.push("/login");
+      setLoading(false);
     };
 
     checkAuth();
