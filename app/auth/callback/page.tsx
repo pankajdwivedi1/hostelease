@@ -17,8 +17,15 @@ export default function AuthCallback() {
         console.error("Auth callback error:", error);
       }
 
-      // Redirect to the dashboard
-      router.push("/");
+      // Redirect to the dashboard while preserving tenant
+      const urlParams = new URLSearchParams(window.location.search);
+      const tenant = urlParams.get('tenant');
+      
+      if (tenant) {
+          router.push(`/?tenant=${tenant}`);
+      } else {
+          router.push("/");
+      }
     };
 
     handleCallback();

@@ -21,15 +21,21 @@ export default function Dashboard() {
     const hostname = window.location.hostname;
     const urlParams = new URLSearchParams(window.location.search);
     const tenantParam = urlParams.get('tenant');
+    
+    // Check for cookie on client side
+    const cookies = typeof document !== 'undefined' ? document.cookie : '';
+    const tenantCookie = cookies.split('; ').find(row => row.startsWith('tenant-slug='))?.split('=')[1];
+    
+    const activeTenant = tenantParam || tenantCookie;
 
     const mainDomains = ['hostelease.com', 'localhost', 'hostelease.vercel.app', 'hostelease-silk.vercel.app'];
     const parts = hostname.split('.');
 
-    // If it's the root domain AND no tenant parameter is provided
-    const isRoot = (parts.length === 1 || (parts.length === 2 && (parts[0] === 'www' || parts[1] === 'localhost'))) && !tenantParam;
+    // If it's the root domain AND no tenant (param or cookie) is provided
+    const isRoot = (parts.length === 1 || (parts.length === 2 && (parts[0] === 'www' || parts[1] === 'localhost'))) && !activeTenant;
     
-    // Explicitly check if we are on one of the main domains without a subdomain
-    const isMainBase = mainDomains.includes(hostname) && !tenantParam;
+    // Explicitly check if we are on one of the main domains without a subdomain OR tenant cookie
+    const isMainBase = mainDomains.includes(hostname) && !activeTenant;
 
     if (isMainBase || isRoot) {
       setIsMainDomain(true);

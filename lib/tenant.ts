@@ -9,7 +9,16 @@ export async function getTenantFromRequest() {
     const headersList = await (headers as any)();
     let slug = headersList.get('x-tenant-slug');
 
-    // ⚡ FALLBACK: Resolve from Host header if x-tenant-slug is missing (useful if middleware is off)
+    // ⚡ FALLBACK: Resolve from cookies if x-tenant-slug is missing (useful for free Vercel tier)
+    if (!slug || slug === 'default') {
+        const cookiesList = headersList.get('cookie') || '';
+        const match = cookiesList.match(/tenant-slug=([^;]+)/);
+        if (match) {
+            slug = match[1];
+        }
+    }
+
+    // ⚡ FALLBACK: Resolve from Host header if x-tenant-slug is still missing
     if (!slug || slug === 'default') {
         const host = headersList.get('host') || '';
         if (host.includes('.localhost')) {

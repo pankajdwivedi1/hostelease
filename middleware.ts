@@ -5,20 +5,26 @@ export function middleware(request: NextRequest) {
     
     let tenantSlug = 'default';
     
-    // Handle localhost and specific domains
-    if (hostname.includes('.localhost')) {
+    // 1. Priority: ?tenant=slug query parameter
+    const url = new URL(request.url);
+    const tenantParam = url.searchParams.get('tenant');
+    if (tenantParam) {
+        tenantSlug = tenantParam;
+    } 
+    // 2. Secondary: Hostname-based detection
+    else if (hostname.includes('.localhost')) {
         tenantSlug = hostname.split('.localhost')[0];
     } else if (hostname.includes('.hostelease.com')) {
         tenantSlug = hostname.split('.hostelease.com')[0];
     } else if (hostname.includes('.hostelease.vercel.app')) {
         tenantSlug = hostname.split('.hostelease.vercel.app')[0];
     }
-
-    // ⚡ FALLBACK: Support ?tenant=slug query parameter for Vercel free tier / testing
-    const url = new URL(request.url);
-    const tenantParam = url.searchParams.get('tenant');
-    if (tenantParam) {
-        tenantSlug = tenantParam;
+    // 3. Tertiary: Cookie-based persistence
+    else {
+        const tenantCookie = request.cookies.get('tenant-slug')?.value;
+        if (tenantCookie) {
+            tenantSlug = tenantCookie;
+        }
     }
 
     // Clean up
@@ -35,6 +41,15 @@ export function middleware(request: NextRequest) {
             headers: requestHeaders,
         },
     });
+
+    // Set cookie for persistence if a valid tenant was found
+    if (tenantSlug !== 'default') {
+        response.cookies.set('tenant-slug', tenantSlug, {
+            path: '/',
+            maxAge: 60 * 60 * 24 * 30, // 30 days
+            sameSite: 'lax',
+        });
+    }
 
     // For debugging
     response.headers.set('x-tenant-slug', tenantSlug);
