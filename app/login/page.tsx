@@ -25,12 +25,17 @@ function LoginForm() {
   const [showLogoutToast, setShowLogoutToast] = useState(false);
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
   const [selectedHostelId, setSelectedHostelId] = useState("");
+  const [isDeveloperSetup, setIsDeveloperSetup] = useState(true);
 
   // For background animation mounting
   const [mounted, setMounted] = useState(false);
+  const [tenantName, setTenantName] = useState("Hostelease");
+  const [tenantLogo, setTenantLogo] = useState("");
   useEffect(() => {
     setMounted(true);
     fetchHostels();
+    fetchTenantConfig();
+    checkDeveloperSetup();
     if (searchParams.get("logout") === "success") {
       setShowLogoutToast(true);
       setTimeout(() => setShowLogoutToast(false), 5000);
@@ -38,6 +43,19 @@ function LoginForm() {
       window.history.replaceState({}, '', '/login');
     }
   }, [searchParams]);
+
+  const fetchTenantConfig = async () => {
+    try {
+      const res = await fetch('/api/tenant/config');
+      const data = await res.json();
+      if (data.success) {
+        setTenantName(data.name);
+        setTenantLogo(data.logo);
+      }
+    } catch (err) {
+      console.error("Config fetch failed", err);
+    }
+  };
 
   const fetchHostels = async () => {
     try {
@@ -59,7 +77,19 @@ function LoginForm() {
         setHostels(data.hostels);
       }
     } catch (error) {
-      console.error("Error fetching hostels:", error);
+      console.error("Fetch config failed");
+    }
+  };
+
+  const checkDeveloperSetup = async () => {
+    try {
+      const res = await fetch('/api/developer/setup-status');
+      const data = await res.json();
+      if (data.success) {
+        setIsDeveloperSetup(data.isSetup);
+      }
+    } catch (e) {
+      console.error("Setup check failed");
     }
   };
 
@@ -213,6 +243,22 @@ function LoginForm() {
       setDeveloperLoading(true);
       setError("");
 
+      if (!isDeveloperSetup) {
+        // Initial setup flow
+        const response = await fetch("/api/developer/initialize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: developerPassword }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+        
+        // After successful init, login automatically
+        localStorage.setItem("userType", "superadmin");
+        router.push("/");
+        return;
+      }
+
       const response = await fetch("/api/developer/auth", {
         method: "POST",
         headers: {
@@ -228,7 +274,7 @@ function LoginForm() {
       }
 
       if (data.success) {
-        localStorage.setItem("userType", "developer");
+        localStorage.setItem("userType", "superadmin");
         router.push("/");
       }
     } catch (error: any) {
@@ -283,25 +329,34 @@ function LoginForm() {
               >
                 <div className="absolute -inset-4 rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 opacity-0 blur-xl transition duration-700 group-hover:opacity-100" />
                 <img
-                  src="/logo.jpeg"
-                  alt="Hostelease Logo"
+                  src={tenantLogo || "/logo.jpeg"}
+                  alt="University Logo"
                   className={`relative rounded-full object-cover transition-all duration-500 group-hover:scale-105 group-hover:rotate-3 shadow-2xl border-4 border-white ${(showAdminPassword || showWardenPassword || showDeveloperPassword)
                     ? "h-10 w-10 sm:h-14 sm:w-14"
                     : "h-16 w-16 sm:h-20 sm:w-20"
                     }`}
-                  title="Click for developer login"
+                  title="Click for Super Admin login"
+                  onError={(e) => {
+                    (e.target as any).src = "/logo.jpeg";
+                  }}
                 />
+                {!isDeveloperSetup && !showDeveloperPassword && (
+                  <div className="absolute -bottom-1 -right-1 animate-bounce pointer-events-none">
+                    <div className="relative">
+                      <div className="absolute -inset-1 rounded-full bg-blue-400 opacity-75 blur animate-ping" />
+                      <div className="bg-blue-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-lg whitespace-nowrap border border-white/50">
+                        CLICK ME
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="space-y-1 sm:space-y-2">
                 <h1 className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "text-2xl sm:text-4xl" : "text-3xl sm:text-5xl"} font-black tracking-tight text-slate-900 transition-all duration-500`}>
-                  Hostel<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">ease</span>
+                  {tenantName}
+                  {tenantName !== "Hostelease" && <span className="block text-[8px] sm:text-[10px] text-slate-400 font-bold tracking-widest mt-1">POWERED BY HOSTELEASE</span>}
                 </h1>
                 <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-                  <p className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "hidden sm:block text-[8px] sm:text-[10px]" : "text-[9px] sm:text-[10px]"} font-black text-blue-600/60 tracking-[0.3em] uppercase transition-all duration-500`}>
-                    Management Reimagined
-                  </p>
-
-                  {/* Logout success popup positioned exactly above the description */}
                   {showLogoutToast && (
                     <div className="w-full max-w-[280px] sm:max-w-[320px] animate-in fade-in slide-in-from-top-2 duration-500 my-0.5 sm:my-1">
                       <div className="flex items-center gap-2 sm:gap-3 rounded-lg sm:rounded-xl border border-emerald-100 bg-[#e6fcf5] pr-3 sm:pr-4 shadow-sm overflow-hidden min-h-[40px] sm:min-h-[48px]">
@@ -327,7 +382,6 @@ function LoginForm() {
 
             {/* Login Container */}
             <div className="w-full relative group">
-              {/* Decorative background glow for the container */}
               <div className="absolute -inset-1 rounded-[32px] bg-gradient-to-b from-gray-200/50 to-transparent opacity-50 blur-sm transition duration-500 group-hover:opacity-100" />
 
               <div className="relative overflow-hidden rounded-[24px] sm:rounded-[32px] border border-white bg-white/80 backdrop-blur-xl p-1 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.08)] transition-all duration-500">
@@ -419,8 +473,16 @@ function LoginForm() {
                       <div className="mt-4 sm:mt-8 animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-500">
                         <div className="rounded-2xl border border-slate-100 bg-white p-4 sm:p-6 shadow-[0_12px_24px_-8px_rgba(0,0,0,0.08)]">
                           <label className="mb-2 sm:mb-3 block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
-                            {showAdminPassword ? "Dean Authentication Key" : showWardenPassword ? "Campus Authentication Key" : "Developer Override"}
+                            {showAdminPassword ? "Dean Authentication Key" : 
+                             showWardenPassword ? "Campus Authentication Key" : 
+                             !isDeveloperSetup ? "CREATE YOUR PASSWORD" : "Super Admin Authentication"}
                           </label>
+                          {!isDeveloperSetup && showDeveloperPassword && (
+                            <p className="mb-4 text-[10px] text-blue-600 font-bold bg-blue-50 p-2 rounded-lg border border-blue-100 flex items-center gap-2">
+                              <span className="text-sm">🔑</span>
+                              Please create a secure developer password for your university.
+                            </p>
+                          )}
 
                           {showWardenPassword && (
                             <div className="mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -465,43 +527,31 @@ function LoginForm() {
                                   else handleDeveloperLogin();
                                 }
                               }}
-                              className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:py-4 text-sm sm:text-base text-slate-900 placeholder-slate-300 transition-all focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10"
-                              placeholder="••••••••••••"
+                              className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:py-4 text-center text-sm sm:text-lg font-black tracking-[0.4em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-300 placeholder:font-medium placeholder:tracking-normal"
+                              placeholder={showAdminPassword ? "············" : showWardenPassword ? "············" : !isDeveloperSetup ? "Create password" : "Enter Super Admin key"}
                             />
+                            <button
+                                type="button"
+                                onClick={() => {
+                                  if (showAdminPassword) setShowAdminPassword(false);
+                                  if (showWardenPassword) setShowWardenPassword(false);
+                                  if (showDeveloperPassword) setShowDeveloperPassword(false);
+                                  setError("");
+                                }}
+                                className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors mt-2"
+                              >
+                                Cancel
+                              </button>
                           </div>
                           <div className="mt-6 flex gap-3">
                             <button
-                              onClick={() => {
-                                setShowAdminPassword(false);
-                                setShowWardenPassword(false);
-                                setShowDeveloperPassword(false);
-                                setAdminPassword("");
-                                setWardenPassword("");
-                                setDeveloperPassword("");
-                                setError("");
-                              }}
-                              className="flex-1 rounded-xl border border-slate-100 bg-white py-3 text-xs font-bold text-slate-500 transition-all hover:bg-slate-50 hover:text-slate-900"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (showAdminPassword) handleAdminLogin();
-                                else if (showWardenPassword) handleWardenLogin();
-                                else handleDeveloperLogin();
-                              }}
+                              onClick={showAdminPassword ? handleAdminLogin : showWardenPassword ? handleWardenLogin : handleDeveloperLogin}
                               disabled={adminLoading || wardenLoading || developerLoading}
-                              className={`flex-1 rounded-xl py-3 text-xs font-bold text-white transition-all shadow-lg active:scale-95 ${showAdminPassword ? "bg-blue-600 hover:bg-blue-500 shadow-blue-500/25" :
-                                showWardenPassword ? "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/25" :
-                                  "bg-slate-800 hover:bg-slate-700 shadow-slate-800/25"
-                                }`}
+                              className={`w-full py-3.5 sm:py-4.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-widest text-white shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 ${showAdminPassword ? 'bg-blue-600 shadow-blue-200' : showWardenPassword ? 'bg-indigo-600 shadow-indigo-200' : 'bg-slate-900 shadow-slate-200'}`}
                             >
-                              {adminLoading || wardenLoading || developerLoading ? (
-                                <div className="flex items-center justify-center gap-2">
-                                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                                  <span>Verifying</span>
-                                </div>
-                              ) : "Confirm Identity"}
+                              {adminLoading || wardenLoading || developerLoading ? "Processing..." : 
+                               showAdminPassword || showWardenPassword ? "Confirm Identity" : 
+                               !isDeveloperSetup ? "REGISTER PASSWORD" : "Unlock Portal"}
                             </button>
                           </div>
                         </div>

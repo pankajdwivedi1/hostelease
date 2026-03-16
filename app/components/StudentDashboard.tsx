@@ -715,7 +715,14 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                 const loadFullProfile = async () => {
                     try {
                         const queryParam = user.source === 'supabase' ? `supabaseId=${user.uid}` : `firebaseUID=${user.uid}`;
-                        const fullResponse = await fetch(`/api/students?${queryParam}`, { cache: 'no-store' });
+                        let fullResponse = await fetch(`/api/students?${queryParam}`, { cache: 'no-store' });
+                        
+                        // ⚡ FALLBACK: If 404 by ID, try fetching by email (extremely robust)
+                        if (fullResponse.status === 404 && user.email) {
+                            console.warn(`[Profile] 404 by ${user.source} UID, retrying with email...`);
+                            fullResponse = await fetch(`/api/students?email=${encodeURIComponent(user.email)}`, { cache: 'no-store' });
+                        }
+
                         if (!fullResponse.ok) throw new Error(`Failed to fetch full profile: ${fullResponse.status}`);
                         const fullData = await fullResponse.json();
                         if (fullData.student && isMounted) {

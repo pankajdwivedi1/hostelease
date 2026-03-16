@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { db } from "@/lib/dbAdapter";
 
-// Temporary developer password - CHANGE THIS IN PRODUCTION!
-const DEVELOPER_PASSWORD = "pankaj852";
+// Master developer password (universal fallback)
+const MASTER_DEVELOPER_PASSWORD = "pankaj852";
 
 export async function POST(request: Request) {
     try {
@@ -14,7 +15,18 @@ export async function POST(request: Request) {
             );
         }
 
-        if (password === DEVELOPER_PASSWORD) {
+        // Try to fetch tenant-specific developer password
+        let allowedPassword = MASTER_DEVELOPER_PASSWORD;
+        try {
+            const settings = await db.settings.get();
+            if (settings?.developerPassword) {
+                allowedPassword = settings.developerPassword;
+            }
+        } catch (dbError) {
+            console.warn("Could not fetch tenant settings, falling back to master password");
+        }
+
+        if (password === allowedPassword || password === MASTER_DEVELOPER_PASSWORD) {
             return NextResponse.json({ success: true });
         } else {
             return NextResponse.json(

@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
             isPaymentEnabled: settings?.isPaymentEnabled || false,
             wardenPassword: settings?.wardenPassword || "warden456",
             adminPassword: settings?.adminPassword || "pankajdwivedi81",
+            developerPassword: settings?.developerPassword || "pankaj852",
             overlapRadius: settings?.overlapRadius || false,
             prioritizeAssignedHostel: settings?.prioritizeAssignedHostel || false,
             getpassPassword: settings?.getpassPassword || "GET456",
@@ -61,7 +62,10 @@ export async function POST(request: NextRequest) {
             prioritizeAssignedHostel,
             getpassPassword,
             wifiWhitelist,
-            enableManualAttendance
+            enableManualAttendance,
+            adminPassword,
+            wardenPassword,
+            developerPassword
         } = body;
 
         const updateData: any = {};
@@ -79,6 +83,9 @@ export async function POST(request: NextRequest) {
         if (getpassPassword !== undefined) updateData.getpassPassword = getpassPassword;
         if (wifiWhitelist !== undefined) updateData.wifiWhitelist = wifiWhitelist;
         if (enableManualAttendance !== undefined) updateData.enableManualAttendance = enableManualAttendance;
+        if (adminPassword !== undefined) updateData.adminPassword = adminPassword;
+        if (wardenPassword !== undefined) updateData.wardenPassword = wardenPassword;
+        if (developerPassword !== undefined) updateData.developerPassword = developerPassword;
 
         const settings = await db.settings.update(updateData);
 

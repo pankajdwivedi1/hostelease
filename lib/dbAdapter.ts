@@ -223,6 +223,7 @@ const mapSettingsToCamelCase = (s: any) => {
         prioritizeAssignedHostel: s.prioritize_assigned_hostel,
         getpassPassword: s.getpass_password,
         enableManualAttendance: s.enable_manual_attendance,
+        developerPassword: s.developer_password,
         createdAt: s.created_at,
         updatedAt: s.updated_at
     };
@@ -253,7 +254,8 @@ const mapSettingsToSnakeCase = (s: any) => {
         overlapRadius: 'overlap_radius',
         prioritizeAssignedHostel: 'prioritize_assigned_hostel',
         getpassPassword: 'getpass_password',
-        enableManualAttendance: 'enable_manual_attendance'
+        enableManualAttendance: 'enable_manual_attendance',
+        developerPassword: 'developer_password'
     };
 
     Object.keys(s).forEach(key => {
@@ -879,6 +881,11 @@ export const db = {
                 query = query.eq('tenant_id', tenantId);
 
                 if (filter.firebaseUID) query = query.eq('firebase_uid', filter.firebaseUID);
+                if (filter.supabaseId) {
+                    // ⚡ TRANSITION: Try both supabase_id and firebase_uid columns for Supabase users
+                    query = query.or(`supabase_id.eq.${filter.supabaseId},firebase_uid.eq.${filter.supabaseId}`);
+                }
+                if (filter._id) query = query.eq('_id', filter._id);
                 if (filter.email) query = query.eq('email', filter.email);
                 if (filter.phoneNumber) query = query.eq('phone_number', filter.phoneNumber);
                 if (filter.registrationId) query = query.eq('registration_id', filter.registrationId);
@@ -891,7 +898,26 @@ export const db = {
                     console.error("Supabase findOne error:", error);
                     return null;
                 }
-                if (!data) return null;
+
+                if (!data) {
+                    // ⚡ GLOBAL FALLBACK: If not found in current tenant, try across all tenants
+                    console.log(`[DB_ADAPTER] Student not found in tenant ${tenantId}, trying global lookup...`);
+                    let globalQuery = supabase.from('students').select('*');
+                    
+                    if (filter.firebaseUID) globalQuery = globalQuery.eq('firebase_uid', filter.firebaseUID);
+                    if (filter.supabaseId) {
+                         globalQuery = globalQuery.or(`supabase_id.eq.${filter.supabaseId},firebase_uid.eq.${filter.supabaseId}`);
+                    }
+                    if (filter._id) globalQuery = globalQuery.eq('_id', filter._id);
+                    if (filter.email) globalQuery = globalQuery.eq('email', filter.email);
+
+                    const { data: globalData, error: globalError } = await globalQuery.maybeSingle();
+                    if (!globalError && globalData) {
+                        console.log(`[DB_ADAPTER] Found student globally (tenant_id=${globalData.tenant_id})`);
+                        return mapStudentToCamelCase(globalData);
+                    }
+                    return null;
+                }
 
                 return mapStudentToCamelCase(data);
             }
@@ -1344,8 +1370,13 @@ export const db = {
         audit: async (type: string) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
+
                 if (type === "duplicates-phone") {
-                    const { data: allStudents } = await supabase.from('students').select('_id,name,phone_number,registration_id,room_number,hostel_name,email');
+                    const { data: allStudents } = await supabase
+                        .from('students')
+                        .select('_id,name,phone_number,registration_id,room_number,hostel_name,email')
+                        .eq('tenant_id', tenantId);
                     const grouped = (allStudents || []).reduce((acc: any, s: any) => {
                         const key = s.phone_number;
                         if (!key) return acc;
@@ -1365,7 +1396,12 @@ export const db = {
                 }
 
                 if (type === "duplicates-regid") {
-                    const { data: allStudents } = await supabase.from('students').select('_id,name,phone_number,registration_id,room_number,hostel_name,email').not('registration_id', 'is', null).neq('registration_id', '');
+                    const { data: allStudents } = await supabase
+                        .from('students')
+                        .select('_id,name,phone_number,registration_id,room_number,hostel_name,email')
+                        .eq('tenant_id', tenantId)
+                        .not('registration_id', 'is', null)
+                        .neq('registration_id', '');
                     const grouped = (allStudents || []).reduce((acc: any, s: any) => {
                         const key = s.registration_id;
                         if (!key) return acc;
@@ -1385,7 +1421,10 @@ export const db = {
                 }
 
                 if (type === "gibberish-names") {
-                    const { data: students } = await supabase.from('students').select('_id,name,phone_number,registration_id,hostel_name,room_number,email');
+                    const { data: students } = await supabase
+                        .from('students')
+                        .select('_id,name,phone_number,registration_id,hostel_name,room_number,email')
+                        .eq('tenant_id', tenantId);
                     return (students || []).filter(s => {
                         if (!s.name) return true;
                         const name = s.name.toLowerCase().trim();
@@ -2269,6 +2308,7 @@ export const db = {
         findOneAndUpdate: async (filter: any, update: any, options: { upsert?: boolean; new?: boolean } = {}) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 const snakeUpdate = mapFieldEnforcementToSnakeCase(update.$set || update);
                 const hostelName = filter.hostelName?.$regex ? filter.hostelName.$regex.replace(/^\^|\$$/g, '') : (typeof filter.hostelName === 'string' ? filter.hostelName : null);
 
@@ -2307,6 +2347,7 @@ export const db = {
         findOneAndDelete: async (filter: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
                 let hostelNameFilter;
                 if (filter.hostelName) {
                     if (typeof filter.hostelName === 'object' && filter.hostelName.$regex) {
@@ -2746,13 +2787,20 @@ export const db = {
                     .select()
                     .single();
                 
-                // If it fails because tenant_id column is missing, retry without it
-                if (error && error.message?.includes('column "tenant_id" of relation "permissions" does not exist')) {
-                    console.warn("⚠️ [DB] permissions table missing tenant_id column, retrying create without it");
-                    delete snakeData.tenant_id;
-                    const retry = await supabase.from('permissions').insert([snakeData]).select().single();
+                // 🔄 ROBUST FALLBACK CHAIN: Handle missing columns (tenant_id, request_type, etc.)
+                if (error && (error.message?.includes('tenant_id') || error.message?.includes('request_type') || error.code === 'PGRST204' || error.message?.includes('schema cache'))) {
+                    console.warn(`⚠️ [DB] Permissions table schema mismatch detected ("${error.message}"). Retrying without new columns...`);
+                    
+                    const cleanData = { ...snakeData };
+                    // Remove columns that might not exist in older schemas
+                    delete cleanData.tenant_id;
+                    delete cleanData.request_type;
+                    
+                    const retry = await supabase.from('permissions').insert([cleanData]).select().single();
                     data = retry.data;
                     error = retry.error;
+                    
+                    if (!error) console.log("✅ Retry successful without problematic columns.");
                 }
 
                 if (error) throw error;
@@ -2769,12 +2817,26 @@ export const db = {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const snakeUpdate = mapPermissionToSnakeCase(updateData.$set || updateData);
-                const { data, error } = await supabase
+                let { data, error } = await supabase
                     .from('permissions')
                     .update(snakeUpdate)
                     .eq('_id', id)
                     .select()
                     .single();
+
+                // 🔄 ROBUST FALLBACK: Handle missing columns in update
+                if (error && (error.message?.includes('tenant_id') || error.message?.includes('request_type') || error.code === 'PGRST204' || error.message?.includes('schema cache'))) {
+                    console.warn(`⚠️ [DB] Permissions update schema mismatch ("${error.message}"). Retrying without new columns...`);
+                    
+                    const cleanUpdate = { ...snakeUpdate };
+                    delete cleanUpdate.tenant_id;
+                    delete cleanUpdate.request_type;
+                    
+                    const retry = await supabase.from('permissions').update(cleanUpdate).eq('_id', id).select().single();
+                    data = retry.data;
+                    error = retry.error;
+                }
+
                 if (error) throw error;
                 return mapPermissionToCamelCase(data);
             } else {

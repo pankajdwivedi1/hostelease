@@ -205,12 +205,13 @@ export default function LandingPage() {
                                     if (data.success) {
                                         alert(`🚀 SUCCESS! ${formData.name} has been provisioned.\n\nYour portal is ready at: ${formData.slug}.hostelease.com`);
                                         setRequestMode(false);
-                                        window.location.href = `http://${formData.slug}.localhost:3000`;
+                                        window.location.href = `http://localhost:3000/login?tenant=${formData.slug}`;
                                     } else {
                                         alert(data.error || "Registration failed");
                                     }
-                                } catch (err) {
-                                    alert("Network error during registration");
+                                } catch (err: any) {
+                                    console.error("Registration UI Error:", err);
+                                    alert("Registration Error: " + (err.message || "Network connection failed"));
                                 }
                             }} className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -34,6 +34,7 @@ export default function SuperAdminDashboard() {
     const [loading, setLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
+    const [registrationSuccessData, setRegistrationSuccessData] = useState<any | null>(null);
 
     // Auth state
     const [isAuthorized, setIsAuthorized] = useState(false);
@@ -88,8 +89,12 @@ export default function SuperAdminDashboard() {
             if (data.success) {
                 setTenants([data.tenant, ...tenants]);
                 setShowAddModal(false);
+                setRegistrationSuccessData({
+                    ...data.tenant,
+                    defaultAdminPass: "pankajdwivedi81",
+                    defaultDevPass: "pankaj852"
+                });
                 setNewTenant({ name: "", slug: "", adminEmail: "", subscriptionStatus: "trial", primaryColor: "#3b82f6" });
-                alert("University registered successfully!");
             } else {
                 alert(data.error);
             }
@@ -434,6 +439,80 @@ export default function SuperAdminDashboard() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {/* Registration Success Modal */}
+            {registrationSuccessData && (
+                <div className="fixed inset-0 bg-[#050510]/95 backdrop-blur-xl z-[100] flex items-center justify-center p-6">
+                    <div className="bg-white w-full max-w-xl rounded-[40px] shadow-2xl overflow-hidden border border-white animate-in zoom-in duration-500">
+                        <div className="bg-emerald-600 p-10 text-white relative">
+                            <div className="absolute top-0 right-0 p-12 opacity-10">
+                                <CheckCircle2 className="w-32 h-32" />
+                            </div>
+                            <h3 className="text-3xl font-black uppercase tracking-tighter mb-2">Registration Successful!</h3>
+                            <p className="text-emerald-100/60 text-xs font-black uppercase tracking-widest">{registrationSuccessData.name} is now LIVE</p>
+                        </div>
+
+                        <div className="p-10 space-y-8">
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                                    <div className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-200 flex items-center justify-center">
+                                        <Globe className="w-5 h-5 text-blue-500" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Live Subdomain</p>
+                                        <p className="text-lg font-black text-slate-800 tracking-tight lowercase">{registrationSuccessData.slug}.hostelease.com</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="p-6 rounded-3xl bg-indigo-50/50 border border-indigo-100/50">
+                                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-3">Dean Portal</p>
+                                    <div className="space-y-1">
+                                        <p className="text-xs text-indigo-900 font-bold mb-1">User: <span className="text-indigo-600">{registrationSuccessData.adminEmail}</span></p>
+                                        <p className="text-xs text-indigo-900 font-bold">Pass: <code className="bg-indigo-100 px-1.5 py-0.5 rounded text-indigo-700 font-black">{registrationSuccessData.defaultAdminPass}</code></p>
+                                    </div>
+                                </div>
+
+                                <div className="p-6 rounded-3xl bg-amber-50/50 border border-amber-100/50">
+                                    <p className="text-[10px] font-black text-amber-400 uppercase tracking-widest mb-3">Developer Portal</p>
+                                    <div className="space-y-1">
+                                        <p className="text-xs text-amber-900 font-bold mb-1">User: <span className="text-amber-600">Logo Click</span></p>
+                                        <p className="text-xs text-amber-900 font-bold">Pass: <code className="bg-amber-100 px-1.5 py-0.5 rounded text-amber-700 font-black">{registrationSuccessData.defaultDevPass}</code></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-blue-50/50 p-6 rounded-3xl border border-blue-100/50">
+                                <h4 className="text-[10px] font-black text-blue-900 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                    <AlertCircle className="w-3.5 h-3.5" />
+                                    Initial Setup Instructions
+                                </h4>
+                                <ul className="space-y-2">
+                                    <li className="text-[11px] text-blue-800/70 font-bold leading-tight flex gap-2">
+                                        <span className="text-blue-500">•</span>
+                                        Log in as Developer first to customize Dean & Warden passwords.
+                                    </li>
+                                    <li className="text-[11px] text-blue-800/70 font-bold leading-tight flex gap-2">
+                                        <span className="text-blue-500">•</span>
+                                        Add your hostels in 'System Settings' to enable student registration.
+                                    </li>
+                                    <li className="text-[11px] text-blue-800/70 font-bold leading-tight flex gap-2">
+                                        <span className="text-blue-500">•</span>
+                                        Students can log in via Google once they are mapped to a room.
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <button
+                                onClick={() => setRegistrationSuccessData(null)}
+                                className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest shadow-2xl shadow-slate-200 active:scale-95 transition-all"
+                            >
+                                Done & Close
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

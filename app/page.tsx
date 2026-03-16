@@ -123,8 +123,8 @@ export default function Dashboard() {
         return;
       }
 
-      if (storedUserType === "developer") {
-        setUserType("developer");
+      if (storedUserType === "superadmin") {
+        setUserType("superadmin");
         setLoading(false);
         return;
       }
@@ -165,8 +165,8 @@ export default function Dashboard() {
         <StudentDashboard initialData={studentData} />
       ) : userType === "warden" ? (
         <AdminDashboard title="Campus Dashboard" />
-      ) : userType === "developer" ? (
-        <AdminDashboard title="Developer Dashboard" showRemoveButton={true} />
+      ) : userType === "superadmin" ? (
+        <AdminDashboard title="Super Admin Dashboard" showRemoveButton={true} />
       ) : (
         <AdminDashboard title="Dean Dashboard" />
       )}
