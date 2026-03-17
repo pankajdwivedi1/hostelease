@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { validators, validateStudentRegistration } from "@/lib/validation";
-import { getCurrentTenantId } from "@/lib/tenant";
+import { getCurrentTenantId, getTenantById } from "@/lib/tenant";
 
 export async function POST(request: NextRequest) {
   try {
@@ -158,7 +158,8 @@ export async function GET(request: NextRequest) {
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
-      return NextResponse.json({ student }, { status: 200 });
+      const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
+      return NextResponse.json({ student, tenantSlug: tenant?.slug }, { status: 200 });
     }
 
     if (supabaseId) {
@@ -166,7 +167,8 @@ export async function GET(request: NextRequest) {
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
-      return NextResponse.json({ student }, { status: 200 });
+      const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
+      return NextResponse.json({ student, tenantSlug: tenant?.slug }, { status: 200 });
     }
 
     if (email) {
@@ -174,7 +176,8 @@ export async function GET(request: NextRequest) {
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
-      return NextResponse.json({ student }, { status: 200 });
+      const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
+      return NextResponse.json({ student, tenantSlug: tenant?.slug }, { status: 200 });
     }
 
     const search = searchParams.get("search");

@@ -147,3 +147,22 @@ export async function getSubscriptionStatus() {
         isExpired: (endDate && now > endDate) || tenant.subscriptionStatus === 'expired' || !tenant.isActive
     };
 }
+/**
+ * Finds a tenant by its internal ID.
+ */
+export async function getTenantById(id: string) {
+    if (!id) return null;
+    const supabase = getSupabaseAdmin();
+    const { data: tenant } = await supabase
+        .from('tenants')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+    
+    if (!tenant) return null;
+    return {
+        _id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug
+    };
+}

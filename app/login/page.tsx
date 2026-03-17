@@ -329,7 +329,7 @@ function LoginForm() {
               >
                 <div className="absolute -inset-4 rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 opacity-0 blur-xl transition duration-700 group-hover:opacity-100" />
                 <img
-                  src={tenantLogo || "/logo.jpeg"}
+                  src={tenantLogo || "/uvw_logo.jpg"}
                   alt="University Logo"
                   className={`relative rounded-full object-cover transition-all duration-500 group-hover:scale-105 group-hover:rotate-3 shadow-2xl border-4 border-white ${(showAdminPassword || showWardenPassword || showDeveloperPassword)
                     ? "h-10 w-10 sm:h-14 sm:w-14"
@@ -337,7 +337,7 @@ function LoginForm() {
                     }`}
                   title="Click for Super Admin login"
                   onError={(e) => {
-                    (e.target as any).src = "/logo.jpeg";
+                    (e.target as any).src = "/uvw_logo.jpg";
                   }}
                 />
                 {!isDeveloperSetup && !showDeveloperPassword && (
@@ -376,6 +376,17 @@ function LoginForm() {
                   <p className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "hidden sm:block opacity-0 sm:opacity-100 max-h-0 sm:max-h-20" : "max-h-20 opacity-100"} max-w-[260px] sm:max-w-[280px] text-[11px] sm:text-sm font-medium text-slate-500 leading-tight sm:leading-relaxed transition-all duration-500 overflow-hidden`}>
                     The smart, all-in-one ecosystem for modern hostel administration and student living.
                   </p>
+                  {tenantName === "Hostelease" && !showAdminPassword && !showWardenPassword && (
+                    <button 
+                      onClick={() => {
+                        const slug = prompt("Enter your Campus Slug (e.g. oist):");
+                        if (slug) window.location.href = `/login?tenant=${slug.toLowerCase()}`;
+                      }}
+                      className="text-[10px] font-bold text-blue-600 uppercase tracking-widest hover:underline"
+                    >
+                      ✨ Switch to your Campus
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

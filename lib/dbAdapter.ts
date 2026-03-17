@@ -65,7 +65,8 @@ const mapStudentToCamelCase = (s: any) => {
         supabaseId: s.supabase_id || s.supabaseId,
         authProvider: s.auth_provider || s.authProvider,
         createdAt: s.created_at || s.createdAt,
-        updatedAt: s.updated_at || s.updatedAt
+        updatedAt: s.updated_at || s.updatedAt,
+        tenantId: s.tenant_id || s.tenantId
     };
 };
 
