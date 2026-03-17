@@ -2315,22 +2315,38 @@ export const db = {
 
                 if (!hostelName) return null;
 
-                const { data: existing } = await supabase.from('field_enforcement').select('_id').ilike('hostel_name', hostelName).eq('tenant_id', tenantId).maybeSingle();
+                // ⚡ ROBUSTNESS: Search GLOBALLY for this hostel name. 
+                // Some older tables have unique constraints on 'hostel_name' only, not (hostel_name, tenant_id).
+                // We search without 'tenant_id' filter first to see if we'd hit a conflict.
+                const { data: results, error: findError } = await supabase
+                    .from('field_enforcement')
+                    .select('_id, tenant_id')
+                    .ilike('hostel_name', hostelName)
+                    .limit(1);
 
-                if (existing) {
+                const globalExisting = results?.[0];
+
+                if (globalExisting) {
+                    // Update the existing record (this handles both same-tenant updates and "stealing" an orphaned/other record)
                     const { data, error } = await supabase
                         .from('field_enforcement')
-                        .update(snakeUpdate)
-                        .eq('_id', existing._id)
-                        .eq('tenant_id', tenantId)
+                        .update({ ...snakeUpdate, tenant_id: tenantId }) // Ensure it's now owned by this tenant
+                        .eq('_id', globalExisting._id)
                         .select()
                         .single();
                     if (error) throw error;
                     return mapFieldEnforcementToCamelCase(data);
                 } else if (options.upsert) {
+                    // New record
+                    const insertData = {
+                        ...snakeUpdate,
+                        _id: crypto.randomUUID(),
+                        hostel_name: hostelName,
+                        tenant_id: tenantId
+                    };
                     const { data, error } = await supabase
                         .from('field_enforcement')
-                        .insert([{ ...snakeUpdate, hostel_name: hostelName, tenant_id: tenantId }])
+                        .insert([insertData])
                         .select()
                         .single();
                     if (error) throw error;
@@ -2890,10 +2906,11 @@ export const db = {
             if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('student_field_progress').select('*');
-                query = query.eq('tenant_id', tenantId);
+                // Removed tenant_id filter because column is missing in DB
                 if (filter.studentId) query = query.eq('student_id', filter.studentId);
                 if (filter.firebaseUID) query = query.eq('firebase_uid', filter.firebaseUID);
                 if (filter.fieldId) query = query.eq('field_id', filter.fieldId);
+                if (filter.hostelName) query = query.eq('hostel_name', filter.hostelName);
 
                 const { data, error } = await query;
                 if (error) throw error;
@@ -2909,7 +2926,8 @@ export const db = {
         upsert: async (recordData: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                const snakeData = mapStudentFieldProgressToSnakeCase(recordData);
+                const tenantId = await getTenantIdOrThrow();
+                const snakeData = { ...mapStudentFieldProgressToSnakeCase(recordData) };
                 const { data: existing } = await supabase
                     .from('student_field_progress')
                     .select('_id')

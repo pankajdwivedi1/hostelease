@@ -129,6 +129,13 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     const [showFieldEnforcementModal, setShowFieldEnforcementModal] = useState(false);
     const [enforcementFormData, setEnforcementFormData] = useState<Record<string, string>>({});
     const [savingEnforcementFields, setSavingEnforcementFields] = useState(false);
+    
+    // Helper to get tenant from URL
+    const getTenantParam = (includeQuestionMark = true) => {
+        const tenant = searchParams.get('tenant');
+        if (!tenant) return "";
+        return includeQuestionMark ? `?tenant=${tenant}` : `&tenant=${tenant}`;
+    };
 
     // Face Matching State
     const [faceMatchProgress, setFaceMatchProgress] = useState(0);
@@ -289,7 +296,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
     const fetchSystemSettings = async () => {
         try {
-            const res = await fetch("/api/admin/settings");
+            const res = await fetch(`/api/admin/settings${getTenantParam()}`);
             if (!res.ok) throw new Error(`API error: ${res.status}`);
             const data = await res.json();
             if (data.success) {
@@ -335,13 +342,13 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         if (!studentProfile?._id) return;
         try {
             // Fetch History
-            const historyRes = await fetch(`/api/students/payments?studentId=${studentProfile._id}`);
+            const historyRes = await fetch(`/api/students/payments?studentId=${studentProfile._id}${getTenantParam(false)}`);
             if (!historyRes.ok) throw new Error(`API error: ${historyRes.status}`);
             const historyData = await historyRes.json();
             if (historyData.success) setPaymentHistory(historyData.payments);
 
             // Fetch Bank Details
-            const settingsRes = await fetch("/api/admin/settings");
+            const settingsRes = await fetch(`/api/admin/settings${getTenantParam()}`);
             if (!settingsRes.ok) throw new Error(`API error: ${settingsRes.status}`);
             const settingsData = await settingsRes.json();
             if (settingsData.success) {
@@ -404,7 +411,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     const fetchHostelLocations = async () => {
         try {
             setIsLocationsLoading(true);
-            const response = await fetch("/api/admin/locations");
+            const response = await fetch(`/api/admin/locations${getTenantParam()}`);
             if (!response.ok) throw new Error(`Failed to fetch locations: ${response.status}`);
             const data = await response.json();
             if (data.success && data.locations) {
@@ -498,18 +505,21 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             // ⚡ FIELD ENFORCEMENT: Check for admin-enforced missing fields (replaces old hardcoded check)
             const checkFieldEnforcement = async () => {
                 try {
-                    const res = await fetch(`/api/student/profile-blockers?studentId=${studentProfile._id}`);
+                    console.log(`🔍 Checking field enforcement for: ${studentProfile._id} (${studentProfile.hostelName})`);
+                    const res = await fetch(`/api/student/profile-blockers?studentId=${studentProfile._id}${getTenantParam(false)}`, { cache: 'no-store' });
                     if (!res.ok) throw new Error('Failed to check profile blockers');
                     const data = await res.json();
+                    console.log("📦 Blocker API Data:", data);
 
                     if (data.hasBlockers && data.missingFields.length > 0) {
                         console.log("🚫 Profile Blockers Found:", data.missingFields.length);
                         setEnforcedMissingFields(data.missingFields);
                         setEnforcementConfig(data.enforcement);
-                        // Pre-fill form with existing values
+                        // Pre-fill form with existing values (Check top-level AND dynamicFields)
                         const initialFormData: Record<string, string> = {};
                         data.missingFields.forEach((f: any) => {
-                            initialFormData[f.fieldId] = (studentProfile as any)[f.fieldId] || "";
+                            const val = (studentProfile as any)[f.fieldId] ?? studentProfile.dynamicFields?.[f.fieldId] ?? "";
+                            initialFormData[f.fieldId] = val.toString();
                         });
                         setEnforcementFormData(initialFormData);
                         setShowFieldEnforcementModal(true);
@@ -551,7 +561,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             // Check attendance status
             const checkAttendance = async () => {
                 try {
-                    const res = await fetch(`/api/students/attendance?studentId=${studentProfile._id}`);
+                    const res = await fetch(`/api/students/attendance?studentId=${studentProfile._id}${getTenantParam(false)}`);
                     if (!res.ok) throw new Error(`Failed to check attendance: ${res.status}`);
                     const data = await res.json();
                     if (data.marked) setIsAttendanceMarked(true);
@@ -569,7 +579,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             // Fetch Notifications
             const fetchStudentNotifications = async () => {
                 try {
-                    const res = await fetch(`/api/student/notifications?studentId=${encodeURIComponent(studentProfile._id)}&hostelName=${encodeURIComponent(studentProfile.hostelName)}`);
+                    const res = await fetch(`/api/student/notifications?studentId=${encodeURIComponent(studentProfile._id)}&hostelName=${encodeURIComponent(studentProfile.hostelName)}${getTenantParam(false)}`);
                     if (!res.ok) throw new Error(`Failed to fetch notifications: ${res.status}`);
                     const data = await res.json();
                     if (data.success && data.notifications.length > 0) {
@@ -686,7 +696,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                 try {
                     // ⚡ STEP 1: Load MINIMAL data first if not provided
                     const queryParam = user.source === 'supabase' ? `supabaseId=${user.uid}` : `firebaseUID=${user.uid}`;
-                    const minimalResponse = await fetch(`/api/students?${queryParam}&minimal=true`, { cache: 'no-store' });
+                    const minimalResponse = await fetch(`/api/students?${queryParam}&minimal=true${getTenantParam(false)}`, { cache: 'no-store' });
                     if (!minimalResponse.ok) throw new Error(`Failed to fetch minimal data: ${minimalResponse.status}`);
                     const minimalData = await minimalResponse.json();
                     if (minimalData.student) {
@@ -715,12 +725,12 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                 const loadFullProfile = async () => {
                     try {
                         const queryParam = user.source === 'supabase' ? `supabaseId=${user.uid}` : `firebaseUID=${user.uid}`;
-                        let fullResponse = await fetch(`/api/students?${queryParam}`, { cache: 'no-store' });
+                        let fullResponse = await fetch(`/api/students?${queryParam}${getTenantParam(false)}`, { cache: 'no-store' });
                         
                         // ⚡ FALLBACK: If 404 by ID, try fetching by email (extremely robust)
                         if (fullResponse.status === 404 && user.email) {
                             console.warn(`[Profile] 404 by ${user.source} UID, retrying with email...`);
-                            fullResponse = await fetch(`/api/students?email=${encodeURIComponent(user.email)}`, { cache: 'no-store' });
+                            fullResponse = await fetch(`/api/students?email=${encodeURIComponent(user.email)}${getTenantParam(false)}`, { cache: 'no-store' });
                         }
 
                         if (!fullResponse.ok) throw new Error(`Failed to fetch full profile: ${fullResponse.status}`);
@@ -763,7 +773,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                 // ⚡ STEP 3: Load permissions asynchronously in background
                 const fetchPermissions = async () => {
                     try {
-                        const permResponse = await fetch(`/api/permissions?studentId=${studentId}&light=true`);
+                        const permResponse = await fetch(`/api/permissions?studentId=${studentId}&light=true${getTenantParam(false)}`);
                         const permData = await permResponse.json();
 
                         if (permData.permissions && isMounted) {
@@ -976,7 +986,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                 updateData[f.fieldId] = enforcementFormData[f.fieldId].trim();
             });
 
-            const response = await fetch(`/api/students/${studentProfile._id}`, {
+            const response = await fetch(`/api/students/${studentProfile._id}${getTenantParam()}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(updateData),
@@ -989,7 +999,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                 // ⚡ NEW: Mark fields as completed in the FieldEnforcement tracking system
                 // This ensures the Admin Dashboard "Status" view updates immediately
                 try {
-                    await fetch("/api/admin/field-enforcement/progress", {
+                    await fetch(`/api/admin/field-enforcement/progress${getTenantParam()}`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({

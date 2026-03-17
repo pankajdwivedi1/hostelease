@@ -1,11 +1,12 @@
 import { headers } from 'next/headers';
 import { getSupabaseAdmin } from './supabaseServer';
+import { cache } from 'react';
 
 /**
  * Resolves the current tenant from the request headers
  * injected by the global Next.js middleware.
  */
-export async function getTenantFromRequest() {
+export const getTenantFromRequest = cache(async () => {
     const headersList = await (headers as any)();
     let slug = headersList.get('x-tenant-slug');
 
@@ -89,7 +90,7 @@ export async function getTenantFromRequest() {
         isActive: tenant.is_active,
         adminEmail: tenant.admin_email
     };
-}
+});
 
 /**
  * Gets the tenantId string from the current request context.

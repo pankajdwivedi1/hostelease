@@ -1,48 +1,33 @@
-
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
 
-const envPath = path.join(process.cwd(), '.env.local');
-const envContent = fs.readFileSync(envPath, 'utf8');
+const env = fs.readFileSync(path.join(__dirname, '.env.local'), 'utf8')
+    .split('\n')
+    .filter(line => line.trim() && !line.startsWith('#'))
+    .reduce((acc, line) => {
+        const [key, ...val] = line.split('=');
+        acc[key.trim()] = val.join('=').trim().replace(/^"|"$/g, '');
+        return acc;
+    }, {});
 
-const getEnv = (key) => {
-    const lines = envContent.split('\n');
-    for (const line of lines) {
-        if (line.trim().startsWith(key + '=')) {
-            return line.split('=')[1].trim().replace(/^"(.*)"$/, '$1');
-        }
-    }
-    return null;
-};
+const s = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-const supabaseUrl = getEnv('NEXT_PUBLIC_SUPABASE_URL');
-const supabaseKey = getEnv('SUPABASE_SERVICE_ROLE_KEY');
-
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-async function checkColumns(table) {
-    try {
-        console.log(`Checking table: ${table}`);
-        const { data, error } = await supabase.from(table).select('*').limit(1);
-        if (error) {
-            console.error(`Error selecting from ${table}:`, error.message);
-        } else if (data && data.length > 0) {
-            console.log(`Columns in ${table}:`, Object.keys(data[0]));
-        } else {
-            console.log(`Table ${table} is empty.`);
-        }
-    } catch (e) {
-        console.error(e);
-    }
-}
-
-async function run() {
-    const tables = ['hostels', 'students', 'permissions', 'gate_passes', 'attendance', 'admin_settings', 'transactions'];
+async function checkSchema() {
+    const tables = ['students', 'field_enforcement', 'student_field_progress'];
+    console.log("--- Checking table columns ---");
+    
     for (const table of tables) {
-        await checkColumns(table);
+        // We can check columns by fetching 1 row
+        const { data, error } = await s.from(table).select('*').limit(1);
+        if (error) {
+            console.log(`❌ Table: ${table} | Error: ${error.message}`);
+        } else if (data && data.length > 0) {
+            console.log(`✅ Table: ${table} | Columns: ${Object.keys(data[0]).join(', ')}`);
+        } else {
+            console.log(`ℹ️ Table: ${table} | Empty (cannot check columns)`);
+        }
     }
-    process.exit(0);
 }
 
-run();
+checkSchema();

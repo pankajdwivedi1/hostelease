@@ -81,10 +81,19 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
   );
   const [autoCloseNotification, setAutoCloseNotification] = useState(true);
 
+  // Helper to get tenant from URL
+  const getTenantParam = () => {
+    if (typeof window === 'undefined') return '';
+    const params = new URLSearchParams(window.location.search);
+    const tenant = params.get('tenant');
+    return tenant ? `?tenant=${tenant}` : '';
+  };
+
   // Load available fields from admin settings
   const loadAvailableFields = async () => {
     try {
-      const response = await fetch("/api/admin/settings");
+      const tenantParam = getTenantParam();
+      const response = await fetch(`/api/admin/settings${tenantParam}`);
       const data = await response.json();
       if (data.success || data.formBuilderConfig) {
         // Extract fields from formBuilderConfig
@@ -133,7 +142,8 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
   const loadEnforcementRules = async () => {
     try {
       setLoading(true);
-      const response = await fetch("/api/admin/field-enforcement");
+      const tenantParam = getTenantParam();
+      const response = await fetch(`/api/admin/field-enforcement${tenantParam}`);
       const data = await response.json();
       if (data.success) {
         const rulesMap: Record<string, EnforcementRule> = {};
@@ -210,8 +220,9 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
       setLoading(true);
       setMessage("");
 
+      const tenantParam = getTenantParam();
       const updates = selectedHostels.map(async (hostel) => {
-        const response = await fetch("/api/admin/field-enforcement", {
+        const response = await fetch(`/api/admin/field-enforcement${tenantParam}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -261,7 +272,8 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
 
     try {
       setLoading(true);
-      const response = await fetch(`/api/admin/field-enforcement/status?hostelName=${hostel}`);
+      const tenantParam = getTenantParam();
+      const response = await fetch(`/api/admin/field-enforcement/status?hostelName=${hostel}${tenantParam.replace('?', '&')}`);
       const data = await response.json();
       if (data.success) {
         setCompletionStatus((prev) => ({
@@ -411,7 +423,7 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
                       <div>
                         <label className="text-xs font-semibold text-slate-700 block mb-1">Display Mode</label>
                         <select
-                          value={field.displayMode}
+                          value={field.displayMode || "on-login"}
                           onChange={(e) =>
                             updateFieldSetting(
                               field.fieldId,
@@ -430,7 +442,7 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
                         <label className="text-xs font-semibold text-slate-700 block mb-1">Duration (Days)</label>
                         <input
                           type="number"
-                          value={field.durationDays || ""}
+                          value={field.durationDays ?? ""}
                           onChange={(e) =>
                             updateFieldSetting(
                               field.fieldId,
@@ -446,7 +458,7 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input
                             type="checkbox"
-                            checked={field.skipCompleted}
+                            checked={!!field.skipCompleted}
                             onChange={(e) =>
                               updateFieldSetting(field.fieldId, "skipCompleted", e.target.checked)
                             }

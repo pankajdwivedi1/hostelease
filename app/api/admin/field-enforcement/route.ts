@@ -71,18 +71,20 @@ export async function POST(request: NextRequest) {
       autoCloseNotification: autoCloseNotification ?? true,
     };
 
+    console.log(`[FieldEnforcement API] Saving rules for ${normalizedHostelName}...`);
     const enforcement = await db.fieldEnforcement.findOneAndUpdate(
       { hostelName: { $regex: `^${normalizedHostelName}$` } },
       { $set: updateData },
       { upsert: true, new: true }
     );
+    console.log(`[FieldEnforcement API] Success for ${normalizedHostelName}`);
 
     return NextResponse.json({
       success: true,
       data: enforcement,
     });
   } catch (error: any) {
-    console.error("Error saving field enforcement rules:", error);
+    console.error("[FieldEnforcement API] CRITICAL ERROR:", error);
     return NextResponse.json(
       { error: error.message || "Failed to save field enforcement rules" },
       { status: 500 }

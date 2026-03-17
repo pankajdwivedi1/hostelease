@@ -66,6 +66,21 @@ const testSettingsAPIs = async () => {
         console.log('❌ Exception:', e.message);
     }
     console.log('\n');
+    // 4. Test /api/admin/field-enforcement
+    try {
+        console.log('4. Fetching Field Enforcement Rules...');
+        const res = await fetch(`${baseURL}/api/admin/field-enforcement?tenant=${tenantSlug}`);
+        const data = await res.json();
+        console.log('Status:', res.status);
+        if (data.success) {
+            console.log('✅ Field Enforcement rules fetched:', data.data?.length || 0);
+        } else {
+            console.log('❌ Error:', data.error);
+        }
+    } catch (e) {
+        console.log('❌ Exception:', e.message);
+    }
+    console.log('\n');
 
     console.log('--- Verification Complete ---');
 };

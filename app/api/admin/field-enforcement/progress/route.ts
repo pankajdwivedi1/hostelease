@@ -49,17 +49,17 @@ export async function POST(request: NextRequest) {
     }
 
     const targetFieldIds = fieldIds || [fieldId];
-    const results = [];
 
-    for (const id of targetFieldIds) {
+    // Parallel fulfillment to speed up response
+    const results = await Promise.all(targetFieldIds.map(async (id: string) => {
       // Find the field in enforcement rules
       const field = (enforcement.enforcedFields || []).find(
         (f: any) => f.fieldId === id
       );
-      if (!field) continue;
+      if (!field) return null;
 
       // Create or update field progress via adapter
-      const fieldProgress = await db.studentFieldProgress.upsert({
+      return db.studentFieldProgress.upsert({
         studentId: student._id,
         fieldId: id,
         hostelName: normalizedHostelName,
@@ -68,12 +68,13 @@ export async function POST(request: NextRequest) {
         isCompleted: true,
         completedAt: new Date(),
       });
-      results.push(fieldProgress);
-    }
+    }));
+
+    const filteredResults = results.filter(r => r !== null);
 
     return NextResponse.json({
       success: true,
-      data: results,
+      data: filteredResults,
     });
   } catch (error: any) {
     console.error("Error marking field as completed:", error);

@@ -66,44 +66,46 @@ export async function GET(request: NextRequest) {
         const enabledFields = enforcement.enforcedFields.filter((f: any) => f.isEnabled);
         const missingFields: any[] = [];
 
+        // First pass: Determine if ANY field requires action
+        let hasAnyActionRequired = false;
+        const allEnforcedFields: any[] = [];
+
         for (const field of enabledFields) {
-            // Check both top-level fields and dynamicFields sub-object
             const fieldValue = (student as any)[field.fieldId] ?? (student as any).dynamicFields?.[field.fieldId];
             const progressRecord = progress.find((p: any) => p.fieldId === field.fieldId);
 
-            // Check if field is empty/missing in Student record
             const isEmpty =
                 fieldValue === undefined ||
                 fieldValue === null ||
                 fieldValue === "" ||
                 (typeof fieldValue === "string" && fieldValue.trim() === "");
 
-            // A field is a "blocker" if:
-            // 1. It's empty in the student profile
-            // 2. OR It's NOT empty, but skipCompleted is false (force review)
-            // 3. OR skipCompleted is true, but it hasn't been "completed" via the enforcement system yet
-
-            let shouldShow = false;
-
+            let isBlocker = false;
             if (isEmpty) {
-                shouldShow = true; // Always show if empty
+                isBlocker = true;
             } else if (field.skipCompleted === false) {
-                shouldShow = true; // Force show even if not empty
+                isBlocker = true;
             } else if (field.skipCompleted === true && (!progressRecord || !progressRecord.isCompleted)) {
-                // Not empty, but haven't gone through the enforcement modal yet
-                shouldShow = true;
+                isBlocker = true;
             }
 
-            if (shouldShow) {
-                missingFields.push({
-                    fieldId: field.fieldId,
-                    fieldLabel: field.fieldLabel,
-                    displayMode: field.displayMode,
-                    durationDays: field.durationDays,
-                    order: field.order || 0,
-                    isCurrentlyEmpty: isEmpty
-                });
+            if (isBlocker) {
+                hasAnyActionRequired = true;
             }
+
+            allEnforcedFields.push({
+                fieldId: field.fieldId,
+                fieldLabel: field.fieldLabel,
+                displayMode: field.displayMode,
+                durationDays: field.durationDays,
+                order: field.order || 0,
+                isCurrentlyEmpty: isEmpty
+            });
+        }
+
+        // If at least one blocker is found, return the full list of enabled fields
+        if (hasAnyActionRequired) {
+            missingFields.push(...allEnforcedFields);
         }
 
         // Sort by order
