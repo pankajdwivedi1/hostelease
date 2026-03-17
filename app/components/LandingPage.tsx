@@ -1,11 +1,75 @@
 "use client";
 
 import { Building2, ShieldCheck, Zap, Users, Globe, ArrowRight, CheckCircle2, Layout, Lock } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function LandingPage() {
     const [requestMode, setRequestMode] = useState(false);
+    const [showDemo, setShowDemo] = useState(false);
+    const [demoStep, setDemoStep] = useState(0);
+    const [isAutoPlaying, setIsAutoPlaying] = useState(false);
     const [email, setEmail] = useState("");
+
+    const demoSlides = [
+        {
+            title: "Student Dashboard",
+            role: "Daily Campus Navigation",
+            description: "Students access their dynamic QR key, request leave, and view live attendance status.",
+            features: ["Dynamic QR Keybase", "AI-Face Verification", "Hostel Leave Requests", "Student Profile & Fees"],
+            icon: <Users className="w-8 h-8 text-blue-500" />,
+            color: "from-blue-600/30 to-indigo-600/30",
+            mockup: "student"
+        },
+        {
+            title: "Warden Portal",
+            role: "Real-time Operations",
+            description: "Wardens manage student movement, approve gatepasses, and perform night audits with zero paperwork.",
+            features: ["Live Gatepass Approvals", "Night Attendance System", "In/Out Movement Log", "Emergency Alerts"],
+            icon: <ShieldCheck className="w-8 h-8 text-emerald-500" />,
+            color: "from-emerald-600/30 to-teal-600/30",
+            mockup: "warden"
+        },
+        {
+            title: "Dean Dashboard",
+            role: "Institution Analytics",
+            description: "Complete oversight for university leadership with hostel trends, staff performance, and security auditing.",
+            features: ["Multi-Campus Intelligence", "Staff Permission Mgmt", "Global Attendance Stats", "Infrastructure Settings"],
+            icon: <Layout className="w-8 h-8 text-purple-500" />,
+            color: "from-purple-600/30 to-pink-600/30",
+            mockup: "dean"
+        },
+        {
+            title: "Super Admin Control",
+            role: "Ecosystem Backbone",
+            description: "The global command center to provision new campuses, monitor system health, and secure the network.",
+            features: ["Ultra-Private Data Isolation", "New Campus Provisioning", "AES-256 Cloud Security", "System-wide Monitoring"],
+            icon: <Globe className="w-8 h-8 text-blue-400" />,
+            color: "from-blue-600/40 to-cyan-600/40",
+            mockup: "superadmin"
+        }
+    ];
+
+    // Automatic Demo Logic
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (showDemo && isAutoPlaying) {
+            interval = setInterval(() => {
+                setDemoStep(prev => {
+                    if (prev < demoSlides.length - 1) {
+                        return prev + 1;
+                    } else {
+                        // Completion - close automatically after a small delay
+                        setTimeout(() => {
+                            setShowDemo(false);
+                            setIsAutoPlaying(false);
+                        }, 3000);
+                        return prev;
+                    }
+                });
+            }, 4500); // 4.5 seconds per slide
+        }
+        return () => clearInterval(interval);
+    }, [showDemo, isAutoPlaying]);
 
     return (
         <div className="min-h-screen bg-[#050510] text-white selection:bg-blue-500/30 overflow-x-hidden">
@@ -65,8 +129,16 @@ export default function LandingPage() {
                         >
                             Request Access <ArrowRight className="w-5 h-5" />
                         </button>
-                        <button className="w-full sm:w-auto bg-white/5 border border-white/10 text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-white/10 transition-all active:scale-95">
-                            Watch Demo
+                        <button 
+                            onClick={() => {
+                                setDemoStep(0);
+                                setShowDemo(true);
+                                setIsAutoPlaying(true);
+                            }}
+                            className="w-full sm:w-auto bg-white/5 border border-white/10 text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-white/10 transition-all active:scale-95 group flex items-center justify-center gap-3"
+                        >
+                            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+                            Watch Auto-Demo
                         </button>
                     </div>
                 </div>
@@ -301,6 +373,171 @@ export default function LandingPage() {
                     </div>
                 </div>
             )}
+            {/* Demo Walkthrough Modal */}
+            {showDemo && (
+                <div className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4">
+                    <div className="bg-[#050510] border border-white/10 w-full max-w-4xl rounded-[32px] sm:rounded-[48px] overflow-hidden animate-in zoom-in duration-300 relative shadow-2xl shadow-blue-500/10">
+                        <button 
+                            onClick={() => setShowDemo(false)}
+                            className="absolute top-6 right-6 sm:top-8 sm:right-8 z-20 text-gray-500 hover:text-white transition-colors"
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+
+                        <div className="grid md:grid-cols-2">
+                            {/* Content Side */}
+                            <div className="p-8 sm:p-14 space-y-8 flex flex-col justify-center">
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-blue-600/20 p-2 rounded-xl">
+                                            {demoSlides[demoStep].icon}
+                                        </div>
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500">Live Simulation</span>
+                                            <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Step {demoStep + 1} of 4</p>
+                                        </div>
+                                    </div>
+                                    <h3 className="text-3xl sm:text-5xl font-black uppercase tracking-tighter leading-tight bg-gradient-to-r from-white to-gray-500 bg-clip-text text-transparent">{demoSlides[demoStep].title}</h3>
+                                    <p className="text-blue-400 text-xs font-black uppercase tracking-widest border-l-2 border-blue-600 pl-3">{demoSlides[demoStep].role}</p>
+                                    <p className="text-gray-400 text-sm sm:text-base font-medium leading-relaxed">{demoSlides[demoStep].description}</p>
+                                </div>
+
+                                <ul className="space-y-4">
+                                    {demoSlides[demoStep].features.map((f, i) => (
+                                        <li key={i} className="flex items-center gap-3 text-[10px] sm:text-xs font-black uppercase tracking-widest text-gray-300">
+                                            <div className="w-5 h-5 rounded-full bg-blue-500/10 flex items-center justify-center">
+                                                <CheckCircle2 className="w-3 h-3 text-blue-500" />
+                                            </div>
+                                            {f}
+                                        </li>
+                                    ))}
+                                </ul>
+
+                                <div className="flex items-center gap-4 pt-6">
+                                    <button 
+                                        onClick={() => setIsAutoPlaying(!isAutoPlaying)}
+                                        className={`px-6 py-3 rounded-xl border flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${isAutoPlaying ? 'border-amber-500/50 text-amber-500 hover:bg-amber-500/5' : 'border-blue-500/50 text-blue-500 hover:bg-blue-500/5'}`}
+                                    >
+                                        {isAutoPlaying ? (
+                                            <><span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Pause Tour</>
+                                        ) : (
+                                            <><span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span> Resume Auto</>
+                                        )}
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowDemo(false)}
+                                        className="flex-1 bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 transition-all border border-white/10"
+                                    >
+                                        Exit Demo
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Visual Preview Side - High Tech Mockup */}
+                            <div className={`hidden md:flex bg-gradient-to-br ${demoSlides[demoStep].color} items-center justify-center p-12 relative overflow-hidden`}>
+                                <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(#fff 1.5px, transparent 1.5px)', backgroundSize: '32px 32px' }}></div>
+                                <div className="absolute inset-0 animate-pulse opacity-10 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
+                                
+                                <div className="relative w-full aspect-[4/3] bg-[#020208] rounded-[40px] border border-white/20 shadow-[0_0_100px_rgba(59,130,246,0.3)] flex flex-col p-6 overflow-hidden scale-110 rotate-2">
+                                     {/* Fake Browser Chrome */}
+                                     <div className="flex items-center justify-between mb-6 px-2">
+                                        <div className="flex gap-1.5">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-red-500/70 shadow-[0_0_10px_rgba(239,68,68,0.5)]"></div>
+                                            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/70 shadow-[0_0_10px_rgba(234,179,8,0.5)]"></div>
+                                            <div className="w-2.5 h-2.5 rounded-full bg-green-500/70 shadow-[0_0_10px_rgba(34,197,94,0.5)]"></div>
+                                        </div>
+                                        <div className="h-5 w-32 bg-white/5 rounded-full border border-white/10 flex items-center justify-center px-3">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-2 animate-pulse"></div>
+                                            <span className="text-[7px] font-black uppercase text-gray-500 tracking-tighter">campus-node-secure</span>
+                                        </div>
+                                     </div>
+
+                                     {/* Mock Dashboard Layout */}
+                                     <div className="flex-1 flex flex-col gap-4">
+                                        <div className="flex gap-4">
+                                            <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shadow-lg">
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 p-0.5">
+                                                    <div className="w-full h-full rounded-full bg-black border border-white/20 flex items-center justify-center text-[10px] font-black">UVW</div>
+                                                </div>
+                                            </div>
+                                            <div className="flex-1 space-y-2 py-1">
+                                                <div className="h-5 w-40 bg-white/10 rounded-lg"></div>
+                                                <div className="h-3 w-24 bg-white/5 rounded"></div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div className="h-16 rounded-2xl bg-white/5 border border-white/5 flex flex-col items-center justify-center gap-1">
+                                                <div className="h-4 w-8 bg-blue-500/20 rounded"></div>
+                                                <div className="h-1.5 w-10 bg-white/5 rounded"></div>
+                                            </div>
+                                            <div className="h-16 rounded-2xl bg-white/5 border border-white/5 flex flex-col items-center justify-center gap-1">
+                                                <div className="h-4 w-8 bg-emerald-500/20 rounded"></div>
+                                                <div className="h-1.5 w-10 bg-white/5 rounded"></div>
+                                            </div>
+                                            <div className="h-16 rounded-2xl bg-white/5 border border-white/5 flex flex-col items-center justify-center gap-1">
+                                                <div className="h-4 w-8 bg-purple-500/20 rounded"></div>
+                                                <div className="h-1.5 w-10 bg-white/5 rounded"></div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex-1 rounded-2xl bg-white/5 border border-white/10 p-4 space-y-3 relative overflow-hidden group">
+                                            <div className="h-4 w-32 bg-white/10 rounded-lg mb-2"></div>
+                                            <div className="space-y-2">
+                                                <div className="h-2 w-full bg-white/5 rounded"></div>
+                                                <div className="h-2 w-full bg-white/5 rounded"></div>
+                                                <div className="h-2 w-[80%] bg-white/5 rounded"></div>
+                                            </div>
+                                            
+                                            {/* Dynamic Center Element based on Step */}
+                                            <div className="absolute inset-x-4 bottom-4 h-24 rounded-xl bg-black/40 border border-white/5 flex items-center justify-center">
+                                                {demoStep === 0 && <div className="w-16 h-16 rounded-lg border-2 border-dashed border-blue-500/40 flex items-center justify-center"><div className="w-10 h-10 border-2 border-white/10 rounded-sm italic text-[8px] flex items-center justify-center text-blue-500/50">QR_ID</div></div>}
+                                                {demoStep === 1 && <div className="flex gap-2"><div className="w-16 h-16 rounded-full border-4 border-blue-500/20 border-t-blue-500 animate-spin"></div></div>}
+                                                {demoStep === 2 && <div className="grid grid-cols-2 gap-2 w-full px-2"><div className="h-8 bg-blue-600/20 rounded-lg"></div><div className="h-8 bg-white/5 rounded-lg"></div><div className="h-8 bg-white/5 rounded-lg"></div><div className="h-8 bg-white/5 rounded-lg"></div></div>}
+                                                {demoStep === 3 && <div className="text-[20px] font-black text-blue-500/20 uppercase tracking-[0.5em] animate-pulse">PROTECTED</div>}
+                                            </div>
+                                        </div>
+                                     </div>
+
+                                     {/* Overlay HUD Overlay */}
+                                     <div className="absolute top-0 right-0 p-8 h-full flex flex-col justify-between pointer-events-none">
+                                        <div className="text-[7px] text-white/20 font-mono text-right">
+                                            SYS_DASHBOARD_LIVE<br/>
+                                            BUILD_ID: UVW_9980<br/>
+                                            ENCRYPT: AES_256
+                                        </div>
+                                        <div className="text-[10px] text-blue-500/40 font-black animate-pulse text-right tracking-widest">
+                                            SCANNING_ACTIVE...
+                                        </div>
+                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Top Automatic Countdown Bar */}
+                        <div className="absolute top-0 left-0 h-1 bg-white/[0.03] w-full z-10">
+                            <div 
+                                key={demoStep}
+                                className={`h-full bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)] ${isAutoPlaying ? 'animate-demo-progress' : 'w-full'}`} 
+                                style={{ animationDuration: '4.5s' }}
+                            ></div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            <style jsx>{`
+                @keyframes demo-progress {
+                    from { width: 0%; }
+                    to { width: 100%; }
+                }
+                .animate-demo-progress {
+                    animation-name: demo-progress;
+                    animation-timing-function: linear;
+                    animation-fill-mode: forwards;
+                }
+            `}</style>
         </div>
     );
 }
