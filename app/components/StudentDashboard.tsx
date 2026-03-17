@@ -505,14 +505,11 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             // ⚡ FIELD ENFORCEMENT: Check for admin-enforced missing fields (replaces old hardcoded check)
             const checkFieldEnforcement = async () => {
                 try {
-                    console.log(`🔍 Checking field enforcement for: ${studentProfile._id} (${studentProfile.hostelName})`);
                     const res = await fetch(`/api/student/profile-blockers?studentId=${studentProfile._id}${getTenantParam(false)}`, { cache: 'no-store' });
                     if (!res.ok) throw new Error('Failed to check profile blockers');
                     const data = await res.json();
-                    console.log("📦 Blocker API Data:", data);
 
                     if (data.hasBlockers && data.missingFields.length > 0) {
-                        console.log("🚫 Profile Blockers Found:", data.missingFields.length);
                         setEnforcedMissingFields(data.missingFields);
                         setEnforcementConfig(data.enforcement);
                         // Pre-fill form with existing values (Check top-level AND dynamicFields)
@@ -814,7 +811,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             // 1. Try Supabase session first
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
-                loadData({ uid: session.user.id, email: session.user.email, source: 'supabase' });
+                loadData({ uid: session.user.id, email: session.user.email ?? null, source: 'supabase' });
                 return;
             }
 

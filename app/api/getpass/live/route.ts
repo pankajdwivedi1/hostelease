@@ -41,6 +41,11 @@ export async function GET(request: NextRequest) {
             recentFilters.hostelName = hostelName;
         }
 
+        const countFilters: any = {};
+        if (hostelName && hostelName !== "all") {
+            countFilters.hostelName = hostelName;
+        }
+
         // ⚡ OPTIMIZATION: Heartbeat Mode (Extremely Low Bandwidth)
         if (isMinimal) {
             const returnsFilters: any = {
@@ -51,17 +56,31 @@ export async function GET(request: NextRequest) {
                 returnsFilters.hostelName = hostelName;
             }
 
-            // Only fetch the latest 5 scans (tiny data packet)
-            const { records: miniRecent } = await db.gatePasses.list(returnsFilters, {
-                limit: 5,
-                sortField: source === 'SUPABASE' ? 'check_in_time' : 'checkInTime',
-                sortOrder: 'desc'
-            });
+            // ⚡ FAST COUNTS: Use Promise.all to fetch counts and recent items in parallel
+            const [recentRes, summaryRes, studentsRes] = await Promise.all([
+                db.gatePasses.list(returnsFilters, {
+                    limit: 5,
+                    sortField: source === 'SUPABASE' ? 'check_in_time' : 'checkInTime',
+                    sortOrder: 'desc'
+                }),
+                db.gatePasses.list(filters, { limit: 1, countOnly: true }),
+                db.students.count(countFilters)
+            ]);
+
+            const { records: miniRecent } = recentRes;
+            const uniqueStudentsOut = summaryRes.total || 0;
+            const totalStudents = studentsRes || 0;
+
             return NextResponse.json({
                 success: true,
                 minimal: true,
                 recentActivity: miniRecent,
-                summary: null,
+                summary: {
+                    totalStudents,
+                    studentsIn: totalStudents - uniqueStudentsOut,
+                    studentsOut: uniqueStudentsOut,
+                    // Note: leave/pass counts are omitted in minimal to keep it fast
+                },
                 currentlyOut: []
             });
         }
@@ -77,11 +96,6 @@ export async function GET(request: NextRequest) {
 
         const { records: currentlyOut } = listData;
         const totalOut = summaryData.total || 0;
-
-        const countFilters: any = {};
-        if (hostelName && hostelName !== "all") {
-            countFilters.hostelName = hostelName;
-        }
 
         const [totalStudents, fullOutListForBreakdown] = await Promise.all([
             db.students.count(countFilters),

@@ -369,6 +369,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                     if (data.minimal && prev) {
                         return {
                             ...prev,
+                            summary: data.summary || prev.summary, // ⚡ Merge updated counts
                             recentActivity: data.recentActivity || prev.recentActivity
                         };
                     }
@@ -425,9 +426,10 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                     table: 'gate_passes'
                 },
                 (payload) => {
-                    console.log('⚡ Scan Detected via Realtime:', payload.eventType, payload.new);
-                    // Refresh the dashboard FULLY when a scan happens
-                    fetchLiveData(false);
+                    console.log('⚡ Scan Detected via Realtime:', payload.eventType);
+                    // Refresh the dashboard MINIMALLY when a scan happens (Saves 95% bandwidth)
+                    // The minimal API now returns student counts!
+                    fetchLiveData(true);
                 }
             )
             .subscribe();

@@ -30,7 +30,6 @@ export async function GET(request: NextRequest) {
 
         // Fetch field enforcement rules for student's hostel
         const studentHostel = (student.hostelName || "").trim();
-        console.log(`🔍 Checking blockers for student: ${studentId}, Hostel: "${studentHostel}"`);
 
         // Use adapter for enforcement lookup
         const rules = await db.fieldEnforcement.find({
@@ -60,7 +59,7 @@ export async function GET(request: NextRequest) {
             studentId: student._id
         });
 
-        console.log(`✅ Found ${enforcement.enforcedFields.length} rules. Student has ${progress.length} progress records.`);
+
 
         // Check which required fields are missing or need updating
         const enabledFields = enforcement.enforcedFields.filter((f: any) => f.isEnabled);
