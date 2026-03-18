@@ -13,7 +13,16 @@ import {
     MoreVertical,
     AlertCircle,
     CheckCircle2,
-    Clock
+    Clock,
+    Trash2,
+    LogIn,
+    Activity,
+    X,
+    TrendingUp,
+    BarChart3,
+    ArrowUpRight,
+    Lock,
+    Zap
 } from "lucide-react";
 
 interface Tenant {
@@ -27,10 +36,13 @@ interface Tenant {
     primaryColor?: string;
     createdAt: string;
     studentCount?: number;
+    liveTraffic?: number;
 }
 
 export default function SuperAdminDashboard() {
     const [tenants, setTenants] = useState<Tenant[]>([]);
+    const [viewMode, setViewMode] = useState<"active" | "recycle">("active");
+    const [globalStats, setGlobalStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
@@ -38,9 +50,13 @@ export default function SuperAdminDashboard() {
 
     // Auth state
     const [isAuthorized, setIsAuthorized] = useState(false);
+    const [isMounted, setIsMounted] = useState(false);
     const [password, setPassword] = useState("");
 
     const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+    const [deletingTenant, setDeletingTenant] = useState<Tenant | null>(null);
+    const [deleteConfirmText, setDeleteConfirmText] = useState("");
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const [newTenant, setNewTenant] = useState({
         name: "",
@@ -50,11 +66,22 @@ export default function SuperAdminDashboard() {
         primaryColor: "#3b82f6"
     });
 
+    useEffect(() => {
+        setIsMounted(true);
+        // Check if already authorized
+        if (localStorage.getItem("superadmin_session") === "true") {
+            setIsAuthorized(true);
+        }
+    }, []);
+
     const fetchTenants = async () => {
         try {
-            const res = await fetch("/api/super-admin/tenants");
+            const res = await fetch(`/api/super-admin/tenants${viewMode === 'recycle' ? '?deleted=true' : ''}`);
             const data = await res.json();
-            if (data.success) setTenants(data.tenants);
+            if (data.success) {
+                setTenants(data.tenants);
+                setGlobalStats(data.globalStats);
+            }
         } catch (error) {
             console.error("Failed to fetch tenants", error);
         } finally {
@@ -63,8 +90,15 @@ export default function SuperAdminDashboard() {
     };
 
     useEffect(() => {
-        if (isAuthorized) fetchTenants();
-    }, [isAuthorized]);
+        if (isAuthorized && isMounted) fetchTenants();
+        
+        // Auto-refresh stats every 30 seconds for live traffic
+        const interval = setInterval(() => {
+            if (isAuthorized && isMounted && viewMode === 'active') fetchTenants();
+        }, 30000);
+        
+        return () => clearInterval(interval);
+    }, [isAuthorized, isMounted, viewMode]);
 
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
@@ -123,6 +157,92 @@ export default function SuperAdminDashboard() {
         }
     };
 
+    const handleDeletePurge = async () => {
+        if (!deletingTenant) return;
+        
+        const normalizedExpected = `DELETE ${deletingTenant.name.toUpperCase()}`.trim().replace(/\s+/g, ' ');
+        const normalizedInput = deleteConfirmText.trim().toUpperCase().replace(/\s+/g, ' ');
+
+        if (normalizedInput !== normalizedExpected) {
+            alert("Confirmation text mismatch. Please type the name exactly as shown.");
+            return;
+        }
+
+        // Final safety check with student count
+        const studentCount = deletingTenant.studentCount || 0;
+        const finalConfirm = window.confirm(
+            `⚠️ FINAL WARNING: ${studentCount} students are registered in ${deletingTenant.name}.\n\nAre you absolutely sure you want to delete all student records and this university node permanently?`
+        );
+
+        if (!finalConfirm) return;
+
+        setIsDeleting(true);
+        try {
+            const res = await fetch(`/api/super-admin/tenants?id=${deletingTenant._id}&purge=true`, { method: "DELETE" });
+            const data = await res.json();
+            if (data.success) {
+                setTenants(tenants.filter(t => t._id !== deletingTenant._id));
+                setDeletingTenant(null);
+                setDeleteConfirmText("");
+                alert("University Node permanently destroyed and purged from disk.");
+            }
+        } catch (error) {
+            alert("Purge failed.");
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    const handleSoftDelete = async (id: string) => {
+        if (!confirm("Move this university to the Recycle Bin? All students and admins will lose access immediately.")) return;
+        
+        try {
+            const res = await fetch(`/api/super-admin/tenants?id=${id}`, { method: "DELETE" });
+            const data = await res.json();
+            if (data.success) {
+                setTenants(tenants.filter(t => t._id !== id));
+                alert("University successfully moved to Recycle Bin.");
+            }
+        } catch (error) {
+            alert("Soft-delete failed.");
+        }
+    };
+
+    const handleRestore = async (id: string) => {
+        try {
+            const res = await fetch('/api/super-admin/tenants', {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "restore", id })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert("University Node successfully restored to the network.");
+                fetchTenants();
+            }
+        } catch (error) {
+            alert("Restoration failed.");
+        }
+    };
+
+    const handleImpersonateAdmin = (slug: string) => {
+        // Construct the tenant-specific URL
+        const hostname = window.location.hostname;
+        let targetHost = "";
+        
+        if (hostname === "localhost") {
+            targetHost = `${slug}.localhost:3000`;
+        } else if (hostname === "hostelease.com" || hostname.includes("hostelease.vercel.app")) {
+            targetHost = `${slug}.${hostname}`;
+        } else {
+            // Fallback for codespaces or other environments
+            targetHost = window.location.host.replace(/^[^.]+/, slug);
+        }
+
+        const impersonateUrl = `${window.location.protocol}//${targetHost}/auth/impersonate?type=admin&token=BOSS_PROXY_${Date.now()}`;
+        window.open(impersonateUrl, "_blank");
+    };
+
     const handleUpdateTenant = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingTenant) return;
@@ -148,6 +268,8 @@ export default function SuperAdminDashboard() {
         }
     };
 
+    if (!isMounted) return null;
+
     if (!isAuthorized) {
         return (
             <div className="min-h-screen bg-[#050510] flex items-center justify-center p-6 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-black to-black">
@@ -171,175 +293,433 @@ export default function SuperAdminDashboard() {
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-white font-bold text-center tracking-[1em] focus:ring-2 focus:ring-blue-500/40 outline-none transition-all"
-                            placeholder="••••••••"
+                            suppressHydrationWarning
+                            className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-white font-bold text-center tracking-[0.4em] focus:ring-2 focus:ring-blue-500/40 outline-none transition-all placeholder:tracking-normal placeholder:font-medium placeholder:text-gray-600"
+                            placeholder="HQ AUTH KEY"
                             autoFocus
                         />
-                        <button className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-xl shadow-blue-600/20 uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all">
+                        <button 
+                            suppressHydrationWarning
+                            className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-xl shadow-blue-600/20 uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all"
+                        >
                             Authorize Entry
                         </button>
                     </form>
 
-                    <p className="text-[10px] text-gray-600 uppercase font-black tracking-widest">Restricted Access • SuperAdmin Only</p>
+                    <p className="text-[10px] text-gray-600 uppercase font-black tracking-widest">Restricted Access • Boss Portal</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
+        <div className="min-h-screen bg-[#fcfcfd] flex flex-col font-sans">
             {/* Header */}
-            <header className="bg-white border-b border-gray-100 flex items-center justify-between px-8 py-4 shadow-sm">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
-                        <Building2 className="text-white w-6 h-6" />
+            <header className="bg-white/70 backdrop-blur-md border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-8 py-4 sm:py-5 sticky top-0 z-40 transition-shadow gap-4 sm:gap-0">
+                <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-900 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg shadow-gray-200 shrink-0">
+                        <Building2 className="text-blue-400 w-6 h-6 sm:w-7 sm:h-7" />
                     </div>
-                    <div>
-                        <h2 className="text-lg font-black text-gray-900 uppercase tracking-tighter">Tenant Central</h2>
+                    <div className="min-w-0">
+                        <h2 className="text-lg sm:text-xl font-black text-gray-900 uppercase tracking-tighter truncate">Campus Boss Control</h2>
                         <div className="flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-                            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Global HQ System Online</span>
+                            <div className="flex gap-0.5 shrink-0">
+                                <span className="w-1 h-2 sm:w-1 sm:h-3 bg-blue-500 rounded-full animate-bounce"></span>
+                                <span className="w-1 h-2 sm:w-1 sm:h-3 bg-blue-400 rounded-full animate-bounce delay-75"></span>
+                                <span className="w-1 h-2 sm:w-1 sm:h-3 bg-blue-300 rounded-full animate-bounce delay-150"></span>
+                            </div>
+                            <span className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest truncate">SuperAdmin Authorization Active</span>
                         </div>
                     </div>
                 </div>
 
-                <button
-                    onClick={() => setShowAddModal(true)}
-                    className="bg-gray-900 hover:bg-black text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg active:scale-95"
-                >
-                    <Plus className="w-4 h-4" />
-                    <span className="text-xs uppercase tracking-widest">New University</span>
-                </button>
+                <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                     <div className="flex flex-col items-end px-3 py-1 sm:px-4 sm:py-1.5 bg-emerald-50 rounded-xl border border-emerald-100">
+                        <p className="text-[8px] sm:text-[9px] text-emerald-600 font-black uppercase tracking-widest">Live Pulse</p>
+                        <p className="text-xs sm:text-sm font-black text-emerald-900">
+                            {globalStats?.totalActiveTraffic || 0} 
+                            <span className="text-[8px] ml-1 font-bold text-emerald-700 opacity-60 italic">Att/Min</span>
+                        </p>
+                    </div>
+
+                    <button
+                        onClick={() => setShowAddModal(true)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl font-black flex items-center gap-2 transition-all shadow-xl shadow-blue-500/20 active:scale-95 text-[10px] sm:text-xs uppercase tracking-widest flex-1 sm:flex-none justify-center"
+                    >
+                        <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        <span className="whitespace-nowrap">Provision Node</span>
+                    </button>
+                </div>
             </header>
 
-            {/* Stats Summary */}
-            <div className="px-8 py-8 grid grid-cols-1 md:grid-cols-4 gap-4">
-                {[
-                    { icon: Building2, label: "Total Colleges", value: tenants.length, color: "blue" },
-                    { icon: ShieldCheck, label: "Active Nodes", value: tenants.filter(t => t.isActive).length, color: "green" },
-                    { icon: Users, label: "Users Proxied", value: tenants.reduce((acc, t) => acc + (t.studentCount || 0), 0), color: "purple" },
-                    { icon: Globe, label: "Live Domains", value: tenants.length, color: "amber" },
-                ].map((stat, i) => (
-                    <div key={i} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-gray-200 transition-all">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center bg-${stat.color}-50 text-${stat.color}-600`}>
-                            <stat.icon className="w-6 h-6" />
+            <div className="px-4 sm:px-8 pt-6 sm:pt-8">
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 no-scrollbar">
+                    {[
+                        { icon: Users, label: "Total Students", value: tenants.reduce((acc, t) => acc + (t.studentCount || 0), 0), sub: "Across nodes", trend: "+12.4%", color: "blue" },
+                        { icon: CreditCard, label: "Active Revenue", value: `$${globalStats?.revenueSummary?.active * 249 || 0}`, sub: "Monthly", trend: "High", color: "emerald" },
+                        { icon: TrendingUp, label: "Growth Nodes", value: globalStats?.revenueSummary?.trial || 0, sub: "Trialing", trend: "Future", color: "indigo" },
+                        { icon: Zap, label: "System Load", value: "99.9%", sub: "Uptime", trend: "Stable", color: "amber" },
+                    ].map((stat, i) => (
+                        <div key={i} className="bg-white p-3 sm:p-7 rounded-[20px] sm:rounded-[32px] border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-gray-200/40 transition-all duration-500 group">
+                            <div className="flex justify-between items-center mb-2 sm:mb-4">
+                                <div className={`w-7 h-7 sm:w-12 sm:h-12 rounded-lg sm:rounded-2xl flex items-center justify-center bg-${stat.color}-50 text-${stat.color}-600 group-hover:bg-${stat.color}-600 group-hover:text-white transition-colors`}>
+                                    <stat.icon className="w-3.5 h-3.5 sm:w-6 sm:h-6" />
+                                </div>
+                                <div className={`text-[6px] sm:text-[10px] font-black px-1 py-0.5 sm:px-2 sm:py-1 rounded-md sm:rounded-lg bg-${stat.color}-50 text-${stat.color}-600 uppercase tracking-tighter`}>
+                                    {stat.trend}
+                                </div>
+                            </div>
+                            <div>
+                                <h3 className="text-lg sm:text-3xl font-black text-gray-900 leading-none tracking-tighter">{stat.value}</h3>
+                                <p className="text-[7px] sm:text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{stat.label}</p>
+                                <p className="hidden sm:block text-[8px] sm:text-[9px] text-gray-300 font-medium italic mt-2 truncate">{stat.sub}</p>
+                            </div>
                         </div>
-                        <div className="text-right">
-                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{stat.label}</p>
-                            <h3 className="text-2xl font-black text-gray-900">{stat.value}</h3>
-                        </div>
-                    </div>
-                ))}
+                    ))}
+                </div>
             </div>
 
-            {/* Tenant List */}
-            <main className="px-8 pb-12">
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-xl shadow-gray-200/50 overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-50 bg-gray-50/50 flex items-center justify-between">
-                        <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Global Infrastructure Inventory</h3>
-                        <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-gray-400 font-bold italic">Auto-refreshing...</span>
-                        </div>
+            {/* Main Content Area */}
+            <main className="px-4 sm:px-8 py-6 sm:py-8 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
+                
+                {/* View Switcher & Header */}
+                <div className="lg:col-span-12 flex flex-col md:flex-row md:items-center justify-between gap-6 mb-4 sm:mb-8 mt-6 sm:mt-12 border-t border-gray-100 pt-8 sm:pt-12">
+                    <div className="flex items-center gap-3">
+                        <Activity className="w-5 h-5 text-blue-600" />
+                        <h2 className="text-lg sm:text-xl font-black text-gray-900 uppercase tracking-tighter">Infrastructure Control</h2>
                     </div>
 
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-white border-b border-gray-50">
-                                    <th className="p-6 text-[10px] font-black uppercase tracking-widest text-gray-400">College Identity</th>
-                                    <th className="p-6 text-[10px] font-black uppercase tracking-widest text-gray-400">Entry Subdomain</th>
-                                    <th className="p-6 text-[10px] font-black uppercase tracking-widest text-gray-400">Subscription Status</th>
-                                    <th className="p-6 text-[10px] font-black uppercase tracking-widest text-gray-400">Activity</th>
-                                    <th className="p-6 text-[10px] font-black uppercase tracking-widest text-gray-400">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {loading ? (
-                                    <tr>
-                                        <td colSpan={5} className="p-12 text-center">
-                                            <div className="flex flex-col items-center gap-4 text-gray-400">
-                                                <div className="w-10 h-10 border-4 border-gray-100 border-t-blue-500 rounded-full animate-spin"></div>
-                                                <p className="text-[10px] font-bold uppercase tracking-widest">Querying Global Database...</p>
+                    <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl sm:rounded-2xl border border-gray-200 w-full sm:w-auto overflow-hidden">
+                        <button 
+                            onClick={() => setViewMode('active')}
+                            className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'active' ? 'bg-white text-blue-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
+                        >
+                            Active Nodes
+                        </button>
+                        <button 
+                            onClick={() => setViewMode('recycle')}
+                            className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'recycle' ? 'bg-white text-red-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-red-400'}`}
+                        >
+                            Recycle Bin
+                        </button>
+                    </div>
+                </div>
+
+                <div className="lg:col-span-12 space-y-6">
+                    <div className="flex items-center justify-between">
+                         <div className="flex items-center gap-3">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
+                                {viewMode === 'active' ? 'Operational Hub' : 'Trash Registry'}
+                            </p>
+                         </div>
+                         <div className="flex gap-2">
+                             <div className="px-3 py-1 bg-white rounded-lg border border-gray-100 text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                                {viewMode === 'active' ? `Total Active Nodes: ${tenants.length}` : `Deleted Nodes: ${tenants.length}`}
+                             </div>
+                         </div>
+                    </div>
+                    <div className="bg-white sm:bg-transparent rounded-[32px] sm:rounded-none overflow-hidden">
+                        {/* Desktop Table View */}
+                        <div className="hidden sm:block bg-white rounded-[40px] border border-gray-100 shadow-2xl shadow-gray-200/50 overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-gray-50/50 border-b border-gray-50">
+                                            <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Node Identity</th>
+                                            <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Live Domain</th>
+                                            <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 text-center">Load (Students)</th>
+                                            <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Subscription Status</th>
+                                            <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 text-right">Operational Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {loading ? (
+                                            <tr>
+                                                <td colSpan={5} className="p-24 text-center">
+                                                    <div className="flex flex-col items-center gap-6">
+                                                        <div className="w-16 h-16 border-4 border-gray-100 border-t-blue-600 rounded-full animate-spin"></div>
+                                                        <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Syncing with Remote Nodes...</p>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ) : tenants.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={5} className="p-24 text-center">
+                                                    <div className="bg-gray-50/50 inline-block p-10 rounded-full mb-4">
+                                                        <Globe className="w-16 h-16 text-gray-200 mx-auto" />
+                                                    </div>
+                                                    <p className="text-gray-400 text-sm italic font-bold">No global nodes provisioned yet.</p>
+                                                </td>
+                                            </tr>
+                                        ) : tenants.map((tenant) => (
+                                            <tr key={tenant._id} className="hover:bg-blue-50/30 transition-all group border-b border-gray-50 last:border-0">
+                                                <td className="px-8 py-8">
+                                                    <div className="flex items-center gap-5">
+                                                        <div className="w-16 h-16 bg-white border-2 border-slate-50 rounded-[20px] shadow-sm flex items-center justify-center font-black text-slate-400 group-hover:scale-110 group-hover:border-blue-100 group-hover:shadow-blue-200 group-hover:text-blue-600 transition-all uppercase text-xl">
+                                                            {tenant.name.substring(0, 2)}
+                                                        </div>
+                                                        <div>
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <p className="font-black text-gray-900 uppercase tracking-tight text-base leading-none">{tenant.name}</p>
+                                                                {viewMode === 'active' && tenant.liveTraffic && tenant.liveTraffic > 0 ? (
+                                                                    <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+                                                                ) : null}
+                                                            </div>
+                                                            <p className="text-[11px] text-slate-400 font-bold italic lowercase">{tenant.adminEmail}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-8">
+                                                    <div className="flex flex-col gap-1.5">
+                                                        <div className="bg-gray-100/50 border border-gray-100 px-4 py-2 rounded-2xl flex items-center gap-3 w-fit group-hover:bg-blue-600 group-hover:border-blue-500 group-hover:text-white transition-all">
+                                                            <Globe className="w-4 h-4 text-gray-300 group-hover:text-blue-200" />
+                                                            <span className="text-[13px] font-black uppercase tracking-tight">{tenant.slug}.hostelease.com</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-4 px-2">
+                                                            {viewMode === 'active' ? (
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <Activity className={`w-2.5 h-2.5 ${tenant.liveTraffic && tenant.liveTraffic > 0 ? 'text-emerald-500' : 'text-gray-300'}`} />
+                                                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{tenant.liveTraffic || 0} Req/Min</span>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-1.5 text-red-400/60">
+                                                                    <Clock className="w-2.5 h-2.5" />
+                                                                    <span className="text-[9px] font-black uppercase tracking-widest">Disconnected</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-8 text-center">
+                                                    <div className="inline-flex flex-col items-center">
+                                                        <p className="text-2xl font-black text-gray-900 tracking-tighter">{tenant.studentCount}</p>
+                                                        <p className="text-[9px] text-gray-300 font-black uppercase tracking-widest mt-0.5">Proxy Clients</p>
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-8">
+                                                    <div className="flex flex-col gap-2">
+                                                        <span className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest w-fit shadow-sm ${tenant.subscriptionStatus === 'active' ? 'bg-emerald-500 text-white' :
+                                                            tenant.subscriptionStatus === 'trial' ? 'bg-blue-600 text-white' : 'bg-red-500 text-white'
+                                                            }`}>
+                                                            {tenant.subscriptionStatus === 'active' ? <CheckCircle2 className="w-3.5 h-3.5" /> :
+                                                                tenant.subscriptionStatus === 'trial' ? <Clock className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                                                            {tenant.subscriptionStatus}
+                                                        </span>
+                                                        {viewMode === 'active' ? (
+                                                            <button
+                                                                onClick={() => toggleTenantStatus(tenant._id, tenant.isActive)}
+                                                                className={`text-[9px] font-black uppercase tracking-widest flex items-center gap-2 px-1 transition-colors hover:text-gray-900 ${tenant.isActive ? 'text-emerald-500' : 'text-red-400'}`}
+                                                            >
+                                                                <div className={`w-1.5 h-1.5 rounded-full ${tenant.isActive ? 'bg-emerald-500 shadow-emerald-500 shadow-lg' : 'bg-red-400 animate-pulse'}`}></div>
+                                                                {tenant.isActive ? 'OPERATIONAL' : 'OFFLINE'}
+                                                            </button>
+                                                        ) : (
+                                                            <div className="text-[9px] font-black text-red-500/60 uppercase tracking-widest px-1">
+                                                                Deleted Node
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-8 text-right">
+                                                    <div className="flex items-center justify-end gap-2 text-right">
+                                                        {viewMode === 'active' ? (
+                                                            <>
+                                                                <button onClick={() => handleImpersonateAdmin(tenant.slug)} className="h-12 w-12 bg-white border border-gray-100 rounded-2xl flex items-center justify-center text-emerald-500 hover:bg-emerald-600 hover:text-white transition-all duration-300 shadow-sm"><LogIn className="w-5 h-5" /></button>
+                                                                <button onClick={() => setEditingTenant(tenant)} className="h-12 w-12 bg-white border border-gray-100 rounded-2xl flex items-center justify-center text-gray-400 hover:bg-slate-900 hover:text-white transition-all duration-300 shadow-sm"><Settings className="w-5 h-5" /></button>
+                                                                <button onClick={() => handleSoftDelete(tenant._id)} className="h-12 w-12 bg-white border border-gray-100 rounded-2xl flex items-center justify-center text-red-400 hover:bg-orange-500 hover:text-white transition-all duration-300 shadow-sm"><Trash2 className="w-5 h-5" /></button>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <button onClick={() => handleRestore(tenant._id)} className="px-6 h-12 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center gap-2">Restore Node</button>
+                                                                <button onClick={() => setDeletingTenant(tenant)} className="h-12 w-12 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-center text-red-600 hover:bg-red-600 hover:text-white transition-all duration-300 shadow-sm"><Trash2 className="w-5 h-5" /></button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* Mobile Card View */}
+                        <div className="sm:hidden space-y-4">
+                            {loading ? (
+                                <div className="bg-white p-12 rounded-[32px] border border-gray-100 text-center flex flex-col items-center gap-4">
+                                     <div className="w-12 h-12 border-4 border-gray-100 border-t-blue-600 rounded-full animate-spin"></div>
+                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Syncing Nodes...</p>
+                                </div>
+                            ) : tenants.length === 0 ? (
+                                <div className="bg-white p-8 rounded-[32px] border border-gray-100 text-center flex flex-col items-center gap-3">
+                                    <Globe className="w-8 h-8 text-gray-200 mx-auto" />
+                                    <p className="text-gray-400 text-[10px] italic font-bold">No global nodes provisioned yet.</p>
+                                </div>
+                            ) : tenants.map((tenant) => (
+                                <div key={tenant._id} className="bg-white p-4 sm:p-6 rounded-[24px] sm:rounded-[32px] border border-gray-100 shadow-sm space-y-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-11 h-11 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center font-black text-slate-400 uppercase text-md shrink-0">
+                                            {tenant.name.substring(0, 2)}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="font-black text-gray-900 uppercase tracking-tight truncate text-sm">{tenant.name}</h3>
+                                                {viewMode === 'active' && tenant.liveTraffic && tenant.liveTraffic > 0 ? (
+                                                    <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                                                ) : null}
                                             </div>
-                                        </td>
-                                    </tr>
-                                ) : tenants.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={5} className="p-12 text-center">
-                                            <p className="text-gray-400 text-sm italic font-bold">No universities registered. Add your first client college.</p>
-                                        </td>
-                                    </tr>
-                                ) : tenants.map((tenant) => (
-                                    <tr key={tenant._id} className="hover:bg-gray-50/50 transition-colors group">
-                                        <td className="p-6">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center font-black text-gray-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-all uppercase">
-                                                    {tenant.name.substring(0, 2)}
-                                                </div>
-                                                <div>
-                                                    <p className="font-black text-gray-900 leading-none mb-1 uppercase tracking-tight">{tenant.name}</p>
-                                                    <p className="text-xs text-gray-400 font-bold italic">{tenant.adminEmail}</p>
-                                                </div>
+                                            <p className="text-[9px] text-slate-400 font-bold italic truncate opacity-70">{tenant.adminEmail}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex items-center justify-between">
+                                            <div>
+                                                <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Load Status</p>
+                                                <p className="text-sm font-black text-gray-900 leading-none">{tenant.studentCount} <span className="text-[7px] text-gray-400 uppercase">S</span></p>
                                             </div>
-                                        </td>
-                                        <td className="p-6">
-                                            <div className="bg-gray-100 px-3 py-1.5 rounded-lg inline-flex items-center gap-2 group-hover:bg-gray-200 transition-all">
-                                                <Globe className="w-3 h-3 text-gray-400" />
-                                                <span className="text-[11px] font-black text-gray-600 uppercase tracking-tight">{tenant.slug}.hostelease.com</span>
-                                            </div>
-                                        </td>
-                                        <td className="p-6">
-                                            <div className="flex flex-col gap-1.5">
-                                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest w-fit ${tenant.subscriptionStatus === 'active' ? 'bg-emerald-50 text-emerald-600' :
-                                                    tenant.subscriptionStatus === 'trial' ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'
-                                                    }`}>
-                                                    {tenant.subscriptionStatus === 'active' ? <CheckCircle2 className="w-3 h-3" /> :
-                                                        tenant.subscriptionStatus === 'trial' ? <Clock className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                                            <Users className="w-3 h-3 text-slate-200" />
+                                        </div>
+                                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex items-center justify-between">
+                                            <div>
+                                                <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Level</p>
+                                                <span className={`text-[8px] font-black uppercase tracking-tight leading-none ${tenant.subscriptionStatus === 'active' ? 'text-emerald-500' : 'text-blue-500'}`}>
                                                     {tenant.subscriptionStatus}
                                                 </span>
-                                                <p className="text-[9px] text-gray-400 font-bold uppercase italic tracking-tight">Expires: Oct 2026</p>
                                             </div>
-                                        </td>
-                                        <td className="p-6">
-                                            <button
-                                                onClick={() => toggleTenantStatus(tenant._id, tenant.isActive)}
-                                                className={`text-[10px] font-black uppercase tracking-widest ${tenant.isActive ? 'text-green-500' : 'text-gray-300'}`}
-                                            >
-                                                {tenant.isActive ? '⚡ ONLINE' : '🔒 SUSPENDED'}
-                                            </button>
-                                        </td>
-                                        <td className="p-6">
-                                            <button
-                                                onClick={() => setEditingTenant(tenant)}
-                                                className="p-2 text-gray-300 hover:text-gray-900 transition-colors"
-                                            >
-                                                <Settings className="w-4 h-4" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                            <ShieldCheck className="w-3 h-3 text-slate-200" />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 bg-slate-900 text-white p-2 rounded-xl">
+                                        <Globe className="w-3 h-3 text-blue-400 shrink-0" />
+                                        <span className="text-[10px] font-bold tracking-tight truncate flex-1">{tenant.slug}.hostelease.com</span>
+                                        <div className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 bg-white/10 rounded-lg">
+                                            <Activity className="w-2 h-2 text-emerald-400" />
+                                            <span className="text-[8px] font-black">{tenant.liveTraffic || 0}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-2 pt-1">
+                                        {viewMode === 'active' ? (
+                                            <>
+                                                <button onClick={() => handleImpersonateAdmin(tenant.slug)} className="flex-1 bg-blue-600 text-white h-9 rounded-xl flex items-center justify-center gap-2 font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-blue-500/10">
+                                                    <LogIn className="w-3.5 h-3.5" /> Sign In
+                                                </button>
+                                                <button onClick={() => setEditingTenant(tenant)} className="w-9 h-9 bg-slate-50 text-slate-400 border border-slate-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
+                                                    <Settings className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button onClick={() => handleSoftDelete(tenant._id)} className="w-9 h-9 bg-red-50 text-red-500/60 border border-red-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <button onClick={() => handleRestore(tenant._id)} className="flex-1 bg-blue-600 text-white h-9 rounded-xl flex items-center justify-center gap-2 font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/10">
+                                                    Restore Node
+                                                </button>
+                                                <button onClick={() => setDeletingTenant(tenant)} className="w-9 h-9 bg-red-50 text-red-600 border border-red-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Boss Overrides Section */}
+                <div className="lg:col-span-12 mt-8 sm:mt-12">
+                     <div className="bg-slate-900 rounded-[32px] sm:rounded-[48px] p-6 sm:p-12 text-white relative overflow-hidden shadow-2xl shadow-blue-900/40">
+                        {/* Decorative background circle */}
+                        <div className="absolute top-0 right-0 w-64 h-64 sm:w-96 sm:h-96 bg-blue-600/10 rounded-full blur-[60px] sm:blur-[100px] -mr-32 -mt-32 sm:-mr-48 sm:-mt-48"></div>
+                        <div className="absolute bottom-0 left-0 w-64 h-64 sm:w-96 sm:h-96 bg-indigo-600/10 rounded-full blur-[60px] sm:blur-[100px] -ml-32 -mb-32 sm:-ml-48 -mb-48"></div>
+
+                        <div className="relative z-10 flex flex-col xl:flex-row items-start sm:items-center justify-between gap-8 sm:gap-12">
+                            <div className="w-full xl:max-w-2xl">
+                                <div className="inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-5 py-1.5 sm:py-2 rounded-full bg-blue-500/10 border border-blue-500/20 mb-6 sm:mb-8">
+                                    <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
+                                    <span className="text-[9px] sm:text-[11px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-blue-400">Boss Overrides Management</span>
+                                </div>
+                                <h3 className="text-3xl sm:text-5xl font-black tracking-tighter uppercase mb-4 sm:mb-6 leading-tight sm:leading-none">Global Network <br/><span className="text-blue-500">Infrastructure.</span></h3>
+                                <p className="text-slate-400 font-medium text-base sm:text-lg mb-8 sm:mb-10 leading-relaxed max-w-xl">
+                                    Maintain total control over the registration ecosystem. Force system-wide updates, push core maintenance flags, and broadcast alerts across all university nodes simultaneously.
+                                </p>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
+                                     <button className="flex items-center justify-start sm:justify-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 p-4 sm:p-6 rounded-[20px] sm:rounded-[28px] transition-all group w-full">
+                                         <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400 group-hover:scale-110 transition-transform shrink-0" />
+                                         <div className="text-left">
+                                             <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500">Secure Mode</p>
+                                             <p className="font-black text-xs sm:text-sm whitespace-nowrap">Force Password Reset</p>
+                                         </div>
+                                     </button>
+                                     <button className="flex items-center justify-start sm:justify-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 p-4 sm:p-6 rounded-[20px] sm:rounded-[28px] transition-all group w-full">
+                                         <ArrowUpRight className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
+                                         <div className="text-left">
+                                             <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500">System Comms</p>
+                                             <p className="font-black text-xs sm:text-sm whitespace-nowrap">Broadcast Global Alert</p>
+                                         </div>
+                                     </button>
+                                </div>
+                            </div>
+
+                            <div className="w-full xl:w-auto grid grid-cols-1 gap-4">
+                                <div className="bg-white/5 border border-white/10 p-6 sm:p-8 rounded-[32px] sm:rounded-[40px] backdrop-blur-xl">
+                                    <h4 className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-blue-400 mb-6 flex items-center gap-2">
+                                        <Activity className="w-4 h-4" />
+                                        Infrastructure Capacity
+                                    </h4>
+                                    <div className="space-y-6">
+                                        {[
+                                            { label: "Database Persistence", val: "88%", color: "blue", percent: 88 },
+                                            { label: "Firebase Auth Response", val: "24ms", color: "emerald", percent: 95 },
+                                            { label: "Node.js Thread Pool", val: "Optimal", color: "blue", percent: 100 },
+                                        ].map((stat, i) => (
+                                            <div key={i} className="flex flex-col gap-2">
+                                                <div className="flex justify-between items-end">
+                                                    <span className="text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-widest">{stat.label}</span>
+                                                    <span className="text-[10px] sm:text-[11px] font-black text-white">{stat.val}</span>
+                                                </div>
+                                                <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                                                    <div 
+                                                        className={`h-full ${stat.color === 'blue' ? 'bg-blue-500' : 'bg-emerald-400'} transition-all duration-1000 ease-out`} 
+                                                        style={{ width: `${stat.percent}%` }} 
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <button className="mt-8 sm:mt-10 w-full py-4 sm:py-5 bg-blue-600 hover:bg-blue-700 rounded-2xl sm:rounded-3xl font-black uppercase tracking-widest transition-all shadow-2xl shadow-blue-500/20 active:scale-95 text-[10px] sm:text-xs">
+                                        Deploy Platform Wide Update
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </main>
 
             {/* Add Modal */}
             {showAddModal && (
-                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
-                    <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-white animate-in zoom-in slide-in-from-bottom duration-300">
-                        <div className="bg-gray-900 p-8 text-white relative">
-                            <Building2 className="w-12 h-12 text-blue-400 mb-4" />
-                            <h3 className="text-2xl font-black uppercase tracking-tighter">Deploy New University</h3>
-                            <p className="text-blue-200/60 text-xs font-black uppercase tracking-widest mt-1">Infrastructure Provisioning</p>
-                            <button onClick={() => setShowAddModal(false)} className="absolute top-8 right-8 text-gray-500 hover:text-white transition-colors">
-                                <Plus className="w-8 h-8 rotate-45" />
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 transition-all animate-in fade-in">
+                    <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl overflow-hidden border border-white animate-in zoom-in slide-in-from-bottom-12 duration-500">
+                        <div className="bg-gray-900 p-10 text-white relative">
+                            <div className="absolute top-0 right-0 p-12 opacity-5 scale-150">
+                                <Building2 className="w-24 h-24" />
+                            </div>
+                            <h3 className="text-3xl font-black uppercase tracking-tighter">Provision New Node</h3>
+                            <p className="text-blue-200/60 text-[10px] font-black uppercase tracking-widest mt-1">Establishing Virtual Infrastructure</p>
+                            <button onClick={() => setShowAddModal(false)} className="absolute top-10 right-10 text-gray-500 hover:text-white transition-colors bg-white/10 h-10 w-10 rounded-full flex items-center justify-center hover:rotate-90">
+                                <X className="w-6 h-6" />
                             </button>
                         </div>
 
-                        <form onSubmit={handleCreateTenant} className="p-8 space-y-6">
+                        <form onSubmit={handleCreateTenant} className="p-10 space-y-8">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-1.5">
+                                <div className="space-y-2">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">University Name</label>
                                     <input
                                         type="text"
@@ -347,10 +727,10 @@ export default function SuperAdminDashboard() {
                                         value={newTenant.name}
                                         onChange={(e) => setNewTenant({ ...newTenant, name: e.target.value })}
                                         placeholder="e.g. Oxford University"
-                                        className="w-full bg-gray-50 border-gray-100 p-4 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
+                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
                                     />
                                 </div>
-                                <div className="space-y-1.5">
+                                <div className="space-y-2">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Subdomain Slug</label>
                                     <div className="flex items-center relative">
                                         <input
@@ -359,22 +739,22 @@ export default function SuperAdminDashboard() {
                                             value={newTenant.slug}
                                             onChange={(e) => setNewTenant({ ...newTenant, slug: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '') })}
                                             placeholder="oxford"
-                                            className="w-full bg-gray-50 border-gray-100 p-4 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 lowercase"
+                                            className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 lowercase px-5"
                                         />
-                                        <Globe className="absolute right-4 w-4 h-4 text-gray-300" />
+                                        <Globe className="absolute right-5 w-4 h-4 text-gray-300" />
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Admin Email Address</label>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Global Admin Contact</label>
                                 <input
                                     type="email"
                                     required
                                     value={newTenant.adminEmail}
                                     onChange={(e) => setNewTenant({ ...newTenant, adminEmail: e.target.value })}
                                     placeholder="admin@oxford.edu"
-                                    className="w-full bg-gray-50 border-gray-100 p-4 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
+                                    className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
                                 />
                             </div>
 
@@ -382,16 +762,16 @@ export default function SuperAdminDashboard() {
                                 <button
                                     type="button"
                                     onClick={() => setShowAddModal(false)}
-                                    className="p-4 rounded-xl bg-gray-50 text-gray-500 font-black uppercase text-xs tracking-widest hover:bg-gray-100"
+                                    className="p-5 rounded-2xl bg-slate-50 text-slate-500 font-black uppercase text-xs tracking-widest hover:bg-slate-100"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     disabled={isCreating}
-                                    className="p-4 rounded-xl bg-gray-900 text-white font-black uppercase text-xs tracking-widest shadow-xl shadow-gray-200 active:scale-95 transition-all flex items-center justify-center gap-2"
+                                    className="p-5 rounded-2xl bg-blue-600 text-white font-black uppercase text-xs tracking-widest shadow-2xl shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
                                 >
                                     {isCreating ? "Deploying..." : (
-                                        <>Execute Provisioning <ArrowRight className="w-4 h-4" /></>
+                                        <>Deploy Node <ArrowRight className="w-4 h-4" /></>
                                     )}
                                 </button>
                             </div>
@@ -400,26 +780,29 @@ export default function SuperAdminDashboard() {
                 </div>
             )}
 
-            {/* Edit Modal */}
+            {/* Config Modal */}
             {editingTenant && (
-                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
-                    <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-300">
-                        <div className="bg-gray-800 p-8 text-white">
-                            <h3 className="text-2xl font-black uppercase tracking-tighter">Configure Node</h3>
-                            <p className="text-gray-400 text-xs font-black uppercase tracking-widest mt-1">{editingTenant.name}</p>
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden animate-in zoom-in duration-500 border border-white">
+                        <div className="bg-slate-800 p-10 text-white flex justify-between items-start">
+                            <div>
+                                <h3 className="text-3xl font-black uppercase tracking-tighter">Configure Node</h3>
+                                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">{editingTenant?.name}</p>
+                            </div>
+                            <X className="w-6 h-6 text-slate-500 cursor-pointer" onClick={() => setEditingTenant(null)} />
                         </div>
 
-                        <form onSubmit={handleUpdateTenant} className="p-8 space-y-6">
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Subscription Status</label>
+                        <form onSubmit={handleUpdateTenant} className="p-10 space-y-8">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Subscription Entitlement</label>
                                 <select
-                                    value={editingTenant.subscriptionStatus}
-                                    onChange={(e) => setEditingTenant({ ...editingTenant, subscriptionStatus: e.target.value as any })}
-                                    className="w-full bg-gray-50 border-gray-100 p-4 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                                    value={editingTenant?.subscriptionStatus || 'trial'}
+                                    onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, subscriptionStatus: e.target.value as any })}
+                                    className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none appearance-none transition-all"
                                 >
-                                    <option value="active">Active (Full Access)</option>
-                                    <option value="trial">Trial Mode</option>
-                                    <option value="expired">Expired (Locked)</option>
+                                    <option value="active">Active (Premium Full Access)</option>
+                                    <option value="trial">Standard Trial (Restricted)</option>
+                                    <option value="expired">Expired (Node Locked)</option>
                                 </select>
                             </div>
 
@@ -427,91 +810,149 @@ export default function SuperAdminDashboard() {
                                 <button
                                     type="button"
                                     onClick={() => setEditingTenant(null)}
-                                    className="flex-1 p-4 rounded-xl bg-gray-50 text-gray-500 font-black uppercase text-xs tracking-widest hover:bg-gray-100"
+                                    className="flex-1 p-5 rounded-2xl bg-slate-50 text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-slate-100"
                                 >
-                                    Close
+                                    Abort
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 p-4 rounded-xl bg-blue-600 text-white font-black uppercase text-xs tracking-widest shadow-xl shadow-blue-600/20 active:scale-95 transition-all"
+                                    className="flex-1 p-5 rounded-2xl bg-blue-600 text-white font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-blue-500/20 active:scale-95 transition-all"
                                 >
-                                    Commit Changes
+                                    Commit Sync
                                 </button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
-            {/* Registration Success Modal */}
+
+            {/* Registration Success (Boss Style) */}
             {registrationSuccessData && (
-                <div className="fixed inset-0 bg-[#050510]/95 backdrop-blur-xl z-[100] flex items-center justify-center p-6">
-                    <div className="bg-white w-full max-w-xl rounded-[40px] shadow-2xl overflow-hidden border border-white animate-in zoom-in duration-500">
-                        <div className="bg-emerald-600 p-10 text-white relative">
-                            <div className="absolute top-0 right-0 p-12 opacity-10">
-                                <CheckCircle2 className="w-32 h-32" />
+                <div className="fixed inset-0 bg-[#050510]/98 backdrop-blur-2xl z-[100] flex items-center justify-center p-6 animate-in fade-in duration-700">
+                    <div className="bg-white w-full max-w-2xl rounded-[56px] shadow-2xl overflow-hidden border border-white/20 animate-in zoom-in slide-in-from-bottom-24 duration-700">
+                        <div className="bg-emerald-500 p-14 text-white relative">
+                            <div className="absolute top-0 right-0 p-16 opacity-10">
+                                <Zap className="w-48 h-48 rotate-12" />
                             </div>
-                            <h3 className="text-3xl font-black uppercase tracking-tighter mb-2">Registration Successful!</h3>
-                            <p className="text-emerald-100/60 text-xs font-black uppercase tracking-widest">{registrationSuccessData.name} is now LIVE</p>
+                            <h3 className="text-5xl font-black uppercase tracking-tighter mb-4 leading-none">Node is Online.</h3>
+                            <p className="text-emerald-100/60 text-xs font-black uppercase tracking-[0.4em]">{registrationSuccessData.name} Established</p>
                         </div>
 
-                        <div className="p-10 space-y-8">
-                            <div className="space-y-4">
-                                <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                                    <div className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-200 flex items-center justify-center">
-                                        <Globe className="w-5 h-5 text-blue-500" />
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Live Subdomain</p>
-                                        <p className="text-lg font-black text-slate-800 tracking-tight lowercase">{registrationSuccessData.slug}.hostelease.com</p>
-                                    </div>
+                        <div className="p-14 space-y-12">
+                            <div className="flex items-center gap-6 p-8 rounded-[40px] bg-slate-50 border border-slate-100">
+                                <div className="w-16 h-16 bg-white rounded-3xl shadow-xl shadow-slate-200 border border-slate-100 flex items-center justify-center">
+                                    <Globe className="w-8 h-8 text-blue-500" />
                                 </div>
+                                <div className="flex-1">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Live Endpoint</p>
+                                    <p className="text-2xl font-black text-slate-900 tracking-tight lowercase">{registrationSuccessData.slug}.hostelease.com</p>
+                                </div>
+                                <button onClick={() => window.open(`${window.location.protocol}//${registrationSuccessData.slug}.${window.location.host}/login`, '_blank')} className="p-4 bg-white rounded-2xl shadow-sm border border-slate-200 hover:bg-slate-900 hover:text-white transition-all">
+                                    <ArrowUpRight className="w-6 h-6" />
+                                </button>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="p-6 rounded-3xl bg-indigo-50/50 border border-indigo-100/50">
-                                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-3">Dean Portal</p>
-                                    <div className="space-y-1">
-                                        <p className="text-xs text-indigo-900 font-bold mb-1">User: <span className="text-indigo-600">{registrationSuccessData.adminEmail}</span></p>
-                                        <p className="text-xs text-indigo-900 font-bold">Pass: <code className="bg-indigo-100 px-1.5 py-0.5 rounded text-indigo-700 font-black">{registrationSuccessData.defaultAdminPass}</code></p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="p-8 rounded-[40px] bg-blue-50/50 border border-blue-100/50">
+                                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-4">Master Proxy Creds</p>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <p className="text-[10px] text-blue-900/40 font-black uppercase mb-1">Login</p>
+                                            <p className="text-sm font-black text-blue-900">{registrationSuccessData.adminEmail}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] text-blue-900/40 font-black uppercase mb-1">Key</p>
+                                            <code className="bg-blue-600 text-white px-3 py-1.5 rounded-xl font-black text-xs">{registrationSuccessData.defaultAdminPass}</code>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="p-6 rounded-3xl bg-amber-50/50 border border-amber-100/50">
-                                    <p className="text-[10px] font-black text-amber-400 uppercase tracking-widest mb-3">Developer Portal</p>
-                                    <div className="space-y-1">
-                                        <p className="text-xs text-amber-900 font-bold mb-1">User: <span className="text-amber-600">Logo Click</span></p>
-                                        <p className="text-xs text-amber-900 font-bold">Pass: <code className="bg-amber-100 px-1.5 py-0.5 rounded text-amber-700 font-black">{registrationSuccessData.defaultDevPass}</code></p>
-                                    </div>
+                                <div className="p-8 rounded-[40px] bg-slate-900 border border-slate-800 shadow-2xl shadow-blue-900/20">
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6">Boss Integration</p>
+                                    <button 
+                                        onClick={() => handleImpersonateAdmin(registrationSuccessData.slug)} 
+                                        className="w-full py-5 bg-blue-600 rounded-3xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-blue-500 active:scale-95 flex items-center justify-center gap-2"
+                                    >
+                                        <Zap className="w-3.5 h-3.5 fill-current" />
+                                        Launch Instant Proxy
+                                    </button>
                                 </div>
-                            </div>
-
-                            <div className="bg-blue-50/50 p-6 rounded-3xl border border-blue-100/50">
-                                <h4 className="text-[10px] font-black text-blue-900 uppercase tracking-widest mb-2 flex items-center gap-2">
-                                    <AlertCircle className="w-3.5 h-3.5" />
-                                    Initial Setup Instructions
-                                </h4>
-                                <ul className="space-y-2">
-                                    <li className="text-[11px] text-blue-800/70 font-bold leading-tight flex gap-2">
-                                        <span className="text-blue-500">•</span>
-                                        Log in as Developer first to customize Dean & Warden passwords.
-                                    </li>
-                                    <li className="text-[11px] text-blue-800/70 font-bold leading-tight flex gap-2">
-                                        <span className="text-blue-500">•</span>
-                                        Add your hostels in 'System Settings' to enable student registration.
-                                    </li>
-                                    <li className="text-[11px] text-blue-800/70 font-bold leading-tight flex gap-2">
-                                        <span className="text-blue-500">•</span>
-                                        Students can log in via Google once they are mapped to a room.
-                                    </li>
-                                </ul>
                             </div>
 
                             <button
                                 onClick={() => setRegistrationSuccessData(null)}
-                                className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest shadow-2xl shadow-slate-200 active:scale-95 transition-all"
+                                className="w-full py-6 bg-slate-900 text-white rounded-[32px] font-black uppercase tracking-[0.3em] text-[11px] shadow-2xl transition-all hover:bg-black active:scale-[0.98]"
                             >
-                                Done & Close
+                                Confirm & Terminate Sync
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Deletion Confirmation Modal */}
+            {deletingTenant && (
+                <div className="fixed inset-0 bg-red-900/20 backdrop-blur-xl z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl overflow-hidden border border-red-100 animate-in zoom-in duration-500">
+                        <div className="bg-red-600 p-10 text-white relative">
+                            <div className="absolute top-0 right-0 p-12 opacity-10">
+                                <Trash2 className="w-24 h-24" />
+                            </div>
+                            <h3 className="text-3xl font-black uppercase tracking-tighter">Critical Purge</h3>
+                            <p className="text-red-100/60 text-[10px] font-black uppercase tracking-widest mt-1 italic">Permanent Database Destruction</p>
+                        </div>
+
+                        <div className="p-10 space-y-8">
+                            <div className="bg-red-50 border border-red-100 p-6 rounded-[28px] space-y-3">
+                                <div className="flex items-center gap-3 text-red-600">
+                                    <AlertCircle className="w-5 h-5" />
+                                    <p className="text-xs font-black uppercase tracking-tight">Warning: Irreversible Action</p>
+                                </div>
+                                <p className="text-xs text-red-800 font-medium leading-relaxed">
+                                    This will permanently delete <span className="font-black underline">{deletingTenant?.name || 'this node'}</span> and every single record associated with it, including students, attendance history, and gatepasses.
+                                </p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+                                        Type the following to confirm (You can copy this text):
+                                    </label>
+                                    <div className="bg-slate-100 p-4 rounded-2xl select-all cursor-text font-black text-slate-600 text-[11px] uppercase tracking-wider text-center border border-slate-200">
+                                        DELETE {deletingTenant?.name?.toUpperCase()}
+                                    </div>
+                                </div>
+
+                                <input
+                                    type="text"
+                                    value={deleteConfirmText}
+                                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                                    placeholder="Type confirmation here..."
+                                    className="w-full bg-slate-50 border-slate-100 p-5 rounded-2xl font-black text-center focus:ring-4 focus:ring-red-500/10 focus:bg-white outline-none transition-all uppercase tracking-widest text-xs"
+                                />
+                            </div>
+
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => {
+                                        setDeletingTenant(null);
+                                        setDeleteConfirmText("");
+                                    }}
+                                    className="flex-1 p-5 rounded-2xl bg-slate-100 text-slate-500 font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-all"
+                                >
+                                    Abort
+                                </button>
+                                <button
+                                    onClick={handleDeletePurge}
+                                    disabled={
+                                        isDeleting || 
+                                        !deletingTenant ||
+                                        deleteConfirmText.trim().toUpperCase().replace(/\s+/g, ' ') !== `DELETE ${deletingTenant?.name?.toUpperCase()}`.trim().replace(/\s+/g, ' ')
+                                    }
+                                    className="flex-1 p-5 rounded-2xl bg-red-600 text-white font-black uppercase text-[10px] tracking-widest shadow-xl shadow-red-500/20 active:scale-95 disabled:opacity-30 disabled:grayscale transition-all"
+                                >
+                                    {isDeleting ? "Purging..." : "Confirm Purge"}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -10,8 +10,8 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
     const pathname = usePathname();
 
     useEffect(() => {
-        // Don't guard the superadmin or login pages
-        if (pathname.startsWith("/superadmin") || pathname.startsWith("/login")) {
+        // Don't guard the superadmin, login, or impersonation pages
+        if (pathname.startsWith("/superadmin") || pathname.startsWith("/login") || pathname.startsWith("/auth/impersonate")) {
             setLoading(false);
             return;
         }
