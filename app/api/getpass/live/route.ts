@@ -86,22 +86,31 @@ export async function GET(request: NextRequest) {
         }
 
         // 2. Full Mode (Heavier Data - Runs Infrequently)
-        // ⚡ SMART FIX: Fetch full counts separately from the visible list
-        // This ensures the summary (116) matches the breakdown labels (Pass/Leave count)
-        // even if we only download 100 profiles to save bandwidth.
-        const [listData, summaryData] = await Promise.all([
-            db.gatePasses.list(filters, { limit: 100 }), // Get profiles (Limit 100 for speed/bandwidth)
-            db.gatePasses.list(filters, { limit: 1, countOnly: true }) // Get TRUE counts (Extremely tiny data)
-        ]);
+        // ⚡ SMART FIX: Fetch all active passes to calculate TRUE unique counts
+        // This prevents the '140 vs 70' double-counting bug.
+        const allOutPassesRes = await db.gatePasses.list(filters, { limit: 1000 });
+        const openPasses = allOutPassesRes.records || [];
+        
+        // ⚡ DE-DUPLICATION: Use a Map to keep ONLY the most recent record per student
+        const uniqueOutRecords = new Map<string, any>();
+        openPasses.forEach((p: any) => {
+            const sId = (typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId)?.toString();
+            if (sId && !uniqueOutRecords.has(sId)) {
+                uniqueOutRecords.set(sId, p);
+            }
+        });
 
-        const { records: currentlyOut } = listData;
-        const totalOut = summaryData.total || 0;
+        const currentlyOut = Array.from(uniqueOutRecords.values());
+        const uniqueStudentsOut = currentlyOut.length;
+        
+        let leaveCount = 0;
+        let gatePassCount = 0;
+        currentlyOut.forEach((p) => {
+            if (p.type === 'leave') leaveCount++;
+            else gatePassCount++;
+        });
 
-        const [totalStudents, fullOutListForBreakdown] = await Promise.all([
-            db.students.count(countFilters),
-            // Light-weight query for true Pass vs Leave split
-            db.gatePasses.list({ ...filters, light: true }, { limit: 500 })
-        ]);
+        const totalStudents = await db.students.count(countFilters);
 
         const returnsFilters: any = {
             status: "in",
@@ -117,59 +126,8 @@ export async function GET(request: NextRequest) {
             sortOrder: 'desc'
         });
 
-        // ⚡ SELF-HEALING & DEDUPLICATION LOGIC
-        // Some students might have duplicate 'out' records due to race conditions.
-        // We deduplicate them here for the UI and identify records that need closing.
-        const uniqueStudentsMap = new Map();
-        const duplicatesToClose: string[] = [];
-
-        // Note: currentlyOut is limited to 100, but fullOutListForBreakdown has more for analysis
-        const allOutRecords = fullOutListForBreakdown.records || [];
-
-        allOutRecords.forEach((record: any) => {
-            const sId = record.studentId?.toString();
-            if (!uniqueStudentsMap.has(sId)) {
-                uniqueStudentsMap.set(sId, record);
-            } else {
-                // This is a duplicate! We keep the newest one (based on sort) and mark this for closing
-                duplicatesToClose.push(record._id);
-            }
-        });
-
-        // Fix the true unique counts
-        const uniqueStudentsOut = uniqueStudentsMap.size;
-
-        // ⚡ ASYNC SELF-HEALING: Close duplicates in the background
-        if (duplicatesToClose.length > 0) {
-            console.log(`[SELF_HEAL] Found ${duplicatesToClose.length} duplicate 'out' records. Resolving...`);
-            // We don't await this to keep the API fast
-            Promise.all(duplicatesToClose.map(id =>
-                db.gatePasses.update(id, {
-                    status: 'auto-resolved',
-                    checkInTime: now,
-                    qrTokenUsedIn: 'SYSTEM_SELF_HEAL_DUPLICATE'
-                })
-            )).catch(err => console.error("[SELF_HEAL_ERROR]", err));
-        }
-
-        // Filter the visible list to be unique as well
-        const uniqueVisibleList: any[] = [];
-        const seenInVisible = new Set();
-        currentlyOut.forEach((record: any) => {
-            const sId = record.studentId?.toString();
-            if (!seenInVisible.has(sId)) {
-                uniqueVisibleList.push(record);
-                seenInVisible.add(sId);
-            }
-        });
-
-        // Calculate split from the FULL list (lightweight records) instead of the limited profile list
-        // Calculate split from the UNIQUE map
-        const uniqueRecords = Array.from(uniqueStudentsMap.values());
-        const leaveCount = uniqueRecords.filter((p: any) => p.type === "leave").length;
-        const gatePassCount = uniqueStudentsOut - leaveCount;
-
-        const currentlyOutWithDuration = uniqueVisibleList.map((record: any) => {
+        // Use the deduplicated list for display (no extra healing needed as it's already mapped)
+        const currentlyOutWithDuration = currentlyOut.map((record: any) => {
             const diffMs = now.getTime() - new Date(record.checkOutTime).getTime();
             const durationMinutes = Math.round(diffMs / 60000);
             const hours = Math.floor(durationMinutes / 60);

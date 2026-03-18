@@ -720,8 +720,17 @@ const getDbSource = async () => {
 };
 
 export const db = {
-    // Returns which database is currently active
+    // Returns which database currently active
     getSource: getDbSource,
+
+    // ⚡ EXPOSED FOR BULK OPERATIONS
+    supabase,
+    getDbSource,
+    getTenantIdOrThrow,
+    mapAttendanceToSnakeCase,
+    mapStudentToSnakeCase,
+    mapAttendanceToCamelCase,
+    mapStudentToCamelCase,
 
     /**
      * ADMIN SETTINGS OPERATIONS
@@ -1064,12 +1073,22 @@ export const db = {
                     query = query.ilike('registration_id', filters.registrationId);
                 }
 
+                if (filters._id) {
+                    if (typeof filters._id === 'object' && filters._id.$in) {
+                        query = query.in('_id', filters._id.$in);
+                    } else {
+                        query = query.eq('_id', filters._id);
+                    }
+                }
+
                 if (filters.search) {
                     const s = filters.search;
                     query = query.or(`name.ilike.%${s}%,email.ilike.%${s}%,phone_number.ilike.%${s}%,room_number.ilike.%${s}%,registration_id.ilike.%${s}%,device_id.ilike.%${s}%`);
                 }
 
-                const { data, error } = await query.order('name', { ascending: true });
+                const { data, error } = await query
+                    .order('name', { ascending: true })
+                    .limit(options.limit || 1000);
                 if (error) throw error;
 
                 // Map snake_case back to camelCase for API compatibility
@@ -1691,17 +1710,31 @@ export const db = {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
+
+                // ⚡ ULTRA-OPTIMIZED GROUPED FETCH: Only get counts per hostel
+                // Since Supabase doesn't support complex 'group by' easily in JS select, 
+                // we fetch minimal data (just hostel names) and perform light grouping.
                 const { data, error } = await supabase
                     .from('attendance')
-                    .select('student_id, hostel_name')
+                    .select('hostel_name, student_id')
                     .eq('tenant_id', tenantId)
                     .eq('date', date)
                     .neq('is_test', true);
 
                 if (error) throw error;
+
+                // Group by hostel locally (still saves a lot of weight compared to full records)
+                const counts: Record<string, number> = {};
+                const uniqueStudents = new Set<string>();
+                
+                (data || []).forEach((r: any) => {
+                    counts[r.hostel_name] = (counts[r.hostel_name] || 0) + 1;
+                    if (r.student_id) uniqueStudents.add(r.student_id.toString());
+                });
+
                 return {
-                    records: data || [],
-                    presentStudentIds: (data || []).map((r: any) => r.student_id)
+                    summary: Object.entries(counts).map(([name, count]) => ({ _id: name, count })),
+                    presentStudentIds: Array.from(uniqueStudents)
                 };
             } else {
                 await connectDB();

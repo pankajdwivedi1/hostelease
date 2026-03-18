@@ -199,58 +199,54 @@ export async function GET(request: NextRequest) {
     let activeOutings = new Map<string, string>();
     let syncCount = 0;
 
-    // ⚡ SYNC STATUS: Ensure 'out' status matches open gate passes for everyone in the list
-    try {
-      // 1. Fetch Open Passes
-      const gatePassResult = await db.gatePasses.list({ status: "out" }, { limit: 1000 });
-      openPasses = gatePassResult.records || [];
+    // ⚡ OPTIMIZATION: Only sync status if NOT in 'light' mode to save massive bandwidth
+    if (!light) {
+      try {
+        // 1. Fetch Open Passes
+        const gatePassResult = await db.gatePasses.list({ status: "out" }, { limit: 1000 });
+        openPasses = gatePassResult.records || [];
 
-      // 2. Fetch Present IDs for Today (to detect stale gate passes)
-      const now = new Date();
-      // ⚡ Robust Date Parsing (Sync with attendance-summary API)
-      const istDateStr = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" });
-      const dateParts = istDateStr.split(/[^0-9]/).filter(p => p.length > 0);
-      let today = "";
-      if (dateParts.length >= 3) {
-        if (dateParts[0].length === 4) today = `${dateParts[0]}-${dateParts[1]}-${dateParts[2]}`; // YYYY-MM-DD
-        else today = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; // DD-MM-YYYY -> YYYY-MM-DD
-      } else {
-        today = now.toISOString().split('T')[0];
-      }
-
-      console.log(`[SYNC_DEBUG] Today Date String determined as: ${today}`);
-      const attendanceSummary = await db.attendance.summary(today);
-      const presentIdsSet = new Set((attendanceSummary?.presentStudentIds || []).map((id: any) => id?.toString()));
-
-      // Create a map of studentId -> outingType for efficient lookup
-      activeOutings = new Map(openPasses.map((p: any) => {
-        const sId = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
-        return [sId?.toString(), p.type || "outing"];
-      }));
-
-      console.log(`[SYNC_DEBUG] Open Passes: ${openPasses?.length || 0}, Active Outings: ${activeOutings.size}, Present Students Today: ${presentIdsSet.size}`);
-
-      students.forEach((s: any) => {
-        const sId = (s.id || s._id)?.toString();
-        const outingType = activeOutings.get(sId);
-
-        // ⚡ DATA CONSISTENCY FIX:
-        // A student CANNOT be 'OUT' (red) if they are already marked 'Present' (today)!
-        const isActuallyPresent = presentIdsSet.has(sId);
-
-        if (outingType && !isActuallyPresent) {
-          s.studentStatus = "out";
-          s.outingType = outingType;
-          syncCount++;
+        // 2. Fetch Present IDs for Today (to detect stale gate passes)
+        const now = new Date();
+        // ⚡ Robust Date Parsing (Sync with attendance-summary API)
+        const istDateStr = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" });
+        const dateParts = istDateStr.split(/[^0-9]/).filter(p => p.length > 0);
+        let today = "";
+        if (dateParts.length >= 3) {
+          if (dateParts[0].length === 4) today = `${dateParts[0]}-${dateParts[1]}-${dateParts[2]}`; // YYYY-MM-DD
+          else today = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; // DD-MM-YYYY -> YYYY-MM-DD
         } else {
-          // If they are present OR have no open pass, they are 'in'
-          s.studentStatus = "in";
-          s.outingType = undefined;
+          today = now.toISOString().split('T')[0];
         }
-      });
-      console.log(`[SYNC_DEBUG] Total Students Synced to 'out': ${syncCount}`);
-    } catch (syncError) {
-      console.warn("⚠️ Status sync failed in list API:", syncError);
+
+        const attendanceSummary = await db.attendance.summary(today);
+        const presentIdsSet = new Set((attendanceSummary?.presentStudentIds || []).map((id: any) => id?.toString()));
+
+        // Create a map of studentId -> outingType for efficient lookup
+        activeOutings = new Map(openPasses.map((p: any) => {
+          const sId = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
+          return [sId?.toString(), p.type || "outing"];
+        }));
+
+        students.forEach((s: any) => {
+          const sId = (s.id || s._id)?.toString();
+          const outingType = activeOutings.get(sId);
+
+          // ⚡ DATA CONSISTENCY FIX:
+          // Priority 1: If Gatepass says OUT, stay OUT (Matches Terminal Count: 70)
+          if (outingType) {
+            s.studentStatus = "out";
+            s.outingType = outingType;
+            syncCount++;
+          } else {
+            // If no open pass, they are 'in'
+            s.studentStatus = "in";
+            s.outingType = undefined;
+          }
+        });
+      } catch (syncError) {
+        console.warn("⚠️ Status sync failed in list API:", syncError);
+      }
     }
 
     return NextResponse.json({

@@ -94,7 +94,10 @@ export default function SuperAdminDashboard() {
         
         // Auto-refresh stats every 30 seconds for live traffic
         const interval = setInterval(() => {
-            if (isAuthorized && isMounted && viewMode === 'active') fetchTenants();
+            // ⚡ OPTIMIZATION: Only refresh if tab is visible to save bandwidth
+            if (isAuthorized && isMounted && viewMode === 'active' && document.visibilityState === 'visible') {
+                fetchTenants();
+            }
         }, 30000);
         
         return () => clearInterval(interval);

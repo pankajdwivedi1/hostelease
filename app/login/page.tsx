@@ -26,16 +26,34 @@ function LoginForm() {
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
   const [selectedHostelId, setSelectedHostelId] = useState("");
   const [isDeveloperSetup, setIsDeveloperSetup] = useState(true);
-
-  // For background animation mounting
   const [mounted, setMounted] = useState(false);
+
+  // ⚡ INSTANT BRANDING SYNC: Initialize from URL or Local Storage to prevent flickering
   const [tenantName, setTenantName] = useState("Hostelease");
   const [tenantLogo, setTenantLogo] = useState("");
+
   useEffect(() => {
+    // ⚡ FIRST PASS: Check URL and Storage instantly (Zero Flicker)
+    if (typeof window !== 'undefined') {
+      const tenantParam = searchParams.get('tenant');
+      if (tenantParam) {
+        setTenantName(tenantParam.toUpperCase());
+        // If we have logo in storage for this specific slug, use it
+        if (localStorage.getItem("lastTenantSlug") === tenantParam.toLowerCase()) {
+            setTenantLogo(localStorage.getItem("lastTenantLogo") || "");
+            setTenantName(localStorage.getItem("lastTenantName") || tenantParam.toUpperCase());
+        }
+      } else {
+        setTenantName(localStorage.getItem("lastTenantName") || "Hostelease");
+        setTenantLogo(localStorage.getItem("lastTenantLogo") || "");
+      }
+    }
+
     setMounted(true);
     fetchHostels();
     fetchTenantConfig();
     checkDeveloperSetup();
+    
     if (searchParams.get("logout") === "success") {
       setShowLogoutToast(true);
       setTimeout(() => setShowLogoutToast(false), 5000);
@@ -46,11 +64,16 @@ function LoginForm() {
 
   const fetchTenantConfig = async () => {
     try {
-      const res = await fetch('/api/tenant/config');
+      const tenant = searchParams.get('tenant');
+      const res = await fetch(`/api/tenant/config${tenant ? `?tenant=${tenant}` : ''}`);
       const data = await res.json();
       if (data.success) {
         setTenantName(data.name);
         setTenantLogo(data.logo);
+        // ⚡ Persist for instant load next time
+        localStorage.setItem("lastTenantName", data.name);
+        localStorage.setItem("lastTenantLogo", data.logo || "");
+        localStorage.setItem("lastTenantSlug", data.slug || "");
       }
     } catch (err) {
       console.error("Config fetch failed", err);

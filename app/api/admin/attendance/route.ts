@@ -51,19 +51,23 @@ export async function POST(request: Request) {
         const istTime = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
         const today = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
 
-        const results = [];
+        // ⚡ BATCH OPTIMIZATION: Fetch all students in one single query instead of a loop
+        const { records: students } = await db.students.list({ 
+            _id: { $in: studentIds },
+            tenant_id: (await db.getTenantIdOrThrow()) 
+        }, { limit: studentIds.length });
+
+        const attendanceRecords: any[] = [];
+        
         for (const studentId of studentIds) {
-            const student = await db.students.getById(studentId);
+            const student = students.find((s: any) => s._id.toString() === studentId);
             if (!student) continue;
 
-            // Only mark if "IN"
+            // Only mark if "IN" or status matches
             if (student.studentStatus !== 'in') continue;
 
-            // Check if already marked
-            const existing = await db.attendance.checkToday(studentId, today);
-            if (existing) continue;
-
-            const attendanceData = {
+            // Prepare bulk data
+            attendanceRecords.push({
                 studentId: student._id.toString(),
                 firebaseUID: student.firebaseUID,
                 name: student.name,
@@ -79,14 +83,25 @@ export async function POST(request: Request) {
                 isTest: false,
                 timestamp: now.toISOString(),
                 verificationMethod: "warden",
-                markedBy: markedBy || "Warden"
-            };
-
-            const record = await db.attendance.mark(attendanceData);
-            results.push(record);
+                markedBy: markedBy || "Warden",
+                tenantId: student.tenantId
+            });
         }
 
-        return NextResponse.json({ success: true, count: results.length });
+        if (attendanceRecords.length > 0) {
+            // ⚡ BULK INSERT: Send all records to DB in one single trip
+            const source = await db.getDbSource();
+            if (source === 'SUPABASE') {
+                const { error } = await db.supabase.from('attendance').insert(attendanceRecords.map(db.mapAttendanceToSnakeCase));
+                if (error) throw error;
+            } else {
+                for (const rec of attendanceRecords) {
+                    await db.attendance.mark(rec);
+                }
+            }
+        }
+
+        return NextResponse.json({ success: true, count: attendanceRecords.length });
     } catch (error: any) {
         console.error("Error marking manual attendance:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });

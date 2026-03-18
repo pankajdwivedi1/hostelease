@@ -2186,14 +2186,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   }, [title]);
 
   useEffect(() => {
-    // ⚡ OPTIMIZATION: Tab Persistence
-    // Only fetch if tab changed AND we don't have data yet OR if filters changed.
-    const shouldFetchSummary = !attendanceSummary || Object.keys(attendanceSummary).length === 0;
-    if (shouldFetchSummary) fetchAttendanceSummary();
+    // ⚡ INSTANT UPDATE: Always fetch summary when filters or date change to provide a snappy experience
+    fetchAttendanceSummary();
 
-    if (currentTab === "attendance" && (!attendanceLogs || attendanceLogs.length === 0)) {
+    if (currentTab === "attendance") {
       fetchAttendanceLogs();
     }
+    
     if (currentTab === 'payments' && (!payments || payments.length === 0)) {
       fetchAdminPayments();
       fetchBankSettings();

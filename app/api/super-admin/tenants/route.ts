@@ -23,52 +23,48 @@ export async function GET(request: NextRequest) {
         if (showDeleted) {
             query = query.eq('is_deleted', true);
         } else {
-            // Guard against null/false for active rows
             query = query.or('is_deleted.is.null,is_deleted.eq.false');
         }
 
         const { data: tenants, error: tenantError } = await query.order('created_at', { ascending: false });
-
         if (tenantError) throw tenantError;
 
-        // 2. ULTRA-PERFORMANCE BATCH FETCH: Get all student counts in one go
         const tenantIds = tenants?.map(t => t.id) || [];
-        
-        // Fetch all student counts for these tenants
-        const { data: studentCounts, error: studentCountError } = await supabase
-            .from('students')
-            .select('tenant_id')
-            .in('tenant_id', tenantIds);
 
-        if (studentCountError) throw studentCountError;
+        // 2. ULTRA-OPTIMIZED COUNT FETCH: Get counts per tenant without downloading records
+        // Using Promise.all to fetch counts in parallel for best speed
+        const tenantStats = await Promise.all(tenantIds.map(async (id) => {
+            const [studentRes, trafficRes] = await Promise.all([
+                supabase.from('students').select('*', { count: 'exact', head: true }).eq('tenant_id', id),
+                supabase.from('attendance').select('*', { count: 'exact', head: true }).eq('tenant_id', id).gte('timestamp', tenMinutesAgo)
+            ]);
+            return {
+                id,
+                studentCount: studentRes.count || 0,
+                liveTraffic: trafficRes.count || 0
+            };
+        }));
 
-        // Fetch attendance pulse for all (last 10 mins)
-        const { data: trafficData, error: trafficError } = await supabase
-            .from('attendance')
-            .select('tenant_id')
-            .in('tenant_id', tenantIds)
-            .gte('timestamp', tenMinutesAgo);
+        const statsMap = new Map(tenantStats.map(s => [s.id, s]));
 
-        if (trafficError) throw trafficError;
-
-        // Helper to count occurrences
-        const getCount = (arr: any[], id: string) => arr.filter(item => item.tenant_id === id).length;
-
-        const formattedTenants = tenants?.map(t => ({
-            _id: t.id,
-            name: t.name,
-            slug: t.slug,
-            adminEmail: t.admin_email,
-            isActive: t.is_active,
-            isDeleted: t.is_deleted || false,
-            deletedAt: t.deleted_at,
-            subscriptionStatus: t.subscription_status,
-            subscriptionEndDate: t.subscription_end_date,
-            primaryColor: t.primary_color,
-            createdAt: t.created_at,
-            studentCount: getCount(studentCounts || [], t.id),
-            liveTraffic: getCount(trafficData || [], t.id),
-        })) || [];
+        const formattedTenants = tenants?.map(t => {
+            const stats = statsMap.get(t.id);
+            return {
+                _id: t.id,
+                name: t.name,
+                slug: t.slug,
+                adminEmail: t.admin_email,
+                isActive: t.is_active,
+                isDeleted: t.is_deleted || false,
+                deletedAt: t.deleted_at,
+                subscriptionStatus: t.subscription_status,
+                subscriptionEndDate: t.subscription_end_date,
+                primaryColor: t.primary_color,
+                createdAt: t.created_at,
+                studentCount: stats?.studentCount || 0,
+                liveTraffic: stats?.liveTraffic || 0,
+            };
+        }) || [];
 
         const { count: globalPulse } = await supabase
             .from('attendance')

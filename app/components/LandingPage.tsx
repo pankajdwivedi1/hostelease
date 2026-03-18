@@ -88,7 +88,9 @@ export default function LandingPage() {
                 </div>
                 <div className="flex items-center gap-2 sm:gap-4">
                     <a 
-                        href="/login" 
+                        href={typeof window !== 'undefined' && window.location.hostname.includes('.') && !window.location.hostname.startsWith('www.') 
+                            ? `/login?tenant=${window.location.hostname.split('.')[0]}` 
+                            : "/login"} 
                         className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-white transition-colors border border-white/10 px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl"
                     >
                         Login
