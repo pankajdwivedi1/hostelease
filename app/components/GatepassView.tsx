@@ -425,11 +425,64 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                     schema: 'public',
                     table: 'gate_passes'
                 },
-                (payload) => {
-                    console.log('⚡ Scan Detected via Realtime:', payload.eventType);
-                    // Refresh the dashboard MINIMALLY when a scan happens (Saves 95% bandwidth)
-                    // The minimal API now returns student counts!
-                    fetchLiveData(true);
+                (payload: any) => {
+                    console.log('⚡ Scan Detected via Realtime:', payload.eventType, payload.new);
+                    
+                    // ⚡ INSTANT FEEDBACK: Update local state immediately from the Realtime payload
+                    setLiveData((prev: any) => {
+                        if (!prev) return prev;
+                        const newSummary = { ...prev.summary };
+                        const newCurrentlyOut = [...(prev.currentlyOut || [])];
+                        const newRecent = [...(prev.recentActivity || [])];
+
+                        if (payload.eventType === 'INSERT') {
+                            // STUDENT SCANNING OUT
+                            const newRecord = payload.new;
+                            // Add to currentlyOut if not already there
+                            if (!newCurrentlyOut.some(r => r._id === newRecord._id)) {
+                                newCurrentlyOut.unshift({
+                                    ...newRecord,
+                                    currentDurationText: 'Just now',
+                                    currentDurationMinutes: 0
+                                });
+                                newSummary.studentsOut++;
+                                newSummary.studentsIn--;
+                                if (newRecord.type === 'leave') newSummary.leaveCount++;
+                                else newSummary.gatePassCount++;
+                            }
+                        } else if (payload.eventType === 'UPDATE' && payload.new.status === 'in') {
+                            // STUDENT SCANNING IN (Check-in)
+                            const updatedRecord = payload.new;
+                            // Remove from currentlyOut
+                            const index = newCurrentlyOut.findIndex(r => r._id === updatedRecord._id);
+                            if (index !== -1) {
+                                newCurrentlyOut.splice(index, 1);
+                                newSummary.studentsOut--;
+                                newSummary.studentsIn++;
+                                if (updatedRecord.type === 'leave') newSummary.leaveCount--;
+                                else newSummary.gatePassCount--;
+                                
+                                // Add to Recent Activity
+                                newRecent.unshift(updatedRecord);
+                                if (newRecent.length > 20) newRecent.pop();
+                            }
+                        }
+
+                        return {
+                            ...prev,
+                            summary: newSummary,
+                            currentlyOut: newCurrentlyOut,
+                            recentActivity: newRecent
+                        };
+                    });
+
+                    // 🔄 Background Refresh: Still do a fresh fetch to ensure server sync
+                    if (payload.eventType === 'INSERT') {
+                        fetchLiveData(false); 
+                    } else {
+                        fetchLiveData(true);
+                        setTimeout(() => fetchLiveData(false), 2000); 
+                    }
                 }
             )
             .subscribe();

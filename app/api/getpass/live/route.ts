@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { supabase } from "@/lib/supabase";
 
 /**
  * GET /api/getpass/live
@@ -57,19 +58,30 @@ export async function GET(request: NextRequest) {
             }
 
             // ⚡ FAST COUNTS: Use Promise.all to fetch counts and recent items in parallel
-            const [recentRes, summaryRes, studentsRes] = await Promise.all([
+            const [recentRes, summaryRes, studentsRes, typeCountsRes] = await Promise.all([
                 db.gatePasses.list(returnsFilters, {
                     limit: 5,
                     sortField: source === 'SUPABASE' ? 'check_in_time' : 'checkInTime',
                     sortOrder: 'desc'
                 }),
                 db.gatePasses.list(filters, { limit: 1, countOnly: true }),
-                db.students.count(countFilters)
+                db.students.count(countFilters),
+                // Optimized fetch for type counts only
+                supabase.from('gate_passes').select('type', { count: 'exact' }).eq('status', 'out').eq('tenant_id', await db.getTenantIdOrThrow())
             ]);
 
             const { records: miniRecent } = recentRes;
             const uniqueStudentsOut = summaryRes.total || 0;
             const totalStudents = studentsRes || 0;
+
+            // Extract type counts from Supabase directly (Fastest)
+            const { data: typeData } = await supabase.from('gate_passes').select('type').eq('status', 'out').eq('tenant_id', await db.getTenantIdOrThrow());
+            let miniLeaveCount = 0;
+            let miniGatePassCount = 0;
+            typeData?.forEach(p => {
+                if (p.type === 'leave') miniLeaveCount++;
+                else miniGatePassCount++;
+            });
 
             return NextResponse.json({
                 success: true,
@@ -79,17 +91,31 @@ export async function GET(request: NextRequest) {
                     totalStudents,
                     studentsIn: totalStudents - uniqueStudentsOut,
                     studentsOut: uniqueStudentsOut,
-                    // Note: leave/pass counts are omitted in minimal to keep it fast
+                    leaveCount: miniLeaveCount,
+                    gatePassCount: miniGatePassCount,
                 },
                 currentlyOut: []
             });
         }
 
         // 2. Full Mode (Heavier Data - Runs Infrequently)
-        // ⚡ SMART FIX: Fetch all active passes to calculate TRUE unique counts
-        // This prevents the '140 vs 70' double-counting bug.
-        const allOutPassesRes = await db.gatePasses.list(filters, { limit: 1000 });
+        // ⚡ SPEED FIX: Fetch all data elements in parallel
+        const [allOutPassesRes, totalStudents, recentActivityRes] = await Promise.all([
+            db.gatePasses.list(filters, { limit: 1000 }),
+            db.students.count(countFilters),
+            db.gatePasses.list({
+                status: "in",
+                startDate: utcTodayStart.toISOString(),
+                ...(hostelName && hostelName !== "all" ? { hostelName } : {})
+            }, {
+                limit: 20,
+                sortField: source === 'SUPABASE' ? 'check_in_time' : 'checkInTime',
+                sortOrder: 'desc'
+            })
+        ]);
+
         const openPasses = allOutPassesRes.records || [];
+        const recentActivity = recentActivityRes.records || [];
         
         // ⚡ DE-DUPLICATION: Use a Map to keep ONLY the most recent record per student
         const uniqueOutRecords = new Map<string, any>();
@@ -108,22 +134,6 @@ export async function GET(request: NextRequest) {
         currentlyOut.forEach((p) => {
             if (p.type === 'leave') leaveCount++;
             else gatePassCount++;
-        });
-
-        const totalStudents = await db.students.count(countFilters);
-
-        const returnsFilters: any = {
-            status: "in",
-            startDate: utcTodayStart.toISOString()
-        };
-        if (hostelName && hostelName !== "all") {
-            returnsFilters.hostelName = hostelName;
-        }
-
-        const { records: recentActivity } = await db.gatePasses.list(returnsFilters, {
-            limit: 20,
-            sortField: source === 'SUPABASE' ? 'check_in_time' : 'checkInTime',
-            sortOrder: 'desc'
         });
 
         // Use the deduplicated list for display (no extra healing needed as it's already mapped)

@@ -131,13 +131,14 @@ export async function POST(request: NextRequest) {
                 // Check for token reuse - prevents same QR code image being scanned twice instantly
                 const isTokenReuse = last.qrTokenUsedOut === token || last.qrTokenUsedIn === token;
 
-                // If activity was within 8 seconds OR the token is the same, assume it's a duplicate
-                if (isTokenReuse || (timeDiff < 8000)) {
+                // ⚡ SCAN GUARD: If activity was within 15 seconds OR the token is the same, assume it's a duplicate
+                // This prevents students from accidentally scanning twice in a row
+                if (isTokenReuse || (timeDiff < 15000)) {
                     console.log(`🚫 [SCAN_GUARD]: Blocked duplicate scan for ${student.name}. Reason: ${isTokenReuse ? 'Token Reused' : `Fast Scan (${timeDiff}ms)`}`);
                     return NextResponse.json({
-                        success: true, // Show success to user so they stop clicking
+                        success: true, 
                         action: "duplicate_blocked",
-                        message: "Processing your scan...",
+                        message: "Already scanned recently. Please wait a few seconds.",
                         newStatus: currentStatus,
                         studentName: student.name,
                         hostelName: student.hostelName,
@@ -176,12 +177,16 @@ export async function POST(request: NextRequest) {
 
             // ⚡ CHECK FOR PERMISSIONS: Is this an approved "Leave" or just a regular Outing?
             const { records: activePermissions } = await db.permissions.list({
-                studentId: student._id.toString(),
-                status: "allowed"
+                studentId: student._id.toString()
             });
 
-            // Find if any permission covers "NOW"
+            // Find if any permission covers "NOW" and is EITHER "allowed" OR "dean-accepted"
             const activeLeave = activePermissions?.find((p: any) => {
+                const isAllowed = p.status === "allowed";
+                const isDeanAccepted = p.deanStatus === "accepted" || p.deanStatus === "approved";
+                
+                if (!isAllowed && !isDeanAccepted) return false;
+
                 const start = new Date(p.fromDateTime).getTime();
                 const end = new Date(p.toDateTime).getTime();
                 const currentTime = now.getTime();

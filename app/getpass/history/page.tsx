@@ -8,7 +8,7 @@ export default function OutingHistoryPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(true);
     const [records, setRecords] = useState<any[]>([]);
-    const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 });
+    const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1, leaveCount: 0, passCount: 0 });
 
     // Filters State
     const [filters, setFilters] = useState({
@@ -21,6 +21,7 @@ export default function OutingHistoryPage() {
     });
 
     const [hostelsList, setHostelsList] = useState<any[]>([]);
+    const [mounted, setMounted] = useState(false);
 
     // Profile Modal State
     const [selectedStudent, setSelectedStudent] = useState<any>(null);
@@ -89,6 +90,7 @@ export default function OutingHistoryPage() {
     const colleges = ["OIST", "OCT", "OCP", "OPM", "OIPR"];
 
     useEffect(() => {
+        setMounted(true);
         const fetchHostelsList = async () => {
             try {
                 const res = await fetch("/api/admin/hostels");
@@ -122,7 +124,11 @@ export default function OutingHistoryPage() {
 
             if (data.success) {
                 setRecords(data.records);
-                setPagination(data.pagination);
+                setPagination({
+                    ...data.pagination,
+                    leaveCount: data.summary?.leaveCount || 0,
+                    passCount: data.summary?.passCount || 0
+                });
             }
         } catch (error) {
             console.error("Error fetching history:", error);
@@ -298,6 +304,8 @@ export default function OutingHistoryPage() {
         return name;
     };
 
+    if (!mounted) return <div className="min-h-screen bg-[#0d1117]" />;
+
     return (
         <div className="min-h-screen bg-[#0d1117] text-white font-sans selection:bg-blue-500/30">
             {/* Header */}
@@ -331,9 +339,19 @@ export default function OutingHistoryPage() {
                         )}
                         Export
                     </button>
-                    <div className="hidden sm:flex flex-col items-end">
-                        <span className="text-[10px] text-white/30 font-black uppercase tracking-widest">Total Logs</span>
-                        <span className="text-lg font-black text-white tabular-nums">{pagination.total}</span>
+                    <div className="hidden sm:flex items-center gap-6 border-l border-white/5 pl-6">
+                        <div className="flex flex-col items-center">
+                            <span className="text-[10px] text-white/30 font-black uppercase tracking-widest leading-none mb-1">Daily Pass</span>
+                            <span className="text-lg font-black text-[#00ff88] tabular-nums leading-none">{pagination.passCount}</span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                            <span className="text-[10px] text-white/30 font-black uppercase tracking-widest leading-none mb-1">Leave Logs</span>
+                            <span className="text-lg font-black text-blue-400 tabular-nums leading-none">{pagination.leaveCount}</span>
+                        </div>
+                        <div className="flex flex-col items-end opacity-50">
+                            <span className="text-[10px] text-white/20 font-black uppercase tracking-widest leading-none mb-1">Total Logs</span>
+                            <span className="text-sm font-black text-white/40 tabular-nums leading-none">{pagination.total}</span>
+                        </div>
                     </div>
                 </div>
             </div>

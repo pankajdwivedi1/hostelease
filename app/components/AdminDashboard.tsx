@@ -658,6 +658,36 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
+  const handleBulkManualToggle = async (studentIds: string[]) => {
+    if (!studentIds || studentIds.length === 0) return;
+
+    if (!confirm(`Are you sure you want to manually mark ${studentIds.length} students as IN (Campus)?`)) return;
+
+    setIsBulkMarking(true);
+    try {
+      const storedUserType = localStorage.getItem("userType") || "warden";
+      const res = await fetch("/api/getpass/manual-toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentIds, userType: storedUserType }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || `Successfully updated status for ${data.count} students.`);
+        setSelectedStudentIds([]); // Clear selection
+        fetchStudents(true); // Refresh student list to show new status
+      } else {
+        alert(data.error || "Bulk operation failed");
+      }
+    } catch (error) {
+      console.error("Bulk toggle error:", error);
+      alert("An error occurred during bulk operation.");
+    } finally {
+      setIsBulkMarking(false);
+    }
+  };
+
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -2987,7 +3017,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     </div>
                   </div>
 
-                  {title === "Super Admin Dashboard" && (
+                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard" || title === "Campus Dashboard") && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -3015,7 +3045,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-                  {title === "Super Admin Dashboard" && (
+                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard" || title === "Campus Dashboard") && (
                     <button
                       onClick={() => setShowSystemSettingsModal(true)}
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap"
@@ -3023,7 +3053,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       🛠️ System Settings
                     </button>
                   )}
-                  {title === "Super Admin Dashboard" && (
+                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard" || title === "Campus Dashboard") && (
                     <button
                       onClick={handleFixCampusSettings}
                       disabled={isUpdatingSettings}
@@ -3032,7 +3062,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       {isUpdatingSettings ? "Updating..." : "✨ Set New Location"}
                     </button>
                   )}
-                  {title === "Super Admin Dashboard" && (
+                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard" || title === "Campus Dashboard") && (
                     <button
                       onClick={() => setShowAttendanceTimeModal(true)}
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-green-100 transition-all whitespace-nowrap"
@@ -3040,7 +3070,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       ⏰ Set Attendance Time
                     </button>
                   )}
-                  {title === "Super Admin Dashboard" && (
+                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard" || title === "Campus Dashboard") && (
                     <button
                       onClick={() => setShowHostelSettingsModal(true)}
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap"
@@ -3049,7 +3079,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     </button>
                   )}
 
-                  {title === "Super Admin Dashboard" && (
+                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard" || title === "Campus Dashboard") && (
                     <button
                       onClick={() => setShowDBExportModal(true)}
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-emerald-100 transition-all whitespace-nowrap"
@@ -3059,7 +3089,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   )}
 
 
-                  {title === "Super Admin Dashboard" && (
+                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard" || title === "Campus Dashboard") && (
                     <button
                       onClick={async () => {
                         const confirm = window.confirm("⚠️ Perform full migration to Supabase? This may take time.");
@@ -4781,6 +4811,55 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
                 )}
 
+                {/* ⚡ NEW: Bulk Campus Status Toggle for "OUT" Students */}
+                {!studentsLoading && (statusFilter === 'out' || selectedStudentIds.some(id => students.find(s => s.id === id)?.studentStatus === 'out')) && (
+                  <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 p-3 bg-indigo-50/50 rounded-2xl border border-indigo-100 italic font-medium">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        checked={selectedStudentIds.length > 0 && filteredStudents.filter(s => s.studentStatus === 'out').every(s => selectedStudentIds.includes(s.id))}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            const eligible = filteredStudents
+                              .filter(s => s.studentStatus === 'out')
+                              .map(s => s.id);
+                            setSelectedStudentIds(eligible);
+                          } else {
+                            setSelectedStudentIds([]);
+                          }
+                        }}
+                      />
+                      <span className="text-[10px] font-black text-indigo-800 uppercase tracking-widest">Select All (Out Students)</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={isBulkMarking}
+                        onClick={() => {
+                          const eligible = filteredStudents
+                            .filter(s => s.studentStatus === 'out')
+                            .map(s => s.id);
+                          if (eligible.length > 0) handleBulkManualToggle(eligible);
+                        }}
+                        className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-sm shadow-blue-200 disabled:opacity-50"
+                      >
+                        {isBulkMarking ? "Processing..." : "Mark All as IN (Campus)"}
+                      </button>
+
+                      {selectedStudentIds.length > 0 && (
+                        <button
+                          disabled={isBulkMarking}
+                          onClick={() => handleBulkManualToggle(selectedStudentIds)}
+                          className="px-4 py-1.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-all shadow-sm shadow-green-200 disabled:opacity-50"
+                        >
+                          Mark Selected as IN ({selectedStudentIds.length})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <div className="space-y-3">
                     {studentsLoading ? (
@@ -4799,11 +4878,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           });
                           return (
                             <div key={student.id} className="flex items-center gap-2 group/card">
-                              {/* ⚡ NEW: Selection Checkbox */}
-                              {enableManualAttendance && !presentStudentIds.includes(student.id) && student.studentStatus !== 'out' && (
+                              {/* ⚡ NEW: Selection Checkbox for Bulk Actions (Attendance & Campus Status) */}
+                              {enableManualAttendance && (!presentStudentIds.includes(student.id) || student.studentStatus === 'out') && (
                                 <input
                                   type="checkbox"
-                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer transition-all shrink-0"
+                                  className={`w-4 h-4 rounded border-gray-300 ${student.studentStatus === 'out' ? 'text-indigo-600 focus:ring-indigo-500' : 'text-blue-600 focus:ring-blue-500'} cursor-pointer transition-all shrink-0`}
                                   checked={selectedStudentIds.includes(student.id)}
                                   onClick={(e) => e.stopPropagation()}
                                   onChange={(e) => {
@@ -4864,7 +4943,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         </a>
                                       </div>
 
-                                      {/* ⚡ NEW: Individual Mark Button */}
+                                      {/* ⚡ NEW: Individual Mark Button (Attendance) */}
                                       {enableManualAttendance && !presentStudentIds.includes(student.id) && student.studentStatus !== 'out' && (
                                         <button
                                           onClick={(e) => {
@@ -4874,6 +4953,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           className="px-3 py-1 bg-green-50 text-green-600 rounded-lg text-[9px] font-black uppercase tracking-widest border border-green-100 hover:bg-green-600 hover:text-white transition-all shadow-sm"
                                         >
                                           Mark
+                                        </button>
+                                      )}
+
+                                      {/* ⚡ NEW: Individual Mark Campus IN Button (Manual Toggle) */}
+                                      {student.studentStatus === 'out' && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleBulkManualToggle([student.id]);
+                                          }}
+                                          className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                                        >
+                                          Mark IN
                                         </button>
                                       )}
 
@@ -6477,7 +6569,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   { id: "password", label: "Pass", icon: "🔑" },
                   { id: "system", label: "System", icon: "⚙️" },
                   { id: "audit", label: "Audit", icon: "🔍" },
-                  { id: "superadmin", label: "Super Admin", icon: "⚡" }
+                  ...(title !== "Campus Dashboard" ? [{ id: "superadmin", label: "Super Admin", icon: "⚡" }] : [])
                 ].map((tab) => (
                   <button
                     key={tab.id}

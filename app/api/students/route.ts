@@ -199,54 +199,52 @@ export async function GET(request: NextRequest) {
     let activeOutings = new Map<string, string>();
     let syncCount = 0;
 
-    // ⚡ OPTIMIZATION: Only sync status if NOT in 'light' mode to save massive bandwidth
-    if (!light) {
-      try {
-        // 1. Fetch Open Passes
-        const gatePassResult = await db.gatePasses.list({ status: "out" }, { limit: 1000 });
-        openPasses = gatePassResult.records || [];
+    // ⚡ ALWAYS SYNC: We now sync even in light mode because status is critical for Warden Dashboard accuracy
+    try {
+      // 1. Fetch Open Passes
+      const gatePassResult = await db.gatePasses.list({ status: "out" }, { limit: 1000 });
+      openPasses = gatePassResult.records || [];
 
-        // 2. Fetch Present IDs for Today (to detect stale gate passes)
-        const now = new Date();
-        // ⚡ Robust Date Parsing (Sync with attendance-summary API)
-        const istDateStr = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" });
-        const dateParts = istDateStr.split(/[^0-9]/).filter(p => p.length > 0);
-        let today = "";
-        if (dateParts.length >= 3) {
-          if (dateParts[0].length === 4) today = `${dateParts[0]}-${dateParts[1]}-${dateParts[2]}`; // YYYY-MM-DD
-          else today = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; // DD-MM-YYYY -> YYYY-MM-DD
-        } else {
-          today = now.toISOString().split('T')[0];
-        }
-
-        const attendanceSummary = await db.attendance.summary(today);
-        const presentIdsSet = new Set((attendanceSummary?.presentStudentIds || []).map((id: any) => id?.toString()));
-
-        // Create a map of studentId -> outingType for efficient lookup
-        activeOutings = new Map(openPasses.map((p: any) => {
-          const sId = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
-          return [sId?.toString(), p.type || "outing"];
-        }));
-
-        students.forEach((s: any) => {
-          const sId = (s.id || s._id)?.toString();
-          const outingType = activeOutings.get(sId);
-
-          // ⚡ DATA CONSISTENCY FIX:
-          // Priority 1: If Gatepass says OUT, stay OUT (Matches Terminal Count: 70)
-          if (outingType) {
-            s.studentStatus = "out";
-            s.outingType = outingType;
-            syncCount++;
-          } else {
-            // If no open pass, they are 'in'
-            s.studentStatus = "in";
-            s.outingType = undefined;
-          }
-        });
-      } catch (syncError) {
-        console.warn("⚠️ Status sync failed in list API:", syncError);
+      // 2. Fetch Present IDs for Today (to detect stale gate passes)
+      const now = new Date();
+      // ⚡ Robust Date Parsing (Sync with attendance-summary API)
+      const istDateStr = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" });
+      const dateParts = istDateStr.split(/[^0-9]/).filter(p => p.length > 0);
+      let today = "";
+      if (dateParts.length >= 3) {
+        if (dateParts[0].length === 4) today = `${dateParts[0]}-${dateParts[1]}-${dateParts[2]}`; // YYYY-MM-DD
+        else today = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; // DD-MM-YYYY -> YYYY-MM-DD
+      } else {
+        today = now.toISOString().split('T')[0];
       }
+
+      const attendanceSummary = await db.attendance.summary(today);
+      const presentIdsSet = new Set((attendanceSummary?.presentStudentIds || []).map((id: any) => id?.toString()));
+
+      // Create a map of studentId -> outingType for efficient lookup
+      activeOutings = new Map(openPasses.map((p: any) => {
+        const sId = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
+        return [sId?.toString(), p.type || "outing"];
+      }));
+
+      students.forEach((s: any) => {
+        const sId = (s.id || s._id)?.toString();
+        const outingType = activeOutings.get(sId);
+
+        // ⚡ DATA CONSISTENCY FIX:
+        // Priority 1: If Gatepass says OUT, stay OUT (Matches Terminal Count: 70)
+        if (outingType) {
+          s.studentStatus = "out";
+          s.outingType = outingType;
+          syncCount++;
+        } else {
+          // If no open pass, they are 'in'
+          s.studentStatus = "in";
+          s.outingType = undefined;
+        }
+      });
+    } catch (syncError) {
+      console.warn("⚠️ Status sync failed in list API:", syncError);
     }
 
     return NextResponse.json({

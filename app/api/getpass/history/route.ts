@@ -52,11 +52,24 @@ export async function GET(request: NextRequest) {
         if (startDate) filters.startDate = startDate;
         if (endDate) filters.endDate = endDate;
 
-        const { records, total } = await db.gatePasses.list(filters, { page, limit, populate: true });
+        const [historyRes, leaveCountRes, passCountRes] = await Promise.all([
+            db.gatePasses.list(filters, { page, limit, populate: true }),
+            db.gatePasses.list({ ...filters, type: "leave" }, { countOnly: true }),
+            db.gatePasses.list({ ...filters, type: "outing" }, { countOnly: true })
+        ]);
+
+        const { records, total } = historyRes;
+        const leaveCount = leaveCountRes.total || 0;
+        const passCount = passCountRes.total || 0;
 
         return NextResponse.json({
             success: true,
             records,
+            summary: {
+                total,
+                leaveCount,
+                passCount
+            },
             pagination: {
                 total,
                 page,
