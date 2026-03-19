@@ -1999,6 +1999,7 @@ export const db = {
                 if (filters.studentId) query = query.eq('student_id', filters.studentId);
                 if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
                 if (filters.registrationId) query = query.ilike('registration_id', `%${filters.registrationId}%`);
+                if (filters.type) query = query.eq('type', filters.type);
                 if (filters.erpId) query = query.ilike('students.erp_id', `%${filters.erpId}%`);
                 if (filters.hostelName && filters.hostelName !== 'all') {
                     if (typeof filters.hostelName === 'object' && filters.hostelName.$in) {
@@ -2064,6 +2065,7 @@ export const db = {
                 if (filters.firebaseUID) mongoQuery.firebaseUID = filters.firebaseUID;
                 if (filters.studentId) mongoQuery.studentId = filters.studentId;
                 if (filters.status && filters.status !== 'all') mongoQuery.status = filters.status;
+                if (filters.type) mongoQuery.type = filters.type;
                 if (filters.hostelName && filters.hostelName !== "all") {
                     mongoQuery.hostelName = { $regex: filters.hostelName, $options: "i" };
                 }

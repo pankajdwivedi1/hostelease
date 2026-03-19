@@ -15,6 +15,7 @@ export default function OutingHistoryPage() {
         collegeName: "all",
         hostelName: "all",
         status: "all",
+        type: "all",
         startDate: "",
         endDate: "",
         search: ""
@@ -114,6 +115,7 @@ export default function OutingHistoryPage() {
                 collegeName: filters.collegeName,
                 hostelName: filters.hostelName,
                 status: filters.status,
+                type: filters.type,
                 startDate: filters.startDate,
                 endDate: filters.endDate,
                 search: filters.search
@@ -176,6 +178,7 @@ export default function OutingHistoryPage() {
                 collegeName: filters.collegeName,
                 hostelName: filters.hostelName,
                 status: filters.status,
+                type: filters.type,
                 startDate: filters.startDate,
                 endDate: filters.endDate,
                 search: filters.search
@@ -326,33 +329,45 @@ export default function OutingHistoryPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3 sm:gap-6">
+                <div className="flex items-center gap-4 sm:gap-10">
+                    <div className="hidden sm:flex items-center gap-6 border-l border-white/5 pl-8">
+                        <button 
+                            onClick={() => setFilters(f => ({ ...f, type: f.type === 'outing' ? 'all' : 'outing' }))}
+                            className={`flex flex-col items-center group transition-all p-2 rounded-xl border ${filters.type === 'outing' ? 'bg-[#00ff8808] border-[#00ff8833] scale-105 shadow-[0_0_20px_rgba(0,255,136,0.05)]' : 'border-transparent hover:bg-white/5'}`}
+                        >
+                            <span className={`text-[10px] font-black uppercase tracking-widest leading-none mb-1.5 transition-colors ${filters.type === 'outing' ? 'text-[#00ff88]' : 'text-white/30 group-hover:text-[#00ff8888]'}`}>Daily Pass</span>
+                            <span className={`text-xl font-black tabular-nums leading-none transition-all ${filters.type === 'outing' ? 'text-[#00ff88] drop-shadow-[0_0_10px_rgba(0,255,136,0.3)]' : 'text-white'}`}>{pagination.passCount}</span>
+                        </button>
+                        
+                        <button 
+                            onClick={() => setFilters(f => ({ ...f, type: f.type === 'leave' ? 'all' : 'leave' }))}
+                            className={`flex flex-col items-center group transition-all p-2 rounded-xl border ${filters.type === 'leave' ? 'bg-blue-500/10 border-blue-500/30 scale-105 shadow-[0_0_20px_rgba(96,165,250,0.05)]' : 'border-transparent hover:bg-white/5'}`}
+                        >
+                            <span className={`text-[10px] font-black uppercase tracking-widest leading-none mb-1.5 transition-colors ${filters.type === 'leave' ? 'text-blue-400' : 'text-white/30 group-hover:text-blue-400/60'}`}>Leave Logs</span>
+                            <span className={`text-xl font-black tabular-nums leading-none transition-all ${filters.type === 'leave' ? 'text-blue-400 drop-shadow-[0_0_10px_rgba(96,165,250,0.3)]' : 'text-white'}`}>{pagination.leaveCount}</span>
+                        </button>
+                        
+                        <button 
+                            onClick={() => setFilters(f => ({ ...f, type: 'all' }))}
+                            className={`flex flex-col items-end group transition-all p-2 rounded-xl border ${filters.type === 'all' ? 'bg-white/5 border-white/10' : 'border-transparent hover:bg-white/5'} ml-2`}
+                        >
+                            <span className={`text-[10px] font-black uppercase tracking-widest leading-none mb-1.5 transition-colors ${filters.type === 'all' ? 'text-white/40' : 'text-white/20'}`}>Total Logs</span>
+                            <span className={`text-sm font-black tabular-nums leading-none transition-all ${filters.type === 'all' ? 'text-white' : 'text-white/40'}`}>{pagination.total}</span>
+                        </button>
+                    </div>
+
                     <button
                         onClick={handleExportPreview}
                         disabled={isExporting}
-                        className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-600/10 border border-blue-500/20 rounded-xl text-blue-400 text-[10px] sm:text-xs font-black uppercase tracking-widest hover:bg-blue-600/20 transition-all active:scale-95 disabled:opacity-50"
+                        className={`flex items-center gap-3 px-5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50 shadow-lg ${filters.type === 'outing' ? 'bg-[#00ff881a] border border-[#00ff884d] text-[#00ff88] hover:bg-[#00ff8826]' : filters.type === 'leave' ? 'bg-blue-500/20 border border-blue-500/40 text-blue-300 hover:bg-blue-500/30' : 'bg-white/5 border border-white/10 text-white/80 hover:bg-white/10 hover:text-white'}`}
                     >
                         {isExporting ? (
-                            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                            <div className={`w-4 h-4 border-2 rounded-full animate-spin ${filters.type === 'outing' ? 'border-[#00ff88] border-t-transparent' : filters.type === 'leave' ? 'border-blue-400 border-t-transparent' : 'border-white/40 border-t-transparent'}`} />
                         ) : (
-                            <span className="hidden sm:inline">📥</span>
+                            <span>📥</span>
                         )}
-                        Export
+                        Export {filters.type === 'outing' ? 'Passes' : filters.type === 'leave' ? 'Leaves' : 'All'}
                     </button>
-                    <div className="hidden sm:flex items-center gap-6 border-l border-white/5 pl-6">
-                        <div className="flex flex-col items-center">
-                            <span className="text-[10px] text-white/30 font-black uppercase tracking-widest leading-none mb-1">Daily Pass</span>
-                            <span className="text-lg font-black text-[#00ff88] tabular-nums leading-none">{pagination.passCount}</span>
-                        </div>
-                        <div className="flex flex-col items-center">
-                            <span className="text-[10px] text-white/30 font-black uppercase tracking-widest leading-none mb-1">Leave Logs</span>
-                            <span className="text-lg font-black text-blue-400 tabular-nums leading-none">{pagination.leaveCount}</span>
-                        </div>
-                        <div className="flex flex-col items-end opacity-50">
-                            <span className="text-[10px] text-white/20 font-black uppercase tracking-widest leading-none mb-1">Total Logs</span>
-                            <span className="text-sm font-black text-white/40 tabular-nums leading-none">{pagination.total}</span>
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -517,7 +532,7 @@ export default function OutingHistoryPage() {
                             <h3 className="text-xl font-bold text-white/80 m-0">No records found</h3>
                             <p className="text-white/40 mt-2">Adjust your filters to search deeper into the archives.</p>
                             <button
-                                onClick={() => setFilters({ collegeName: "all", hostelName: "all", status: "all", startDate: "", endDate: "", search: "" })}
+                                onClick={() => setFilters({ collegeName: "all", hostelName: "all", status: "all", type: "all", startDate: "", endDate: "", search: "" })}
                                 className="mt-6 px-6 py-2.5 rounded-xl bg-blue-600 font-bold text-sm transition-all hover:bg-blue-500 active:scale-95"
                             >
                                 Reset All Filters

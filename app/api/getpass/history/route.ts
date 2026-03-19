@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
         const registrationId = searchParams.get("registrationId");
         const collegeName = searchParams.get("collegeName");
         const search = searchParams.get("search");
+        const type = searchParams.get("type");
         const startDate = searchParams.get("startDate");
         const endDate = searchParams.get("endDate");
         const limit = parseInt(searchParams.get("limit") || "50");
@@ -45,6 +46,7 @@ export async function GET(request: NextRequest) {
             filters.status = status;
         }
 
+        if (type && type !== "all") filters.type = type;
         if (erpId) filters.erpId = erpId;
         if (registrationId) filters.registrationId = registrationId;
         if (collegeName && collegeName !== "all") filters.collegeName = collegeName;
@@ -52,21 +54,28 @@ export async function GET(request: NextRequest) {
         if (startDate) filters.startDate = startDate;
         if (endDate) filters.endDate = endDate;
 
+        // ⚡ ENSURE COUNTS ARE INDEPENDENT: Remove 'type' from stats filters so counts stay global for the search
+        const statsFilters = { ...filters };
+        delete statsFilters.type;
+
         const [historyRes, leaveCountRes, passCountRes] = await Promise.all([
             db.gatePasses.list(filters, { page, limit, populate: true }),
-            db.gatePasses.list({ ...filters, type: "leave" }, { countOnly: true }),
-            db.gatePasses.list({ ...filters, type: "outing" }, { countOnly: true })
+            db.gatePasses.list({ ...statsFilters, type: "leave" }, { countOnly: true }),
+            db.gatePasses.list({ ...statsFilters, type: "outing" }, { countOnly: true })
         ]);
 
         const { records, total } = historyRes;
         const leaveCount = leaveCountRes.total || 0;
         const passCount = passCountRes.total || 0;
+        
+        // Calculate grand total from the independent counts
+        const grandTotal = leaveCount + passCount;
 
         return NextResponse.json({
             success: true,
             records,
             summary: {
-                total,
+                total: grandTotal,
                 leaveCount,
                 passCount
             },

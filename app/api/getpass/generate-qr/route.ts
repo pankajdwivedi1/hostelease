@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
         // The token is now a combination of timestamp and signature
         const signedToken = `${timestamp}.${signature}`;
-        const expiresAt = new Date(timestamp + 15000);
+        const expiresAt = new Date(timestamp + 25000); // 15s rotation + 10s network buffer
 
         // The QR code will encode this data
         const qrData = JSON.stringify({

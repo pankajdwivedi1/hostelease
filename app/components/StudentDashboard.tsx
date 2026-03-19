@@ -614,6 +614,24 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                 localStorage.setItem("getpass_device_id", studentProfile.deviceId || "");
             }
 
+            // ⚡ REALTIME STATUS UPDATE: Listen for instant status changes (In/Out)
+            const statusChannel = supabase
+                .channel(`student-status-${studentProfile._id}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'students',
+                        filter: `_id=eq.${studentProfile._id}`
+                    },
+                    (payload) => {
+                        console.log("⚡ [REALTIME] Student status updated:", payload.new.student_status);
+                        setStudentProfile(prev => prev ? ({ ...prev, studentStatus: payload.new.student_status }) : prev);
+                    }
+                )
+                .subscribe();
+
             // Delay initial notification fetch by 3 seconds as requested
             const initialNotifTimer = setTimeout(fetchStudentNotifications, 3000);
 
@@ -625,12 +643,15 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             const handleVisibilityChange = () => {
                 if (document.visibilityState === 'visible') {
                     fetchStudentNotifications();
+                    // Also fetch fresh profile to be safe
+                    loadFullProfile();
                 }
             };
             document.addEventListener('visibilitychange', handleVisibilityChange);
 
             return () => {
                 clearTimeout(initialNotifTimer);
+                supabase.removeChannel(statusChannel);
                 document.removeEventListener('visibilitychange', handleVisibilityChange);
             };
         }

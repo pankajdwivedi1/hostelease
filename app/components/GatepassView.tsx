@@ -300,7 +300,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                 setQrData(data.qrData);
                 setQrToken(data.token);
                 setQrExpiry(new Date(data.expiresAt));
-                setTimeLeft(10);
+                setTimeLeft(15);
                 setError("");
             } else {
                 setError("Failed to generate QR code");
@@ -392,7 +392,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
             if (document.visibilityState === 'visible') {
                 fetchNewQR();
             }
-        }, 30000); // 30 seconds (Balances Security and Bandwidth)
+        }, 15000); // 15 seconds (Matches display time to server logic)
         return () => clearInterval(qrInterval);
     }, [fetchNewQR]);
 
@@ -435,37 +435,54 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                         const newCurrentlyOut = [...(prev.currentlyOut || [])];
                         const newRecent = [...(prev.recentActivity || [])];
 
-                        if (payload.eventType === 'INSERT') {
-                            // STUDENT SCANNING OUT
-                            const newRecord = payload.new;
-                            // Add to currentlyOut if not already there
-                            if (!newCurrentlyOut.some(r => r._id === newRecord._id)) {
-                                newCurrentlyOut.unshift({
-                                    ...newRecord,
-                                    currentDurationText: 'Just now',
-                                    currentDurationMinutes: 0
-                                });
-                                newSummary.studentsOut++;
-                                newSummary.studentsIn--;
-                                if (newRecord.type === 'leave') newSummary.leaveCount++;
-                                else newSummary.gatePassCount++;
+                        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                            const raw = payload.new;
+                            const mapped: any = {
+                                _id: raw._id || raw.id,
+                                studentName: raw.student_name || raw.studentName,
+                                hostelName: raw.hostel_name || raw.hostelName,
+                                roomNumber: raw.room_number || raw.roomNumber,
+                                registrationId: raw.registration_id || raw.registrationId,
+                                status: raw.status,
+                                type: raw.type,
+                                checkOutTime: raw.check_out_time || raw.checkOutTime,
+                                checkInTime: raw.check_in_time || raw.checkInTime,
+                                checkOutISTTime: raw.check_out_ist_time || raw.checkOutISTTime,
+                                checkOutISTDate: raw.check_out_ist_date || raw.checkOutISTDate,
+                                phoneNumber: raw.phone_number || raw.phoneNumber
+                            };
+
+                            if (payload.eventType === 'INSERT') {
+                                // STUDENT SCANNING OUT
+                                // Add to currentlyOut if not already there
+                                if (!newCurrentlyOut.some(r => r._id === mapped._id)) {
+                                    newCurrentlyOut.unshift({
+                                        ...mapped,
+                                        currentDurationText: 'Just now',
+                                        currentDurationMinutes: 0
+                                    });
+                                    newSummary.studentsOut++;
+                                    newSummary.studentsIn--;
+                                    if (mapped.type === 'leave') newSummary.leaveCount++;
+                                    else newSummary.gatePassCount++;
+                                }
+                                newRecent.unshift(mapped);
+                            } else if (payload.eventType === 'UPDATE' && mapped.status === 'in') {
+                                // STUDENT SCANNING IN (Check-in)
+                                // Remove from currentlyOut
+                                const index = newCurrentlyOut.findIndex(r => r._id === mapped._id);
+                                if (index !== -1) {
+                                    newCurrentlyOut.splice(index, 1);
+                                    newSummary.studentsOut--;
+                                    newSummary.studentsIn++;
+                                    if (mapped.type === 'leave') newSummary.leaveCount--;
+                                    else newSummary.gatePassCount--;
+                                    
+                                    // Add to Recent Activity
+                                    newRecent.unshift(mapped);
+                                }
                             }
-                        } else if (payload.eventType === 'UPDATE' && payload.new.status === 'in') {
-                            // STUDENT SCANNING IN (Check-in)
-                            const updatedRecord = payload.new;
-                            // Remove from currentlyOut
-                            const index = newCurrentlyOut.findIndex(r => r._id === updatedRecord._id);
-                            if (index !== -1) {
-                                newCurrentlyOut.splice(index, 1);
-                                newSummary.studentsOut--;
-                                newSummary.studentsIn++;
-                                if (updatedRecord.type === 'leave') newSummary.leaveCount--;
-                                else newSummary.gatePassCount--;
-                                
-                                // Add to Recent Activity
-                                newRecent.unshift(updatedRecord);
-                                if (newRecent.length > 20) newRecent.pop();
-                            }
+                            if (newRecent.length > 20) newRecent.pop();
                         }
 
                         return {
@@ -500,7 +517,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         const countdownInterval = setInterval(() => {
             // Only countdown if page is active
             if (document.visibilityState === 'visible') {
-                setTimeLeft((prev) => (prev > 0 ? prev - 1 : 30));
+                setTimeLeft((prev) => (prev > 0 ? prev - 1 : 15));
             }
             setCurrentTime(new Date());
         }, 1000);
@@ -740,7 +757,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                     <div className="flex items-center justify-center gap-3 md:gap-4 w-full px-2">
                         {/* Timer */}
                         <div className="scale-75 md:scale-100 origin-center shrink-0">
-                            <RectangleTimer timeLeft={timeLeft} maxTime={30} />
+                            <RectangleTimer timeLeft={timeLeft} maxTime={15} />
                         </div>
 
                         {/* Divider */}

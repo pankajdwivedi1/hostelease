@@ -3045,7 +3045,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard" || title === "Campus Dashboard") && (
+                  {title === "Super Admin Dashboard" && (
                     <button
                       onClick={() => setShowSystemSettingsModal(true)}
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap"
@@ -3053,7 +3053,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       🛠️ System Settings
                     </button>
                   )}
-                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard" || title === "Campus Dashboard") && (
+                  {title === "Super Admin Dashboard" && (
                     <button
                       onClick={handleFixCampusSettings}
                       disabled={isUpdatingSettings}
@@ -3062,7 +3062,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       {isUpdatingSettings ? "Updating..." : "✨ Set New Location"}
                     </button>
                   )}
-                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard" || title === "Campus Dashboard") && (
+                  {title === "Super Admin Dashboard" && (
                     <button
                       onClick={() => setShowAttendanceTimeModal(true)}
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-green-100 transition-all whitespace-nowrap"
@@ -3070,7 +3070,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       ⏰ Set Attendance Time
                     </button>
                   )}
-                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard" || title === "Campus Dashboard") && (
+                  {title === "Super Admin Dashboard" && (
                     <button
                       onClick={() => setShowHostelSettingsModal(true)}
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-indigo-100 transition-all whitespace-nowrap"
@@ -3079,7 +3079,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     </button>
                   )}
 
-                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard" || title === "Campus Dashboard") && (
+                  {title === "Super Admin Dashboard" && (
                     <button
                       onClick={() => setShowDBExportModal(true)}
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-emerald-100 transition-all whitespace-nowrap"
@@ -3089,7 +3089,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   )}
 
 
-                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard" || title === "Campus Dashboard") && (
+                  {title === "Super Admin Dashboard" && (
                     <button
                       onClick={async () => {
                         const confirm = window.confirm("⚠️ Perform full migration to Supabase? This may take time.");
@@ -3114,26 +3114,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <LiveDbSwitch />
                   )}
 
-                  <button
-                    onClick={() => {
-                      // ⚡ FORCE REFRESH: Manually bypass all caches
-                      sessionStorage.removeItem('hostelease_permissions_cache');
-                      fetchPermissions(true);
-                      fetchHostels(true);
-                      fetchAttendanceSummary();
-                      fetchStudents(true);
-                      if (currentTab === 'attendance') fetchAttendanceLogs();
-                      if (currentTab === 'messaging') fetchAdminNotifications();
-                      if (currentTab === 'payments') {
-                        fetchAdminPayments();
-                        fetchBankSettings();
-                      }
-                      setLastUpdated(new Date());
-                    }}
-                    className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95"
-                  >
-                    🔄 Sync Data
-                  </button>
+                  {title === "Super Admin Dashboard" && (
+                    <button
+                      onClick={() => {
+                        // ⚡ FORCE REFRESH: Manually bypass all caches
+                        sessionStorage.removeItem('hostelease_permissions_cache');
+                        fetchPermissions(true);
+                        fetchHostels(true);
+                        fetchAttendanceSummary();
+                        fetchStudents(true);
+                        if (currentTab === 'attendance') fetchAttendanceLogs();
+                        if (currentTab === 'messaging') fetchAdminNotifications();
+                        if (currentTab === 'payments') {
+                          fetchAdminPayments();
+                          fetchBankSettings();
+                        }
+                        setLastUpdated(new Date());
+                      }}
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95"
+                    >
+                      🔄 Sync Data
+                    </button>
+                  )}
 
 
                   {title === "Super Admin Dashboard" && (
