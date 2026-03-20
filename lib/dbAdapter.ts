@@ -4,7 +4,7 @@ import { headers } from 'next/headers'; // To check for secret header
 import crypto from 'crypto';
 import { getCurrentTenantId } from './tenant';
 
-const supabase = getSupabaseAdmin();
+export const supabase = getSupabaseAdmin();
 
 // Note: We might need to ensure mongoose models are imported correctly
 /**
@@ -323,7 +323,8 @@ const mapGatePassToCamelCase = (g: any) => {
         fatherName: g.students?.father_name || g.studentId?.fatherName || g.students?.fatherName || "",
         fatherNumber: g.students?.father_number || g.studentId?.fatherNumber || g.students?.fatherNumber || "",
         motherName: g.students?.mother_name || g.studentId?.motherName || g.students?.motherName || "",
-        motherNumber: g.students?.mother_number || g.studentId?.motherNumber || g.students?.motherNumber || ""
+        motherNumber: g.students?.mother_number || g.studentId?.motherNumber || g.students?.motherNumber || "",
+        permissionId: g.permission_id || g.permissionId || null
     };
 };
 

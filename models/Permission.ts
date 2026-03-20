@@ -6,6 +6,7 @@ export interface IPermission {
   fromDateTime: Date;
   toDateTime: Date;
   reason: string;
+  requestType: "outing" | "leave";
   status: "pending" | "allowed" | "rejected";
   wardenStatus: "pending" | "allowed" | "rejected";
   deanStatus: "pending" | "allowed" | "rejected";
@@ -34,6 +35,12 @@ const PermissionSchema = new Schema<IPermission>(
     reason: {
       type: String,
       required: true,
+    },
+    requestType: {
+      type: String,
+      enum: ["outing", "leave"],
+      default: "outing",
+      index: true,
     },
     status: {
       type: String,

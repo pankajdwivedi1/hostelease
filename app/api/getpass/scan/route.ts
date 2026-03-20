@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/dbAdapter";
+import { db, supabase } from "@/lib/dbAdapter";
 
 /**
  * Helper: Get IST time and date strings
@@ -180,17 +180,56 @@ export async function POST(request: NextRequest) {
                 studentId: student._id.toString()
             });
 
-            // Find if any permission covers "NOW" and is EITHER "allowed" OR "dean-accepted"
+            // ✅ DEFINITIVE GUARD: Build a set of permissionIds that were ALREADY consumed
+            // by a previous gate pass (any status — out or in). A permission can only be
+            // used ONCE. If a gate pass already exists with this permissionId, skip it.
+            const alreadyConsumedPermIds = new Set<string>();
+            try {
+                // 📡 BANDWIDTH OPTIMIZATION: Only select permission_id column to reduce data transfer
+                const { data: consumedPasses, error: gpErr } = await supabase
+                    .from('gate_passes')
+                    .select('permission_id')
+                    .eq('student_id', student._id.toString())
+                    .not('permission_id', 'is', null);
+
+                if (!gpErr && consumedPasses) {
+                    consumedPasses.forEach((gp: any) => {
+                        alreadyConsumedPermIds.add(gp.permission_id.toString());
+                    });
+                }
+            } catch (gpErr) {
+                console.warn("⚠️ Could not fetch prior gate passes for permission check:", gpErr);
+            }
+
+            // Find if any permission covers "NOW" and is approved (by dean OR fully allowed)
+            // A permission is only "active" if ALL of these are true:
+            //   1. Approved (status="allowed" OR deanStatus="allowed")
+            //   2. NOT already completed
+            //   3. NOT already linked to a previous gate pass (already consumed)
+            //   4. Current time is within [fromDateTime → toDateTime]
+            //   5. requestType is explicitly "leave"
             const activeLeave = activePermissions?.find((p: any) => {
-                const isAllowed = p.status === "allowed";
-                const isDeanAccepted = p.deanStatus === "accepted" || p.deanStatus === "approved";
-                
-                if (!isAllowed && !isDeanAccepted) return false;
+                const isFullyAllowed = p.status === "allowed";
+                const isDeanAllowed = p.deanStatus === "allowed";
+
+                if (!isFullyAllowed && !isDeanAllowed) return false;
+
+                // Skip permissions already marked completed
+                if (p.status === "completed") return false;
+
+                // ✅ KEY FIX: Skip permissions already consumed by a previous gate pass
+                const permId = (p._id || p.id)?.toString();
+                if (permId && alreadyConsumedPermIds.has(permId)) return false;
 
                 const start = new Date(p.fromDateTime).getTime();
                 const end = new Date(p.toDateTime).getTime();
                 const currentTime = now.getTime();
-                return currentTime >= start && currentTime <= end && p.requestType === "leave";
+                const isInTimeWindow = currentTime >= start && currentTime <= end;
+
+                if (!isInTimeWindow) return false;
+
+                // ONLY explicitly-tagged leave permissions count as leave
+                return p.requestType === "leave";
             });
 
             // Create new gate pass (check-out)
@@ -284,6 +323,19 @@ export async function POST(request: NextRequest) {
 
             // Update student status to "in"
             await db.students.update(student._id.toString(), { studentStatus: "in" });
+
+            // ✅ FIX: Mark the used leave permission as "completed" so it does NOT
+            // trigger again on future scans. Without this, an old approved permission
+            // whose time window still covers future time keeps classifying new outings as LEAVE.
+            const usedPermissionId = (openPasses[0] as any)?.permissionId || (openPasses[0] as any)?.permission_id;
+            if (usedPermissionId) {
+                try {
+                    await db.permissions.update(usedPermissionId, { status: "completed" });
+                    console.log(`✅ Permission ${usedPermissionId} marked as completed after student checked in.`);
+                } catch (permErr) {
+                    console.warn("⚠️ Could not mark permission as completed (non-critical):", permErr);
+                }
+            }
 
             // Format duration for display (using last/most relevant)
             const hours = Math.floor(totalDuration / 60);

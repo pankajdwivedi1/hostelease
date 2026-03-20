@@ -112,34 +112,19 @@ export async function PATCH(request: NextRequest) {
       update.status = "pending";
     }
 
-    const permission = await db.permissions.update(permissionId, update);
+    await db.permissions.update(permissionId, update);
 
-    // We need the student info for the status update below
+    // ✅ FIXED: Do NOT auto-update studentStatus here.
+    // Approving or rejecting a leave permission does NOT mean the student has physically
+    // left campus. studentStatus must ONLY change when the student scans the gate QR.
+    // Setting it here caused:
+    //   - Student app showing "Scan to Check IN" before they even left
+    //   - Gatepass screen showing OUTSIDE: 0 (no gate pass record) vs student showing "Outside"
+    //   - Manual Entry showing contradiction with live counter
     const populatedPermission = await db.permissions.getById(permissionId, { populate: true });
 
     if (!populatedPermission) {
       return NextResponse.json({ error: "Permission not found" }, { status: 404 });
-    }
-
-    const finalStatus = populatedPermission.status;
-
-    // If permission is allowed, set student studentStatus to "out"
-    if (finalStatus === "allowed" && populatedPermission.studentId) {
-      const studentId = typeof populatedPermission.studentId === "object"
-        ? populatedPermission.studentId._id || populatedPermission.studentId.id
-        : populatedPermission.studentId;
-
-      await db.students.update(studentId, { studentStatus: "out" });
-      console.log(`Student ${studentId} studentStatus updated to "out"`);
-    }
-
-    // If permission is rejected, set student studentStatus to "in" (they're back)
-    if (finalStatus === "rejected" && populatedPermission.studentId) {
-      const studentId = typeof populatedPermission.studentId === "object"
-        ? populatedPermission.studentId._id || populatedPermission.studentId.id
-        : populatedPermission.studentId;
-
-      await db.students.update(studentId, { studentStatus: "in" });
     }
 
     return NextResponse.json({ success: true, permission: populatedPermission }, { status: 200 });

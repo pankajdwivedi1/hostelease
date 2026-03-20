@@ -483,6 +483,7 @@ export default function StudentScannerPage() {
                     <div style={styles.historyList}>
                         {outingHistory.map((record) => (
                             <div key={record._id} style={styles.historyCard}>
+                                {/* Card Header: date + live indicator */}
                                 <div style={styles.historyCardHeader}>
                                     <span style={{
                                         ...styles.historyStatusDot,
@@ -493,22 +494,59 @@ export default function StudentScannerPage() {
                                         <span style={styles.liveTag}>LIVE</span>
                                     )}
                                 </div>
+
+                                {/* Card Body: OUT time → IN time | [Type + Duration on right] */}
                                 <div style={styles.historyCardBody}>
+                                    {/* Left: OUT time */}
                                     <div style={styles.historyTimeBlock}>
-                                        <span style={styles.historyLabel}>Out</span>
+                                        <span style={styles.historyLabel}>OUT</span>
                                         <span style={styles.historyTime}>{record.checkOutISTTime}</span>
                                     </div>
+
                                     <span style={styles.historyArrow}>→</span>
+
+                                    {/* Middle: IN time */}
                                     <div style={styles.historyTimeBlock}>
-                                        <span style={styles.historyLabel}>In</span>
+                                        <span style={styles.historyLabel}>IN</span>
                                         <span style={styles.historyTime}>
                                             {record.checkInISTTime || "---"}
                                         </span>
                                     </div>
-                                    <div style={styles.historyDuration}>
-                                        {record.durationMinutes !== undefined
-                                            ? formatDuration(record.durationMinutes)
-                                            : "Ongoing..."}
+
+                                    {/* Right: Type badge stacked above duration */}
+                                    <div style={{
+                                        display: "flex",
+                                        flexDirection: "column" as const,
+                                        alignItems: "center",
+                                        gap: "4px",
+                                        marginLeft: "auto",
+                                    }}>
+                                        {/* LEAVE / PASS big badge */}
+                                        <span style={{
+                                            padding: "3px 10px",
+                                            borderRadius: "8px",
+                                            fontSize: "10px",
+                                            fontWeight: "900",
+                                            letterSpacing: "0.1em",
+                                            textTransform: "uppercase" as const,
+                                            background: record.type === "leave"
+                                                ? "rgba(245, 158, 11, 0.2)"
+                                                : "rgba(59, 130, 246, 0.2)",
+                                            color: record.type === "leave" ? "#f59e0b" : "#60a5fa",
+                                            border: record.type === "leave"
+                                                ? "1px solid rgba(245,158,11,0.5)"
+                                                : "1px solid rgba(59,130,246,0.5)",
+                                            whiteSpace: "nowrap" as const,
+                                        }}>
+                                            {record.type === "leave" ? "🏠 LEAVE" : "🎫 PASS"}
+                                        </span>
+
+                                        {/* Duration below the badge */}
+                                        <div style={styles.historyDuration}>
+                                            {record.durationMinutes !== undefined
+                                                ? formatDuration(record.durationMinutes)
+                                                : "Ongoing..."}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
