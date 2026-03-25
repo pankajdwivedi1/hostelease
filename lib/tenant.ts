@@ -6,6 +6,14 @@ import { cache } from 'react';
  * Resolves the current tenant from the request headers
  * injected by the global Next.js middleware.
  */
+// ⚡ IN-MEMORY CACHE for resolved tenants (Reduces DB load and speeds up every request)
+const tenantCache = new Map<string, { tenant: any, expires: number }>();
+const TENANT_CACHE_TTL = 60 * 1000; // 1 minute cache
+
+/**
+ * Resolves the current tenant from the request headers
+ * injected by the global Next.js middleware.
+ */
 export const getTenantFromRequest = cache(async () => {
     const headersList = await (headers as any)();
     let slug = headersList.get('x-tenant-slug');
@@ -44,6 +52,7 @@ export const getTenantFromRequest = cache(async () => {
     // 🛠️ DEVELOPMENT FALLBACK: If resolving via plain localhost (no subdomain), 
     // pick the first active tenant so the app doesn't crash with a 500 error.
     if ((!slug || slug === 'default' || slug === 'www' || slug.includes(':')) && process.env.NODE_ENV === 'development') {
+        // We can't easily cache this part as slug is unstable here
         const supabase = getSupabaseAdmin();
         const { data: firstTenant } = await supabase
             .from('tenants')
@@ -63,13 +72,21 @@ export const getTenantFromRequest = cache(async () => {
         return null;
     }
 
-    console.log(`🔍 [Tenant] Searching for tenant with slug: "${slug}"`);
+    const normalizedSlug = slug.toLowerCase();
+
+    // ⚡ Check local memory cache first
+    const cached = tenantCache.get(normalizedSlug);
+    if (cached && cached.expires > Date.now()) {
+        return cached.tenant;
+    }
+
+    console.log(`🔍 [Tenant] Searching for tenant with slug: "${normalizedSlug}"`);
 
     const supabase = getSupabaseAdmin();
     const { data: tenant, error } = await supabase
         .from('tenants')
         .select('*')
-        .eq('slug', slug.toLowerCase())
+        .eq('slug', normalizedSlug)
         .eq('is_active', true)
         .single();
 
@@ -78,7 +95,7 @@ export const getTenantFromRequest = cache(async () => {
     }
 
     // Map Supabase snake_case to camelCase for compatibility with rest of app logic
-    return {
+    const resolvedTenant = {
         _id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
@@ -90,6 +107,14 @@ export const getTenantFromRequest = cache(async () => {
         isActive: tenant.is_active,
         adminEmail: tenant.admin_email
     };
+
+    // Store in cache
+    tenantCache.set(normalizedSlug, {
+        tenant: resolvedTenant,
+        expires: Date.now() + TENANT_CACHE_TTL
+    });
+
+    return resolvedTenant;
 });
 
 /**

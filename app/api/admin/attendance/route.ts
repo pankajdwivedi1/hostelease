@@ -52,7 +52,7 @@ export async function POST(request: Request) {
         const today = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
 
         // ⚡ BATCH OPTIMIZATION: Fetch all students in one single query instead of a loop
-        const { records: students } = await db.students.list({ 
+        const students = await db.students.list({ 
             _id: { $in: studentIds },
             tenant_id: (await db.getTenantIdOrThrow()) 
         }, { limit: studentIds.length });

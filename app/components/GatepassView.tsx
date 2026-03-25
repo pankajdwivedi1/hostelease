@@ -12,9 +12,7 @@ import { supabase } from "@/lib/supabase"; // ⚡ Added for Realtime updates
 // Right side: Live outing history and student counts
 // ============================================================
 
-// ===================== QR Code Generator (Canvas-based) =====================
-// Simple QR code generator using canvas - no external library needed
-// Uses a text-to-QR approach with the QR code API
+import QRCode from "qrcode";
 
 function QRCodeCanvas({ data, size = 550 }: { data: string; size?: number }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -22,43 +20,30 @@ function QRCodeCanvas({ data, size = 550 }: { data: string; size?: number }) {
     useEffect(() => {
         if (!canvasRef.current || !data) return;
         const canvas = canvasRef.current;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
 
-        // Use QR code image from API
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        // Use a reliable QR code API
-        const encodedData = encodeURIComponent(data);
-        img.src = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodedData}&bgcolor=ffffff&color=000000&margin=4&qzone=2`;
+        // ⚡ LOCAL GENERATION: Use 'qrcode' library to generate QR on the fly.
+        // This makes your bandwidth egress 0 bytes for QR rotation.
+        QRCode.toCanvas(canvas, data, {
+            width: size,
+            margin: 2,
+            color: {
+                dark: "#000000",
+                light: "#ffffff"
+            },
+            errorCorrectionLevel: 'H'
+        }, (error) => {
+            if (error) console.error("QR Generation Error:", error);
+            else {
+                // After generation, we apply the custom styling/rounding to the canvas element
+                canvas.style.borderRadius = "24px";
+            }
+        });
 
-        img.onload = () => {
-            canvas.width = size;
-            canvas.height = size;
-            // Draw a white background first
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(0, 0, size, size);
-            ctx.drawImage(img, 0, 0, size, size);
-        };
-
-        img.onerror = () => {
-            // Fallback: Draw a placeholder
-            canvas.width = size;
-            canvas.height = size;
-            ctx.fillStyle = "#0a0a1a";
-            ctx.fillRect(0, 0, size, size);
-            ctx.fillStyle = "#00ff88";
-            ctx.font = "bold 24px Lora, Cambria";
-            ctx.textAlign = "center";
-            ctx.fillText("QR Loading...", size / 2, size / 2);
-        };
     }, [data, size]);
 
     return (
         <canvas
             ref={canvasRef}
-            width={size}
-            height={size}
             className="w-full h-full object-contain rounded-2xl border-[3px] border-[#00ff884d] shadow-[0_0_20px_rgba(0,255,136,0.1)]"
         />
     );
@@ -427,7 +412,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                 },
                 (payload: any) => {
                     console.log('⚡ Scan Detected via Realtime:', payload.eventType, payload.new);
-                    
+
                     // ⚡ INSTANT FEEDBACK: Update local state immediately from the Realtime payload
                     setLiveData((prev: any) => {
                         if (!prev) return prev;
@@ -477,7 +462,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                     newSummary.studentsIn++;
                                     if (mapped.type === 'leave') newSummary.leaveCount--;
                                     else newSummary.gatePassCount--;
-                                    
+
                                     // Add to Recent Activity
                                     newRecent.unshift(mapped);
                                 }
@@ -495,10 +480,10 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
                     // 🔄 Background Refresh: Still do a fresh fetch to ensure server sync
                     if (payload.eventType === 'INSERT') {
-                        fetchLiveData(false); 
+                        fetchLiveData(false);
                     } else {
                         fetchLiveData(true);
-                        setTimeout(() => fetchLiveData(false), 2000); 
+                        setTimeout(() => fetchLiveData(false), 2000);
                     }
                 }
             )
@@ -551,13 +536,21 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
     }, [liveData?.recentActivity]);
 
     // ===================== Fullscreen toggle =====================
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    }, []);
+
     const toggleFullscreen = () => {
         if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen();
-            setIsFullscreen(true);
+            document.documentElement.requestFullscreen().catch(err => {
+                console.error(`Error attempting to enable fullscreen: ${err.message}`);
+            });
         } else {
             document.exitFullscreen();
-            setIsFullscreen(false);
         }
     };
 
@@ -783,10 +776,14 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
                 {/* QR Code */}
                 <div className="flex-1 flex flex-col items-center justify-center w-full py-4 min-h-0">
-                    <div className="p-3 md:p-4 bg-white rounded-[24px] md:rounded-[28px] border-[8px] md:border-[12px] border-[#00ff88] shadow-[0_0_60px_rgba(0,255,136,0.15)] md:shadow-[0_0_100px_rgba(0,255,136,0.25)] relative flex items-center justify-center w-full max-w-[min(70vw,50vh,580px)] md:max-w-[min(40vw,62vh,580px)]"
+                    <div className={`p-3 bg-white rounded-[24px] md:rounded-[28px] border-[6px] md:border-[8px] border-[#00ff88] shadow-[0_0_60px_rgba(0,255,136,0.15)] md:shadow-[0_0_100px_rgba(0,255,136,0.25)] relative flex items-center justify-center w-full transition-all duration-500 ${
+                        isFullscreen 
+                        ? "max-w-[min(75vw,65vh,580px)] md:max-w-[min(42vw,70vh,580px)]" 
+                        : "max-w-[min(65vw,45vh,350px)] md:max-w-[min(32vw,58vh,430px)]"
+                    }`}
                         style={{ aspectRatio: '1/1' }}>
                         {qrData ? (
-                            <QRCodeCanvas data={qrData} size={550} />
+                            <QRCodeCanvas data={qrData} size={isFullscreen ? 580 : 450} />
                         ) : (
                             <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-[rgba(255,255,255,0.5)] text-base">
                                 <div className="w-10 h-10 border-[3px] border-[rgba(0,255,136,0.2)] border-t-[#00ff88] rounded-full animate-spin"></div>

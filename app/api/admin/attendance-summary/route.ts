@@ -7,6 +7,20 @@ export async function GET(request: NextRequest) {
     try {
         const searchParams = request.nextUrl.searchParams;
         const requestedDate = searchParams.get("date");
+        const hostelFilter = searchParams.get("hostelName");
+        const authHostelsParam = searchParams.get("authorizedHostels");
+
+        // Parse authorized hostels if provided
+        let authorizedHostels: string[] = [];
+        if (authHostelsParam) {
+            try {
+                authorizedHostels = JSON.parse(authHostelsParam);
+            } catch (e) {
+                authorizedHostels = [authHostelsParam];
+            }
+        } else if (hostelFilter && hostelFilter !== "all") {
+            authorizedHostels = [hostelFilter];
+        }
 
         // Get today's date in IST YYYY-MM-DD
         const dateObj = new Date();
@@ -81,33 +95,13 @@ export async function GET(request: NextRequest) {
 
         let presentStudentIds: string[] = result.presentStudentIds || [];
 
-        // 6. Aggregate results into categories
-        if (result.records && Array.isArray(result.records)) {
-            // Supabase style return: records array
-            // Optimization: Count unique students per hostel category
-            const processedStudentsPerHostel = new Map<string, Set<string>>();
-
-            result.records.forEach((record: any) => {
-                const category = getHostelCategory(record.hostel_name || record.hostelName);
-                const studentId = record.student_id || record.studentId || "unknown";
-
-                if (!processedStudentsPerHostel.has(category)) {
-                    processedStudentsPerHostel.set(category, new Set());
-                }
-                processedStudentsPerHostel.get(category)!.add(studentId);
-            });
-
-            // Convert sets to counts
-            processedStudentsPerHostel.forEach((studentSet, category) => {
-                formattedSummary[category] = studentSet.size;
-            });
-        } else if (result.summary && Array.isArray(result.summary)) {
-            // Mongo style return: [{_id: 'Hostel Name', count: 10}]
-            // Note: MongoDB aggregation with $group might already count unique students if written that way,
-            // but for safety we'll assume item.count is correct or re-calculate if possible.
-            // In MongoAdapter, it's just a count. Let's trust $group { $sum: 1 } for now but keep fuzzy matching.
+        // 6. Aggregate results into categories using the summary returned by the adapter
+        if (result.summary && Array.isArray(result.summary)) {
+            // result.summary is [{_id: 'Hostel Name', count: 10}]
             result.summary.forEach((item: any) => {
                 const category = getHostelCategory(item._id);
+                // Filter by authorized hostels if provided
+                if (authorizedHostels.length > 0 && !authorizedHostels.includes(category)) return;
                 formattedSummary[category] = (formattedSummary[category] || 0) + (item.count || 0);
             });
         }
@@ -116,13 +110,64 @@ export async function GET(request: NextRequest) {
         const settings = await db.settings.get();
         const enableManualAttendance = settings?.enableManualAttendance ?? false;
 
+        // ⚡ MAJOR OPTIMIZATION: Consolidate 20+ count queries into 1 single fetch
+        const [studentData, pendingCountResult] = await Promise.all([
+            db.students.list({}, { select: 'hostel_name,student_status' }),
+            db.permissions.count({ status: 'pending' })
+        ]);
+
+        let studentList = Array.isArray(studentData) ? studentData : [];
+        const pendingCount = typeof pendingCountResult === 'number' ? pendingCountResult : 0;
+        
+        // ⚡ WARDEN FILTER: If authorized hostels are specified, filter the student list
+        if (authorizedHostels.length > 0) {
+            studentList = studentList.filter((s: any) => {
+                const category = getHostelCategory(s.hostelName);
+                return authorizedHostels.includes(category);
+            });
+        }
+
+        // Global Stats (Now filtered for Wardens if applicable)
+        const stats = {
+            totalStudents: studentList.length,
+            totalIn: studentList.filter((s: any) => s.studentStatus === 'in').length,
+            totalOut: studentList.filter((s: any) => s.studentStatus === 'out').length,
+            pendingPermissions: pendingCount // Pending permissions count remains global for simplicity or can be filtered if needed
+        };
+
+        // Hostel-Specific Stats
+        const hostelStats: Record<string, { total: number; in: number; out: number }> = {};
+        
+        // Initialize hostelStats for all canonical hostels (or just authorized ones)
+        const activeHostels = authorizedHostels.length > 0 ? authorizedHostels : canonicalHostelNames;
+        activeHostels.forEach(h => {
+            hostelStats[h] = { total: 0, in: 0, out: 0 };
+        });
+
+        // ⚡ SINGLE PASS: Aggregate counts for each hostel in memory
+        studentList.forEach((s: any) => {
+            const hCategory = getHostelCategory(s.hostelName);
+            // Double check filtering
+            if (authorizedHostels.length > 0 && !authorizedHostels.includes(hCategory)) return;
+
+            if (!hostelStats[hCategory]) {
+                hostelStats[hCategory] = { total: 0, in: 0, out: 0 };
+            }
+            hostelStats[hCategory].total++;
+            if (s.studentStatus === 'in') hostelStats[hCategory].in++;
+            else if (s.studentStatus === 'out') hostelStats[hCategory].out++;
+        });
+
         return NextResponse.json({
             success: true,
-            summary: formattedSummary,
+            summary: formattedSummary, 
+            hostelStats,              
+            stats,
             presentStudentIds,
             enableManualAttendance,
             date
         });
+
 
     } catch (error: any) {
         console.error("❌ [ATTENDANCE_SUMMARY_ERROR]:", error);

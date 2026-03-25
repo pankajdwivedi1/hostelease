@@ -643,8 +643,6 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
             const handleVisibilityChange = () => {
                 if (document.visibilityState === 'visible') {
                     fetchStudentNotifications();
-                    // Also fetch fresh profile to be safe
-                    loadFullProfile();
                 }
             };
             document.addEventListener('visibilitychange', handleVisibilityChange);

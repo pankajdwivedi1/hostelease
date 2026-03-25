@@ -394,7 +394,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string; attendanceMode?: 'strict' | 'gps-only' | 'biometric' }>>([]);
   const [showHostelSettingsModal, setShowHostelSettingsModal] = useState(false);
   const [updatingHostelId, setUpdatingHostelId] = useState<string | null>(null);
-  const [studentsLoading, setStudentsLoading] = useState(true);
+  const [studentsLoading, setStudentsLoading] = useState(false);
   const [attendanceSummary, setAttendanceSummary] = useState<Record<string, number>>({});
   const [presentStudentIds, setPresentStudentIds] = useState<string[]>([]);
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
@@ -405,6 +405,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [sendingMessage, setSendingMessage] = useState(false);
   const [showEditStudentModal, setShowEditStudentModal] = useState(false);
   const [isUpdatingStudent, setIsUpdatingStudent] = useState(false);
+  
+  // ⚡ BANDWIDTH OPTIMIZATION: Lightweight Dashboard Stats
+  const [dashboardStats, setDashboardStats] = useState<{
+    totalStudents: number;
+    totalIn: number;
+    totalOut: number;
+    pendingPermissions: number;
+  }>({ totalStudents: 0, totalIn: 0, totalOut: 0, pendingPermissions: 0 });
+  const [hostelStats, setHostelStats] = useState<Record<string, { total: number; in: number; out: number }>>({});
 
   // Payment States
   const [payments, setPayments] = useState<any[]>([]);
@@ -618,9 +627,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [measurePoints, setMeasurePoints] = useState<[number, number][]>([]);
   const [measureDistance, setMeasureDistance] = useState<number | null>(null);
   const [isLocationModalMaximized, setIsLocationModalMaximized] = useState(false);
-  const [wardenHostelName, setWardenHostelName] = useState<string | null>(null);
-  const [authorizedHostels, setAuthorizedHostels] = useState<string[]>([]);
-  const [isWarden, setIsWarden] = useState(false);
+  // Initialize warden status directly from localStorage to prevent "Flash of 772"
+  const getInitialWardenData = () => {
+    if (typeof window === "undefined") return { isWarden: false, hostelName: null, authorized: [] };
+    const type = localStorage.getItem("userType");
+    const hostelName = localStorage.getItem("wardenHostelName");
+    const authHostelsStr = localStorage.getItem("authorizedHostels");
+    let authorized: string[] = [];
+    if (authHostelsStr) {
+        try { authorized = JSON.parse(authHostelsStr); } catch (e) { authorized = [hostelName || ""]; }
+    } else if (hostelName) {
+        authorized = [hostelName];
+    }
+    return { isWarden: type === "warden", hostelName, authorized };
+  };
+
+  const initialWarden = getInitialWardenData();
+  const [wardenHostelName, setWardenHostelName] = useState<string | null>(initialWarden.hostelName);
+  const [authorizedHostels, setAuthorizedHostels] = useState<string[]>(initialWarden.authorized);
+  const [isWarden, setIsWarden] = useState(initialWarden.isWarden);
   const [dashboardTitle, setDashboardTitle] = useState(title);
   const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null); // ⚡ NEW: Subscription tracking
 
@@ -1872,10 +1897,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const fetchPermissions = async (forceRefresh = false) => {
+  const fetchPermissions = async (statusArg?: string, forceRefresh = false) => {
     try {
-      // ⚡ OPTIMIZATION: Check cache for Permissions
-      if (!forceRefresh) {
+      const status = statusArg || (currentTab === 'permissions' ? 'pending' : 'all');
+      
+      // ? OPTIMIZATION: Check cache for Permissions (only for 'all' status)
+      if (!forceRefresh && status === 'all') {
         const cached = sessionStorage.getItem('hostelease_permissions_cache');
         if (cached) {
           setPermissions(JSON.parse(cached));
@@ -1883,14 +1910,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         }
       }
 
-      const response = await fetch("/api/permissions?light=true", { cache: "no-store" });
+      const response = await fetch(`/api/permissions?light=true&status=${status}`, { cache: "no-store" });
       const data = await response.json();
 
       // Handle both success and error responses
       if (data.permissions !== undefined) {
         const list = Array.isArray(data.permissions) ? data.permissions : [];
         setPermissions(list);
-        sessionStorage.setItem('hostelease_permissions_cache', JSON.stringify(list));
+        
+        // Only cache full list
+        if (status === 'all') {
+          sessionStorage.setItem('hostelease_permissions_cache', JSON.stringify(list));
+        }
       } else if (!response.ok) {
         console.warn(`Permissions API returned status ${response.status}`);
         setPermissions([]);
@@ -1904,14 +1935,29 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const fetchAttendanceSummary = async () => {
     try {
       const url = new URL(`/api/admin/attendance-summary?date=${selectedDate}`, window.location.origin);
-      const response = await fetch(url.href);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch summary: ${response.status}`);
+      
+      // ⚡ WARDEN FILTER: Automatically scope summary stats to warden's assigned hostels
+      if (isWarden) {
+          if (wardenHostelName) url.searchParams.set("hostelName", wardenHostelName);
+          if (authorizedHostels && authorizedHostels.length > 0) {
+              url.searchParams.set("authorizedHostels", JSON.stringify(authorizedHostels));
+          }
       }
+
+      const response = await fetch(url.href);
       const data = await response.json();
       if (data.success) {
         setAttendanceSummary(data.summary);
         setPresentStudentIds(data.presentStudentIds);
+
+        // ⚡ BANDWIDTH OPTIMIZATION: Populate global and hostel-specific stats
+        if (data.stats) {
+          setDashboardStats(data.stats);
+        }
+        if (data.hostelStats) {
+          setHostelStats(data.hostelStats);
+        }
+
         // ⚡ Sync Global Toggle across all dashboards (Wardens & Admins)
         if (data.enableManualAttendance !== undefined) {
           setEnableManualAttendance(data.enableManualAttendance);
@@ -2195,29 +2241,38 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const loadData = () => {
       setLoading(true);
 
-      // ⚡ OPTIMIZED: Run all fetches independently
-      // Permissions (Critical for UI list): Manage loading state
-      fetchPermissions().finally(() => setLoading(false));
+      // ⚡ BANDWIDTH OPTIMIZATION: Only fetch summary stats on first load
+      setStudentsLoading(true);
+      fetchAttendanceSummary()
+        .finally(() => {
+            setLoading(false);
+            setStudentsLoading(false);
+        });
 
-      // Hostels: Updates filters when ready (safe to render without)
+      // Fetch hostels and notifications (only once)
       fetchHostels();
+      fetchAdminNotifications();
 
-      // Students: Background update
-      fetchStudents();
+      if (currentTab === 'permissions') {
+        fetchPermissions('pending'); 
+      }
     };
 
     loadData();
-    fetchAdminNotifications();
+
     if (title === "Super Admin Dashboard") {
       fetchHostelLocations();
-      fetchAttendanceTimeSettings(); // Fetch attendance time settings
-      fetchSystemSettings(); // Fetch new developer settings
+      fetchAttendanceTimeSettings();
+      fetchSystemSettings();
     }
   }, [title]);
 
   useEffect(() => {
-    // ⚡ INSTANT UPDATE: Always fetch summary when filters or date change to provide a snappy experience
-    fetchAttendanceSummary();
+    // ⚡ INSTANT UPDATE: Always fetch summary when filters or date change
+    // but SKIP initial call if it's already triggered by loadData (title change)
+    if (lastUpdated) {
+        fetchAttendanceSummary();
+    }
 
     if (currentTab === "attendance") {
       fetchAttendanceLogs();
@@ -2416,7 +2471,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const data = JSON.parse(await response.text() || "{}");
       setSelectedStudent(null);
       setShowDeleteConfirm(false);
-      await Promise.all([fetchPermissions(true), fetchStudents(true)]);
+      await Promise.all([fetchPermissions(undefined, true), fetchStudents(true)]);
     } catch (error: any) {
       console.error("Error deleting student:", error);
       alert(error.message || "Failed to delete student. Please try again.");
@@ -2868,6 +2923,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
     const outStudents = baseList.filter(s => s.studentStatus === 'out');
 
+    // ⚡ BANDWIDTH OPTIMIZATION: Use dashboardStats if student list is not loaded
+    if (students.length === 0 && dashboardStats.totalStudents > 0) {
+      return {
+        all: dashboardStats.totalStudents,
+        in: dashboardStats.totalIn,
+        out: dashboardStats.totalOut,
+        leave: 0, // Simplified for now
+        pass: 0   // Simplified for now
+      };
+    }
+
     return {
       all: baseList.length,
       in: baseList.filter(s => s.studentStatus === 'in').length,
@@ -2875,7 +2941,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       leave: outStudents.filter(s => s.outingType === 'leave').length,
       pass: outStudents.filter(s => s.outingType !== 'leave').length
     };
-  }, [dropdownFilteredStudents, hostelFilter, isWarden, authorizedHostels]);
+  }, [students, dropdownFilteredStudents, hostelFilter, isWarden, authorizedHostels, dashboardStats]);
 
 
 
@@ -3006,7 +3072,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></span>
                       ) : (
                         <div className="flex flex-col">
-                          <p className="text-sm text-secondary">{filteredStudents.length} Students</p>
+                          <p className="text-sm text-secondary">
+                            {students.length > 0 ? filteredStudents.length : (dashboardStats.totalStudents || 0)} Students
+                          </p>
                           {lastUpdated && (
                             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
                               Updated: {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -3119,7 +3187,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       onClick={() => {
                         // ⚡ FORCE REFRESH: Manually bypass all caches
                         sessionStorage.removeItem('hostelease_permissions_cache');
-                        fetchPermissions(true);
+                        fetchPermissions(undefined, true);
                         fetchHostels(true);
                         fetchAttendanceSummary();
                         fetchStudents(true);
@@ -3154,7 +3222,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     </button>
                   )}
                   <button
-                    onClick={() => setShowAllStudents(true)}
+                    onClick={() => {
+                        setShowAllStudents(true);
+                        if (students.length === 0) fetchStudents();
+                    }}
                     className="flex-1 md:flex-none px-4 py-2 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 text-sm whitespace-nowrap"
                   >
                     All Students
@@ -3390,7 +3461,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           type="text"
                           placeholder="Search student..."
                           value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
+                          onChange={(e) => {
+                              setSearchQuery(e.target.value);
+                              if (e.target.value.length > 0 && students.length === 0) {
+                                  fetchStudents();
+                              }
+                          }}
                           className="w-full pl-9 pr-3 h-9 text-sm rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
                         />
                       </div>
@@ -3624,27 +3700,27 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <div className="bg-filler p-2.5 rounded-lg border border-gray-100 shadow-sm text-red-600 text-center">
                           <p className="text-[9px] font-bold uppercase tracking-wider">Total Absentees</p>
                           <p className="text-lg font-black mt-1">
-                            {absentees.length}
+                            {students.length > 0 ? absentees.length : (dashboardStats.totalStudents - presentStudentIds.length)}
                           </p>
                         </div>
                         <div className="bg-filler p-2.5 rounded-lg border border-gray-100 shadow-sm text-center">
                           <p className="text-[9px] font-bold text-secondary uppercase tracking-wider">Present Ratio</p>
                           <p className="text-lg font-black text-foreground mt-1">
                             {(() => {
-                              const total = attendanceHostelFilter === 'all'
-                                ? (isWarden && authorizedHostels.length > 0
-                                  ? students.filter(s => {
-                                    const studentHostel = getHostelCategory(s.hostelName) || s.hostelName;
-                                    return authorizedHostels.some(h => h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase());
-                                  }).length
-                                  : students.length)
-                                : students.filter(s => {
+                              let total = 0;
+                              if (attendanceHostelFilter === 'all') {
+                                total = students.length > 0 ? (isWarden && authorizedHostels.length > 0 ? filteredStudents.length : students.length) : dashboardStats.totalStudents;
+                              } else {
+                                const stats = Object.entries(hostelStats).find(([k]) => k.toLowerCase() === attendanceHostelFilter.toLowerCase())?.[1];
+                                total = students.length > 0 ? students.filter(s => {
                                   const studentHostel = (getHostelCategory(s.hostelName) || s.hostelName || "").toLowerCase().trim();
                                   const filterHostel = attendanceHostelFilter.toLowerCase().trim();
                                   return studentHostel === filterHostel;
-                                }).length;
+                                }).length : (stats?.total || 0);
+                              }
+
                               const present = attendanceHostelFilter === 'all'
-                                ? filteredPresentCount
+                                ? presentStudentIds.length
                                 : (() => {
                                   const normalizedKey = getHostelCategory(attendanceHostelFilter) || attendanceHostelFilter;
                                   const entry = Object.entries(attendanceSummary).find(
@@ -3677,14 +3753,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             }
                             return true;
                           })
-                          .map(([hostel, count]) => {
-                            // Calculate total students in this hostel
-                            const totalInHostel = students.filter(s => {
-                              const studentHostel = (getHostelCategory(s.hostelName) || s.hostelName || "").toLowerCase().trim();
-                              const cardHostel = hostel.toLowerCase().trim();
-                              return studentHostel === cardHostel;
-                            }).length;
-                            const percentage = totalInHostel > 0 ? Math.round((count / totalInHostel) * 100) : 0;
+                            .map(([hostel, count]) => {
+                              // ⚡ BANDWIDTH OPTIMIZATION: Use pre-calculated hostel stats
+                              const hStatEntry = Object.entries(hostelStats).find(([k]) => k.toLowerCase() === hostel.toLowerCase());
+                              const hStats = hStatEntry ? hStatEntry[1] : null;
+                              
+                              const totalInHostel = students.length > 0 
+                                ? students.filter(s => {
+                                    const studentHostel = (getHostelCategory(s.hostelName) || s.hostelName || "").toLowerCase().trim();
+                                    const cardHostel = hostel.toLowerCase().trim();
+                                    return studentHostel === cardHostel;
+                                  }).length
+                                : (hStats?.total || 0);
+                              
+                              const percentage = totalInHostel > 0 ? Math.round((count / totalInHostel) * 100) : 0;
                             const isSelected = selectedAttendanceHostel === hostel;
 
                             return (

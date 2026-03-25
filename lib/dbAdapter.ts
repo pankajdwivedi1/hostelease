@@ -820,8 +820,6 @@ export const db = {
                     .maybeSingle();
 
                 if (error || !data) {
-                    // FALLBACK: Try lookup by firebase_uid if _id lookup fails
-                    // This handles cases where studentId in other tables might be the Firebase UID
                     console.log(`[DB_ADAPTER] Falling back to firebase_uid lookup for: ${id}`);
                     const fbLookup = await supabase
                         .from('students')
@@ -841,7 +839,6 @@ export const db = {
 
                 return mapStudentToCamelCase(data);
             } else {
-                // MongoDB Query
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
                 try {
@@ -859,13 +856,12 @@ export const db = {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
-                // Querying JSONB in Supabase
                 const { data, error } = await supabase
                     .from('students')
                     .select('*')
                     .eq('tenant_id', tenantId)
                     .contains('web_authn_credentials', JSON.stringify([{ credentialID: credentialId }]))
-                    .maybeSingle(); // Use maybeSingle to avoid error if not found
+                    .maybeSingle();
 
                 if (error) {
                     console.error("Supabase getByCredentialId Error:", error);
@@ -885,7 +881,6 @@ export const db = {
         // Get a single student by specific filter
         findOne: async (filter: any) => {
             const source = await getDbSource();
-            console.log(`[DB_ADAPTER] findOne (${JSON.stringify(filter)}) using: ${source}`);
             if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('students').select('*');
@@ -893,7 +888,6 @@ export const db = {
 
                 if (filter.firebaseUID) query = query.eq('firebase_uid', filter.firebaseUID);
                 if (filter.supabaseId) {
-                    // ⚡ TRANSITION: Try both supabase_id and firebase_uid columns for Supabase users
                     query = query.or(`supabase_id.eq.${filter.supabaseId},firebase_uid.eq.${filter.supabaseId}`);
                 }
                 if (filter._id) query = query.eq('_id', filter._id);
@@ -904,35 +898,20 @@ export const db = {
 
                 const { data, error } = await query.maybeSingle();
 
-                if (error) {
-                    if (error.code === 'PGRST116') return null; // Not found code
-                    console.error("Supabase findOne error:", error);
-                    return null;
-                }
-
+                if (error) return null;
                 if (!data) {
-                    // ⚡ GLOBAL FALLBACK: If not found in current tenant, try across all tenants
                     console.log(`[DB_ADAPTER] Student not found in tenant ${tenantId}, trying global lookup...`);
                     let globalQuery = supabase.from('students').select('*');
-                    
                     if (filter.firebaseUID) globalQuery = globalQuery.eq('firebase_uid', filter.firebaseUID);
-                    if (filter.supabaseId) {
-                         globalQuery = globalQuery.or(`supabase_id.eq.${filter.supabaseId},firebase_uid.eq.${filter.supabaseId}`);
-                    }
-                    if (filter._id) globalQuery = globalQuery.eq('_id', filter._id);
                     if (filter.email) globalQuery = globalQuery.eq('email', filter.email);
 
                     const { data: globalData, error: globalError } = await globalQuery.maybeSingle();
-                    if (!globalError && globalData) {
-                        console.log(`[DB_ADAPTER] Found student globally (tenant_id=${globalData.tenant_id})`);
-                        return mapStudentToCamelCase(globalData);
-                    }
+                    if (!globalError && globalData) return mapStudentToCamelCase(globalData);
                     return null;
                 }
 
                 return mapStudentToCamelCase(data);
-            }
-            else {
+            } else {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
                 const student = await StudentModel.findOne(filter).lean();
@@ -944,16 +923,7 @@ export const db = {
         save: async (firebaseUID: string, studentData: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                // Map camelCase fields to Supabase snake_case column names
-                // (delegates to the module-level mapStudentToSnakeCase helper)
-
                 const supabaseData = mapStudentToSnakeCase(studentData);
-
-                // ✅ CORRECT APPROACH: Never use upsert when _id is the PK referenced by FK.
-                // Supabase upsert's ON CONFLICT DO UPDATE SET includes _id → violates attendance FK.
-                // Instead: check if student exists, then UPDATE or INSERT cleanly.
-
-                // Step 1: Check if student already exists in this university
                 const tenantId = await getTenantIdOrThrow();
                 const { data: existingStudent } = await supabase
                     .from('students')
@@ -962,12 +932,7 @@ export const db = {
                     .eq('tenant_id', tenantId)
                     .maybeSingle();
 
-                let data: any;
-                let error: any;
-
                 if (existingStudent?._id) {
-                    // ✅ Student EXISTS → UPDATE only (never touch _id or firebase_uid)
-                    console.log(`[DB_ADAPTER] Existing student found (_id=${existingStudent._id}), doing UPDATE`);
                     const result = await supabase
                         .from('students')
                         .update({ ...supabaseData, tenant_id: tenantId })
@@ -975,26 +940,16 @@ export const db = {
                         .eq('tenant_id', tenantId)
                         .select()
                         .single();
-                    data = result.data;
-                    error = result.error;
+                    return result.data;
                 } else {
-                    // ✅ New student → INSERT with a fresh UUID _id
                     const newId = crypto.randomUUID();
-                    console.log(`[DB_ADAPTER] New student for university ${tenantId}, doing INSERT with _id=${newId}`);
                     const result = await supabase
                         .from('students')
                         .insert({ ...supabaseData, _id: newId, firebase_uid: firebaseUID, tenant_id: tenantId })
                         .select()
                         .single();
-                    data = result.data;
-                    error = result.error;
+                    return result.data;
                 }
-
-                if (error) {
-                    console.error("❌ Supabase Save Error Detail:", error);
-                    throw error;
-                }
-                return data;
             } else {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
@@ -1007,23 +962,15 @@ export const db = {
             }
         },
 
-        // Example: Create a new student
         create: async (studentData: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
                 const finalData = { ...studentData, tenant_id: tenantId };
-                if (!finalData._id) {
-                    finalData._id = crypto.randomUUID();
-                }
-                const { data, error } = await supabase
-                    .from('students')
-                    .insert([finalData])
-                    .select();
-
+                if (!finalData._id) finalData._id = crypto.randomUUID();
+                const { data, error } = await supabase.from('students').insert([finalData]).select();
                 if (error) throw error;
                 return data?.[0];
-
             } else {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
@@ -1032,13 +979,13 @@ export const db = {
             }
         },
 
-        // 🔥 Used for the Secret Test Page
-        getAll: async (limit = 50, useSupabase = false) => {
-            if (useSupabase) {
+        getAll: async (limit = 50) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
                 const { data, error } = await supabase.from('students').select('*').eq('tenant_id', tenantId).limit(limit);
                 if (error) throw error;
-                return data;
+                return (data || []).map(mapStudentToCamelCase);
             } else {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
@@ -1048,82 +995,43 @@ export const db = {
         },
 
         // ⚡ DATABASE-AWARE LIST WITH FILTERS
-        list: async (filters: any = {}, options: { light?: boolean } = {}) => {
+        list: async (filters: any = {}, options: { light?: boolean; select?: string; limit?: number } = {}) => {
             const source = await getDbSource();
-
-            // ⚡ Optimized Selection for Light Mode (Excludes large fields like profilePicture and faceDescriptor)
             const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id';
+            const selection = options.select || (options.light ? lightFields : '*');
 
-            console.log(`[DB_ADAPTER] list (filters: ${JSON.stringify(filters)}) using: ${source}`);
             if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('students').select(options.light ? lightFields : '*');
+                let query = supabase.from('students').select(selection);
                 query = query.eq('tenant_id', tenantId);
 
                 if (filters.hostelName && filters.hostelName !== 'all') {
-                    // Handle regex-like search for hostel name
                     const hName = typeof filters.hostelName === 'object' ? filters.hostelName.$regex : filters.hostelName;
                     query = query.ilike('hostel_name', `%${hName}%`);
                 }
-
-                if (filters.collegeName && filters.collegeName !== 'all') {
-                    query = query.eq('college_name', filters.collegeName);
-                }
-
-                if (filters.registrationId) {
-                    query = query.ilike('registration_id', filters.registrationId);
-                }
-
+                if (filters.studentStatus) query = query.eq('student_status', filters.studentStatus);
+                if (filters.collegeName && filters.collegeName !== 'all') query = query.eq('college_name', filters.collegeName);
+                if (filters.registrationId) query = query.ilike('registration_id', filters.registrationId);
                 if (filters._id) {
-                    if (typeof filters._id === 'object' && filters._id.$in) {
-                        query = query.in('_id', filters._id.$in);
-                    } else {
-                        query = query.eq('_id', filters._id);
-                    }
+                    if (typeof filters._id === 'object' && filters._id.$in) query = query.in('_id', filters._id.$in);
+                    else query = query.eq('_id', filters._id);
                 }
-
                 if (filters.search) {
                     const s = filters.search;
-                    query = query.or(`name.ilike.%${s}%,email.ilike.%${s}%,phone_number.ilike.%${s}%,room_number.ilike.%${s}%,registration_id.ilike.%${s}%,device_id.ilike.%${s}%`);
+                    query = query.or(`name.ilike.%${s}%,email.ilike.%${s}%,phone_number.ilike.%${s}%,room_number.ilike.%${s}%,registration_id.ilike.%${s}%`);
                 }
 
                 const { data, error } = await query
                     .order('name', { ascending: true })
                     .limit(options.limit || 1000);
+                
                 if (error) throw error;
-
-                // Map snake_case back to camelCase for API compatibility
                 return (data || []).map((s: any) => mapStudentToCamelCase(s));
-            }
-            else {
+            } else {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
-                let mongoQuery: any = {};
-
-                if (filters.hostelName && filters.hostelName !== 'all') {
-                    mongoQuery.hostelName = { $regex: filters.hostelName, $options: "i" };
-                }
-
-                if (filters.registrationId) {
-                    mongoQuery.registrationId = filters.registrationId;
-                }
-
-                if (filters.search) {
-                    mongoQuery.$or = [
-                        { name: { $regex: filters.search, $options: "i" } },
-                        { email: { $regex: filters.search, $options: "i" } },
-                        { phoneNumber: { $regex: filters.search, $options: "i" } },
-                        { roomNumber: { $regex: filters.search, $options: "i" } },
-                        { registrationId: { $regex: filters.search, $options: "i" } },
-                        { deviceId: { $regex: filters.search, $options: "i" } },
-                    ];
-                }
-
-                let q = StudentModel.find(mongoQuery).sort({ name: 1 });
-                if (options.light) q = q.select("-profilePicture");
-
-                const students = await q.lean();
-                return students.map(mapStudentToCamelCase);
+                const records = await StudentModel.find(filters).sort({ name: 1 }).limit(options.limit || 1000).lean();
+                return records.map(mapStudentToCamelCase);
             }
         },
 
@@ -2802,6 +2710,32 @@ export const db = {
                 };
             }
         },
+
+        count: async (filters: any = {}) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
+                let query = supabase.from('permissions').select('*', { count: 'exact', head: true });
+                query = query.eq('tenant_id', tenantId);
+                if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
+                
+                const { count, error } = await query;
+                if (error) {
+                    const fallback = await supabase
+                        .from('permissions')
+                        .select('*, students!student_id!inner(tenant_id)', { count: 'exact', head: true })
+                        .eq('students.tenant_id', tenantId);
+                    if (fallback.error) throw fallback.error;
+                    return fallback.count || 0;
+                }
+                return count || 0;
+            } else {
+                await connectDB();
+                const PermissionModel = (await import('@/models/Permission')).default;
+                return await PermissionModel.countDocuments(filters);
+            }
+        },
+
 
         getById: async (id: string, options: { populate?: boolean } = {}) => {
             const source = await getDbSource();
