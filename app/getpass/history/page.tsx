@@ -371,6 +371,37 @@ export default function OutingHistoryPage() {
                 </div>
             </div>
 
+            {/* ── Mobile-only Stats Bar (Daily Pass / Leave Logs / Total Logs) ── */}
+            <div className="sm:hidden flex items-stretch w-full bg-[#0a0a0f] border-b border-white/5">
+                <button
+                    onClick={() => setFilters(f => ({ ...f, type: f.type === 'outing' ? 'all' : 'outing' }))}
+                    className={`flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 transition-all ${filters.type === 'outing' ? 'bg-[#00ff8810] border-b-2 border-[#00ff88]' : 'border-b-2 border-transparent'}`}
+                >
+                    <span className={`text-[8px] font-black uppercase tracking-widest leading-none ${filters.type === 'outing' ? 'text-[#00ff88]' : 'text-white/30'}`}>Daily Pass</span>
+                    <span className={`text-sm font-black tabular-nums leading-tight ${filters.type === 'outing' ? 'text-[#00ff88]' : 'text-white'}`}>{pagination.passCount}</span>
+                </button>
+
+                <div className="w-px bg-white/10 self-stretch" />
+
+                <button
+                    onClick={() => setFilters(f => ({ ...f, type: f.type === 'leave' ? 'all' : 'leave' }))}
+                    className={`flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 transition-all ${filters.type === 'leave' ? 'bg-blue-500/10 border-b-2 border-blue-400' : 'border-b-2 border-transparent'}`}
+                >
+                    <span className={`text-[8px] font-black uppercase tracking-widest leading-none ${filters.type === 'leave' ? 'text-blue-400' : 'text-white/30'}`}>Leave Logs</span>
+                    <span className={`text-sm font-black tabular-nums leading-tight ${filters.type === 'leave' ? 'text-blue-400' : 'text-white'}`}>{pagination.leaveCount}</span>
+                </button>
+
+                <div className="w-px bg-white/10 self-stretch" />
+
+                <button
+                    onClick={() => setFilters(f => ({ ...f, type: 'all' }))}
+                    className={`flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 transition-all ${filters.type === 'all' ? 'bg-white/5 border-b-2 border-white/30' : 'border-b-2 border-transparent'}`}
+                >
+                    <span className={`text-[8px] font-black uppercase tracking-widest leading-none ${filters.type === 'all' ? 'text-white/60' : 'text-white/20'}`}>Total Logs</span>
+                    <span className={`text-sm font-black tabular-nums leading-tight ${filters.type === 'all' ? 'text-white' : 'text-white/40'}`}>{pagination.total}</span>
+                </button>
+            </div>
+
             <div className="max-w-[1600px] mx-auto p-4 sm:p-6 flex flex-col gap-6">
                 {/* Filters Section */}
                 <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4 p-4 sm:p-5 bg-[#0a0a0f] border border-white/5 rounded-2xl shadow-2xl">

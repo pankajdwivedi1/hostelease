@@ -1692,19 +1692,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     });
   }, [attendanceLogs, isWarden, authorizedHostels]);
 
-  // Calculate filtered present count for wardens (only students from authorized hostels)
+  // Calculate filtered present count (backend already filters this by user scope)
   const filteredPresentCount = useMemo(() => {
-    if (!isWarden || authorizedHostels.length === 0) {
-      return presentStudentIds.length; // Admin/Developer sees all
-    }
+    return presentStudentIds.length;
+  }, [presentStudentIds]);
 
-    // Count only present students from authorized hostels
-    return students.filter(s => {
-      if (!presentStudentIds.includes(s.id)) return false;
-      const studentHostel = getHostelCategory(s.hostelName) || s.hostelName;
-      return authorizedHostels.some(h => h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase());
-    }).length;
-  }, [students, presentStudentIds, isWarden, authorizedHostels]);
 
   // Filter absentees based on selected hostel card
   const displayedAbsentees = useMemo(() => {
@@ -1962,6 +1954,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (data.enableManualAttendance !== undefined) {
           setEnableManualAttendance(data.enableManualAttendance);
         }
+        setLastUpdated(new Date());
       }
     } catch (error: any) {
       console.error("Error fetching attendance summary:", error.message);
@@ -2269,10 +2262,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   useEffect(() => {
     // ⚡ INSTANT UPDATE: Always fetch summary when filters or date change
-    // but SKIP initial call if it's already triggered by loadData (title change)
-    if (lastUpdated) {
-        fetchAttendanceSummary();
-    }
+    fetchAttendanceSummary();
 
     if (currentTab === "attendance") {
       fetchAttendanceLogs();
@@ -3700,7 +3690,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <div className="bg-filler p-2.5 rounded-lg border border-gray-100 shadow-sm text-red-600 text-center">
                           <p className="text-[9px] font-bold uppercase tracking-wider">Total Absentees</p>
                           <p className="text-lg font-black mt-1">
-                            {students.length > 0 ? absentees.length : (dashboardStats.totalStudents - presentStudentIds.length)}
+                            {(() => {
+                              if (attendanceHostelFilter === 'all') {
+                                return Math.max(0, dashboardStats.totalStudents - presentStudentIds.length);
+                              }
+                              const stats = Object.entries(hostelStats).find(([k]) => k.toLowerCase() === attendanceHostelFilter.toLowerCase())?.[1];
+                              const present = (() => {
+                                const normalizedKey = getHostelCategory(attendanceHostelFilter) || attendanceHostelFilter;
+                                const entry = Object.entries(attendanceSummary).find(([k]) => k.toLowerCase() === normalizedKey.toLowerCase());
+                                return entry ? entry[1] : (attendanceSummary[attendanceHostelFilter] || 0);
+                              })();
+                              return Math.max(0, (stats?.total || 0) - present);
+                            })()}
                           </p>
                         </div>
                         <div className="bg-filler p-2.5 rounded-lg border border-gray-100 shadow-sm text-center">
@@ -3709,23 +3710,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             {(() => {
                               let total = 0;
                               if (attendanceHostelFilter === 'all') {
-                                total = students.length > 0 ? (isWarden && authorizedHostels.length > 0 ? filteredStudents.length : students.length) : dashboardStats.totalStudents;
+                                total = dashboardStats.totalStudents;
                               } else {
                                 const stats = Object.entries(hostelStats).find(([k]) => k.toLowerCase() === attendanceHostelFilter.toLowerCase())?.[1];
-                                total = students.length > 0 ? students.filter(s => {
-                                  const studentHostel = (getHostelCategory(s.hostelName) || s.hostelName || "").toLowerCase().trim();
-                                  const filterHostel = attendanceHostelFilter.toLowerCase().trim();
-                                  return studentHostel === filterHostel;
-                                }).length : (stats?.total || 0);
+                                total = stats?.total || 0;
                               }
 
                               const present = attendanceHostelFilter === 'all'
                                 ? presentStudentIds.length
                                 : (() => {
                                   const normalizedKey = getHostelCategory(attendanceHostelFilter) || attendanceHostelFilter;
-                                  const entry = Object.entries(attendanceSummary).find(
-                                    ([k]) => k.toLowerCase() === normalizedKey.toLowerCase()
-                                  );
+                                  const entry = Object.entries(attendanceSummary).find(([k]) => k.toLowerCase() === normalizedKey.toLowerCase());
                                   return entry ? entry[1] : (attendanceSummary[attendanceHostelFilter] || 0);
                                 })();
 
@@ -3733,6 +3728,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             })()}%
                           </p>
                         </div>
+
                       </div>
 
                       <div className="bg-blue-50/50 p-2 rounded-lg text-center mb-2 border border-blue-100">

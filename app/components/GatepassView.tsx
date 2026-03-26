@@ -44,7 +44,8 @@ function QRCodeCanvas({ data, size = 550 }: { data: string; size?: number }) {
     return (
         <canvas
             ref={canvasRef}
-            className="w-full h-full object-contain rounded-2xl border-[3px] border-[#00ff884d] shadow-[0_0_20px_rgba(0,255,136,0.1)]"
+            style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', display: 'block' }}
+            className="rounded-2xl border-[3px] border-[#00ff884d] shadow-[0_0_20px_rgba(0,255,136,0.1)]"
         />
     );
 }
@@ -692,9 +693,9 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
     };
 
     return (
-        <div className="flex flex-col md:flex-row w-screen min-h-screen md:h-screen bg-[#0a0a1a] font-sans text-white overflow-y-auto scrollbar-thin scrollbar-thumb-blue-500/20 scrollbar-track-transparent">
+        <div className="flex flex-col md:flex-row w-screen min-h-screen md:h-screen bg-[#0a0a1a] font-sans text-white overflow-x-hidden overflow-y-auto scrollbar-thin scrollbar-thumb-blue-500/20 scrollbar-track-transparent">
             {/* =================== LEFT PANEL: QR CODE =================== */}
-            <div className="w-full md:w-[42%] flex flex-col items-center justify-center gap-6 p-6 md:p-6 bg-gradient-to-b from-[#0a0a1a] via-[#0d1420] to-[#0a0a1a] border-b md:border-b-0 md:border-r border-[#00ff881a] relative shrink-0 transition-all duration-300 overflow-visible">
+            <div className="w-full md:w-[42%] flex flex-col items-center justify-center gap-6 p-6 md:p-6 bg-gradient-to-b from-[#0a0a1a] via-[#0d1420] to-[#0a0a1a] border-b md:border-b-0 md:border-r border-[#00ff881a] relative shrink-0 transition-all duration-300 overflow-hidden">
 
                 {/* ── TOP ROW: Logo left + Instructions right ── */}
                 <div className="flex items-start justify-between w-full mb-2">
@@ -775,13 +776,15 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                 </div>
 
                 {/* QR Code */}
-                <div className="flex-1 flex flex-col items-center justify-center w-full py-4 min-h-0">
-                    <div className={`p-3 bg-white rounded-[24px] md:rounded-[28px] border-[6px] md:border-[8px] border-[#00ff88] shadow-[0_0_60px_rgba(0,255,136,0.15)] md:shadow-[0_0_100px_rgba(0,255,136,0.25)] relative flex items-center justify-center w-full transition-all duration-500 ${
-                        isFullscreen 
-                        ? "max-w-[min(75vw,65vh,580px)] md:max-w-[min(42vw,70vh,580px)]" 
-                        : "max-w-[min(65vw,45vh,350px)] md:max-w-[min(32vw,58vh,430px)]"
-                    }`}
-                        style={{ aspectRatio: '1/1' }}>
+                <div className="flex-1 flex flex-col items-center justify-center w-full py-2 md:py-4 min-h-0">
+                    <div
+                        className={`p-3 bg-white rounded-[24px] md:rounded-[28px] border-[6px] md:border-[8px] border-[#00ff88] shadow-[0_0_60px_rgba(0,255,136,0.15)] md:shadow-[0_0_100px_rgba(0,255,136,0.25)] flex items-center justify-center overflow-hidden transition-all duration-500 ${
+                            isFullscreen
+                                ? 'w-[min(75vw,65vh,580px)] md:w-[min(42vw,70vh,580px)]'
+                                : 'w-[min(82vw,55vh,380px)] md:w-[min(32vw,58vh,430px)]'
+                        }`}
+                        style={{ aspectRatio: '1/1' }}
+                    >
                         {qrData ? (
                             <QRCodeCanvas data={qrData} size={isFullscreen ? 580 : 450} />
                         ) : (

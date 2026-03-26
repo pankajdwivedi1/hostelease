@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
 
         // ⚡ MAJOR OPTIMIZATION: Consolidate 20+ count queries into 1 single fetch
         const [studentData, pendingCountResult] = await Promise.all([
-            db.students.list({}, { select: 'hostel_name,student_status' }),
+            db.students.list({}, { select: '_id,hostel_name,student_status' }),
             db.permissions.count({ status: 'pending' })
         ]);
 
@@ -125,6 +125,10 @@ export async function GET(request: NextRequest) {
                 const category = getHostelCategory(s.hostelName);
                 return authorizedHostels.includes(category);
             });
+
+            // ⚡ FILTER PRESENT IDs: Only include IDs belonging to these authorized students
+            const authorizedIds = new Set(studentList.map(s => String(s.id || s._id)));
+            presentStudentIds = presentStudentIds.filter(id => authorizedIds.has(String(id)));
         }
 
         // Global Stats (Now filtered for Wardens if applicable)
@@ -143,6 +147,7 @@ export async function GET(request: NextRequest) {
         activeHostels.forEach(h => {
             hostelStats[h] = { total: 0, in: 0, out: 0 };
         });
+
 
         // ⚡ SINGLE PASS: Aggregate counts for each hostel in memory
         studentList.forEach((s: any) => {
