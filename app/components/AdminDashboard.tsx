@@ -9,6 +9,7 @@ import { signOut } from "firebase/auth";
 import Barcode from "react-barcode";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
+import { showToast } from "@/lib/toast";
 
 const LocationPickerMap = dynamic(() => import("./LocationPickerMap"), {
   ssr: false,
@@ -2539,12 +2540,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         });
       }
 
-      alert("Device registration reset successfully!");
+      showToast("Device registration reset successfully!", "success");
       // 🔄 BACKGROUND REFRESH: Let it happen in the background
       fetchStudents(true);
     } catch (error: any) {
       console.error("Error resetting device ID:", error);
-      alert(`Failed to reset device ID: ${error.message || "Unknown error"}. Please try again.`);
+      showToast(`Failed to reset device ID: ${error.message || "Unknown error"}`, "error");
     }
   };
 

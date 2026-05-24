@@ -97,9 +97,26 @@ export async function PATCH(
 
     // 🔓 DEVICE RESET: If admin resets a student's device, we MUST also clear the
     // browser-side 'trusted_device_owner' cookie so the student can re-register freely.
-    // Without this, the 10-year cookie would still block re-registration even though
-    // the DB was wiped clean. We delete it by setting maxAge to 0 (immediate expiry).
     if (body.action === "resetDevice") {
+      const student = await db.students.getById(studentId);
+      const updateData = {
+        deviceId: null,
+        webAuthnCredentials: [], // Also clear biometric if used
+        isProfileLocked: false,  // Unlock profile so they can register new device
+        deviceResetCount: (student?.deviceResetCount || 0) + 1,
+        deviceHistory: [
+          ...((student as any)?.deviceHistory || []),
+          { 
+            deviceId: student?.deviceId || "none", 
+            action: "reset_by_admin", 
+            timestamp: new Date().toISOString() 
+          }
+        ]
+      };
+      
+      await db.students.update(studentId, updateData);
+      console.log(`🔓 [DEVICE_RESET] Cleared device mapping for student: ${studentId}`);
+
       response.cookies.set('trusted_device_owner', '', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
@@ -107,7 +124,6 @@ export async function PATCH(
         maxAge: 0, // Immediately expire the cookie → browser deletes it
         path: '/'
       });
-      console.log(`🔓 Cleared trusted_device_owner cookie for student: ${studentId}`);
     }
 
     return response;

@@ -152,6 +152,95 @@ export async function GET(request: NextRequest) {
     const firebaseUID = searchParams.get("firebaseUID");
     const supabaseId = searchParams.get("supabaseId");
     const email = searchParams.get("email");
+    const parentPhone = searchParams.get("parentPhone");
+
+    if (parentPhone) {
+      let cleaned = parentPhone.replace(/\D/g, "");
+      if (cleaned.length === 12 && cleaned.startsWith("91")) {
+        cleaned = cleaned.substring(2);
+      }
+      
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        return NextResponse.json({ error: "Tenant context not found" }, { status: 400 });
+      }
+
+      const { getSupabaseAdmin } = await import("@/lib/supabaseServer");
+      const supabase = getSupabaseAdmin();
+      
+      // Exclude heavy columns like face_descriptor (which contains large float arrays)
+      // and device_history/web_authn_credentials to minimize DB latency & bandwidth.
+      const selectFields = "_id, firebase_uid, name, email, phone_number, hostel_name, room_number, dob, category, profile_picture, student_status, father_name, father_number, mother_name, mother_number, permanent_address, home_state, erp_id, joining_date, branch, college_name, year, semester, section, floor_number, local_guardian_address, local_guardian_phone_number, device_id, registration_id, is_profile_locked, attendance_mode, device_reset_count, created_at, updated_at, dynamic_fields, tenant_id, supabase_id, auth_provider";
+
+      // ⚡ FAST QUERY: Search directly for matching father_number, mother_number, or local_guardian_phone_number
+      const variations = [cleaned, `+91${cleaned}`, `91${cleaned}`];
+      const filters: string[] = [];
+      variations.forEach(v => {
+        filters.push(`father_number.eq."${v}"`);
+        filters.push(`mother_number.eq."${v}"`);
+        filters.push(`local_guardian_phone_number.eq."${v}"`);
+      });
+      const filterString = filters.join(",");
+
+      let { data: students, error } = await supabase
+        .from("students")
+        .select(selectFields)
+        .eq("tenant_id", tenantId)
+        .or(filterString);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      // ⚡ FALLBACK: If fast query returned no results, fall back to slow scan but ONLY fetch key identifiers.
+      // This prevents downloading massive face descriptors for all students in the tenant context.
+      if (!students || students.length === 0) {
+        console.log(`[Students API] Fast query missed. Running fallback lightweight scan for parent phone: ${cleaned}`);
+        const { data: idMapping, error: allErr } = await supabase
+          .from("students")
+          .select("_id, father_number, mother_number, local_guardian_phone_number")
+          .eq("tenant_id", tenantId);
+        
+        if (!allErr && idMapping) {
+          const cleanDbPhone = (num: string) => num ? num.replace(/\D/g, "").replace(/^91/, "") : "";
+          const matchedMap = idMapping.find(s => {
+            const fatherClean = cleanDbPhone(s.father_number);
+            const motherClean = cleanDbPhone(s.mother_number);
+            const lgClean = cleanDbPhone(s.local_guardian_phone_number);
+            return fatherClean === cleaned || motherClean === cleaned || lgClean === cleaned;
+          });
+
+          if (matchedMap) {
+            // Found a match! Do a fast single-row primary key lookup to get the student's details
+            const { data: matchedStudentData, error: lookupErr } = await supabase
+              .from("students")
+              .select(selectFields)
+              .eq("_id", matchedMap._id)
+              .maybeSingle();
+
+            if (!lookupErr && matchedStudentData) {
+              students = [matchedStudentData];
+            }
+          }
+        }
+      }
+
+      const cleanDbPhone = (num: string) => num ? num.replace(/\D/g, "").replace(/^91/, "") : "";
+      const matched = students?.find(s => {
+        const fatherClean = cleanDbPhone(s.father_number);
+        const motherClean = cleanDbPhone(s.mother_number);
+        const lgClean = cleanDbPhone(s.local_guardian_phone_number);
+        return fatherClean === cleaned || motherClean === cleaned || lgClean === cleaned;
+      });
+
+      if (!matched) {
+        return NextResponse.json({ error: "Student not found for this parent number" }, { status: 404 });
+      }
+
+      const student = db.mapStudentToCamelCase(matched);
+      const tenant = student?.tenantId ? await getTenantById(student.tenantId) : null;
+      return NextResponse.json({ student, tenantSlug: tenant?.slug }, { status: 200 });
+    }
 
     if (firebaseUID) {
       const student = await db.students.findOne({ firebaseUID });

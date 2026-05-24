@@ -29,26 +29,33 @@ export async function GET(request: NextRequest) {
         const { data: tenants, error: tenantError } = await query.order('created_at', { ascending: false });
         if (tenantError) throw tenantError;
 
-        const tenantIds = tenants?.map(t => t.id) || [];
+        const tenantIds = tenants?.map((t: any) => t.id) || [];
 
         // 2. ULTRA-OPTIMIZED COUNT FETCH: Get counts per tenant without downloading records
         // Using Promise.all to fetch counts in parallel for best speed
-        const tenantStats = await Promise.all(tenantIds.map(async (id) => {
-            const [studentRes, trafficRes] = await Promise.all([
+        const tenantStats = await Promise.all(tenantIds.map(async (id: any) => {
+            const [studentRes, trafficRes, settingsRes] = await Promise.all([
                 supabase.from('students').select('*', { count: 'exact', head: true }).eq('tenant_id', id),
-                supabase.from('attendance').select('*', { count: 'exact', head: true }).eq('tenant_id', id).gte('timestamp', tenMinutesAgo)
+                supabase.from('attendance').select('*', { count: 'exact', head: true }).eq('tenant_id', id).gte('timestamp', tenMinutesAgo),
+                supabase.from('admin_settings').select('university_bank_details').eq('tenant_id', id).maybeSingle()
             ]);
+            
+            const bankDetails = settingsRes.data?.university_bank_details || {};
+            
             return {
                 id,
                 studentCount: studentRes.count || 0,
-                liveTraffic: trafficRes.count || 0
+                liveTraffic: trafficRes.count || 0,
+                renewalUtr: bankDetails.renewalUtr || null,
+                renewalStatus: bankDetails.renewalStatus || null,
+                renewalSubmittedAt: bankDetails.renewalSubmittedAt || null
             };
         }));
 
-        const statsMap = new Map(tenantStats.map(s => [s.id, s]));
+        const statsMap = new Map<string, any>(tenantStats.map((s: any) => [s.id, s]));
 
-        const formattedTenants = tenants?.map(t => {
-            const stats = statsMap.get(t.id);
+        const formattedTenants = tenants?.map((t: any) => {
+            const stats = statsMap.get(t.id) as any;
             return {
                 _id: t.id,
                 name: t.name,
@@ -63,6 +70,9 @@ export async function GET(request: NextRequest) {
                 createdAt: t.created_at,
                 studentCount: stats?.studentCount || 0,
                 liveTraffic: stats?.liveTraffic || 0,
+                renewalUtr: stats?.renewalUtr || null,
+                renewalStatus: stats?.renewalStatus || null,
+                renewalSubmittedAt: stats?.renewalSubmittedAt || null
             };
         }) || [];
 
@@ -77,9 +87,9 @@ export async function GET(request: NextRequest) {
             globalStats: {
                 totalActiveTraffic: globalPulse || 0,
                 revenueSummary: {
-                    active: tenants?.filter(t => t.subscription_status === 'active').length || 0,
-                    trial: tenants?.filter(t => t.subscription_status === 'trial').length || 0,
-                    expired: tenants?.filter(t => t.subscription_status === 'expired').length || 0
+                    active: tenants?.filter((t: any) => t.subscription_status === 'active').length || 0,
+                    trial: tenants?.filter((t: any) => t.subscription_status === 'trial').length || 0,
+                    expired: tenants?.filter((t: any) => t.subscription_status === 'expired').length || 0
                 }
             }
         });
@@ -171,7 +181,9 @@ export async function PATCH(request: NextRequest) {
         const updateData: any = {};
         if (typeof is_active !== 'undefined') updateData.is_active = is_active;
         if (subscriptionStatus) updateData.subscription_status = subscriptionStatus;
-        if (subscriptionEndDate) updateData.subscription_end_date = new Date(subscriptionEndDate).toISOString();
+        if (typeof subscriptionEndDate !== 'undefined') {
+            updateData.subscription_end_date = subscriptionEndDate ? new Date(subscriptionEndDate).toISOString() : null;
+        }
 
         const { data: tenant, error } = await supabase
             .from('tenants')
@@ -182,6 +194,27 @@ export async function PATCH(request: NextRequest) {
 
         if (error || !tenant) return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
 
+        // If subscription is being updated, auto-clear renewal request details from settings
+        if (subscriptionStatus || subscriptionEndDate) {
+            const { data: settings } = await supabase
+                .from('admin_settings')
+                .select('_id, university_bank_details')
+                .eq('tenant_id', id)
+                .maybeSingle();
+                
+            if (settings) {
+                const bankDetails = settings.university_bank_details || {};
+                delete bankDetails.renewalUtr;
+                delete bankDetails.renewalStatus;
+                delete bankDetails.renewalSubmittedAt;
+                
+                await supabase
+                    .from('admin_settings')
+                    .update({ university_bank_details: bankDetails })
+                    .eq('_id', settings._id);
+            }
+        }
+
         return NextResponse.json({
             success: true,
             tenant: {
@@ -189,7 +222,8 @@ export async function PATCH(request: NextRequest) {
                 name: tenant.name,
                 slug: tenant.slug,
                 isActive: tenant.is_active,
-                subscriptionStatus: tenant.subscription_status
+                subscriptionStatus: tenant.subscription_status,
+                subscriptionEndDate: tenant.subscription_end_date
             }
         });
     } catch (error: any) {
@@ -212,9 +246,13 @@ export async function DELETE(request: NextRequest) {
         
         if (purge) {
             console.log(`[SuperAdmin] PERMANENT PURGE for tenant: ${id}`);
-            // Manually delete dependents
+            // Manually delete dependents to avoid foreign key constraints
+            await supabase.from('gatepasses').delete().eq('tenant_id', id);
             await supabase.from('attendance').delete().eq('tenant_id', id);
             await supabase.from('students').delete().eq('tenant_id', id);
+            await supabase.from('hostels').delete().eq('tenant_id', id);
+            await supabase.from('warden_accounts').delete().eq('tenant_id', id);
+            await supabase.from('admin_settings').delete().eq('tenant_id', id);
             
             const { error } = await supabase.from('tenants').delete().eq('id', id);
             if (error) throw error;

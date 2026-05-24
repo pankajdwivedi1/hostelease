@@ -27,6 +27,12 @@ function LoginForm() {
   const [selectedHostelId, setSelectedHostelId] = useState("");
   const [isDeveloperSetup, setIsDeveloperSetup] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [showParentLogin, setShowParentLogin] = useState(false);
+  const [parentPhone, setParentPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [parentLoading, setParentLoading] = useState(false);
+  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
 
   // ⚡ INSTANT BRANDING SYNC: Initialize from URL or Local Storage to prevent flickering
   const [tenantName, setTenantName] = useState("Hostelease");
@@ -113,6 +119,79 @@ function LoginForm() {
       }
     } catch (e) {
       console.error("Setup check failed");
+    }
+  };
+  
+  const handleSendOtp = async () => {
+    if (!parentPhone || parentPhone.length !== 10) {
+      setError("Please enter a valid 10-digit mobile number");
+      return;
+    }
+
+    try {
+      setParentLoading(true);
+      setError("");
+
+      const response = await fetch("/api/parent/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: parentPhone }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send OTP");
+      }
+
+      setOtpSent(true);
+      
+      if (data.developmentOtp) {
+        console.log(`[Dev Auto-Fill] OTP received: ${data.developmentOtp}`);
+      }
+    } catch (err: any) {
+      console.error("Send OTP error:", err);
+      setError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setParentLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otp || otp.length !== 6) {
+      setError("Please enter the 6-digit OTP code");
+      return;
+    }
+
+    try {
+      setParentLoading(true);
+      setError("");
+
+      const response = await fetch("/api/parent/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: parentPhone, otp }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        let errorMessage = data.error || "Verification failed";
+        if (errorMessage.toLowerCase() === "invalid otp" || errorMessage.toLowerCase().includes("invalid otp")) {
+          const maskedPhone = parentPhone.length === 10 ? `${parentPhone.substring(0, 4)}XXXX${parentPhone.substring(8, 10)}` : parentPhone;
+          errorMessage = `Invalid OTP, please enter correct OTP received on your linked mobile number '${maskedPhone}'`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      localStorage.setItem("userType", "parent");
+      localStorage.setItem("parentPhone", parentPhone);
+      router.push("/");
+    } catch (err: any) {
+      console.error("Verify OTP error:", err);
+      setError(err.message || "Invalid OTP code. Please try again.");
+    } finally {
+      setParentLoading(false);
     }
   };
 
@@ -431,25 +510,162 @@ function LoginForm() {
                   )}
 
                   <div className="space-y-4 sm:space-y-6">
-                    {/* Student Login */}
-                    <button
-                      onClick={handleGoogleLogin}
-                      disabled={loading}
-                      className="group relative flex w-full items-center justify-center gap-3 sm:gap-4 overflow-hidden rounded-xl sm:rounded-2xl border border-slate-200 bg-white px-4 py-3.5 sm:py-4.5 text-xs sm:text-sm font-bold text-slate-900 transition-all hover:border-blue-200 hover:bg-slate-50 disabled:opacity-50 active:scale-[0.98]"
-                    >
-                      <svg className="h-5 w-5" viewBox="0 0 24 24">
-                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                      </svg>
-                      {loading ? (
-                        <span className="flex items-center gap-2">
-                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600/20 border-t-blue-600" />
-                          Connecting...
-                        </span>
-                      ) : "Continue as Student"}
-                    </button>
+                    {showParentLogin ? (
+                      <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                          <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
+                            👨‍👩‍👧 Parent OTP Portal
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowParentLogin(false);
+                              setError("");
+                            }}
+                            className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 transition-colors"
+                          >
+                            &larr; Back to Student
+                          </button>
+                        </div>
+
+                        {!otpSent ? (
+                          <div className="space-y-3">
+                            <label className="block text-[10px] font-black uppercase tracking-wider text-blue-600 text-center">
+                              Enter your Registered Mobile Number
+                            </label>
+                            <div className="relative">
+                              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 text-sm font-semibold pointer-events-none">
+                                +91
+                              </span>
+                              <input
+                                type="tel"
+                                maxLength={10}
+                                value={parentPhone}
+                                onChange={(e) => {
+                                  setParentPhone(e.target.value.replace(/\D/g, ""));
+                                  setError("");
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleSendOtp();
+                                }}
+                                className="w-full rounded-xl border border-slate-200 bg-white pl-12 pr-4 py-3 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                placeholder="9876543210"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleSendOtp}
+                              disabled={parentLoading}
+                              className="w-full py-3.5 sm:py-4 rounded-xl bg-blue-600 font-bold text-xs uppercase tracking-widest text-white shadow-lg shadow-blue-100 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50"
+                            >
+                              {parentLoading ? "Sending OTP..." : "Get OTP"}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                Enter 6-digit OTP code
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOtpSent(false);
+                                  setOtp("");
+                                  setError("");
+                                }}
+                                className="text-[9px] font-bold text-slate-400 hover:text-slate-600 transition-colors uppercase tracking-wider"
+                              >
+                                Change Phone
+                              </button>
+                            </div>
+                            <input
+                              type="text"
+                              maxLength={6}
+                              value={otp}
+                              onChange={(e) => {
+                                setOtp(e.target.value.replace(/\D/g, ""));
+                                setError("");
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleVerifyOtp();
+                              }}
+                              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-center text-lg font-black tracking-[0.5em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:font-medium"
+                              placeholder="······"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleVerifyOtp}
+                              disabled={parentLoading}
+                              className="w-full py-3.5 sm:py-4 rounded-xl bg-slate-900 font-bold text-xs uppercase tracking-widest text-white shadow-lg hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-50"
+                            >
+                              {parentLoading ? "Verifying..." : "Verify & Login"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+                            className="flex w-full items-center justify-between gap-3 sm:gap-4 rounded-xl sm:rounded-2xl border border-slate-200 bg-white px-4 py-3.5 sm:py-4.5 text-xs sm:text-sm font-bold text-slate-900 hover:border-blue-200 transition-all active:scale-[0.98]"
+                          >
+                            <span className="flex items-center gap-3">
+                              <svg className="h-5 w-5 flex-shrink-0" viewBox="0 0 24 24">
+                                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                              </svg>
+                              Continue as Student
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md">Role select</span>
+                              <svg className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${isRoleDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </button>
+
+                          {isRoleDropdownOpen && (
+                            <div className="absolute right-0 left-0 mt-2 z-50 rounded-xl border border-slate-150 bg-white/95 backdrop-blur-md p-1.5 shadow-[0_12px_24px_-8px_rgba(0,0,0,0.15)] transition-all">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsRoleDropdownOpen(false);
+                                  handleGoogleLogin();
+                                }}
+                                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-xs sm:text-sm font-bold text-slate-800 hover:bg-slate-50 transition-colors text-left"
+                              >
+                                <svg className="h-4 w-4" viewBox="0 0 24 24">
+                                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                                </svg>
+                                Continue as Student
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsRoleDropdownOpen(false);
+                                  setShowParentLogin(true);
+                                  setOtpSent(false);
+                                  setOtp("");
+                                  setParentPhone("");
+                                }}
+                                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-xs sm:text-sm font-bold text-slate-800 hover:bg-slate-50 transition-colors text-left border-t border-slate-50"
+                              >
+                                <span className="text-base">👨‍👩‍👧</span>
+                                Continue as Parent
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     <div className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "py-1 sm:py-2" : "py-2"} relative flex items-center transition-all`}>
                       <div className="grow border-t border-slate-100"></div>

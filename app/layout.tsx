@@ -4,6 +4,7 @@ import "./globals.css";
 import InstallPWA from "./components/InstallPWA";
 import TenantGuard from "./components/TenantGuard";
 import { AuthProvider } from "./components/AuthProvider";
+import AppBootstrap from "./components/AppBootstrap";
 
 const lora = Lora({
   subsets: ["latin"],
@@ -51,6 +52,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${lora.variable} antialiased`} suppressHydrationWarning>
         <InstallPWA />
+        <AppBootstrap />
         <AuthProvider>
           <TenantGuard>
             {children}

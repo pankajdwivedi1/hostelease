@@ -1,14 +1,15 @@
 "use client";
 
-import { Building2, ShieldCheck, Zap, Users, Globe, ArrowRight, CheckCircle2, Layout, Lock } from "lucide-react";
+import { Building2, ShieldCheck, Zap, Users, Globe, ArrowRight, CheckCircle2, Layout, Lock, Phone, Mail, Building, CheckCircle, Server } from "lucide-react";
 import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function LandingPage() {
-    const [requestMode, setRequestMode] = useState(false);
+    const router = useRouter();
     const [showDemo, setShowDemo] = useState(false);
     const [demoStep, setDemoStep] = useState(0);
     const [isAutoPlaying, setIsAutoPlaying] = useState(false);
-    const [email, setEmail] = useState("");
 
     const demoSlides = [
         {
@@ -96,7 +97,7 @@ export default function LandingPage() {
                         Login
                     </a>
                     <button
-                        onClick={() => setRequestMode(true)}
+                        onClick={() => router.push("/register")}
                         className="bg-white text-black px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-gray-200 transition-all active:scale-95 whitespace-nowrap"
                     >
                         Get Access
@@ -126,7 +127,7 @@ export default function LandingPage() {
 
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
                         <button
-                            onClick={() => setRequestMode(true)}
+                            onClick={() => router.push("/register")}
                             className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest text-sm shadow-2xl shadow-blue-500/20 transition-all active:scale-95 flex items-center justify-center gap-3"
                         >
                             Request Access <ArrowRight className="w-5 h-5" />
@@ -241,7 +242,7 @@ export default function LandingPage() {
                     <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-tighter">Ready to digitize your campus?</h3>
                     <p className="text-gray-500 text-xs sm:text-sm font-medium">Join forward-thinking universities around the globe. Get started with Hostelease today.</p>
                     <button
-                        onClick={() => setRequestMode(true)}
+                        onClick={() => router.push("/register")}
                         className="bg-blue-600 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-105 transition-all"
                     >
                         Schedule a Demo
@@ -273,108 +274,6 @@ export default function LandingPage() {
                 </div>
             </footer>
 
-            {/* Registration Modal */}
-            {requestMode && (
-                <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-                    <div className="bg-[#050510] border border-white/10 w-full max-w-xl rounded-[24px] sm:rounded-[40px] overflow-hidden animate-in zoom-in duration-300 my-auto">
-                        <div className="p-6 sm:p-12 space-y-6 sm:space-y-8">
-                            <div className="text-center space-y-2">
-                                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-white rounded-2xl flex items-center justify-center border border-blue-500/30 mx-auto mb-4 overflow-hidden shadow-lg shadow-blue-500/20">
-                                    <img src="/uvw_logo.jpg" alt="UVW Logo" className="w-full h-full object-cover" />
-                                </div>
-                                <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-tighter text-white">Register Institution</h3>
-                                <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest">Provision your own digital campus in seconds</p>
-                            </div>
-
-                            <form onSubmit={async (e) => {
-                                e.preventDefault();
-                                const target = e.target as any;
-                                const formData = {
-                                    name: target.name.value,
-                                    slug: target.slug.value.toLowerCase().replace(/\s+/g, '-'),
-                                    adminEmail: target.adminEmail.value,
-                                    subscriptionStatus: 'trial',
-                                    primaryColor: '#3b82f6'
-                                };
-
-                                try {
-                                    const res = await fetch('/api/super-admin/tenants', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify(formData)
-                                    });
-                                    const data = await res.json();
-                                    if (data.success) {
-                                        alert(`🚀 SUCCESS! ${formData.name} has been provisioned.\n\nYour portal is ready at: ${formData.slug}.hostelease.com`);
-                                        setRequestMode(false);
-                                        window.location.href = `http://localhost:3000/login?tenant=${formData.slug}`;
-                                    } else {
-                                        alert(data.error || "Registration failed");
-                                    }
-                                } catch (err: any) {
-                                    console.error("Registration UI Error:", err);
-                                    alert("Registration Error: " + (err.message || "Network connection failed"));
-                                }
-                            }} className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1">University Name</label>
-                                        <input
-                                            name="name"
-                                            required
-                                            placeholder="Oxford University"
-                                            className="w-full bg-white/5 border border-white/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/40 outline-none placeholder:text-gray-700"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1">Subdomain Slug</label>
-                                        <div className="relative">
-                                            <input
-                                                name="slug"
-                                                required
-                                                placeholder="oxford"
-                                                className="w-full bg-white/5 border border-white/10 p-3 sm:p-4 pr-32 rounded-xl sm:rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/40 outline-none placeholder:text-gray-700"
-                                            />
-                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] sm:text-[10px] font-black text-gray-600 uppercase">.hostelease.com</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1">Administrator Email</label>
-                                    <input
-                                        name="adminEmail"
-                                        type="email"
-                                        required
-                                        placeholder="admin@university.edu"
-                                        className="w-full bg-white/5 border border-white/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/40 outline-none placeholder:text-gray-700"
-                                    />
-                                </div>
-
-                                <div className="pt-2 sm:pt-4 space-y-4">
-                                    <button
-                                        type="submit"
-                                        className="w-full bg-blue-600 text-white py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-blue-700 transition-all active:scale-95 shadow-xl shadow-blue-500/20"
-                                    >
-                                        Launch My Campus
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setRequestMode(false)}
-                                        className="w-full text-gray-500 py-1 sm:py-2 font-black uppercase tracking-widest text-[9px] sm:text-[10px] hover:text-white"
-                                    >
-                                        Back to Overview
-                                    </button>
-                                </div>
-                            </form>
-
-                            <p className="text-[8px] sm:text-[9px] text-gray-600 text-center leading-relaxed font-medium">
-                                By launching your campus, you agree to our <span className="text-gray-400 underline">Terms of Infrastructure Service</span>. <br />
-                                Automated provisioning may take up to 30 seconds for DNS propagation.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
             {/* Demo Walkthrough Modal */}
             {showDemo && (
                 <div className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4">

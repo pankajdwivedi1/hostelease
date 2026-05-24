@@ -54,12 +54,15 @@ export async function GET(request: NextRequest) {
         if (startDate) filters.startDate = startDate;
         if (endDate) filters.endDate = endDate;
 
+        const populateParam = searchParams.get("populate");
+        const populate = populateParam === "false" ? false : true;
+
         // ⚡ ENSURE COUNTS ARE INDEPENDENT: Remove 'type' from stats filters so counts stay global for the search
         const statsFilters = { ...filters };
         delete statsFilters.type;
 
         const [historyRes, leaveCountRes, passCountRes] = await Promise.all([
-            db.gatePasses.list(filters, { page, limit, populate: true }),
+            db.gatePasses.list(filters, { page, limit, populate }),
             db.gatePasses.list({ ...statsFilters, type: "leave" }, { countOnly: true }),
             db.gatePasses.list({ ...statsFilters, type: "outing" }, { countOnly: true })
         ]);

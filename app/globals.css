@@ -202,3 +202,45 @@ input[type="radio"] {
 .animate-scan-line {
   animation: scan-line 2.5s ease-in-out infinite;
 }
+
+/* --- BLUE RUNNING BORDER BEAM ANIMATION --- */
+@keyframes border-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.glowing-border-blue {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  z-index: 0;
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+}
+
+.glowing-border-blue::before {
+  content: '';
+  position: absolute;
+  z-index: -2;
+  left: -50%;
+  top: -50%;
+  width: 200%;
+  height: 200%;
+  background-image: conic-gradient(from 0deg, #00f2fe, #4facfe, transparent 50%, transparent);
+  animation: border-rotate 1.5s linear infinite;
+}
+
+.glowing-border-blue::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 3px;
+  top: 3px;
+  width: calc(100% - 6px);
+  height: calc(100% - 6px);
+  background: #fffbeb; /* matches Tailwind bg-amber-50 */
+  border-radius: 9px;
+}

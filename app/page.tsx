@@ -116,6 +116,29 @@ export default function Dashboard() {
         return () => unsubscribe();
       }
 
+      if (storedUserType === "parent") {
+        const storedParentPhone = localStorage.getItem("parentPhone");
+        if (storedParentPhone) {
+          try {
+            const response = await fetch(`/api/students?parentPhone=${encodeURIComponent(storedParentPhone)}&minimal=true${activeTenant ? `&tenant=${activeTenant}` : ''}`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data.student) {
+                setStudentData(data.student);
+                setUserType("parent");
+                setLoading(false);
+                return;
+              }
+            }
+          } catch (e) {
+            console.error("Parent student fetch failed", e);
+          }
+        }
+        router.push("/login");
+        setLoading(false);
+        return;
+      }
+
       if (storedUserType === "admin") { setUserType("admin"); setLoading(false); return; }
       if (storedUserType === "warden") { setUserType("warden"); setLoading(false); return; }
       if (storedUserType === "superadmin") { setUserType("superadmin"); setLoading(false); return; }
@@ -149,6 +172,8 @@ export default function Dashboard() {
     <>
       {userType === "student" ? (
         <StudentDashboard initialData={studentData} />
+      ) : userType === "parent" ? (
+        <StudentDashboard initialData={studentData} isParentView={true} />
       ) : userType === "warden" ? (
         <AdminDashboard title="Campus Dashboard" />
       ) : userType === "superadmin" ? (

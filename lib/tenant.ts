@@ -105,7 +105,8 @@ export const getTenantFromRequest = cache(async () => {
         subscriptionStatus: tenant.subscription_status,
         subscriptionEndDate: tenant.subscription_end_date,
         isActive: tenant.is_active,
-        adminEmail: tenant.admin_email
+        adminEmail: tenant.admin_email,
+        createdAt: tenant.created_at
     };
 
     // Store in cache
@@ -155,6 +156,20 @@ export async function getSubscriptionStatus() {
     const tenant = await getTenantFromRequest();
     if (!tenant) return null;
 
+    const supabase = getSupabaseAdmin();
+    // ⚡ ALWAYS fetch fresh subscription status to bypass 1-minute tenantCache
+    const { data: freshTenant } = await supabase
+        .from('tenants')
+        .select('subscription_status, subscription_end_date, is_active')
+        .eq('id', tenant._id)
+        .maybeSingle();
+
+    if (freshTenant) {
+        tenant.subscriptionStatus = freshTenant.subscription_status;
+        tenant.subscriptionEndDate = freshTenant.subscription_end_date;
+        tenant.isActive = freshTenant.is_active;
+    }
+
     const now = new Date();
     const endDate = tenant.subscriptionEndDate ? new Date(tenant.subscriptionEndDate) : null;
 
@@ -164,13 +179,30 @@ export async function getSubscriptionStatus() {
         daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     }
 
+    const { data: settings } = await supabase
+        .from('admin_settings')
+        .select('university_bank_details')
+        .eq('tenant_id', tenant._id)
+        .maybeSingle();
+
+    const bankDetails = settings?.university_bank_details || {};
+    const renewalUtr = bankDetails.renewalUtr || null;
+    const renewalStatus = bankDetails.renewalStatus || null;
+    const renewalSubmittedAt = bankDetails.renewalSubmittedAt || null;
+
     return {
         status: tenant.subscriptionStatus,
         isActive: tenant.isActive,
         endDate: endDate,
+        startDate: tenant.createdAt,
+        name: tenant.name,
+        tenantId: tenant._id,
         daysRemaining: daysRemaining,
         isWarning: daysRemaining !== null && daysRemaining <= 7 && daysRemaining > 0,
-        isExpired: (endDate && now > endDate) || tenant.subscriptionStatus === 'expired' || !tenant.isActive
+        isExpired: (endDate && now > endDate) || tenant.subscriptionStatus === 'expired' || !tenant.isActive,
+        renewalUtr,
+        renewalStatus,
+        renewalSubmittedAt
     };
 }
 /**

@@ -72,7 +72,7 @@ interface DBNotification {
     createdAt: string;
 }
 
-export default function StudentDashboard({ initialData }: { initialData?: any }) {
+export default function StudentDashboard({ initialData, isParentView = false }: { initialData?: any; isParentView?: boolean }) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [showRequestForm, setShowRequestForm] = useState(false);
@@ -86,6 +86,14 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
     const [requestType, setRequestType] = useState<"outing" | "leave">("outing");
     const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(initialData || null);
     const [permissions, setPermissions] = useState<Permission[]>([]);
+    
+    // Outing Calendar states
+    const [gatePasses, setGatePasses] = useState<any[]>([]);
+    const [loadingGatePasses, setLoadingGatePasses] = useState(false);
+    const [activeHistoryTab, setActiveHistoryTab] = useState<'calendar' | 'permissions'>('calendar');
+    const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
+    const [selectedCalendarDay, setSelectedCalendarDay] = useState<Date | null>(new Date());
+
     const [loading, setLoading] = useState(!initialData);
     const [submitting, setSubmitting] = useState(false);
     const [checkingIn, setCheckingIn] = useState(false);
@@ -135,6 +143,120 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         const tenant = searchParams.get('tenant');
         if (!tenant) return "";
         return includeQuestionMark ? `?tenant=${tenant}` : `&tenant=${tenant}`;
+    };
+
+    // Outing Calendar Helpers and Fetch Logic
+    const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ];
+
+    const fetchGatePassHistory = async () => {
+        const studentId = studentProfile?._id;
+        if (!studentId) return;
+        setLoadingGatePasses(true);
+        try {
+            const res = await fetch(`/api/getpass/history?studentId=${studentId}&limit=1000&populate=false${getTenantParam(false)}`);
+            const data = await res.json();
+            if (data.success && data.records) {
+                setGatePasses(data.records);
+            }
+        } catch (error) {
+            console.error("Error fetching gatepass history:", error);
+        } finally {
+            setLoadingGatePasses(false);
+        }
+    };
+
+    useEffect(() => {
+        if (showPermissionsHistory || studentProfile?._id) {
+            fetchGatePassHistory();
+        }
+    }, [showPermissionsHistory, studentProfile?._id]);
+
+    const getDayOutingStatus = (date: Date) => {
+        const dayStart = new Date(date);
+        dayStart.setHours(0, 0, 0, 0);
+        
+        const dayEnd = new Date(date);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        let isWholeDayOut = false;
+        let isPartialOut = false;
+        let hasOverlappingPass = false;
+
+        for (const pass of gatePasses) {
+            const outTime = new Date(pass.checkOutTime);
+            const inTime = pass.checkInTime ? new Date(pass.checkInTime) : new Date();
+
+            const overlaps = outTime <= dayEnd && inTime >= dayStart;
+            
+            if (overlaps) {
+                hasOverlappingPass = true;
+                if (outTime <= dayStart && inTime >= dayEnd) {
+                    isWholeDayOut = true;
+                } else {
+                    isPartialOut = true;
+                }
+            }
+        }
+
+        if (isWholeDayOut) return 'red';
+        if (hasOverlappingPass) return 'orange';
+        return 'green';
+    };
+
+    const getOverlappingGatePasses = (date: Date) => {
+        const dayStart = new Date(date);
+        dayStart.setHours(0, 0, 0, 0);
+        
+        const dayEnd = new Date(date);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        return gatePasses.filter(pass => {
+            const outTime = new Date(pass.checkOutTime);
+            const inTime = pass.checkInTime ? new Date(pass.checkInTime) : new Date();
+            return outTime <= dayEnd && inTime >= dayStart;
+        });
+    };
+
+    const getDaysInMonth = (date: Date) => {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        
+        const firstDayOfMonth = new Date(year, month, 1);
+        const lastDayOfMonth = new Date(year, month + 1, 0);
+        
+        const daysInMonth = lastDayOfMonth.getDate();
+        const startDayOfWeek = firstDayOfMonth.getDay();
+        
+        const calendarCells: { date: Date | null; isCurrentMonth: boolean }[] = [];
+        
+        const prevMonthLastDay = new Date(year, month, 0).getDate();
+        for (let i = startDayOfWeek - 1; i >= 0; i--) {
+            calendarCells.push({
+                date: new Date(year, month - 1, prevMonthLastDay - i),
+                isCurrentMonth: false
+            });
+        }
+        
+        for (let i = 1; i <= daysInMonth; i++) {
+            calendarCells.push({
+                date: new Date(year, month, i),
+                isCurrentMonth: true
+            });
+        }
+        
+        const totalCells = 42;
+        const nextMonthPadding = totalCells - calendarCells.length;
+        for (let i = 1; i <= nextMonthPadding; i++) {
+            calendarCells.push({
+                date: new Date(year, month + 1, i),
+                isCurrentMonth: false
+            });
+        }
+        
+        return calendarCells;
     };
 
     // Face Matching State
@@ -504,6 +626,11 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
             // ⚡ FIELD ENFORCEMENT: Check for admin-enforced missing fields (replaces old hardcoded check)
             const checkFieldEnforcement = async () => {
+                if (isParentView) {
+                    setShowFieldEnforcementModal(false);
+                    setShowMandatoryUpdate(false);
+                    return;
+                }
                 try {
                     const res = await fetch(`/api/student/profile-blockers?studentId=${studentProfile._id}${getTenantParam(false)}`, { cache: 'no-store' });
                     if (!res.ok) throw new Error('Failed to check profile blockers');
@@ -553,7 +680,12 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                     }
                 }
             };
-            checkFieldEnforcement();
+            if (isParentView) {
+                setShowFieldEnforcementModal(false);
+                setShowMandatoryUpdate(false);
+            } else {
+                checkFieldEnforcement();
+            }
 
             // Check attendance status
             const checkAttendance = async () => {
@@ -827,6 +959,78 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         };
 
         const initAuth = async () => {
+            const storedUserType = localStorage.getItem("userType");
+            if (storedUserType === "parent" || isParentView) {
+                const storedParentPhone = localStorage.getItem("parentPhone");
+                if (storedParentPhone) {
+                    try {
+                        let currentStudent = initialData;
+
+                        if (!currentStudent) {
+                            const response = await fetch(`/api/students?parentPhone=${encodeURIComponent(storedParentPhone)}&minimal=true${getTenantParam(false)}`, { cache: 'no-store' });
+                            if (response.ok) {
+                                const data = await response.json();
+                                if (data.student) {
+                                    currentStudent = data.student;
+                                }
+                            }
+                        }
+
+                        if (currentStudent) {
+                            const studentWithStatus = {
+                                ...currentStudent,
+                                studentStatus: currentStudent.studentStatus || "in"
+                            };
+                            if (isMounted) {
+                                setStudentProfile(studentWithStatus);
+                                setLoading(false);
+                            }
+
+                            // Load full details & permissions in background
+                            const studentId = studentWithStatus._id;
+                            const loadFullProfile = async () => {
+                                try {
+                                    const fullResponse = await fetch(`/api/students?parentPhone=${encodeURIComponent(storedParentPhone)}${getTenantParam(false)}`, { cache: 'no-store' });
+                                    if (fullResponse.ok) {
+                                        const fullData = await fullResponse.json();
+                                        if (fullData.student && isMounted) {
+                                            setStudentProfile({
+                                                ...fullData.student,
+                                                studentStatus: fullData.student.studentStatus || "in"
+                                            });
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.error("Parent load full profile failed", e);
+                                }
+                            };
+
+                            const fetchPermissions = async () => {
+                                try {
+                                    const permResponse = await fetch(`/api/permissions?studentId=${studentId}&light=true${getTenantParam(false)}`);
+                                    const permData = await permResponse.json();
+                                    if (permData.permissions && isMounted) {
+                                        setPermissions(Array.isArray(permData.permissions) ? permData.permissions : []);
+                                    }
+                                } catch (error) {
+                                    console.error("Error fetching permissions:", error);
+                                    setPermissions([]);
+                                }
+                            };
+
+                            loadFullProfile();
+                            fetchPermissions();
+                            return;
+                        }
+                    } catch (e) {
+                        console.error("Parent auth check failed", e);
+                    }
+                }
+                if (isMounted) setLoading(false);
+                router.push("/login");
+                return;
+            }
+
             // 1. Try Supabase session first
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
@@ -1918,6 +2122,10 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
         );
     }
 
+    const gridColsClass = isParentView 
+        ? (bankSettings?.isPaymentEnabled ? "lg:grid-cols-4" : "lg:grid-cols-3")
+        : (bankSettings?.isPaymentEnabled ? "lg:grid-cols-5" : "lg:grid-cols-4");
+
     return (
         <div className="min-h-screen bg-white">
             <main className="w-full max-w-4xl mx-auto">
@@ -1929,7 +2137,11 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center flex-wrap gap-3 mb-1">
                                         <h1 className="text-xl md:text-3xl font-bold text-gray-900 leading-tight">
-                                            Hello, <span className="text-blue-600">{studentProfile.name.split(' ')[0]}!</span>
+                                            {isParentView ? (
+                                                <>Parent of <span className="text-blue-600">{studentProfile.name}</span></>
+                                            ) : (
+                                                <>Hello, <span className="text-blue-600">{studentProfile.name.split(' ')[0]}!</span></>
+                                            )}
                                         </h1>
                                         <button
                                             onClick={handleLogout}
@@ -1941,7 +2153,9 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                                             </svg>
                                         </button>
                                     </div>
-                                    <p className="text-[11px] md:text-sm text-gray-500 font-medium">Welcome back to Hostelease Dashboard</p>
+                                    <p className="text-[11px] md:text-sm text-gray-500 font-medium">
+                                        {isParentView ? "Monitoring Child's Campus Activities" : "Welcome back to Hostelease Dashboard"}
+                                    </p>
                                 </div>
 
                                 <button
@@ -1963,7 +2177,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                             </div>
 
                             {/* Quick Info Grid */}
-                            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-2" style={{ fontFamily: 'var(--font-lora), Cambria' }}>
+                            <div className={`grid grid-cols-2 ${gridColsClass} gap-3 mb-2`} style={{ fontFamily: 'var(--font-lora), Cambria' }}>
                                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-2 md:p-2.5 rounded-2xl border border-blue-100 shadow-sm flex flex-col justify-center">
                                     <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1">Current Status</p>
                                     <div className="flex items-center gap-2">
@@ -1975,39 +2189,59 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hostel & Room</p>
                                     <p className="text-[12px] font-bold text-gray-900">{studentProfile.hostelName}<span className="text-blue-600 ml-1">#{studentProfile.roomNumber}</span></p>
                                 </div>
-                                <div className={`p-2 md:p-2.5 rounded-2xl border shadow-sm flex items-center justify-between gap-1 transition-all duration-500 ${highlightLocation ? 'bg-red-50 border-red-300 ring-4 ring-red-100 shadow-xl scale-[1.02]' : 'bg-white border-gray-100'}`}>
-                                    <div>
-                                        <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${highlightLocation ? 'text-red-500 animate-pulse' : 'text-gray-400'}`}>Location Lock</p>
-                                        <p className="text-[12px] font-bold text-gray-700">{isAtHostel ? '📍 Verified' : '❌ Not Verified'}</p>
+                                {!isParentView && (
+                                    <div className={`p-2 md:p-2.5 rounded-2xl border shadow-sm flex items-center justify-between gap-1 transition-all duration-500 ${highlightLocation ? 'bg-red-50 border-red-300 ring-4 ring-red-100 shadow-xl scale-[1.02]' : 'bg-white border-gray-100'}`}>
+                                        <div>
+                                            <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${highlightLocation ? 'text-red-500 animate-pulse' : 'text-gray-400'}`}>Location Lock</p>
+                                            <p className="text-[12px] font-bold text-gray-700">{isAtHostel ? '📍 Verified' : '❌ Not Verified'}</p>
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                setHighlightLocation(false);
+                                                getAccurateLocation();
+                                            }}
+                                            disabled={isLocationChecking}
+                                            className={`p-2 rounded-lg transition-all ${isAtHostel ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'} ${highlightLocation ? 'animate-bounce' : ''}`}
+                                            title="Refresh Location"
+                                        >
+                                            {isLocationChecking ? (
+                                                <div className="w-5 h-5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+                                            ) : (
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                </svg>
+                                            )}
+                                        </button>
                                     </div>
-                                    <button
-                                        onClick={() => {
-                                            setHighlightLocation(false);
-                                            getAccurateLocation();
-                                        }}
-                                        disabled={isLocationChecking}
-                                        className={`p-2 rounded-lg transition-all ${isAtHostel ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'} ${highlightLocation ? 'animate-bounce' : ''}`}
-                                        title="Refresh Location"
-                                    >
-                                        {isLocationChecking ? (
-                                            <div className="w-5 h-5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
-                                        ) : (
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            </svg>
-                                        )}
-                                    </button>
-                                </div>
+                                )}
 
                                 <div className="bg-white p-2 md:p-2.5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between gap-1">
                                     <div className="flex-1">
                                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Daily Attendance</p>
                                         <p className="text-[12px] font-bold text-gray-700">
-                                            {isAttendanceMarked ? '✅ Saved' : `🕒 ${attendanceWindow.start} - ${attendanceWindow.end}`}
+                                            {isParentView ? (
+                                                isAttendanceMarked ? '✅ Saved' : '🕒 Pending'
+                                            ) : (
+                                                isAttendanceMarked ? '✅ Saved' : `🕒 ${attendanceWindow.start} - ${attendanceWindow.end}`
+                                            )}
                                         </p>
                                     </div>
-                                    {!isAttendanceMarked ? (
+                                    {isParentView ? (
+                                        isAttendanceMarked ? (
+                                            <div className="p-2 bg-green-100 text-green-600 rounded-lg">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </div>
+                                        ) : (
+                                            <div className="p-2 bg-yellow-50 text-yellow-600 rounded-lg border border-yellow-100" title="Pending Student Verification">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            </div>
+                                        )
+                                    ) : !isAttendanceMarked ? (
                                         <button
                                             onClick={() => handleMarkAttendance()}
                                             disabled={isMarkingAttendance}
@@ -2140,7 +2374,7 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                             </div>
 
                             {/* Latest Permission Status Card */}
-                            {latestPermission && (
+                            {!isParentView && latestPermission && (
                                 (() => {
                                     // ⚡ LOGIC: Visible only for 6 hours after both warden and dean have responded
                                     const isFinalized = latestPermission.wardenStatus !== 'pending' && latestPermission.deanStatus !== 'pending';
@@ -2199,56 +2433,58 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                             )}
 
                             {/* Action Buttons Row */}
-                            <div className="grid grid-cols-2 gap-3 mb-4">
-                                {/* ⚡ PRIMARY ACTION: Scan GATEPASS */}
-                                <button
-                                    onClick={() => router.push("/getpass/scan")}
-                                    className="w-full h-24 rounded-2xl bg-[#EEF2FF] border-2 border-[#C7D2FE] text-[#4F46E5] font-black hover:bg-[#E0E7FF] transition-all flex flex-col items-center justify-center gap-2 group px-2 text-center"
-                                >
-                                    <div className="w-10 h-10 bg-[#C7D2FE]/50 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                                        <svg className="w-6 h-6 text-[#4F46E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 opacity-70">Gatepass</span>
-                                        <span className="text-[10px] md:text-xs uppercase tracking-tight block">Scan QR code</span>
-                                    </div>
-                                </button>
-
-                                {/* ⚡ SECONDARY ACTION: Go to Leave */}
-                                {studentProfile?.studentStatus !== "out" && (
+                            {!isParentView && (
+                                <div className="grid grid-cols-2 gap-3 mb-4">
+                                    {/* ⚡ PRIMARY ACTION: Scan GATEPASS */}
                                     <button
-                                        onClick={() => {
-                                            if (!isAtHostel) {
-                                                setHighlightLocation(true);
-                                                // Scroll to top to show the location card
-                                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                                                alert("📍 Location Verification Required\n\nPlease verify your location first by clicking the location icon at the top of your dashboard.");
-                                                return;
-                                            }
-                                            setRequestType("leave");
-                                            setShowRequestForm(true);
-                                        }}
-                                        className={`w-full h-24 rounded-2xl font-black border-2 transition-all flex flex-col items-center justify-center gap-2 group px-2 text-center ${isAtHostel
-                                            ? "bg-[#FFF7ED] border-[#FED7AA] text-[#C2410C] hover:bg-[#FFEDD5]"
-                                            : "bg-gray-50 border-gray-100 text-gray-400 hover:bg-red-50 hover:border-red-200"
-                                            }`}
+                                        onClick={() => router.push("/getpass/scan")}
+                                        className="w-full h-24 rounded-2xl bg-[#EEF2FF] border-2 border-[#C7D2FE] text-[#4F46E5] font-black hover:bg-[#E0E7FF] transition-all flex flex-col items-center justify-center gap-2 group px-2 text-center"
                                     >
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${isAtHostel ? "bg-[#FED7AA]/50 group-hover:scale-110" : "bg-gray-100 group-hover:bg-red-100"}`}>
-                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                        <div className="w-10 h-10 bg-[#C7D2FE]/50 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                                            <svg className="w-6 h-6 text-[#4F46E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                                             </svg>
                                         </div>
                                         <div>
-                                            <span className={`block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 ${isAtHostel ? "opacity-70" : "opacity-40"}`}>Leave Request</span>
-                                            <span className="text-[10px] md:text-xs uppercase tracking-tight block">
-                                                {isAtHostel ? "Go to Home" : "Locked"}
-                                            </span>
+                                            <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 opacity-70">Gatepass</span>
+                                            <span className="text-[10px] md:text-xs uppercase tracking-tight block">Scan QR code</span>
                                         </div>
                                     </button>
-                                )}
-                            </div>
+
+                                    {/* ⚡ SECONDARY ACTION: Go to Leave */}
+                                    {studentProfile?.studentStatus !== "out" && (
+                                        <button
+                                            onClick={() => {
+                                                if (!isAtHostel) {
+                                                    setHighlightLocation(true);
+                                                    // Scroll to top to show the location card
+                                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                    alert("📍 Location Verification Required\n\nPlease verify your location first by clicking the location icon at the top of your dashboard.");
+                                                    return;
+                                                }
+                                                setRequestType("leave");
+                                                setShowRequestForm(true);
+                                            }}
+                                            className={`w-full h-24 rounded-2xl font-black border-2 transition-all flex flex-col items-center justify-center gap-2 group px-2 text-center ${isAtHostel
+                                                ? "bg-[#FFF7ED] border-[#FED7AA] text-[#C2410C] hover:bg-[#FFEDD5]"
+                                                : "bg-gray-50 border-gray-100 text-gray-400 hover:bg-red-50 hover:border-red-200"
+                                                }`}
+                                        >
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${isAtHostel ? "bg-[#FED7AA]/50 group-hover:scale-110" : "bg-gray-100 group-hover:bg-red-100"}`}>
+                                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <span className={`block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 ${isAtHostel ? "opacity-70" : "opacity-40"}`}>Leave Request</span>
+                                                <span className="text-[10px] md:text-xs uppercase tracking-tight block">
+                                                    {isAtHostel ? "Go to Home" : "Locked"}
+                                                </span>
+                                            </div>
+                                        </button>
+                                    )}
+                                </div>
+                            )}
 
                             <div className="mb-6">
                                 <button
@@ -2366,9 +2602,9 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
 
                             {showPermissionsHistory && (
                                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
-                                    <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl flex flex-col">
+                                    <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden shadow-2xl flex flex-col">
                                         <div className="p-4 border-b flex items-center justify-between bg-gray-50">
-                                            <h2 className="text-lg font-bold text-gray-900">Permission History</h2>
+                                            <h2 className="text-lg font-bold text-gray-900">Outing & Permission History</h2>
                                             <button
                                                 onClick={() => setShowPermissionsHistory(false)}
                                                 className="p-2 hover:bg-gray-200 rounded-full transition-colors"
@@ -2379,72 +2615,290 @@ export default function StudentDashboard({ initialData }: { initialData?: any })
                                             </button>
                                         </div>
 
-                                        <div className="overflow-y-auto p-4 space-y-3">
-                                            {permissions.length === 0 ? (
-                                                <div className="text-center py-10 text-gray-500">
-                                                    <p>No permission requests found.</p>
-                                                </div>
-                                            ) : (
-                                                permissions.map((permission) => (
-                                                    <div
-                                                        key={permission._id}
-                                                        className="rounded-2xl border-0 bg-slate-50 p-5 shadow-sm hover:shadow-md transition-all duration-300"
-                                                    >
-                                                        <div className="flex justify-between items-start mb-3">
-                                                            <div className="space-y-1.5">
-                                                                <p className="text-[13px] font-black text-[#2D5A9E]">
-                                                                    {new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}
-                                                                </p>
-                                                                <p className="text-[13px] font-black text-[#2D5A9E]">
-                                                                    To {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}
-                                                                </p>
-                                                            </div>
-                                                            <div className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${permission.status === 'allowed' ? 'bg-green-100 text-green-700 border border-green-200' :
-                                                                permission.status === 'rejected' ? 'bg-red-100 text-red-700 border border-red-200' :
-                                                                    'bg-yellow-100 text-yellow-700 border border-yellow-200'
-                                                                }`}>
-                                                                {permission.status === 'allowed' ? 'Accepted' : permission.status === 'rejected' ? 'Rejected' : 'Pending'}
-                                                            </div>
+                                        {/* Tab Selector */}
+                                        {!isParentView && (
+                                            <div className="flex border-b border-gray-100 bg-gray-50/50">
+                                                <button
+                                                    onClick={() => setActiveHistoryTab('calendar')}
+                                                    className={`flex-1 py-3 text-xs font-black uppercase tracking-wider transition-colors border-b-2 flex items-center justify-center gap-2 ${activeHistoryTab === 'calendar' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+                                                >
+                                                    <span>📅</span> Outing Calendar
+                                                </button>
+                                                <button
+                                                    onClick={() => setActiveHistoryTab('permissions')}
+                                                    className={`flex-1 py-3 text-xs font-black uppercase tracking-wider transition-colors border-b-2 flex items-center justify-center gap-2 ${activeHistoryTab === 'permissions' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+                                                >
+                                                    <span>📜</span> Permission Logs
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        <div className="overflow-y-auto flex-1 flex flex-col">
+                                            {activeHistoryTab === 'calendar' || isParentView ? (
+                                                <div className="flex-1 flex flex-col">
+                                                    {/* Calendar Navigation */}
+                                                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
+                                                        <button
+                                                            onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
+                                                            className="p-2 hover:bg-gray-100 rounded-xl transition-all font-bold text-gray-600 flex items-center justify-center"
+                                                        >
+                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+                                                            </svg>
+                                                        </button>
+                                                        <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest">
+                                                            {monthNames[calendarMonth.getMonth()]} <span className="text-gray-400 font-bold">{calendarMonth.getFullYear()}</span>
+                                                        </h3>
+                                                        <button
+                                                            onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
+                                                            className="p-2 hover:bg-gray-100 rounded-xl transition-all font-bold text-gray-600 flex items-center justify-center"
+                                                        >
+                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Legend */}
+                                                    <div className="flex justify-around items-center px-4 py-3 bg-gray-50 text-[9px] sm:text-[10px] font-black uppercase tracking-wider border-b border-gray-100">
+                                                        <div className="flex items-center gap-1.5 text-emerald-700">
+                                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30"></span> Inside Campus
                                                         </div>
-                                                        <div className="h-px w-full bg-slate-200/50 mb-3" />
-                                                        <p className="text-[11px] text-slate-800 leading-relaxed font-medium">
-                                                            {permission.reason}
-                                                        </p>
-
-                                                        {/* Staff Approval Indicators */}
-                                                        <div className="flex items-center justify-around pt-4 border-t border-slate-200/50 mt-4">
-                                                            <div className="flex flex-col items-center gap-2">
-                                                                <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider">Campus approval</span>
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-500 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-300"}`}>
-                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                                                    </div>
-                                                                    <div className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-300"}`}>
-                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                                                    </div>
-                                                                </div>
-                                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${permission.wardenStatus === 'allowed' ? 'text-green-600 bg-green-50' : permission.wardenStatus === 'rejected' ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-100'}`}>
-                                                                    {permission.wardenStatus === 'allowed' ? 'Accepted' : permission.wardenStatus === 'rejected' ? 'Rejected' : 'Pending'}
-                                                                </span>
-                                                            </div>
-
-                                                            <div className="flex flex-col items-center gap-2">
-                                                                <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider">Dean approval</span>
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-300"}`}>
-                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                                                    </div>
-                                                                    <div className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-300"}`}>
-                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                                                    </div>
-                                                                </div>
-                                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${permission.deanStatus === 'allowed' ? 'text-green-600 bg-green-50' : permission.deanStatus === 'rejected' ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-100'}`}>
-                                                                    {permission.deanStatus === 'allowed' ? 'Accepted' : permission.deanStatus === 'rejected' ? 'Rejected' : 'Pending'}
-                                                                </span>
-                                                            </div>
+                                                        <div className="flex items-center gap-1.5 text-amber-700">
+                                                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-sm shadow-amber-500/30"></span> Partial Outing
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 text-rose-700">
+                                                            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm shadow-rose-500/30"></span> Completely Out
                                                         </div>
                                                     </div>
-                                                ))
+
+                                                    {loadingGatePasses && gatePasses.length === 0 ? (
+                                                        <div className="flex-1 flex flex-col items-center justify-center py-20 gap-3">
+                                                            <div className="w-10 h-10 border-4 border-gray-100 border-t-blue-500 rounded-full animate-spin"></div>
+                                                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Loading Outing Logs...</p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex-1 bg-white">
+                                                            {/* Weekday headers */}
+                                                            <div className="grid grid-cols-7 gap-1 p-4 pb-1 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50">
+                                                                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+                                                                    <div key={day} className="py-1">{day}</div>
+                                                                ))}
+                                                            </div>
+
+                                                            {/* Calendar cells */}
+                                                            <div className="grid grid-cols-7 gap-2 p-4">
+                                                                {getDaysInMonth(calendarMonth).map((cell, idx) => {
+                                                                    if (!cell.date) return <div key={idx} className="aspect-square" />;
+
+                                                                    const isSelected = selectedCalendarDay &&
+                                                                        cell.date.getDate() === selectedCalendarDay.getDate() &&
+                                                                        cell.date.getMonth() === selectedCalendarDay.getMonth() &&
+                                                                        cell.date.getFullYear() === selectedCalendarDay.getFullYear();
+
+                                                                    const isToday = (() => {
+                                                                        const today = new Date();
+                                                                        return cell.date.getDate() === today.getDate() &&
+                                                                            cell.date.getMonth() === today.getMonth() &&
+                                                                            cell.date.getFullYear() === today.getFullYear();
+                                                                    })();
+
+                                                                    if (!cell.isCurrentMonth) {
+                                                                        return (
+                                                                            <div
+                                                                                key={idx}
+                                                                                className="aspect-square flex items-center justify-center rounded-xl bg-gray-50/50 text-gray-300 text-xs font-bold select-none cursor-not-allowed opacity-40"
+                                                                            >
+                                                                                {cell.date.getDate()}
+                                                                            </div>
+                                                                        );
+                                                                    }
+
+                                                                    const isFuture = (() => {
+                                                                        const today = new Date();
+                                                                        today.setHours(23, 59, 59, 999);
+                                                                        return cell.date.getTime() > today.getTime();
+                                                                    })();
+
+                                                                    const status = isFuture ? null : getDayOutingStatus(cell.date);
+                                                                    let colorClasses = "";
+                                                                    if (isFuture) {
+                                                                        colorClasses = "bg-white text-gray-800 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm";
+                                                                    } else if (status === 'red') {
+                                                                        colorClasses = "bg-rose-500 text-white font-black hover:bg-rose-600 shadow-md shadow-rose-500/20";
+                                                                    } else if (status === 'orange') {
+                                                                        colorClasses = "bg-amber-500 text-white font-black hover:bg-amber-600 shadow-md shadow-amber-500/20";
+                                                                    } else {
+                                                                        colorClasses = "bg-emerald-500 text-white font-black hover:bg-emerald-600 shadow-md shadow-emerald-500/20";
+                                                                    }
+
+                                                                    return (
+                                                                        <button
+                                                                            key={idx}
+                                                                            onClick={() => setSelectedCalendarDay(cell.date)}
+                                                                            className={`aspect-square flex flex-col items-center justify-center rounded-xl text-xs transition-all relative ${colorClasses} ${isSelected ? 'ring-4 ring-blue-600 ring-offset-2 scale-105 z-10' : 'hover:scale-[1.03] active:scale-[0.97]'}`}
+                                                                        >
+                                                                            <span className="leading-none">{cell.date.getDate()}</span>
+                                                                            {isToday && (
+                                                                                <span className={`w-1 h-1 rounded-full absolute bottom-1.5 ${status ? 'bg-white' : 'bg-blue-600'}`} />
+                                                                            )}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </div>
+
+                                                            {/* Selected Day Details */}
+                                                            {selectedCalendarDay && (
+                                                                <div className="px-6 pb-6 pt-4 border-t border-gray-100 bg-gray-50/50">
+                                                                    <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                                                        <span>📋</span> Outing Details • {selectedCalendarDay.toLocaleDateString("en-IN", { dateStyle: "long" })}
+                                                                    </h4>
+                                                                    {(() => {
+                                                                        const today = new Date();
+                                                                        today.setHours(23, 59, 59, 999);
+                                                                        const isFuture = selectedCalendarDay.getTime() > today.getTime();
+
+                                                                        if (isFuture) {
+                                                                            return (
+                                                                                <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 text-center">
+                                                                                    <p className="text-gray-500 text-xs font-bold flex items-center justify-center gap-1.5">
+                                                                                        <span>⏳</span> Outing logs not available for future dates.
+                                                                                    </p>
+                                                                                </div>
+                                                                            );
+                                                                        }
+
+                                                                        const dayPasses = getOverlappingGatePasses(selectedCalendarDay);
+                                                                        if (dayPasses.length === 0) {
+                                                                            return (
+                                                                                <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 text-center">
+                                                                                    <p className="text-emerald-700 text-xs font-bold flex items-center justify-center gap-1.5">
+                                                                                        <span>✅</span> Stayed inside campus for the whole day.
+                                                                                    </p>
+                                                                                </div>
+                                                                            );
+                                                                        }
+                                                                        return (
+                                                                            <div className="space-y-3">
+                                                                                {dayPasses.map((pass: any) => (
+                                                                                    <div key={pass._id} className="bg-white rounded-xl border border-gray-200/60 p-4 shadow-sm space-y-3">
+                                                                                        <div className="flex justify-between items-center">
+                                                                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${pass.type === 'leave' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                                                                                                {pass.type === 'leave' ? '🏠 Home Leave' : '🚶 Short Outing'}
+                                                                                            </span>
+                                                                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${pass.status === 'out' ? 'bg-rose-100 text-rose-700 border border-rose-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>
+                                                                                                {pass.status === 'out' ? 'Still Outside' : 'Returned'}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        <div className="grid grid-cols-2 gap-4 text-xs">
+                                                                                            <div>
+                                                                                                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Check Out</p>
+                                                                                                <p className="font-extrabold text-gray-800">{pass.checkOutISTTime} | <span className="text-gray-400">{pass.checkOutISTDate}</span></p>
+                                                                                            </div>
+                                                                                            <div>
+                                                                                                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Check In</p>
+                                                                                                {pass.status === 'in' ? (
+                                                                                                    <p className="font-extrabold text-gray-800">{pass.checkInISTTime} | <span className="text-gray-400">{pass.checkInISTDate}</span></p>
+                                                                                                ) : (
+                                                                                                    <p className="font-extrabold text-rose-500 uppercase tracking-widest text-[10px] animate-pulse">Outside Campus</p>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                        {pass.durationMinutes && (
+                                                                                            <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider pt-2 border-t border-gray-100">
+                                                                                                Total Duration: <span className="text-gray-700 font-black">{(() => {
+                                                                                                    const minutes = pass.durationMinutes;
+                                                                                                    if (minutes >= 1440) {
+                                                                                                        const days = Math.floor(minutes / 1440);
+                                                                                                        const hrs = Math.floor((minutes % 1440) / 60);
+                                                                                                        const mins = minutes % 60;
+                                                                                                        return `${days}d ${hrs}h ${mins}m`;
+                                                                                                    }
+                                                                                                    const h = Math.floor(minutes / 60);
+                                                                                                    const m = minutes % 60;
+                                                                                                    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+                                                                                                })()}</span>
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        );
+                                                                    })()}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="p-4 space-y-3">
+                                                    {permissions.length === 0 ? (
+                                                        <div className="text-center py-10 text-gray-500">
+                                                            <p>No permission requests found.</p>
+                                                        </div>
+                                                    ) : (
+                                                        permissions.map((permission) => (
+                                                            <div
+                                                                key={permission._id}
+                                                                className="rounded-2xl border-0 bg-slate-50 p-5 shadow-sm hover:shadow-md transition-all duration-300"
+                                                            >
+                                                                <div className="flex justify-between items-start mb-3">
+                                                                    <div className="space-y-1.5">
+                                                                        <p className="text-[13px] font-black text-[#2D5A9E]">
+                                                                            {new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}
+                                                                        </p>
+                                                                        <p className="text-[13px] font-black text-[#2D5A9E]">
+                                                                            To {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}
+                                                                        </p>
+                                                                    </div>
+                                                                    <div className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${permission.status === 'allowed' ? 'bg-green-100 text-green-700 border border-green-200' :
+                                                                        permission.status === 'rejected' ? 'bg-red-100 text-red-700 border border-red-200' :
+                                                                            'bg-yellow-100 text-yellow-700 border border-yellow-200'
+                                                                        }`}>
+                                                                        {permission.status === 'allowed' ? 'Accepted' : permission.status === 'rejected' ? 'Rejected' : 'Pending'}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="h-px w-full bg-slate-200/50 mb-3" />
+                                                                <p className="text-[11px] text-slate-800 leading-relaxed font-medium">
+                                                                    {permission.reason}
+                                                                </p>
+
+                                                                {/* Staff Approval Indicators */}
+                                                                <div className="flex items-center justify-around pt-4 border-t border-slate-200/50 mt-4">
+                                                                    <div className="flex flex-col items-center gap-2">
+                                                                        <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider">Campus approval</span>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-500 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-300"}`}>
+                                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                            </div>
+                                                                            <div className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-300"}`}>
+                                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                            </div>
+                                                                        </div>
+                                                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${permission.wardenStatus === 'allowed' ? 'text-green-600 bg-green-50' : permission.wardenStatus === 'rejected' ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-100'}`}>
+                                                                            {permission.wardenStatus === 'allowed' ? 'Accepted' : permission.wardenStatus === 'rejected' ? 'Rejected' : 'Pending'}
+                                                                        </span>
+                                                                    </div>
+
+                                                                    <div className="flex flex-col items-center gap-2">
+                                                                        <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider">Dean approval</span>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-300"}`}>
+                                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                            </div>
+                                                                            <div className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-300"}`}>
+                                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                            </div>
+                                                                        </div>
+                                                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${permission.deanStatus === 'allowed' ? 'text-green-600 bg-green-50' : permission.deanStatus === 'rejected' ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-100'}`}>
+                                                                            {permission.deanStatus === 'allowed' ? 'Accepted' : permission.deanStatus === 'rejected' ? 'Rejected' : 'Pending'}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                     </div>

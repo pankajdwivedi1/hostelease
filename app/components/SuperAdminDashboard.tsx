@@ -37,6 +37,9 @@ interface Tenant {
     createdAt: string;
     studentCount?: number;
     liveTraffic?: number;
+    renewalUtr?: string | null;
+    renewalStatus?: string | null;
+    renewalSubmittedAt?: string | null;
 }
 
 export default function SuperAdminDashboard() {
@@ -62,6 +65,8 @@ export default function SuperAdminDashboard() {
         name: "",
         slug: "",
         adminEmail: "",
+        contactName: "",
+        contactPhone: "",
         subscriptionStatus: "trial" as const,
         primaryColor: "#3b82f6"
     });
@@ -131,7 +136,7 @@ export default function SuperAdminDashboard() {
                     defaultAdminPass: "pankajdwivedi81",
                     defaultDevPass: "pankaj852"
                 });
-                setNewTenant({ name: "", slug: "", adminEmail: "", subscriptionStatus: "trial", primaryColor: "#3b82f6" });
+                setNewTenant({ name: "", slug: "", adminEmail: "", contactName: "", contactPhone: "", subscriptionStatus: "trial", primaryColor: "#3b82f6" });
             } else {
                 alert(data.error);
             }
@@ -188,9 +193,11 @@ export default function SuperAdminDashboard() {
                 setDeletingTenant(null);
                 setDeleteConfirmText("");
                 alert("University Node permanently destroyed and purged from disk.");
+            } else {
+                alert(`Purge failed: ${data.error || "Unknown error"}`);
             }
-        } catch (error) {
-            alert("Purge failed.");
+        } catch (error: any) {
+            alert(`Purge failed: ${error.message}`);
         } finally {
             setIsDeleting(false);
         }
@@ -257,12 +264,19 @@ export default function SuperAdminDashboard() {
                 body: JSON.stringify({
                     id: editingTenant._id,
                     subscriptionStatus: editingTenant.subscriptionStatus,
-                    is_active: editingTenant.isActive
+                    is_active: editingTenant.isActive,
+                    subscriptionEndDate: editingTenant.subscriptionEndDate || null
                 })
             });
             const data = await res.json();
             if (data.success) {
-                setTenants(tenants.map(t => t._id === editingTenant._id ? { ...t, ...editingTenant } : t));
+                setTenants(tenants.map(t => t._id === editingTenant._id ? { 
+                    ...t, 
+                    ...editingTenant,
+                    renewalStatus: null,
+                    renewalUtr: null,
+                    renewalSubmittedAt: null
+                } : t));
                 setEditingTenant(null);
                 alert("University updated successfully!");
             }
@@ -422,157 +436,43 @@ export default function SuperAdminDashboard() {
                          </div>
                     </div>
                     <div className="bg-white sm:bg-transparent rounded-[32px] sm:rounded-none overflow-hidden">
-                        {/* Desktop Table View */}
-                        <div className="hidden sm:block bg-white rounded-[40px] border border-gray-100 shadow-2xl shadow-gray-200/50 overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse">
-                                    <thead>
-                                        <tr className="bg-gray-50/50 border-b border-gray-50">
-                                            <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Node Identity</th>
-                                            <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Live Domain</th>
-                                            <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 text-center">Load (Students)</th>
-                                            <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Subscription Status</th>
-                                            <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 text-right">Operational Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-50">
-                                        {loading ? (
-                                            <tr>
-                                                <td colSpan={5} className="p-24 text-center">
-                                                    <div className="flex flex-col items-center gap-6">
-                                                        <div className="w-16 h-16 border-4 border-gray-100 border-t-blue-600 rounded-full animate-spin"></div>
-                                                        <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Syncing with Remote Nodes...</p>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ) : tenants.length === 0 ? (
-                                            <tr>
-                                                <td colSpan={5} className="p-24 text-center">
-                                                    <div className="bg-gray-50/50 inline-block p-10 rounded-full mb-4">
-                                                        <Globe className="w-16 h-16 text-gray-200 mx-auto" />
-                                                    </div>
-                                                    <p className="text-gray-400 text-sm italic font-bold">No global nodes provisioned yet.</p>
-                                                </td>
-                                            </tr>
-                                        ) : tenants.map((tenant) => (
-                                            <tr key={tenant._id} className="hover:bg-blue-50/30 transition-all group border-b border-gray-50 last:border-0">
-                                                <td className="px-8 py-8">
-                                                    <div className="flex items-center gap-5">
-                                                        <div className="w-16 h-16 bg-white border-2 border-slate-50 rounded-[20px] shadow-sm flex items-center justify-center font-black text-slate-400 group-hover:scale-110 group-hover:border-blue-100 group-hover:shadow-blue-200 group-hover:text-blue-600 transition-all uppercase text-xl">
-                                                            {tenant.name.substring(0, 2)}
-                                                        </div>
-                                                        <div>
-                                                            <div className="flex items-center gap-2 mb-1">
-                                                                <p className="font-black text-gray-900 uppercase tracking-tight text-base leading-none">{tenant.name}</p>
-                                                                {viewMode === 'active' && tenant.liveTraffic && tenant.liveTraffic > 0 ? (
-                                                                    <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-                                                                ) : null}
-                                                            </div>
-                                                            <p className="text-[11px] text-slate-400 font-bold italic lowercase">{tenant.adminEmail}</p>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-8 py-8">
-                                                    <div className="flex flex-col gap-1.5">
-                                                        <div className="bg-gray-100/50 border border-gray-100 px-4 py-2 rounded-2xl flex items-center gap-3 w-fit group-hover:bg-blue-600 group-hover:border-blue-500 group-hover:text-white transition-all">
-                                                            <Globe className="w-4 h-4 text-gray-300 group-hover:text-blue-200" />
-                                                            <span className="text-[13px] font-black uppercase tracking-tight">{tenant.slug}.hostelease.com</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-4 px-2">
-                                                            {viewMode === 'active' ? (
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <Activity className={`w-2.5 h-2.5 ${tenant.liveTraffic && tenant.liveTraffic > 0 ? 'text-emerald-500' : 'text-gray-300'}`} />
-                                                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{tenant.liveTraffic || 0} Req/Min</span>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="flex items-center gap-1.5 text-red-400/60">
-                                                                    <Clock className="w-2.5 h-2.5" />
-                                                                    <span className="text-[9px] font-black uppercase tracking-widest">Disconnected</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-8 py-8 text-center">
-                                                    <div className="inline-flex flex-col items-center">
-                                                        <p className="text-2xl font-black text-gray-900 tracking-tighter">{tenant.studentCount}</p>
-                                                        <p className="text-[9px] text-gray-300 font-black uppercase tracking-widest mt-0.5">Proxy Clients</p>
-                                                    </div>
-                                                </td>
-                                                <td className="px-8 py-8">
-                                                    <div className="flex flex-col gap-2">
-                                                        <span className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest w-fit shadow-sm ${tenant.subscriptionStatus === 'active' ? 'bg-emerald-500 text-white' :
-                                                            tenant.subscriptionStatus === 'trial' ? 'bg-blue-600 text-white' : 'bg-red-500 text-white'
-                                                            }`}>
-                                                            {tenant.subscriptionStatus === 'active' ? <CheckCircle2 className="w-3.5 h-3.5" /> :
-                                                                tenant.subscriptionStatus === 'trial' ? <Clock className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                                                            {tenant.subscriptionStatus}
-                                                        </span>
-                                                        {viewMode === 'active' ? (
-                                                            <button
-                                                                onClick={() => toggleTenantStatus(tenant._id, tenant.isActive)}
-                                                                className={`text-[9px] font-black uppercase tracking-widest flex items-center gap-2 px-1 transition-colors hover:text-gray-900 ${tenant.isActive ? 'text-emerald-500' : 'text-red-400'}`}
-                                                            >
-                                                                <div className={`w-1.5 h-1.5 rounded-full ${tenant.isActive ? 'bg-emerald-500 shadow-emerald-500 shadow-lg' : 'bg-red-400 animate-pulse'}`}></div>
-                                                                {tenant.isActive ? 'OPERATIONAL' : 'OFFLINE'}
-                                                            </button>
-                                                        ) : (
-                                                            <div className="text-[9px] font-black text-red-500/60 uppercase tracking-widest px-1">
-                                                                Deleted Node
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="px-8 py-8 text-right">
-                                                    <div className="flex items-center justify-end gap-2 text-right">
-                                                        {viewMode === 'active' ? (
-                                                            <>
-                                                                <button onClick={() => handleImpersonateAdmin(tenant.slug)} className="h-12 w-12 bg-white border border-gray-100 rounded-2xl flex items-center justify-center text-emerald-500 hover:bg-emerald-600 hover:text-white transition-all duration-300 shadow-sm"><LogIn className="w-5 h-5" /></button>
-                                                                <button onClick={() => setEditingTenant(tenant)} className="h-12 w-12 bg-white border border-gray-100 rounded-2xl flex items-center justify-center text-gray-400 hover:bg-slate-900 hover:text-white transition-all duration-300 shadow-sm"><Settings className="w-5 h-5" /></button>
-                                                                <button onClick={() => handleSoftDelete(tenant._id)} className="h-12 w-12 bg-white border border-gray-100 rounded-2xl flex items-center justify-center text-red-400 hover:bg-orange-500 hover:text-white transition-all duration-300 shadow-sm"><Trash2 className="w-5 h-5" /></button>
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <button onClick={() => handleRestore(tenant._id)} className="px-6 h-12 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center gap-2">Restore Node</button>
-                                                                <button onClick={() => setDeletingTenant(tenant)} className="h-12 w-12 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-center text-red-600 hover:bg-red-600 hover:text-white transition-all duration-300 shadow-sm"><Trash2 className="w-5 h-5" /></button>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        {/* Mobile Card View */}
-                        <div className="sm:hidden space-y-4">
+                        {/* Unified Grid View */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                             {loading ? (
-                                <div className="bg-white p-12 rounded-[32px] border border-gray-100 text-center flex flex-col items-center gap-4">
+                                <div className="col-span-full bg-white p-12 rounded-[32px] border border-gray-100 text-center flex flex-col items-center gap-4">
                                      <div className="w-12 h-12 border-4 border-gray-100 border-t-blue-600 rounded-full animate-spin"></div>
                                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Syncing Nodes...</p>
                                 </div>
                             ) : tenants.length === 0 ? (
-                                <div className="bg-white p-8 rounded-[32px] border border-gray-100 text-center flex flex-col items-center gap-3">
+                                <div className="col-span-full bg-white p-8 rounded-[32px] border border-gray-100 text-center flex flex-col items-center gap-3">
                                     <Globe className="w-8 h-8 text-gray-200 mx-auto" />
                                     <p className="text-gray-400 text-[10px] italic font-bold">No global nodes provisioned yet.</p>
                                 </div>
                             ) : tenants.map((tenant) => (
-                                <div key={tenant._id} className="bg-white p-4 sm:p-6 rounded-[24px] sm:rounded-[32px] border border-gray-100 shadow-sm space-y-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-11 h-11 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center font-black text-slate-400 uppercase text-md shrink-0">
-                                            {tenant.name.substring(0, 2)}
-                                        </div>
-                                        <div className="min-w-0 flex-1">
+                                <div key={tenant._id} className="bg-white p-4 sm:p-6 rounded-[24px] sm:rounded-[32px] border border-gray-100 shadow-sm flex flex-col h-full gap-4 hover:shadow-md transition-shadow duration-300">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex flex-col min-w-0">
                                             <div className="flex items-center gap-2">
-                                                <h3 className="font-black text-gray-900 uppercase tracking-tight truncate text-sm">{tenant.name}</h3>
+                                                <h3 className="font-black text-gray-900 uppercase tracking-tight text-sm leading-tight break-words">{tenant.name}</h3>
                                                 {viewMode === 'active' && tenant.liveTraffic && tenant.liveTraffic > 0 ? (
                                                     <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
                                                 ) : null}
                                             </div>
-                                            <p className="text-[9px] text-slate-400 font-bold italic truncate opacity-70">{tenant.adminEmail}</p>
+                                            <p className="text-[9px] text-slate-400 font-bold italic opacity-70 break-all mt-0.5">{tenant.adminEmail}</p>
                                         </div>
+                                        {viewMode === 'active' ? (
+                                            <button
+                                                onClick={() => toggleTenantStatus(tenant._id, tenant.isActive)}
+                                                className={`shrink-0 text-[8px] font-black uppercase tracking-widest flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-colors ${tenant.isActive ? 'text-emerald-600 border-emerald-100 bg-emerald-50 hover:bg-emerald-100' : 'text-red-500 border-red-100 bg-red-50 hover:bg-red-100'}`}
+                                            >
+                                                <div className={`w-1.5 h-1.5 rounded-full ${tenant.isActive ? 'bg-emerald-500 shadow-emerald-500 shadow-sm' : 'bg-red-500 animate-pulse'}`}></div>
+                                                {tenant.isActive ? 'OPERATIONAL' : 'OFFLINE'}
+                                            </button>
+                                        ) : (
+                                            <div className="shrink-0 text-[8px] font-black text-red-500/60 uppercase tracking-widest px-2 py-1 bg-red-50/50 rounded-lg border border-red-100/50">
+                                                Deleted
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-2">
@@ -594,38 +494,98 @@ export default function SuperAdminDashboard() {
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-2 bg-slate-900 text-white p-2 rounded-xl">
-                                        <Globe className="w-3 h-3 text-blue-400 shrink-0" />
-                                        <span className="text-[10px] font-bold tracking-tight truncate flex-1">{tenant.slug}.hostelease.com</span>
-                                        <div className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 bg-white/10 rounded-lg">
-                                            <Activity className="w-2 h-2 text-emerald-400" />
-                                            <span className="text-[8px] font-black">{tenant.liveTraffic || 0}</span>
+                                    {/* Subscription Period Block */}
+                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1.5 text-[10px]">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Subscription Period</span>
+                                            {tenant.subscriptionEndDate && (() => {
+                                                const now = new Date();
+                                                const end = new Date(tenant.subscriptionEndDate);
+                                                const diffTime = end.getTime() - now.getTime();
+                                                const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                                
+                                                if (daysRemaining < 0) {
+                                                    return (
+                                                        <span className="text-[7px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 border border-rose-100 rounded px-1.5 py-0.5 leading-none">
+                                                            Expired ({Math.abs(daysRemaining)}d ago)
+                                                        </span>
+                                                    );
+                                                } else if (daysRemaining <= 7) {
+                                                    return (
+                                                        <span className="text-[7px] font-black uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 leading-none animate-pulse">
+                                                            Expiring ({daysRemaining}d left)
+                                                        </span>
+                                                    );
+                                                } else {
+                                                    return (
+                                                        <span className="text-[7px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 leading-none">
+                                                            {daysRemaining} days left
+                                                        </span>
+                                                    );
+                                                }
+                                            })()}
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs font-bold text-gray-700">
+                                            <div>
+                                                <p className="text-[6px] font-black text-slate-400 uppercase tracking-widest">Start Date</p>
+                                                <p className="text-[10px] font-extrabold">{tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}</p>
+                                            </div>
+                                            <div className="h-4 w-px bg-slate-200" />
+                                            <div className="text-right">
+                                                <p className="text-[6px] font-black text-slate-400 uppercase tracking-widest">End Date</p>
+                                                <p className="text-[10px] font-extrabold">{tenant.subscriptionEndDate ? new Date(tenant.subscriptionEndDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "Unlimited"}</p>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <div className="flex gap-2 pt-1">
-                                        {viewMode === 'active' ? (
-                                            <>
-                                                <button onClick={() => handleImpersonateAdmin(tenant.slug)} className="flex-1 bg-blue-600 text-white h-9 rounded-xl flex items-center justify-center gap-2 font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-blue-500/10">
-                                                    <LogIn className="w-3.5 h-3.5" /> Sign In
-                                                </button>
-                                                <button onClick={() => setEditingTenant(tenant)} className="w-9 h-9 bg-slate-50 text-slate-400 border border-slate-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
-                                                    <Settings className="w-3.5 h-3.5" />
-                                                </button>
-                                                <button onClick={() => handleSoftDelete(tenant._id)} className="w-9 h-9 bg-red-50 text-red-500/60 border border-red-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <button onClick={() => handleRestore(tenant._id)} className="flex-1 bg-blue-600 text-white h-9 rounded-xl flex items-center justify-center gap-2 font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/10">
-                                                    Restore Node
-                                                </button>
-                                                <button onClick={() => setDeletingTenant(tenant)} className="w-9 h-9 bg-red-50 text-red-600 border border-red-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            </>
+                                    <div className="mt-auto flex flex-col gap-4">
+                                        {tenant.renewalStatus === 'pending' && (
+                                            <div className="glowing-border-blue p-3 text-[10px] font-bold text-amber-900 space-y-0.5">
+                                                <div className="relative z-10 space-y-0.5">
+                                                    <span className="uppercase text-[8px] tracking-wider font-black text-amber-700 block">Renewal Requested</span>
+                                                    <div className="flex justify-between items-center font-mono">
+                                                        <span className="select-all font-extrabold">UTR: {tenant.renewalUtr}</span>
+                                                        <span className="text-[8px] text-amber-600 font-sans">
+                                                            {tenant.renewalSubmittedAt ? new Date(tenant.renewalSubmittedAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }) : "N/A"}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         )}
+
+                                        <div className="flex items-center gap-2 bg-slate-900 text-white p-2 rounded-xl">
+                                            <Globe className="w-3 h-3 text-blue-400 shrink-0" />
+                                            <span className="text-[10px] font-bold tracking-tight truncate flex-1">{tenant.slug}.hostelease.com</span>
+                                            <div className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 bg-white/10 rounded-lg">
+                                                <Activity className="w-2 h-2 text-emerald-400" />
+                                                <span className="text-[8px] font-black">{tenant.liveTraffic || 0}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-2">
+                                            {viewMode === 'active' ? (
+                                                <>
+                                                    <button onClick={() => handleImpersonateAdmin(tenant.slug)} className="flex-1 bg-blue-600 text-white h-9 rounded-xl flex items-center justify-center gap-2 font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-blue-500/10">
+                                                        <LogIn className="w-3.5 h-3.5" /> Sign In
+                                                    </button>
+                                                    <button onClick={() => setEditingTenant(tenant)} className="w-9 h-9 bg-slate-50 text-slate-400 border border-slate-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
+                                                        <Settings className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <button onClick={() => handleSoftDelete(tenant._id)} className="w-9 h-9 bg-red-50 text-red-500/60 border border-red-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <button onClick={() => handleRestore(tenant._id)} className="flex-1 bg-blue-600 text-white h-9 rounded-xl flex items-center justify-center gap-2 font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/10">
+                                                        Restore Node
+                                                    </button>
+                                                    <button onClick={() => setDeletingTenant(tenant)} className="w-9 h-9 bg-red-50 text-red-600 border border-red-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -749,16 +709,54 @@ export default function SuperAdminDashboard() {
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Global Admin Contact</label>
-                                <input
-                                    type="email"
-                                    required
-                                    value={newTenant.adminEmail}
-                                    onChange={(e) => setNewTenant({ ...newTenant, adminEmail: e.target.value })}
-                                    placeholder="admin@oxford.edu"
-                                    className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
-                                />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Global Admin Contact</label>
+                                    <input
+                                        type="email"
+                                        required
+                                        value={newTenant.adminEmail}
+                                        onChange={(e) => setNewTenant({ ...newTenant, adminEmail: e.target.value })}
+                                        placeholder="admin@oxford.edu"
+                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Subscription Plan</label>
+                                    <select
+                                        value={newTenant.subscriptionStatus}
+                                        onChange={(e) => setNewTenant({ ...newTenant, subscriptionStatus: e.target.value as any })}
+                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-gray-700"
+                                    >
+                                        <option value="trial">14-Day Free Trial</option>
+                                        <option value="active">Active (Paid)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Point of Contact Name</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={newTenant.contactName}
+                                        onChange={(e) => setNewTenant({ ...newTenant, contactName: e.target.value })}
+                                        placeholder="e.g. John Doe"
+                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Contact Phone</label>
+                                    <input
+                                        type="tel"
+                                        required
+                                        value={newTenant.contactPhone}
+                                        onChange={(e) => setNewTenant({ ...newTenant, contactPhone: e.target.value })}
+                                        placeholder="+91 9876543210"
+                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
+                                    />
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 pt-4">
@@ -795,7 +793,31 @@ export default function SuperAdminDashboard() {
                             <X className="w-6 h-6 text-slate-500 cursor-pointer" onClick={() => setEditingTenant(null)} />
                         </div>
 
-                        <form onSubmit={handleUpdateTenant} className="p-10 space-y-8">
+                        <form onSubmit={handleUpdateTenant} className="p-10 space-y-8 animate-in fade-in duration-300">
+                            {editingTenant.renewalStatus === 'pending' && (
+                                <div className="bg-amber-50 border border-amber-200 p-6 rounded-[28px] space-y-4 shadow-sm animate-pulse">
+                                    <div className="flex items-center gap-2.5 text-amber-800">
+                                        <AlertCircle className="w-5 h-5 shrink-0" />
+                                        <span className="text-[11px] font-black uppercase tracking-wider">Pending Subscription Renewal Submission</span>
+                                    </div>
+                                    <div className="space-y-2 text-xs text-amber-950">
+                                        <div className="flex justify-between items-center border-b border-amber-100 pb-1.5">
+                                            <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest">Submitted UTR:</span>
+                                            <span className="font-mono font-black select-all bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-lg">{editingTenant.renewalUtr}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest">Submitted At:</span>
+                                            <span className="font-extrabold text-amber-900">
+                                                {editingTenant.renewalSubmittedAt ? new Date(editingTenant.renewalSubmittedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "N/A"}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <p className="text-[9.5px] text-amber-700 leading-relaxed font-semibold bg-white/60 p-3.5 rounded-2xl border border-amber-100">
+                                        💡 To approve, update the subscription entitlement and/or expiration date below, and save. This will clear the pending request automatically.
+                                    </p>
+                                </div>
+                            )}
+
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Subscription Entitlement</label>
                                 <select
@@ -807,6 +829,45 @@ export default function SuperAdminDashboard() {
                                     <option value="trial">Standard Trial (Restricted)</option>
                                     <option value="expired">Expired (Node Locked)</option>
                                 </select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Subscription End Date</label>
+                                <div className="relative">
+                                    <input
+                                        type="date"
+                                        value={(() => {
+                                            if (!editingTenant?.subscriptionEndDate) return "";
+                                            try {
+                                                const d = new Date(editingTenant.subscriptionEndDate);
+                                                if (isNaN(d.getTime())) return "";
+                                                return d.toISOString().split('T')[0];
+                                            } catch {
+                                                return "";
+                                            }
+                                        })()}
+                                        onChange={(e) => {
+                                            if (editingTenant) {
+                                                const val = e.target.value;
+                                                setEditingTenant({
+                                                    ...editingTenant,
+                                                    subscriptionEndDate: val ? new Date(val).toISOString() : undefined
+                                                });
+                                            }
+                                        }}
+                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all cursor-pointer text-slate-700"
+                                    />
+                                    {editingTenant?.subscriptionEndDate && (
+                                        <button
+                                            type="button"
+                                            onClick={() => editingTenant && setEditingTenant({ ...editingTenant, subscriptionEndDate: undefined })}
+                                            className="absolute right-5 top-1/2 -translate-y-1/2 text-[9px] font-black text-rose-500 uppercase tracking-wider hover:underline"
+                                        >
+                                            Clear
+                                        </button>
+                                    )}
+                                </div>
+                                <p className="text-[9px] text-gray-400 px-1 font-medium">Leave blank for unlimited/perpetual access.</p>
                             </div>
 
                             <div className="flex gap-4 pt-4">
