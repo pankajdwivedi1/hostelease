@@ -5249,9 +5249,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       )}
                     </div>
 
-                    {(selectedStudent.branch || selectedStudent.year) && (
+                    {(selectedStudent.collegeName || selectedStudent.branch || selectedStudent.year) && (
                       <div className="col-span-2 md:col-span-2 pt-2 border-t border-gray-100 mt-1">
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                          {selectedStudent.collegeName && (
+                            <div>
+                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-0.5">College</p>
+                              <p className="text-[12px] text-gray-900 font-semibold truncate">{selectedStudent.collegeName}</p>
+                            </div>
+                          )}
                           {selectedStudent.branch && (
                             <div>
                               <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-0.5">Branch</p>
@@ -5310,13 +5316,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
                     )}
 
-                    {selectedStudent.homePinCode && (
+                    {(selectedStudent.homePinCode || selectedStudent.homeState) && (
                       <div className="col-span-2 pt-2 border-t border-gray-100 mt-1">
-                        <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">Permanent Address</p>
-                        <p className="text-[12px] text-gray-700 leading-relaxed">
-                          {selectedStudent.homePinCode}
-                          {selectedStudent.homeState && <span className="text-gray-500">, {selectedStudent.homeState}</span>}
-                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {selectedStudent.homeState && (
+                            <div>
+                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">Home State</p>
+                              <p className="text-[12px] text-gray-900 font-semibold leading-relaxed">
+                                {selectedStudent.homeState}
+                              </p>
+                            </div>
+                          )}
+                          {selectedStudent.homePinCode && (
+                            <div>
+                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">Permanent Address (Pincode)</p>
+                              <p className="text-[12px] text-gray-700 leading-relaxed">
+                                {selectedStudent.homePinCode}
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -6650,6 +6669,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   { id: "password", label: "Pass", icon: "🔑" },
                   { id: "system", label: "System", icon: "⚙️" },
                   { id: "audit", label: "Audit", icon: "🔍" },
+                  { id: "subscription", label: "Billing", icon: "💳" },
                   ...(title !== "Campus Dashboard" ? [{ id: "superadmin", label: "Super Admin", icon: "⚡" }] : [])
                 ].map((tab) => (
                   <button
@@ -8029,6 +8049,68 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                 {activeSettingsTab === "superadmin" && (
                   <DeveloperTools hostels={hostels} developerPassword={developerPassword} />
+                )}
+
+                {activeSettingsTab === "subscription" && (
+                  <div className="space-y-6">
+                    <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-3xl">
+                      <div className="flex items-center gap-3 mb-6">
+                        <span className="p-3 bg-white text-indigo-600 rounded-xl shadow-sm text-xl">💳</span>
+                        <div>
+                          <h3 className="text-lg font-black text-indigo-900 uppercase tracking-tight">Subscription Details</h3>
+                          <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest">Campus Activation Status</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-100/50">
+                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Status</p>
+                          <div className="flex items-center gap-2">
+                            <span className={`w-3 h-3 rounded-full ${subscriptionStatus?.isExpired ? 'bg-red-500' : 'bg-green-500'}`}></span>
+                            <p className="text-sm font-black text-gray-900 uppercase">
+                              {subscriptionStatus?.isExpired ? "Expired" : "Active"}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-100/50">
+                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Time Remaining</p>
+                          <p className="text-sm font-black text-gray-900">
+                            {subscriptionStatus?.daysRemaining !== null 
+                              ? `${subscriptionStatus?.daysRemaining} Days` 
+                              : "N/A"}
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-100/50">
+                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Activation Date</p>
+                          <p className="text-sm font-bold text-gray-900">
+                            {subscriptionStatus?.startDate ? new Date(subscriptionStatus.startDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-100/50">
+                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Expiry Date</p>
+                          <p className="text-sm font-bold text-gray-900">
+                            {subscriptionStatus?.endDate ? new Date(subscriptionStatus.endDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {(subscriptionStatus?.renewalStatus === 'pending' || subscriptionStatus?.renewalUtr) && (
+                        <div className="mt-6 bg-amber-50 border border-amber-100 p-5 rounded-2xl">
+                          <h4 className="text-sm font-black text-amber-900 uppercase tracking-tight mb-2 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                            Pending Renewal
+                          </h4>
+                          <div className="space-y-1 text-xs">
+                            <p><span className="font-bold text-amber-700">UTR:</span> {subscriptionStatus.renewalUtr}</p>
+                            <p><span className="font-bold text-amber-700">Submitted:</span> {subscriptionStatus.renewalSubmittedAt ? new Date(subscriptionStatus.renewalSubmittedAt).toLocaleString("en-IN") : "N/A"}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
 
                 {/* Modal Footer */}
