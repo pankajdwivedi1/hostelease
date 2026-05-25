@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: "Missing required fields or access token." }, { status: 400 });
         }
 
-        const authKey = process.env.MSG91_AUTH_KEY || "519254ATbuLFy7MglO6a11a1dcP1";
+        const authKey = "519254ATbuLFy7MglO6a11a1dcP1";
 
         // Verify the MSG91 access token
         const verifyResponse = await fetch("https://control.msg91.com/api/v5/widget/verifyAccessToken", {
