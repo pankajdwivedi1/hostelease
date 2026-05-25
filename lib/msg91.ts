@@ -50,7 +50,7 @@ export async function sendMSG91_GatepassAlert(
     collegeName: string
 ) {
     try {
-        const authKey = process.env.MSG91_AUTH_KEY;
+        const authKey = process.env.MSG91_AUTH_KEY || "519254ATbuLFy7MglO6a11a1dcP1";
         const templateId = process.env.MSG91_TEMPLATE_ID_GATEPASS;
 
         if (!authKey || !templateId) {
@@ -108,8 +108,8 @@ export async function sendMSG91_GatepassAlert(
 
 export async function sendMSG91_WidgetOTP(phoneNumber: string) {
     try {
-        const authKey = process.env.MSG91_AUTH_KEY;
-        const widgetId = process.env.MSG91_WIDGET_ID;
+        const authKey = process.env.MSG91_AUTH_KEY || "519254ATbuLFy7MglO6a11a1dcP1";
+        const widgetId = process.env.MSG91_WIDGET_ID || "36657770556f363937313038";
 
         if (!authKey || !widgetId) {
             console.warn("⚠️ MSG91 AuthKey or WidgetID is missing. Simulating Widget OTP.");
@@ -155,8 +155,8 @@ export async function sendMSG91_WidgetOTP(phoneNumber: string) {
 
 export async function verifyMSG91_WidgetOTP(phoneNumber: string, reqId: string, otp: string) {
     try {
-        const authKey = process.env.MSG91_AUTH_KEY;
-        const widgetId = process.env.MSG91_WIDGET_ID;
+        const authKey = process.env.MSG91_AUTH_KEY || "519254ATbuLFy7MglO6a11a1dcP1";
+        const widgetId = process.env.MSG91_WIDGET_ID || "36657770556f363937313038";
 
         if (!authKey || !widgetId) {
             console.warn("⚠️ MSG91 AuthKey or WidgetID is missing. Simulating Verification.");

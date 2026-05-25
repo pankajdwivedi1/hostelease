@@ -4,6 +4,13 @@ import { ShieldCheck, Phone, Mail, Building, Globe, CheckCircle } from "lucide-r
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Script from "next/script";
+
+declare global {
+  interface Window {
+    initSendOTP: (config: any) => void;
+  }
+}
 
 export default function RegisterPage() {
     const router = useRouter();
@@ -17,36 +24,47 @@ export default function RegisterPage() {
         contactName: "",
         contactPhone: "",
     });
-    const [otp, setOtp] = useState("");
     const [successData, setSuccessData] = useState<any>(null);
 
     const handleSendOTP = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
-        setLoading(true);
 
-        try {
-            const res = await fetch("/api/public/register/send-otp", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ phoneNumber: formData.contactPhone })
-            });
-            const data = await res.json();
-            
-            if (data.success) {
-                setRegStep(2);
-            } else {
-                setError(data.error || "Failed to send OTP");
-            }
-        } catch (err: any) {
-            setError("Network error occurred.");
-        } finally {
-            setLoading(false);
+        // Ensure 10 digit number
+        const cleanedPhone = formData.contactPhone.replace(/\D/g, "");
+        if (cleanedPhone.length !== 10) {
+            setError("Please enter a valid 10-digit mobile number.");
+            return;
         }
+
+        if (typeof window === "undefined" || !window.initSendOTP) {
+            setError("OTP Provider is still loading. Please wait a moment.");
+            return;
+        }
+
+        const configuration = {
+            widgetId: "36657770556f363937313038",
+            tokenAuth: "519254ATbuLFy7MglO6a11a1dcP1",
+            identifier: "91" + cleanedPhone,
+            success: (data: any) => {
+                // Get verified token in response
+                if (data.type === "success" && data.message) {
+                    // Proceed to deployment automatically using the token
+                    handleVerifyAndDeploy(data.message);
+                } else {
+                    setError("Failed to verify OTP.");
+                }
+            },
+            failure: (error: any) => {
+                setError(error.message || "OTP Verification Failed");
+                console.log("MSG91 Failure:", error);
+            }
+        };
+
+        window.initSendOTP(configuration);
     };
 
-    const handleVerifyAndDeploy = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleVerifyAndDeploy = async (accessToken: string) => {
         setError(null);
         setLoading(true);
 
@@ -56,8 +74,7 @@ export default function RegisterPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     ...formData,
-                    otp,
-                    phoneNumber: formData.contactPhone
+                    accessToken: accessToken
                 })
             });
             const data = await res.json();
@@ -77,6 +94,8 @@ export default function RegisterPage() {
 
     return (
         <div className="min-h-screen bg-[#050510] text-white flex items-center justify-center p-4 sm:p-6 overflow-y-auto relative">
+            <Script src="https://verify.msg91.com/otp-provider.js" strategy="lazyOnload" />
+            
             {/* Background glowing effects */}
             <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none"></div>
             <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none"></div>
@@ -186,48 +205,15 @@ export default function RegisterPage() {
                     )}
 
                     {regStep === 2 && (
-                        <form onSubmit={handleVerifyAndDeploy} className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-500">
-                            <div className="text-center space-y-2">
-                                <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
-                                    <ShieldCheck className="w-8 h-8 text-blue-400" />
-                                </div>
-                                <h3 className="text-xl font-bold">Verify Your Identity</h3>
-                                <p className="text-sm text-gray-400">
-                                    We sent a secure code to <span className="text-white font-bold">{formData.contactPhone}</span>
-                                </p>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1 text-center block">
-                                    Enter 6-Digit OTP
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    maxLength={6}
-                                    value={otp}
-                                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                    placeholder="••••••"
-                                    className="w-full text-center tracking-[1em] text-2xl bg-white/5 border border-white/10 p-6 rounded-2xl font-bold focus:border-blue-500/50 focus:bg-white/10 outline-none transition-all placeholder:text-white/10 placeholder:tracking-normal"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <button
-                                    type="button"
-                                    onClick={() => setRegStep(1)}
-                                    className="p-5 rounded-2xl bg-white/5 text-gray-400 font-black uppercase text-xs tracking-widest hover:bg-white/10 transition-all"
-                                >
-                                    Back
-                                </button>
-                                <button
-                                    disabled={loading || otp.length < 4}
-                                    className="p-5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-black uppercase text-xs tracking-widest shadow-[0_0_30px_rgba(37,99,235,0.4)] transition-all flex justify-center items-center gap-2 disabled:opacity-50"
-                                >
-                                    {loading ? "Deploying..." : "Deploy Node"}
-                                </button>
-                            </div>
-                        </form>
+                        <div className="text-center space-y-8 animate-in fade-in slide-in-from-right-8 duration-500">
+                             <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
+                                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                             </div>
+                             <h3 className="text-xl font-bold">Deploying Your Campus</h3>
+                             <p className="text-sm text-gray-400">
+                                 Please wait while we provision your infrastructure...
+                             </p>
+                        </div>
                     )}
 
                     {regStep === 3 && successData && (

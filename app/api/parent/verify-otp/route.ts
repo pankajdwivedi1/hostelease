@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import { getCurrentTenantId } from "@/lib/tenant";
 import { otpCache } from "@/lib/otpCache";
 import { verifyMSG91_WidgetOTP } from "@/lib/msg91";
+import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,26 +18,25 @@ export async function POST(request: NextRequest) {
       cleaned = cleaned.substring(2);
     }
 
-    const cachedEntry = otpCache.get(cleaned);
+    const cachedData = otpCache.get(cleaned);
 
-    if (!cachedEntry) {
+    if (!cachedData) {
       return NextResponse.json({ success: false, error: "OTP expired or not found. Please request a new one." }, { status: 400 });
     }
 
-    if (Date.now() > cachedEntry.expires) {
+    if (Date.now() > cachedData.expires) {
       otpCache.delete(cleaned);
-      return NextResponse.json({ success: false, error: "OTP has expired. Please request a new one." }, { status: 400 });
+      return NextResponse.json({ success: false, error: "OTP expired. Please request a new one." }, { status: 400 });
     }
 
-    const reqId = cachedEntry.reqId;
+    // Verify using MSG91 Widget API
+    const verification = await verifyMSG91_WidgetOTP(cleaned, cachedData.reqId as string, otp);
     
-    // 🔥 Verify OTP using MSG91 Widget API
-    const verifyResponse = await verifyMSG91_WidgetOTP(cleaned, reqId, otp.trim());
-    if (!verifyResponse.success) {
-        return NextResponse.json({ success: false, error: verifyResponse.error || "Invalid OTP. Please check the code and try again." }, { status: 400 });
+    if (!verification.success) {
+      return NextResponse.json({ success: false, error: verification.error || "Invalid OTP" }, { status: 400 });
     }
 
-    // Clean up cached OTP on success
+    // Clear cache after successful verification
     otpCache.delete(cleaned);
     console.log(`[PARENT LOGIN] Verification successful for phone: ${cleaned}`);
     

@@ -1,30 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
-import { verifyMSG91_WidgetOTP } from "@/lib/msg91";
-import { otpCache } from "@/lib/otpCache";
 
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { otp, phoneNumber, name, slug, adminEmail, contactName, contactPhone } = body;
+        const { name, slug, adminEmail, contactName, contactPhone, accessToken } = body;
 
-        if (!otp || !phoneNumber || !name || !slug || !adminEmail) {
-            return NextResponse.json({ success: false, error: "Missing required fields." }, { status: 400 });
+        if (!name || !slug || !adminEmail || !contactName || !contactPhone || !accessToken) {
+            return NextResponse.json({ success: false, error: "Missing required fields or access token." }, { status: 400 });
         }
 
-        // 1. Verify OTP
-        const cachedReqId = otpCache.get(phoneNumber);
-        if (!cachedReqId) {
-            return NextResponse.json({ success: false, error: "OTP request expired. Please resend." }, { status: 400 });
-        }
+        const authKey = process.env.MSG91_AUTH_KEY || "519254ATbuLFy7MglO6a11a1dcP1";
 
-        const verification = await verifyMSG91_WidgetOTP(phoneNumber, cachedReqId as string, otp);
-        if (!verification.success) {
-            return NextResponse.json({ success: false, error: verification.error || "Invalid OTP." }, { status: 400 });
-        }
+        // Verify the MSG91 access token
+        const verifyResponse = await fetch("https://control.msg91.com/api/v5/widget/verifyAccessToken", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                authkey: authKey,
+                "access-token": accessToken
+            })
+        });
 
-        // Clear the cache to prevent reuse
-        otpCache.delete(phoneNumber);
+        const verifyData = await verifyResponse.json();
+
+        if (verifyData.type !== "success") {
+            return NextResponse.json({ success: false, error: "OTP Token Verification Failed: " + (verifyData.message || "Invalid Token") }, { status: 400 });
+        }
 
         const supabase = getSupabaseAdmin();
 

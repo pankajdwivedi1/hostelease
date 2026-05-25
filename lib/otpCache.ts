@@ -1,5 +1,6 @@
 interface OtpEntry {
-  otp: string;
+  otp?: string;
+  reqId?: string;
   expires: number;
 }
 

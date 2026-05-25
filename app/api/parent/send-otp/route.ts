@@ -81,24 +81,25 @@ export async function POST(request: NextRequest) {
       }, { status: 404 });
     }
 
-    // 🔥 Trigger MSG91 Widget API
+    // 🔥 Trigger MSG91 Widget API (Invisible Mode)
     const smsResponse = await sendMSG91_WidgetOTP(cleaned);
-    const reqId = smsResponse.reqId; // Either the real one from MSG91 or simulated
+    
+    if (!smsResponse.success) {
+        console.warn(`⚠️ SMS error for ${cleaned}: ${smsResponse.error}`);
+        return NextResponse.json({ success: false, error: "Failed to send SMS. Please try again later." }, { status: 500 });
+    }
+
+    const reqId = smsResponse.reqId; 
     
     // Store in global cache with 5 minute expiration
     const expires = Date.now() + 5 * 60 * 1000;
-    otpCache.set(cleaned, { reqId, expires });
+    otpCache.set(cleaned, { reqId: reqId, expires } as any);
 
     console.log(`\n======================================================`);
     console.log(`[PARENT LOGIN OTP] Phone: ${cleaned}`);
     console.log(`[PARENT LOGIN OTP] Student: ${matchedStudent.name}`);
     console.log(`[PARENT LOGIN OTP] Widget ReqId: ${reqId}`);
     console.log(`======================================================\n`);
-
-    if (!smsResponse.success && smsResponse.error !== "Configuration missing") {
-        console.warn(`⚠️ SMS warning for ${cleaned}: ${smsResponse.error}`);
-        // We still allow the login to proceed for development
-    }
 
     return NextResponse.json({
       success: true,
