@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     
     if (!smsResponse.success) {
         console.warn(`⚠️ SMS error for ${cleaned}: ${smsResponse.error}`);
-        return NextResponse.json({ success: false, error: "Failed to send SMS. Please try again later." }, { status: 500 });
+        return NextResponse.json({ success: false, error: `MSG91 Server Error: ${smsResponse.error}` }, { status: 500 });
     }
 
     const reqId = smsResponse.reqId; 
