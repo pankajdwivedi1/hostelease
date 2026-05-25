@@ -131,7 +131,9 @@ export async function sendMSG91_WidgetOTP(phoneNumber: string) {
             headers: {
                 accept: 'application/json',
                 'content-type': 'application/json',
-                authkey: authKey
+                authkey: authKey,
+                'Origin': 'http://localhost:3000',
+                'Referer': 'http://localhost:3000/'
             },
             body: JSON.stringify(payload)
         };
@@ -179,7 +181,9 @@ export async function verifyMSG91_WidgetOTP(phoneNumber: string, reqId: string, 
             headers: {
                 accept: 'application/json',
                 'content-type': 'application/json',
-                authkey: authKey
+                authkey: authKey,
+                'Origin': 'http://localhost:3000',
+                'Referer': 'http://localhost:3000/'
             },
             body: JSON.stringify(payload)
         };
