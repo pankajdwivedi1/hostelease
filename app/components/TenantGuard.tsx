@@ -477,8 +477,8 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
 
     // If expired or deactivated, show the RENEWAL PORTAL for the entire college
     if (status?.isExpired) {
-        // Only allow staff/admin roles to see the payment renewal portal
-        const canSeeRenewal = userType && ["admin", "dean", "gatepass", "warden", "campus"].includes(userType.toLowerCase());
+        // Only allow staff/admin/superadmin roles to see the payment renewal portal
+        const canSeeRenewal = userType && ["admin", "dean", "gatepass", "warden", "campus", "superadmin"].includes(userType.toLowerCase());
 
         // Basic user suspended screen (Screenshot 2)
         if (!canSeeRenewal) {

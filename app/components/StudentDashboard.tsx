@@ -94,6 +94,33 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
     const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
     const [selectedCalendarDay, setSelectedCalendarDay] = useState<Date | null>(new Date());
 
+    // Swipe gestures for calendar month navigation
+    const touchStartRef = useRef<number | null>(null);
+    const touchEndRef = useRef<number | null>(null);
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        touchStartRef.current = e.targetTouches[0].clientX;
+        touchEndRef.current = null;
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        touchEndRef.current = e.targetTouches[0].clientX;
+    };
+
+    const handleTouchEnd = () => {
+        if (touchStartRef.current === null || touchEndRef.current === null) return;
+        const distance = touchStartRef.current - touchEndRef.current;
+        const minSwipeDistance = 50;
+        
+        if (distance > minSwipeDistance) {
+            // Swiped left -> Next Month
+            setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1));
+        } else if (distance < -minSwipeDistance) {
+            // Swiped right -> Previous Month
+            setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1));
+        }
+    };
+
     const [loading, setLoading] = useState(!initialData);
     const [submitting, setSubmitting] = useState(false);
     const [checkingIn, setCheckingIn] = useState(false);
@@ -2635,7 +2662,12 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
 
                                         <div className="overflow-y-auto flex-1 flex flex-col">
                                             {activeHistoryTab === 'calendar' || isParentView ? (
-                                                <div className="flex-1 flex flex-col">
+                                                <div 
+                                                    className="flex-1 flex flex-col"
+                                                    onTouchStart={handleTouchStart}
+                                                    onTouchMove={handleTouchMove}
+                                                    onTouchEnd={handleTouchEnd}
+                                                >
                                                     {/* Calendar Navigation */}
                                                     <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
                                                         <button

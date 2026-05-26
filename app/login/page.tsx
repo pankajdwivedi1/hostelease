@@ -7,6 +7,8 @@ import { auth, googleProvider } from "@/lib/firebase";
 import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { Loader2 } from "lucide-react";
+
 
 function LoginForm() {
   const router = useRouter();
@@ -121,6 +123,30 @@ function LoginForm() {
       console.error("Setup check failed");
     }
   };
+
+  useEffect(() => {
+    if (!otpSent) return;
+
+    if (typeof window !== "undefined" && 'OTPCredential' in window) {
+      const ac = new AbortController();
+      
+      navigator.credentials.get({
+        otp: { transport: ['sms'] },
+        signal: ac.signal
+      }).then((otp: any) => {
+        if (otp && otp.code) {
+          setOtp(otp.code);
+          handleVerifyOtp(otp.code);
+        }
+      }).catch(err => {
+        console.warn("WebOTP error:", err);
+      });
+
+      return () => {
+        ac.abort();
+      };
+    }
+  }, [otpSent]);
   
   const handleSendOtp = async () => {
     if (!parentPhone || parentPhone.length !== 10) {
@@ -157,8 +183,9 @@ function LoginForm() {
     }
   };
 
-  const handleVerifyOtp = async () => {
-    if (!otp || otp.length !== 6) {
+  const handleVerifyOtp = async (codeOverride?: any) => {
+    const activeOtp = (typeof codeOverride === 'string') ? codeOverride : otp;
+    if (!activeOtp || activeOtp.length !== 6) {
       setError("Please enter the 6-digit OTP code");
       return;
     }
@@ -170,7 +197,7 @@ function LoginForm() {
       const response = await fetch("/api/parent/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: parentPhone, otp }),
+        body: JSON.stringify({ phoneNumber: parentPhone, otp: activeOtp }),
       });
 
       const data = await response.json();
@@ -390,6 +417,21 @@ function LoginForm() {
 
   return (
     <div className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-x-hidden overflow-y-auto no-scrollbar bg-[#fafafa] font-sans selection:bg-blue-100 p-4 sm:p-6 lg:p-8">
+      {loading && (
+        <div className="fixed inset-0 z-[9999] bg-[#050510]/80 backdrop-blur-md flex items-center justify-center p-4 text-white">
+          <div className="flex flex-col items-center justify-center gap-4 animate-in fade-in zoom-in duration-300">
+            <div className="w-16 h-16 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/5">
+              <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+            </div>
+            <p className="text-gray-400 text-xs font-black uppercase tracking-widest animate-pulse">
+              Connecting to Google...
+            </p>
+            <p className="text-gray-500 text-[10px] uppercase tracking-wider font-semibold">
+              Please select your account in the popup
+            </p>
+          </div>
+        </div>
+      )}
       <style jsx global>{`
         html, body {
           height: 100%;
@@ -581,6 +623,12 @@ function LoginForm() {
                             </div>
                             <input
                               type="text"
+                              id="otp"
+                              name="otp"
+                              autoFocus
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              autoComplete="one-time-code"
                               maxLength={6}
                               value={otp}
                               onChange={(e) => {
