@@ -123,30 +123,6 @@ function LoginForm() {
       console.error("Setup check failed");
     }
   };
-
-  useEffect(() => {
-    if (!otpSent) return;
-
-    if (typeof window !== "undefined" && 'OTPCredential' in window) {
-      const ac = new AbortController();
-      
-      navigator.credentials.get({
-        otp: { transport: ['sms'] },
-        signal: ac.signal
-      }).then((otp: any) => {
-        if (otp && otp.code) {
-          setOtp(otp.code);
-          handleVerifyOtp(otp.code);
-        }
-      }).catch(err => {
-        console.warn("WebOTP error:", err);
-      });
-
-      return () => {
-        ac.abort();
-      };
-    }
-  }, [otpSent]);
   
   const handleSendOtp = async () => {
     if (!parentPhone || parentPhone.length !== 10) {
