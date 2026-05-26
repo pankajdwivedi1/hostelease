@@ -183,6 +183,23 @@ function LoginForm() {
     }
   };
 
+  const handlePasteClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const numbers = text.replace(/\D/g, "");
+      if (numbers.length === 6) {
+        setOtp(numbers);
+        setError("");
+        handleVerifyOtp(numbers);
+      } else if (numbers.length > 0) {
+        setOtp(numbers.slice(0, 6));
+      }
+    } catch (err) {
+      console.warn("Clipboard access denied", err);
+      setError("Please allow clipboard permission to paste.");
+    }
+  };
+
   const handleVerifyOtp = async (codeOverride?: any) => {
     const activeOtp = (typeof codeOverride === 'string') ? codeOverride : otp;
     if (!activeOtp || activeOtp.length !== 6) {
@@ -621,26 +638,36 @@ function LoginForm() {
                                 Change Phone
                               </button>
                             </div>
-                            <input
-                              type="text"
-                              id="otp"
-                              name="otp"
-                              autoFocus
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              autoComplete="one-time-code"
-                              maxLength={6}
-                              value={otp}
-                              onChange={(e) => {
-                                setOtp(e.target.value.replace(/\D/g, ""));
-                                setError("");
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleVerifyOtp();
-                              }}
-                              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-center text-lg font-black tracking-[0.5em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:font-medium"
-                              placeholder="······"
-                            />
+                            <div className="relative">
+                              <input
+                                type="text"
+                                id="otp"
+                                name="otp"
+                                autoFocus
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                autoComplete="one-time-code"
+                                maxLength={6}
+                                value={otp}
+                                onChange={(e) => {
+                                  setOtp(e.target.value.replace(/\D/g, ""));
+                                  setError("");
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleVerifyOtp();
+                                }}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-16 py-3 text-center text-lg font-black tracking-[0.5em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:font-medium"
+                                placeholder="······"
+                              />
+                              <button
+                                type="button"
+                                onClick={handlePasteClipboard}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 border border-blue-100"
+                                title="Paste code from clipboard"
+                              >
+                                Paste
+                              </button>
+                            </div>
                             <button
                               type="button"
                               onClick={handleVerifyOtp}
