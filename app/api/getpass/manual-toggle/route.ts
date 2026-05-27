@@ -46,9 +46,19 @@ export async function POST(request: NextRequest) {
 
         // 🔍 SEARCH ACTION: Just find and return student profile for verification
         if (action === 'find' && searchId) {
-            const results = await db.students.list({ search: searchId.trim() }, { light: false });
+            const s = searchId.trim();
+            const isEmail = s.includes('@');
+            const isNumeric = /^[0-9]+$/.test(s);
+            const hasPhoneLength = /^\+?[0-9]{10,13}$/.test(s);
+            const hasSpecialChars = /[^a-zA-Z0-9\s\-\/\.\']/.test(s);
+
+            if (isEmail || isNumeric || hasPhoneLength || hasSpecialChars) {
+                return NextResponse.json({ error: "Enter only Name, Registration or ERP ID" }, { status: 400 });
+            }
+
+            const results = await db.students.list({ gatepassSearch: s }, { light: false });
             if (!results || results.length === 0) {
-                return NextResponse.json({ error: "No student found with this name or ID" }, { status: 404 });
+                return NextResponse.json({ error: "No information exists in the database for the entered details." }, { status: 404 });
             }
             return NextResponse.json({ success: true, student: results[0] });
         }

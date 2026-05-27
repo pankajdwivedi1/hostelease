@@ -2829,7 +2829,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                                             </div>
                                                                                             <div>
                                                                                                 <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Check In</p>
-                                                                                                {pass.status === 'in' ? (
+                                                                                                {pass.status === 'in' || pass.status === 'auto-resolved' ? (
                                                                                                     <p className="font-extrabold text-gray-800">{pass.checkInISTTime} | <span className="text-gray-400">{pass.checkInISTDate}</span></p>
                                                                                                 ) : (
                                                                                                     <p className="font-extrabold text-rose-500 uppercase tracking-widest text-[10px] animate-pulse">Outside Campus</p>

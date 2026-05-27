@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       ...(fatherNumber && { fatherNumber: validators.sanitizePhoneNumber(fatherNumber) }),
       ...(motherName && { motherName: validators.sanitizeInput(motherName) }),
       ...(motherNumber && { motherNumber: validators.sanitizePhoneNumber(motherNumber) }),
-      ...(permanentAddress && { permanentAddress: validators.sanitizeInput(permanentAddress) }),
+      ...((permanentAddress || body.homePinCode) && { permanentAddress: validators.sanitizeInput(permanentAddress || body.homePinCode) }),
       ...(homeState && { homeState: validators.sanitizeInput(homeState) }),
       ...(erpInformation && { erpInformation: validators.sanitizeInput(erpInformation) }),
       ...(joiningDate && { joiningDate: validators.formatDateForDB(joiningDate) }),

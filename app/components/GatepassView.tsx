@@ -453,7 +453,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                     else newSummary.gatePassCount++;
                                 }
                                 newRecent.unshift(mapped);
-                            } else if (payload.eventType === 'UPDATE' && mapped.status === 'in') {
+                            } else if (payload.eventType === 'UPDATE' && (mapped.status === 'in' || mapped.status === 'auto-resolved')) {
                                 // STUDENT SCANNING IN (Check-in)
                                 // Remove from currentlyOut
                                 const index = newCurrentlyOut.findIndex(r => r._id === mapped._id);
@@ -561,6 +561,17 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         if (e) e.preventDefault();
         if (!manualSearchId.trim()) return;
 
+        const s = manualSearchId.trim();
+        const isEmail = s.includes('@');
+        const isNumeric = /^[0-9]+$/.test(s);
+        const hasPhoneLength = /^\+?[0-9]{10,13}$/.test(s);
+        const hasSpecialChars = /[^a-zA-Z0-9\s\-\/\.\']/.test(s);
+
+        if (isEmail || isNumeric || hasPhoneLength || hasSpecialChars) {
+            setManualError("Enter only Name, Registration or ERP ID");
+            return;
+        }
+
         setIsProcessingManual(true);
         setManualError("");
         setManualSuccess("");
@@ -584,7 +595,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                 setFoundStudent(data.student);
                 setShowProfileCard(true);
             } else {
-                setManualError(data.error || "No student found with this name or ID");
+                setManualError(data.error || "No information exists in the database for the entered details.");
             }
         } catch (err) {
             setManualError("Network error. Try again.");
@@ -937,7 +948,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                         <input
                                             ref={manualInputRef}
                                             type="text"
-                                            placeholder="Student Name or ID..."
+                                            placeholder="Enter Name, Registration or ERP ID..."
                                             value={manualSearchId}
                                             onChange={e => {
                                                 setManualSearchId(e.target.value);

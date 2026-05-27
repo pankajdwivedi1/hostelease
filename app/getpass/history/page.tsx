@@ -227,7 +227,7 @@ export default function OutingHistoryPage() {
                 if (selectedColumns.has("hostel")) row.hostel = formatHostelDisplay(r.hostelName);
                 if (selectedColumns.has("room")) row.room = r.roomNumber;
                 if (selectedColumns.has("outTime")) row.outTime = `${r.checkOutISTTime} ${r.checkOutISTDate}`;
-                if (selectedColumns.has("inTime")) row.inTime = r.status === 'in' ? `${r.checkInISTTime} ${r.checkInISTDate}` : "Still Outside";
+                if (selectedColumns.has("inTime")) row.inTime = (r.status === 'in' || r.status === 'auto-resolved') ? `${r.checkInISTTime} ${r.checkInISTDate}` : "Still Outside";
                 if (selectedColumns.has("duration")) row.duration = formatDuration(r.durationMinutes);
                 if (selectedColumns.has("status")) row.status = r.status === 'out' ? "OUT" : "IN";
                 if (selectedColumns.has("fatherName")) row.fatherName = r.fatherName || "";
@@ -525,7 +525,7 @@ export default function OutingHistoryPage() {
                                                 </div>
                                             </div>
 
-                                            {record.status === 'in' ? (
+                                            {record.status === 'in' || record.status === 'auto-resolved' ? (
                                                 <div className="flex flex-col items-start sm:items-end mt-0.5">
                                                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                                                         <span className="text-[8px] text-white/70 font-black uppercase tracking-tighter">In:</span>
@@ -801,7 +801,7 @@ export default function OutingHistoryPage() {
                                                     );
                                                     case "inTime": return (
                                                         <td key="inTime" className="px-6 py-4 text-[11px] font-medium text-white/40 border-b border-white/5">
-                                                            {r.status === 'in' ? (
+                                                             {r.status === 'in' || r.status === 'auto-resolved' ? (
                                                                 <>
                                                                     <span className="text-green-400">{r.checkInISTTime}</span> <br /> {r.checkInISTDate}
                                                                 </>

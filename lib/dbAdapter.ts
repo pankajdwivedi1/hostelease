@@ -40,6 +40,7 @@ const mapStudentToCamelCase = (s: any) => {
         motherName: s.mother_name || s.motherName,
         motherNumber: s.mother_number || s.motherNumber,
         permanentAddress: s.permanent_address || s.permanentAddress,
+        homePinCode: s.permanent_address || s.permanentAddress || s.home_pin_code || s.homePinCode,
         homeState: s.home_state || s.homeState,
         erpInformation: s.erp_id || s.erpInformation,
         branch: s.branch,
@@ -86,6 +87,7 @@ const mapStudentToSnakeCase = (data: any) => {
         motherName: 'mother_name',
         motherNumber: 'mother_number',
         permanentAddress: 'permanent_address',
+        homePinCode: 'permanent_address',
         homeState: 'home_state',
         erpInformation: 'erp_id',
         joiningDate: 'joining_date',
@@ -108,7 +110,7 @@ const mapStudentToSnakeCase = (data: any) => {
     };
     const forbidden = [
         'id', '_id', 'firebaseuid', 'firebase_uid', 'createdat', 'updatedat',
-        'action', '__v', 'permissions', 'lastcheckinlocation', 'permanentaddress', 'permanent_address'
+        'action', '__v', 'permissions', 'lastcheckinlocation'
     ];
     Object.keys(data).forEach(key => {
         const lowKey = key.toLowerCase();
@@ -997,7 +999,7 @@ export const db = {
         // ⚡ DATABASE-AWARE LIST WITH FILTERS
         list: async (filters: any = {}, options: { light?: boolean; select?: string; limit?: number } = {}) => {
             const source = await getDbSource();
-            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id';
+            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id,father_name,father_number,mother_name,mother_number,permanent_address,home_state,local_guardian_address,local_guardian_phone_number,erp_id';
             const selection = options.select || (options.light ? lightFields : '*');
 
             if (source === 'SUPABASE') {
@@ -1020,6 +1022,10 @@ export const db = {
                     const s = filters.search;
                     query = query.or(`name.ilike.%${s}%,email.ilike.%${s}%,phone_number.ilike.%${s}%,room_number.ilike.%${s}%,registration_id.ilike.%${s}%`);
                 }
+                if (filters.gatepassSearch) {
+                    const s = filters.gatepassSearch;
+                    query = query.or(`name.ilike.%${s}%,registration_id.ilike.%${s}%,erp_id.ilike.%${s}%`);
+                }
 
                 const { data, error } = await query
                     .order('name', { ascending: true })
@@ -1030,7 +1036,29 @@ export const db = {
             } else {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
-                const records = await StudentModel.find(filters).sort({ name: 1 }).limit(options.limit || 1000).lean();
+                
+                const mongoFilters = { ...filters };
+                if (filters.gatepassSearch) {
+                    delete mongoFilters.gatepassSearch;
+                    const searchRegex = { $regex: filters.gatepassSearch, $options: 'i' };
+                    mongoFilters.$or = [
+                        { name: searchRegex },
+                        { registrationId: searchRegex },
+                        { erpInformation: searchRegex }
+                    ];
+                } else if (filters.search) {
+                    delete mongoFilters.search;
+                    const searchRegex = { $regex: filters.search, $options: 'i' };
+                    mongoFilters.$or = [
+                        { name: searchRegex },
+                        { email: searchRegex },
+                        { phoneNumber: searchRegex },
+                        { roomNumber: searchRegex },
+                        { registrationId: searchRegex }
+                    ];
+                }
+
+                const records = await StudentModel.find(mongoFilters).sort({ name: 1 }).limit(options.limit || 1000).lean();
                 return records.map(mapStudentToCamelCase);
             }
         },
@@ -1104,6 +1132,7 @@ export const db = {
                         motherNumber: 'mother_number',
                         // ✅ permanentAddress maps to permanent_address column in Supabase
                         permanentAddress: 'permanent_address',
+                        homePinCode: 'permanent_address',
                         homeState: 'home_state',
                         // ✅ Corrected: erp_id is the actual live Supabase column name
                         erpInformation: 'erp_id',
@@ -1128,7 +1157,7 @@ export const db = {
                     // Fields to explicitly EXCLUDE from update (metadata, identifiers, or computed)
                     const forbidden = [
                         'id', '_id', 'firebaseuid', 'firebase_uid', 'createdat', 'updatedat',
-                        'action', '__v', 'permissions', 'lastcheckinlocation', 'permanentaddress', 'permanent_address'
+                        'action', '__v', 'permissions', 'lastcheckinlocation'
                     ];
 
                     Object.keys(data).forEach(key => {
