@@ -392,6 +392,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [semesterFilter, setSemesterFilter] = useState<string>("all");
   const [branchFilter, setBranchFilter] = useState<string>("all");
   const [sectionFilter, setSectionFilter] = useState<string>("all");
+  const [floorFilter, setFloorFilter] = useState<string>("all");
+  const [roomFilter, setRoomFilter] = useState<string>("all");
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string; attendanceMode?: 'strict' | 'gps-only' | 'biometric' }>>([]);
   const [showHostelSettingsModal, setShowHostelSettingsModal] = useState(false);
   const [updatingHostelId, setUpdatingHostelId] = useState<string | null>(null);
@@ -1823,9 +1825,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         const timestamp = localStorage.getItem(CACHE_KEYS.TIMESTAMP);
 
         if (cached && timestamp) {
+          const parsed = JSON.parse(cached);
           const age = Date.now() - parseInt(timestamp);
-          if (age < CACHE_DURATION) {
-            setStudents(JSON.parse(cached));
+          const needsUpgrade = parsed.length > 0 && parsed[0].floorNumber === undefined;
+          if (!needsUpgrade && age < CACHE_DURATION) {
+            setStudents(parsed);
             setStudentsLoading(false);
             return;
           }
@@ -1859,6 +1863,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           year: s.year,
           semester: s.semester,
           section: s.section,
+          floorNumber: s.floorNumber,
           localGuardianAddress: s.localGuardianAddress,
           localGuardianPhoneNumber: s.localGuardianPhoneNumber,
           homeState: s.homeState,
@@ -2823,13 +2828,54 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const matchesSemester = semesterFilter === "all" || student.semester?.toUpperCase() === semesterFilter.toUpperCase();
       const matchesBranch = branchFilter === "all" || student.branch === branchFilter;
       const matchesSection = sectionFilter === "all" || student.section?.toUpperCase() === sectionFilter.toUpperCase();
+      const matchesFloor = floorFilter === "all" || student.floorNumber === floorFilter;
+      const matchesRoom = roomFilter === "all" || student.roomNumber === roomFilter;
 
-      if (!matchesStatus || !matchesSearch || !matchesHostel || !matchesCollege || !matchesSemester || !matchesBranch || !matchesSection) return false;
+      if (!matchesStatus || !matchesSearch || !matchesHostel || !matchesCollege || !matchesSemester || !matchesBranch || !matchesSection || !matchesFloor || !matchesRoom) return false;
 
       if (statusFilter === "all") return true;
       return student.studentStatus === statusFilter;
     });
-  }, [permissions, filter, statusFilter, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter, sectionFilter, isWarden, authorizedHostels]);
+  }, [permissions, filter, statusFilter, searchQuery, hostelFilter, collegeFilter, semesterFilter, branchFilter, sectionFilter, floorFilter, roomFilter, isWarden, authorizedHostels]);
+
+
+  // Dynamic lists for Floor and Room dropdown filters based on authorized hostels/students
+  const availableFloors = useMemo(() => {
+    const floorsSet = new Set<string>(["GND FLOOR", "1ST FLOOR", "2ND FLOOR", "3RD FLOOR", "4TH FLOOR"]);
+    students.forEach((s) => {
+      if (isWarden && authorizedHostels.length > 0) {
+        const studentHostel = getHostelCategory(s.hostelName) || s.hostelName;
+        const isAuthorized = authorizedHostels.some(h =>
+          h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase()
+        );
+        if (!isAuthorized) return;
+      }
+      if (s.floorNumber) {
+        floorsSet.add(s.floorNumber.trim().toUpperCase());
+      }
+    });
+    return Array.from(floorsSet);
+  }, [students, isWarden, authorizedHostels]);
+
+  const availableRooms = useMemo(() => {
+    const roomsSet = new Set<string>();
+    students.forEach((s) => {
+      if (isWarden && authorizedHostels.length > 0) {
+        const studentHostel = getHostelCategory(s.hostelName) || s.hostelName;
+        const isAuthorized = authorizedHostels.some(h =>
+          h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase()
+        );
+        if (!isAuthorized) return;
+      }
+      if (floorFilter !== "all" && s.floorNumber !== floorFilter) {
+        return;
+      }
+      if (s.roomNumber) {
+        roomsSet.add(s.roomNumber.trim());
+      }
+    });
+    return Array.from(roomsSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [students, floorFilter, isWarden, authorizedHostels]);
 
 
   // Base list filtered by Search, College, Semester, Branch, and Section
@@ -2878,10 +2924,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const matchesSemester = semesterFilter === "all" || student.semester?.toUpperCase() === semesterFilter.toUpperCase();
       const matchesBranch = branchFilter === "all" || student.branch === branchFilter;
       const matchesSection = sectionFilter === "all" || student.section?.toUpperCase() === sectionFilter.toUpperCase();
+      const matchesFloor = floorFilter === "all" || student.floorNumber === floorFilter;
+      const matchesRoom = roomFilter === "all" || student.roomNumber === roomFilter;
 
-      return matchesSearch && matchesCollege && matchesSemester && matchesBranch && matchesSection;
+      return matchesSearch && matchesCollege && matchesSemester && matchesBranch && matchesSection && matchesFloor && matchesRoom;
     });
-  }, [students, searchQuery, collegeFilter, semesterFilter, branchFilter, sectionFilter, isWarden, wardenHostelName]);
+  }, [students, searchQuery, collegeFilter, semesterFilter, branchFilter, sectionFilter, floorFilter, roomFilter, isWarden, wardenHostelName]);
 
   const filteredStudents = useMemo(() => {
     return dropdownFilteredStudents.filter((student) => {
@@ -4634,7 +4682,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   />
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-secondary mb-1.5">College Name</label>
                     <select
@@ -4711,6 +4759,37 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <option value="D">D</option>
                       <option value="E">E</option>
                       <option value="F">F</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-secondary mb-1.5">Select Floor</label>
+                    <select
+                      value={floorFilter}
+                      onChange={(e) => {
+                        setFloorFilter(e.target.value);
+                        setRoomFilter("all");
+                      }}
+                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground"
+                    >
+                      <option value="all">All Floors</option>
+                      {availableFloors.map((floor) => (
+                        <option key={floor} value={floor}>{floor}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-secondary mb-1.5">Select Room number</label>
+                    <select
+                      value={roomFilter}
+                      onChange={(e) => setRoomFilter(e.target.value)}
+                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground"
+                    >
+                      <option value="all">All Rooms</option>
+                      {availableRooms.map((room) => (
+                        <option key={room} value={room}>{room}</option>
+                      ))}
                     </select>
                   </div>
                 </div>

@@ -999,7 +999,7 @@ export const db = {
         // ⚡ DATABASE-AWARE LIST WITH FILTERS
         list: async (filters: any = {}, options: { light?: boolean; select?: string; limit?: number } = {}) => {
             const source = await getDbSource();
-            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id,father_name,father_number,mother_name,mother_number,permanent_address,home_state,local_guardian_address,local_guardian_phone_number,erp_id';
+            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id,father_name,father_number,mother_name,mother_number,permanent_address,home_state,local_guardian_address,local_guardian_phone_number,erp_id,floor_number';
             const selection = options.select || (options.light ? lightFields : '*');
 
             if (source === 'SUPABASE') {
