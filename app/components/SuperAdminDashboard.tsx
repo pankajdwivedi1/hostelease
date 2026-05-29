@@ -79,6 +79,18 @@ export default function SuperAdminDashboard() {
         }
     }, []);
 
+    const getTenantDisplayUrl = (slug: string) => {
+        if (!isMounted) return `${slug}.hostelease.com`;
+        const hostname = window.location.hostname;
+        if (hostname === "localhost") {
+            return `${slug}.localhost:3000`;
+        } else if (hostname.includes("hostelease.com")) {
+            return `${slug}.hostelease.com`;
+        } else {
+            return `${window.location.host}/?tenant=${slug}`;
+        }
+    };
+
     const fetchTenants = async () => {
         try {
             const res = await fetch(`/api/super-admin/tenants${viewMode === 'recycle' ? '?deleted=true' : ''}`);
@@ -236,20 +248,18 @@ export default function SuperAdminDashboard() {
     };
 
     const handleImpersonateAdmin = (slug: string) => {
-        // Construct the tenant-specific URL
         const hostname = window.location.hostname;
-        let targetHost = "";
+        let impersonateUrl = "";
         
         if (hostname === "localhost") {
-            targetHost = `${slug}.localhost:3000`;
-        } else if (hostname === "hostelease.com" || hostname.includes("hostelease.vercel.app")) {
-            targetHost = `${slug}.${hostname}`;
+            impersonateUrl = `http://${slug}.localhost:3000/auth/impersonate?type=admin&token=BOSS_PROXY_${Date.now()}`;
+        } else if (hostname.includes("hostelease.com")) {
+            impersonateUrl = `https://${slug}.hostelease.com/auth/impersonate?type=admin&token=BOSS_PROXY_${Date.now()}`;
         } else {
-            // Fallback for codespaces or other environments
-            targetHost = window.location.host.replace(/^[^.]+/, slug);
+            // For vercel.app domains, codespaces, IPs, etc. -> Use query param which middleware will convert to cookie
+            impersonateUrl = `${window.location.protocol}//${window.location.host}/auth/impersonate?type=admin&token=BOSS_PROXY_${Date.now()}&tenant=${slug}`;
         }
 
-        const impersonateUrl = `${window.location.protocol}//${targetHost}/auth/impersonate?type=admin&token=BOSS_PROXY_${Date.now()}`;
         window.open(impersonateUrl, "_blank");
     };
 
@@ -566,7 +576,7 @@ export default function SuperAdminDashboard() {
 
                                         <div className="flex items-center gap-2 bg-slate-900 text-white p-2 rounded-xl">
                                             <Globe className="w-3 h-3 text-blue-400 shrink-0" />
-                                            <span className="text-[10px] font-bold tracking-tight truncate flex-1">{tenant.slug}.hostelease.com</span>
+                                            <span className="text-[10px] font-bold tracking-tight truncate flex-1">{getTenantDisplayUrl(tenant.slug)}</span>
                                             <div className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 bg-white/10 rounded-lg">
                                                 <Activity className="w-2 h-2 text-emerald-400" />
                                                 <span className="text-[8px] font-black">{tenant.liveTraffic || 0}</span>
