@@ -30,6 +30,11 @@ const FieldEnforcementComponent = dynamic(() => import("./FieldEnforcementCompon
   loading: () => <div className="h-64 w-full bg-gray-100 animate-pulse rounded-xl flex items-center justify-center text-gray-400 text-xs">Loading Field Enforcement...</div>
 });
 
+const TenantSettingsView = dynamic(() => import("./TenantSettingsView"), {
+  ssr: false,
+  loading: () => <div className="h-64 w-full bg-gray-100 animate-pulse rounded-xl flex items-center justify-center text-gray-400 text-xs">Loading Settings...</div>
+});
+
 // ⚡ DEVELOPER TOOLS COMPONENT
 const DeveloperTools = ({ hostels, developerPassword }: { hostels: any[], developerPassword: string }) => {
   const [password, setPassword] = useState("");
@@ -4243,8 +4248,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   )}
                 </div>
               )}
-              {currentTab === 'settings' && title === "Super Admin Dashboard" && (
-                <FieldEnforcementComponent hostels={hostels.map(h => h.name)} />
+              {currentTab === 'settings' && (
+                title === "Super Admin Dashboard" ? (
+                  <FieldEnforcementComponent hostels={hostels.map(h => h.name)} />
+                ) : (
+                  <TenantSettingsView />
+                )
               )}
 
               {currentTab === 'messaging' && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { ShieldCheck, Phone, Mail, Building, Globe, CheckCircle } from "lucide-react";
+import { Building, Globe, ShieldCheck, Mail, Phone, CheckCircle, Users } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -14,15 +14,17 @@ declare global {
 
 export default function RegisterPage() {
     const router = useRouter();
-    const [regStep, setRegStep] = useState<1 | 2 | 3>(1);
+    const [regStep, setRegStep] = useState<1 | 1.5 | 2 | 3>(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [otp, setOtp] = useState("");
     const [formData, setFormData] = useState({
         name: "",
         slug: "",
         adminEmail: "",
         contactName: "",
         contactPhone: "",
+        totalHostelars: "",
     });
     const [successData, setSuccessData] = useState<any>(null);
 
@@ -30,41 +32,40 @@ export default function RegisterPage() {
         e.preventDefault();
         setError(null);
 
-        // Ensure 10 digit number
         const cleanedPhone = formData.contactPhone.replace(/\D/g, "");
         if (cleanedPhone.length !== 10) {
             setError("Please enter a valid 10-digit mobile number.");
             return;
         }
 
-        if (typeof window === "undefined" || !window.initSendOTP) {
-            setError("OTP Provider is still loading. Please wait a moment.");
+        setLoading(true);
+        try {
+            const res = await fetch("/api/public/register/send-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ contactPhone: formData.contactPhone })
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                setRegStep(1.5 as any); // Show OTP input state
+            } else {
+                setError(data.error || "Failed to send OTP");
+            }
+        } catch (err: any) {
+            setError("Network error occurred. Please try again.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVerifyAndDeploy = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!otp || otp.length !== 6) {
+            setError("Please enter the 6-digit OTP code");
             return;
         }
 
-        const configuration = {
-            widgetId: "36657770556f363937313038",
-            tokenAuth: "519254ATbuLFy7MglO6a11a1dcP1",
-            identifier: "91" + cleanedPhone,
-            success: (data: any) => {
-                // Get verified token in response
-                if (data.type === "success" && data.message) {
-                    // Proceed to deployment automatically using the token
-                    handleVerifyAndDeploy(data.message);
-                } else {
-                    setError("Failed to verify OTP.");
-                }
-            },
-            failure: (error: any) => {
-                setError(error.message || "OTP Verification Failed");
-                console.log("MSG91 Failure:", error);
-            }
-        };
-
-        window.initSendOTP(configuration);
-    };
-
-    const handleVerifyAndDeploy = async (accessToken: string) => {
         setError(null);
         setLoading(true);
 
@@ -74,7 +75,7 @@ export default function RegisterPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     ...formData,
-                    accessToken: accessToken
+                    accessToken: otp // Use the entered OTP as the token
                 })
             });
             const data = await res.json();
@@ -155,16 +156,30 @@ export default function RegisterPage() {
                                         </div>
                                     </div>
 
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1 flex items-center gap-2"><Mail className="w-3 h-3" /> Global Admin Email</label>
-                                    <input
-                                        type="email"
-                                        required
-                                        value={formData.adminEmail}
-                                        onChange={(e) => setFormData({ ...formData, adminEmail: e.target.value })}
-                                        placeholder="admin@university.edu"
-                                        className="w-full bg-white/5 border border-white/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/40 outline-none placeholder:text-gray-700"
-                                    />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1 flex items-center gap-2"><Mail className="w-3 h-3" /> Global Admin Email</label>
+                                        <input
+                                            type="email"
+                                            required
+                                            value={formData.adminEmail}
+                                            onChange={(e) => setFormData({ ...formData, adminEmail: e.target.value })}
+                                            placeholder="admin@university.edu"
+                                            className="w-full bg-white/5 border border-white/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/40 outline-none placeholder:text-gray-700"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1 flex items-center gap-2"><Users className="w-3 h-3" /> Total Hostelars</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            required
+                                            value={formData.totalHostelars}
+                                            onChange={(e) => setFormData({ ...formData, totalHostelars: e.target.value })}
+                                            placeholder="e.g. 500"
+                                            className="w-full bg-white/5 border border-white/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/40 outline-none placeholder:text-gray-700"
+                                        />
+                                    </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -204,6 +219,39 @@ export default function RegisterPage() {
                         </>
                     )}
 
+                    {regStep === 1.5 && (
+                        <div className="text-center space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
+                             <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
+                                <ShieldCheck className="w-8 h-8 text-blue-400" />
+                             </div>
+                             <h3 className="text-xl font-bold">Verify Mobile Number</h3>
+                             <p className="text-sm text-gray-400">
+                                 Please enter the 6-digit OTP sent to {formData.contactPhone}
+                             </p>
+                             
+                             <form onSubmit={handleVerifyAndDeploy} className="space-y-4">
+                                <div className="space-y-2">
+                                    <input
+                                        type="text"
+                                        required
+                                        maxLength={6}
+                                        value={otp}
+                                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                                        placeholder="Enter 6-digit OTP"
+                                        className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-center text-2xl tracking-[0.5em] font-bold focus:ring-2 focus:ring-blue-500/40 outline-none placeholder:text-gray-700"
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    disabled={loading || otp.length !== 6}
+                                    className="w-full bg-blue-600 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20 disabled:opacity-50"
+                                >
+                                    {loading ? "Verifying..." : "Verify & Deploy"}
+                                </button>
+                             </form>
+                        </div>
+                    )}
+
                     {regStep === 2 && (
                         <div className="text-center space-y-8 animate-in fade-in slide-in-from-right-8 duration-500">
                              <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
@@ -230,9 +278,9 @@ export default function RegisterPage() {
                             <div className="bg-black/50 border border-white/5 p-6 rounded-2xl space-y-4 text-left">
                                 <div>
                                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Your Login Portal</label>
-                                    <div className="text-blue-400 font-bold break-all">
+                                    <a href={`http://localhost:3000/login?tenant=${successData.slug}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 font-bold break-all hover:underline block">
                                         http://localhost:3000/login?tenant={successData.slug}
-                                    </div>
+                                    </a>
                                     <p className="text-[10px] text-gray-500 mt-1">Note: In production this will be {successData.slug}.hostelease.com</p>
                                 </div>
                                 <div className="pt-4 border-t border-white/5">

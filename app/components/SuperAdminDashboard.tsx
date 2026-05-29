@@ -265,7 +265,10 @@ export default function SuperAdminDashboard() {
                     id: editingTenant._id,
                     subscriptionStatus: editingTenant.subscriptionStatus,
                     is_active: editingTenant.isActive,
-                    subscriptionEndDate: editingTenant.subscriptionEndDate || null
+                    subscriptionEndDate: editingTenant.subscriptionEndDate || null,
+                    contactName: editingTenant.contactName,
+                    contactPhone: editingTenant.contactPhone,
+                    totalHostelars: editingTenant.totalHostelars
                 })
             });
             const data = await res.json();
@@ -459,6 +462,14 @@ export default function SuperAdminDashboard() {
                                                 ) : null}
                                             </div>
                                             <p className="text-[9px] text-slate-400 font-bold italic opacity-70 break-all mt-0.5">{tenant.adminEmail}</p>
+                                            
+                                            {(tenant.contactName || tenant.contactPhone || tenant.totalHostelars) && (
+                                                <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2">
+                                                    {tenant.contactName && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Contact:</span> {tenant.contactName}</p>}
+                                                    {tenant.contactPhone && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Phone:</span> {tenant.contactPhone}</p>}
+                                                    {tenant.totalHostelars && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Hostelars:</span> {tenant.totalHostelars}</p>}
+                                                </div>
+                                            )}
                                         </div>
                                         {viewMode === 'active' ? (
                                             <button
@@ -868,6 +879,41 @@ export default function SuperAdminDashboard() {
                                     )}
                                 </div>
                                 <p className="text-[9px] text-gray-400 px-1 font-medium">Leave blank for unlimited/perpetual access.</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Contact Name</label>
+                                    <input
+                                        type="text"
+                                        value={editingTenant?.contactName || ""}
+                                        onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, contactName: e.target.value })}
+                                        placeholder="e.g. John Doe"
+                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 text-slate-700"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Contact Phone</label>
+                                    <input
+                                        type="tel"
+                                        value={editingTenant?.contactPhone || ""}
+                                        onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, contactPhone: e.target.value })}
+                                        placeholder="Phone Number"
+                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 text-slate-700"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Total Hostelars</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={editingTenant?.totalHostelars || ""}
+                                    onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, totalHostelars: e.target.value })}
+                                    placeholder="e.g. 500"
+                                    className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 text-slate-700"
+                                />
                             </div>
 
                             <div className="flex gap-4 pt-4">

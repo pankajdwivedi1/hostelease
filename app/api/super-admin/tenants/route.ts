@@ -48,7 +48,10 @@ export async function GET(request: NextRequest) {
                 liveTraffic: trafficRes.count || 0,
                 renewalUtr: bankDetails.renewalUtr || null,
                 renewalStatus: bankDetails.renewalStatus || null,
-                renewalSubmittedAt: bankDetails.renewalSubmittedAt || null
+                renewalSubmittedAt: bankDetails.renewalSubmittedAt || null,
+                contactName: bankDetails.contactName || null,
+                contactPhone: bankDetails.contactPhone || null,
+                totalHostelars: bankDetails.totalHostelars || null
             };
         }));
 
@@ -72,7 +75,10 @@ export async function GET(request: NextRequest) {
                 liveTraffic: stats?.liveTraffic || 0,
                 renewalUtr: stats?.renewalUtr || null,
                 renewalStatus: stats?.renewalStatus || null,
-                renewalSubmittedAt: stats?.renewalSubmittedAt || null
+                renewalSubmittedAt: stats?.renewalSubmittedAt || null,
+                contactName: stats?.contactName || null,
+                contactPhone: stats?.contactPhone || null,
+                totalHostelars: stats?.totalHostelars || null
             };
         }) || [];
 
@@ -170,10 +176,10 @@ export async function POST(request: NextRequest) {
 /**
  * PATCH: Update University Status/Subscription
  */
-export async function PATCH(request: NextRequest) {
+    export async function PATCH(request: NextRequest) {
     try {
         const body = await request.json();
-        const { id, is_active, subscriptionStatus, subscriptionEndDate } = body;
+        const { id, is_active, subscriptionStatus, subscriptionEndDate, contactName, contactPhone, totalHostelars } = body;
 
         if (!id) return NextResponse.json({ success: false, error: "Tenant ID is required" }, { status: 400 });
 
@@ -194,24 +200,38 @@ export async function PATCH(request: NextRequest) {
 
         if (error || !tenant) return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
 
-        // If subscription is being updated, auto-clear renewal request details from settings
-        if (subscriptionStatus || subscriptionEndDate) {
+        // Update admin_settings if subscription is changing or contact details are provided
+        const hasContactUpdates = contactName !== undefined || contactPhone !== undefined || totalHostelars !== undefined;
+        if (subscriptionStatus || subscriptionEndDate || hasContactUpdates) {
             const { data: settings } = await supabase
                 .from('admin_settings')
                 .select('_id, university_bank_details')
                 .eq('tenant_id', id)
                 .maybeSingle();
                 
-            if (settings) {
-                const bankDetails = settings.university_bank_details || {};
+            let bankDetails = settings?.university_bank_details || {};
+
+            if (subscriptionStatus || subscriptionEndDate) {
                 delete bankDetails.renewalUtr;
                 delete bankDetails.renewalStatus;
                 delete bankDetails.renewalSubmittedAt;
-                
+            }
+
+            if (hasContactUpdates) {
+                if (contactName !== undefined) bankDetails.contactName = contactName;
+                if (contactPhone !== undefined) bankDetails.contactPhone = contactPhone;
+                if (totalHostelars !== undefined) bankDetails.totalHostelars = totalHostelars;
+            }
+
+            if (settings) {
                 await supabase
                     .from('admin_settings')
                     .update({ university_bank_details: bankDetails })
                     .eq('_id', settings._id);
+            } else {
+                await supabase
+                    .from('admin_settings')
+                    .insert({ tenant_id: id, university_bank_details: bankDetails });
             }
         }
 
@@ -223,7 +243,10 @@ export async function PATCH(request: NextRequest) {
                 slug: tenant.slug,
                 isActive: tenant.is_active,
                 subscriptionStatus: tenant.subscription_status,
-                subscriptionEndDate: tenant.subscription_end_date
+                subscriptionEndDate: tenant.subscription_end_date,
+                contactName,
+                contactPhone,
+                totalHostelars
             }
         });
     } catch (error: any) {

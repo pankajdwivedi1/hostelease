@@ -90,7 +90,8 @@ function LoginForm() {
 
   const fetchHostels = async () => {
     try {
-      const response = await fetch("/api/hostels");
+      const tenant = searchParams.get('tenant');
+      const response = await fetch(`/api/hostels${tenant ? `?tenant=${tenant}` : ''}`);
 
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
@@ -114,7 +115,8 @@ function LoginForm() {
 
   const checkDeveloperSetup = async () => {
     try {
-      const res = await fetch('/api/developer/setup-status');
+      const tenant = searchParams.get('tenant');
+      const res = await fetch(`/api/developer/setup-status${tenant ? `?tenant=${tenant}` : ''}`);
       const data = await res.json();
       if (data.success) {
         setIsDeveloperSetup(data.isSetup);
