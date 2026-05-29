@@ -3442,7 +3442,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     GATEPASS
                   </button>
                 )}
-                {!isWarden && title === "Super Admin Dashboard" && (
+                {!isWarden && (title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
                   <button
                     onClick={() => setCurrentTab('settings')}
                     className={`flex-1 py-1.5 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all ${currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
@@ -4249,11 +4249,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
               )}
               {currentTab === 'settings' && (
-                title === "Super Admin Dashboard" ? (
-                  <FieldEnforcementComponent hostels={hostels.map(h => h.name)} />
-                ) : (
+                <div className="space-y-8 fade-in">
+                  {title === "Super Admin Dashboard" && (
+                    <FieldEnforcementComponent hostels={hostels.map(h => h.name)} />
+                  )}
                   <TenantSettingsView />
-                )
+                </div>
               )}
 
               {currentTab === 'messaging' && (
