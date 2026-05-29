@@ -35,6 +35,8 @@ const TenantSettingsView = dynamic(() => import("./TenantSettingsView"), {
   loading: () => <div className="h-64 w-full bg-gray-100 animate-pulse rounded-xl flex items-center justify-center text-gray-400 text-xs">Loading Settings...</div>
 });
 
+import HostelManagementModal from "./HostelManagementModal";
+
 // ⚡ DEVELOPER TOOLS COMPONENT
 const DeveloperTools = ({ hostels, developerPassword }: { hostels: any[], developerPassword: string }) => {
   const [password, setPassword] = useState("");
@@ -549,7 +551,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [registrationFields, setRegistrationFields] = useState<Record<string, any>>({});
   const [formBuilderFields, setFormBuilderFields] = useState<any[]>([]);
   const [savedFormBuilderConfig, setSavedFormBuilderConfig] = useState<any[]>([]); // ⚡ NEW: Reference for Diff
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"general" | "rooms" | "form" | "password" | "bank" | "system" | "audit" | "superadmin">("general");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"general" | "rooms" | "form" | "password" | "bank" | "system" | "audit" | "superadmin" | "subscription">("general");
   const [tenantFormData, setTenantFormData] = useState({
     name: "",
     logo: "",
@@ -7846,7 +7848,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <button
                           onClick={async () => {
                             try {
-                              const res = await fetch("/api/admin/passwords", {
+                                  const res = await fetch("/api/admin/passwords", {
                                 method: "PATCH",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ newPassword: getpassPassword, type: "getpass" })
@@ -7862,275 +7864,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         >
                           Set Gatepass Password
                         </button>
-                      </div>
-                    </div>
-
-                    <div className="w-full h-0.5 bg-slate-100"></div>
-
-                    {/* 2. Warden Management Section (Moved from Wardens Tab) */}
-                    <div className="space-y-6">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                        <div className="bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl flex items-start gap-4 flex-1">
-                          <span className="text-xl sm:text-2xl">👮</span>
-                          <div className="flex-1">
-                            <h3 className="text-sm font-black text-blue-900 uppercase tracking-wide mb-1">Campus Management</h3>
-                            <p className="text-xs sm:text-sm text-blue-800 font-medium">
-                              Map individual campus managers to each campus. They can only see students from their assigned campus.
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={handleCreateHostel}
-                          className="w-full sm:w-auto px-6 py-3.5 sm:py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
-                          Add Hostel
-                        </button>
-                      </div>
-
-                      <div className="grid gap-6">
-                        {hostelsConfig.map((hostel) => (
-                          <div key={hostel._id} className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-6 hover:shadow-xl transition-all group overflow-hidden relative">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-100/30 blur-[60px] rounded-full group-hover:bg-indigo-100/40 transition-all" />
-                            <div className="relative z-10">
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                                <div className="flex items-center gap-3 w-full">
-                                  <div className="p-2.5 bg-white rounded-xl shadow-sm border border-slate-200 text-xl shrink-0">🏢</div>
-                                  <div className="min-w-0 flex-1">
-                                    <h4 className="font-black text-slate-800 text-lg uppercase tracking-tight truncate">{formatHostelDisplay(hostel.name)}</h4>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Hostel ID: {hostel._id.slice(-6)}</p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2 w-full sm:w-auto">
-                                  <button
-                                    onClick={() => {
-                                      const newPass = prompt("Enter new password for " + hostel.name + ":", hostel.wardenPassword || "");
-                                      if (newPass !== null) handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenPassword: newPass });
-                                    }}
-                                    className="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:scale-110 active:scale-95 transition-all text-center"
-                                  >
-                                    Update Access
-                                  </button>
-                                  {showRemoveButton && (
-                                    <button
-                                      onClick={() => handleDeleteHostelConfig(hostel._id, hostel.name)}
-                                      className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
-                                    >
-                                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="bg-white/60 p-4 rounded-xl border border-white backdrop-blur-sm">
-                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Campus Username</label>
-                                  <div className="flex items-center gap-3">
-                                    <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-200" />
-                                    <input
-                                      type="text"
-                                      defaultValue={hostel.wardenUsername || (hostel.name.toLowerCase().replace(/ /g, "_") + "_warden")}
-                                      onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenUsername: e.target.value })}
-                                      className="font-black text-slate-700 text-base bg-transparent border-none outline-none focus:ring-0 p-0 w-full"
-                                    />
-                                  </div>
-                                </div>
-                                <div className="bg-white/60 p-4 rounded-xl border border-white backdrop-blur-sm relative group/pass">
-                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-0.5">Campus Password</label>
-                                  <div className="flex items-center gap-3 justify-between">
-                                    <div className="flex items-center gap-3">
-                                      <div className="h-2 w-2 rounded-full bg-indigo-500 shadow-sm shadow-indigo-200" />
-                                      <span className="font-black text-slate-700 text-base tracking-widest">
-                                        {visiblePasswords.has(hostel._id)
-                                          ? (hostel.wardenPassword || globalWardenPassword || "Not Set")
-                                          : ((hostel.wardenPassword || globalWardenPassword) ? "••••••••" : "Not Set")
-                                        }
-                                      </span>
-                                    </div>
-                                    {(hostel.wardenPassword || globalWardenPassword) && (
-                                      <button
-                                        onClick={() => {
-                                          setVisiblePasswords(prev => {
-                                            const newSet = new Set(prev);
-                                            if (newSet.has(hostel._id)) {
-                                              newSet.delete(hostel._id);
-                                            } else {
-                                              newSet.add(hostel._id);
-                                            }
-                                            return newSet;
-                                          });
-                                        }}
-                                        className="p-1.5 hover:bg-indigo-50 rounded-lg transition-colors group"
-                                        title={visiblePasswords.has(hostel._id) ? "Hide password" : "Show password"}
-                                      >
-                                        {visiblePasswords.has(hostel._id) ? (
-                                          <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                                          </svg>
-                                        ) : (
-                                          <svg className="w-5 h-5 text-slate-400 group-hover:text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                          </svg>
-                                        )}
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* MULTI-HOSTEL ACCOUNTS SECTION */}
-                      <div className="mt-12 pt-12 border-t-2 border-slate-100">
-                        <div className="flex items-center justify-between mb-8">
-                          <div>
-                            <h3 className="text-xl font-black text-slate-800">Unified Campus Accounts</h3>
-                            <p className="text-sm text-slate-500 font-medium mt-1">Manage accounts with access to multiple locations</p>
-                          </div>
-                          <button
-                            onClick={() => {
-                              setEditingAccountId(null);
-                              setNewAccountForm({ username: "", password: "", hostels: [] });
-                              setIsCreatingAccount(!isCreatingAccount);
-                            }}
-                            className="px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg flex items-center gap-2"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
-                            Create Account
-                          </button>
-                        </div>
-
-                        {isCreatingAccount && (
-                          <div className="bg-white p-6 rounded-2xl border-2 border-indigo-100 shadow-xl mb-8 animate-in fade-in slide-in-from-top-4">
-                            <h4 className="font-black text-indigo-900 uppercase tracking-widest mb-6">{editingAccountId ? "Edit Campus Account" : "New Campus Account"}</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                              <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Username</label>
-                                <input
-                                  type="text"
-                                  value={newAccountForm.username}
-                                  onChange={e => setNewAccountForm({ ...newAccountForm, username: e.target.value })}
-                                  className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 focus:border-indigo-500 outline-none font-bold"
-                                  placeholder="e.g. super_warden"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Password</label>
-                                <input
-                                  type="text"
-                                  value={newAccountForm.password}
-                                  onChange={e => setNewAccountForm({ ...newAccountForm, password: e.target.value })}
-                                  className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 focus:border-indigo-500 outline-none font-bold"
-                                  placeholder="******"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="mb-8">
-                              <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Assign Hostels</label>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                {hostelsConfig.map(h => (
-                                  <label key={h._id} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${newAccountForm.hostels.includes(h.name) ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 hover:border-slate-200'}`}>
-                                    <input
-                                      type="checkbox"
-                                      checked={newAccountForm.hostels.includes(h.name)}
-                                      onChange={e => {
-                                        if (e.target.checked) {
-                                          setNewAccountForm({ ...newAccountForm, hostels: [...newAccountForm.hostels, h.name] });
-                                        } else {
-                                          setNewAccountForm({ ...newAccountForm, hostels: newAccountForm.hostels.filter(hn => hn !== h.name) });
-                                        }
-                                      }}
-                                      className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
-                                    />
-                                    <span className="font-bold text-sm text-slate-700">{formatHostelDisplay(h.name)}</span>
-                                  </label>
-                                ))}
-                              </div>
-                            </div>
-
-                            <div className="flex justify-end gap-3">
-                              <button
-                                onClick={() => {
-                                  setIsCreatingAccount(false);
-                                  setEditingAccountId(null);
-                                  setNewAccountForm({ username: "", password: "", hostels: [] });
-                                }}
-                                className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors"
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (!newAccountForm.username || !newAccountForm.password || newAccountForm.hostels.length === 0) {
-                                    alert("Please fill all fields and select at least one hostel.");
-                                    return;
-                                  }
-                                  if (editingAccountId) {
-                                    handleManageWardenAccount("update", { ...newAccountForm, accountId: editingAccountId });
-                                  } else {
-                                    handleManageWardenAccount("create", newAccountForm);
-                                  }
-                                }}
-                                className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all"
-                              >
-                                {editingAccountId ? "Update Account" : "Save Account"}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="grid gap-4">
-                          {wardenAccounts.length === 0 && !isCreatingAccount && (
-                            <div className="p-8 text-center text-slate-400 font-medium italic bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-                              No unified accounts created yet.
-                            </div>
-                          )}
-                          {wardenAccounts.map((acc, idx) => (
-                            <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                              <div>
-                                <div className="flex items-center gap-3 mb-2">
-                                  <div className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
-                                  <h4 className="text-lg font-black text-slate-800">{acc.username}</h4>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                  {acc.hostels.map(h => (
-                                    <span key={h} className="px-2.5 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wider rounded-lg">
-                                      {formatHostelDisplay(h)}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 self-start md:self-center">
-                                <button
-                                  onClick={() => {
-                                    setNewAccountForm({
-                                      username: acc.username,
-                                      password: acc.password || "",
-                                      hostels: acc.hostels
-                                    });
-                                    setEditingAccountId(acc._id || null);
-                                    setIsCreatingAccount(true);
-                                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                                  }}
-                                  className="px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    if (confirm("Delete this account?")) handleManageWardenAccount("delete", { username: acc.username });
-                                  }}
-                                  className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors"
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -8446,121 +8179,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
 
       {showHostelSettingsModal && (
-        <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="p-4 md:p-6 border-b flex justify-between items-center bg-gray-50/50">
-              <div>
-                <h3 className="font-black text-gray-800 text-lg md:text-xl tracking-tight">🏢 Hostel Attendance Settings</h3>
-                <p className="text-xs text-secondary mt-1 font-bold uppercase tracking-wide">Configure Security Level Per Hostel</p>
-              </div>
-              <button
-                onClick={() => setShowHostelSettingsModal(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-4 md:p-6 overflow-y-auto flex-1 space-y-6 bg-gray-50/30">
-              {/* Info Box */}
-              <div className="bg-blue-50/80 p-4 rounded-xl border border-blue-100 flex gap-3">
-                <div className="shrink-0 text-2xl">ℹ️</div>
-                <div>
-                  <h4 className="font-bold text-blue-900 text-sm uppercase tracking-wide mb-1">How Modes Work</h4>
-                  <div className="space-y-1 text-xs text-blue-800 leading-relaxed font-medium">
-                    <p>🔒 <strong className="font-black">STRICT MODE (Camera):</strong> GPS + Live Camera Photo Match.</p>
-                    <p>📍 <strong className="font-black">GPS ONLY:</strong> GPS check only. Fastest, no biometric/camera.</p>
-                    <p>👆 <strong className="font-black">BIOMETRIC (New):</strong> GPS + Device Face/Fingerprint (WebAuthn). Most Secure.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {hostels.length === 0 && (
-                  <div className="text-center py-8 text-gray-400 font-bold text-sm bg-white rounded-xl border border-dashed">
-                    No hostels found. Add hostels via database or script first.
-                  </div>
-                )}
-
-                {hostels.map(hostel => {
-                  const isGpsOnly = hostel.attendanceMode === 'gps-only';
-                  const isLoading = updatingHostelId === hostel._id;
-
-                  return (
-                    <div key={hostel._id} className="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div>
-                        <h4 className="font-black text-gray-800 text-base">{hostel.name}</h4>
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <span className="text-[10px] uppercase font-black tracking-widest text-gray-400">Current Status:</span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wide border ${hostel.attendanceMode === 'gps-only'
-                            ? 'bg-amber-50 text-amber-600 border-amber-100'
-                            : hostel.attendanceMode === 'biometric'
-                              ? 'bg-blue-50 text-blue-600 border-blue-100'
-                              : 'bg-green-50 text-green-600 border-green-100'
-                            }`}>
-                            {hostel.attendanceMode === 'gps-only' ? '⚠️ GPS ONLY' : hostel.attendanceMode === 'biometric' ? '👆 BIOMETRIC' : '📸 CAMERA'}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => handleSyncAllStudents(hostel.name)}
-                          disabled={updatingHostelId === 'syncing'}
-                          className="mt-2 text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-1 group"
-                        >
-                          🔄 Force Sync All Students to this Mode
-                        </button>
-                      </div>
-
-                      <div className="flex bg-gray-50 p-1 rounded-lg border border-gray-200 self-start sm:self-auto flex-wrap gap-1">
-                        <button
-                          disabled={isLoading}
-                          onClick={() => handleUpdateHostelMode(hostel._id, 'gps-only')}
-                          title="GPS Check Only"
-                          className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${hostel.attendanceMode === 'gps-only'
-                            ? 'bg-white text-amber-600 shadow-sm ring-1 ring-black/5 scale-[1.02]'
-                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                            }`}
-                        >
-                          {isLoading && hostel.attendanceMode === 'gps-only' ? '⏳' : '📍'} GPS Only
-                        </button>
-                        <button
-                          disabled={isLoading}
-                          onClick={() => handleUpdateHostelMode(hostel._id, 'biometric')}
-                          title="GPS + Device Biometrics"
-                          className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${hostel.attendanceMode === 'biometric'
-                            ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5 scale-[1.02]'
-                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                            }`}
-                        >
-                          {isLoading && hostel.attendanceMode === 'biometric' ? '⏳' : '👆'} Bio-Auth
-                        </button>
-                        <button
-                          disabled={isLoading}
-                          onClick={() => handleUpdateHostelMode(hostel._id, 'strict')}
-                          title="GPS + Camera Photo"
-                          className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${(!hostel.attendanceMode || hostel.attendanceMode === 'strict')
-                            ? 'bg-white text-green-600 shadow-sm ring-1 ring-black/5 scale-[1.02]'
-                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                            }`}
-                        >
-                          {isLoading && (!hostel.attendanceMode || hostel.attendanceMode === 'strict') ? '⏳' : '📸'} Camera
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div className="p-4 border-t bg-gray-50 flex justify-end">
-              <button
-                onClick={() => setShowHostelSettingsModal(false)}
-                className="px-6 py-2.5 bg-gray-800 text-white text-xs font-bold uppercase tracking-wider rounded-xl hover:bg-gray-900 transition-colors shadow-lg shadow-gray-200"
-              >
-                Close Settings
-              </button>
-            </div>
-          </div>
-        </div>
+        <HostelManagementModal
+          hostels={hostels}
+          hostelsConfig={hostelsConfig}
+          wardenAccounts={wardenAccounts}
+          globalWardenPassword={developerPassword}
+          onClose={() => setShowHostelSettingsModal(false)}
+          updatingHostelId={updatingHostelId}
+          formatHostelDisplay={formatHostelDisplay}
+          handleCreateHostel={handleCreateHostel}
+          handleUpdateHostelConfig={handleUpdateHostelConfig}
+          handleDeleteHostelConfig={handleDeleteHostelConfig}
+          handleManageWardenAccount={handleManageWardenAccount}
+          handleUpdateHostelMode={handleUpdateHostelMode}
+          handleSyncAllStudents={handleSyncAllStudents}
+        />
       )}
       {/* Database Export Modal */}
       {showDBExportModal && (
