@@ -22,7 +22,9 @@ import {
     BarChart3,
     ArrowUpRight,
     Lock,
-    Zap
+    Zap,
+    Database,
+    Loader2
 } from "lucide-react";
 
 interface Tenant {
@@ -40,6 +42,13 @@ interface Tenant {
     renewalUtr?: string | null;
     renewalStatus?: string | null;
     renewalSubmittedAt?: string | null;
+    totalHostelars?: number;
+    features?: {
+        smsEnabled?: boolean;
+        biometricEnabled?: boolean;
+        advancedAnalytics?: boolean;
+    };
+    storageBytes?: number;
 }
 
 export default function SuperAdminDashboard() {
@@ -60,6 +69,12 @@ export default function SuperAdminDashboard() {
     const [deletingTenant, setDeletingTenant] = useState<Tenant | null>(null);
     const [deleteConfirmText, setDeleteConfirmText] = useState("");
     const [isDeleting, setIsDeleting] = useState(false);
+    const [calculatingStorageFor, setCalculatingStorageFor] = useState<string | null>(null);
+
+    const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+    const [broadcastMessage, setBroadcastMessage] = useState("");
+    const [broadcastType, setBroadcastType] = useState<"info"|"warning"|"alert">("info");
+    const [isBroadcasting, setIsBroadcasting] = useState(false);
 
     const [newTenant, setNewTenant] = useState({
         name: "",
@@ -278,23 +293,59 @@ export default function SuperAdminDashboard() {
                     subscriptionEndDate: editingTenant.subscriptionEndDate || null,
                     contactName: editingTenant.contactName,
                     contactPhone: editingTenant.contactPhone,
-                    totalHostelars: editingTenant.totalHostelars
+                    totalHostelars: editingTenant.totalHostelars,
+                    features: editingTenant.features
                 })
             });
             const data = await res.json();
             if (data.success) {
-                setTenants(tenants.map(t => t._id === editingTenant._id ? { 
-                    ...t, 
-                    ...editingTenant,
-                    renewalStatus: null,
-                    renewalUtr: null,
-                    renewalSubmittedAt: null
-                } : t));
+                setTenants(tenants.map(t => t._id === editingTenant._id ? { ...t, ...data.tenant } : t));
                 setEditingTenant(null);
-                alert("University updated successfully!");
+                alert("University Node successfully configured.");
             }
         } catch (error) {
-            alert("Update failed");
+            alert("Update failed.");
+        }
+    };
+
+    const handleCalculateStorage = async (tenantId: string) => {
+        setCalculatingStorageFor(tenantId);
+        try {
+            const res = await fetch("/api/super-admin/tenants/storage", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ tenantId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setTenants(tenants.map(t => t._id === tenantId ? { ...t, storageBytes: data.storageBytes } : t));
+            }
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setCalculatingStorageFor(null);
+        }
+    };
+
+    const handleBroadcast = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsBroadcasting(true);
+        try {
+            const res = await fetch("/api/super-admin/broadcast", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: broadcastMessage, type: broadcastType })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert(broadcastMessage ? "Broadcast sent successfully!" : "Broadcast cleared.");
+                setShowBroadcastModal(false);
+                setBroadcastMessage("");
+            }
+        } catch (error) {
+            alert("Failed to send broadcast.");
+        } finally {
+            setIsBroadcasting(false);
         }
     };
 
@@ -386,9 +437,9 @@ export default function SuperAdminDashboard() {
                 <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 no-scrollbar">
                     {[
                         { icon: Users, label: "Total Students", value: tenants.reduce((acc, t) => acc + (t.studentCount || 0), 0), sub: "Across nodes", trend: "+12.4%", color: "blue" },
-                        { icon: CreditCard, label: "Active Revenue", value: `$${globalStats?.revenueSummary?.active * 249 || 0}`, sub: "Monthly", trend: "High", color: "emerald" },
-                        { icon: TrendingUp, label: "Growth Nodes", value: globalStats?.revenueSummary?.trial || 0, sub: "Trialing", trend: "Future", color: "indigo" },
-                        { icon: Zap, label: "System Load", value: "99.9%", sub: "Uptime", trend: "Stable", color: "amber" },
+                        { icon: Zap, label: "Active Nodes", value: globalStats?.revenueSummary?.active || 0, sub: "Subscribed", trend: "Stable", color: "amber" },
+                        { icon: TrendingUp, label: "Trial Nodes", value: globalStats?.revenueSummary?.trial || 0, sub: "Evaluation", trend: "Future", color: "indigo" },
+                        { icon: CreditCard, label: "Active Revenue", value: `$${(globalStats?.revenueSummary?.active || 0) * 249}`, sub: "Monthly", trend: "High", color: "emerald" },
                     ].map((stat, i) => (
                         <div key={i} className="bg-white p-3 sm:p-7 rounded-[20px] sm:rounded-[32px] border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-gray-200/40 transition-all duration-500 group">
                             <div className="flex justify-between items-center mb-2 sm:mb-4">
@@ -462,7 +513,7 @@ export default function SuperAdminDashboard() {
                                     <p className="text-gray-400 text-[10px] italic font-bold">No global nodes provisioned yet.</p>
                                 </div>
                             ) : tenants.map((tenant) => (
-                                <div key={tenant._id} className="bg-white p-4 sm:p-6 rounded-[24px] sm:rounded-[32px] border border-gray-100 shadow-sm flex flex-col h-full gap-4 hover:shadow-md transition-shadow duration-300">
+                                <div key={tenant._id} className="bg-white rounded-[24px] sm:rounded-[32px] p-4 sm:p-6 shadow-sm border border-slate-100 hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 flex flex-col group">
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="flex flex-col min-w-0">
                                             <div className="flex items-center gap-2">
@@ -577,9 +628,26 @@ export default function SuperAdminDashboard() {
                                         <div className="flex items-center gap-2 bg-slate-900 text-white p-2 rounded-xl">
                                             <Globe className="w-3 h-3 text-blue-400 shrink-0" />
                                             <span className="text-[10px] font-bold tracking-tight truncate flex-1">{getTenantDisplayUrl(tenant.slug)}</span>
-                                            <div className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 bg-white/10 rounded-lg">
-                                                <Activity className="w-2 h-2 text-emerald-400" />
-                                                <span className="text-[8px] font-black">{tenant.liveTraffic || 0}</span>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <button 
+                                                    onClick={() => handleCalculateStorage(tenant._id)}
+                                                    disabled={calculatingStorageFor === tenant._id}
+                                                    className="flex items-center gap-1 px-1.5 py-0.5 bg-white/10 hover:bg-white/20 transition-all rounded-lg cursor-pointer disabled:opacity-50" 
+                                                    title="Click to calculate exact storage from database"
+                                                >
+                                                    {calculatingStorageFor === tenant._id ? (
+                                                        <Loader2 className="w-2 h-2 text-indigo-400 animate-spin" />
+                                                    ) : (
+                                                        <Database className="w-2 h-2 text-indigo-400" />
+                                                    )}
+                                                    <span className="text-[8px] font-black">
+                                                        {tenant.storageBytes !== null && tenant.storageBytes !== undefined ? `${(tenant.storageBytes / (1024 * 1024)).toFixed(2)}MB` : "CALCULATE"}
+                                                    </span>
+                                                </button>
+                                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-white/10 rounded-lg" title="Active Connections">
+                                                    <Activity className="w-2 h-2 text-emerald-400" />
+                                                    <span className="text-[8px] font-black">{tenant.liveTraffic || 0}</span>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -640,7 +708,7 @@ export default function SuperAdminDashboard() {
                                              <p className="font-black text-xs sm:text-sm whitespace-nowrap">Force Password Reset</p>
                                          </div>
                                      </button>
-                                     <button className="flex items-center justify-start sm:justify-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 p-4 sm:p-6 rounded-[20px] sm:rounded-[28px] transition-all group w-full">
+                                     <button onClick={() => setShowBroadcastModal(true)} className="flex items-center justify-start sm:justify-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 p-4 sm:p-6 rounded-[20px] sm:rounded-[28px] transition-all group w-full">
                                          <ArrowUpRight className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
                                          <div className="text-left">
                                              <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500">System Comms</p>
@@ -658,9 +726,9 @@ export default function SuperAdminDashboard() {
                                     </h4>
                                     <div className="space-y-6">
                                         {[
-                                            { label: "Database Persistence", val: "88%", color: "blue", percent: 88 },
-                                            { label: "Firebase Auth Response", val: "24ms", color: "emerald", percent: 95 },
-                                            { label: "Node.js Thread Pool", val: "Optimal", color: "blue", percent: 100 },
+                                            { label: "Total Network Nodes", val: `${tenants.length}`, color: "blue", percent: Math.min((tenants.length / 50) * 100, 100) },
+                                            { label: "Active Connections", val: `${tenants.reduce((acc, t) => acc + (t.liveTraffic || 0), 0)}`, color: "emerald", percent: 80 },
+                                            { label: "Database Persistence", val: `${tenants.reduce((acc, t) => acc + (t.studentCount || 0) + (t.liveTraffic || 0) * 15, 0).toLocaleString()} Rows`, color: "blue", percent: 60 },
                                         ].map((stat, i) => (
                                             <div key={i} className="flex flex-col gap-2">
                                                 <div className="flex justify-between items-end">
@@ -757,7 +825,7 @@ export default function SuperAdminDashboard() {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Point of Contact Name</label>
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Contact Name</label>
                                     <input
                                         type="text"
                                         required
@@ -911,6 +979,30 @@ export default function SuperAdminDashboard() {
                                         placeholder="Phone Number"
                                         className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 text-slate-700"
                                     />
+                                </div>
+                            </div>
+
+                            <div className="space-y-4 pt-4 border-t border-gray-100">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Feature Flags (Premium Modules)</label>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <label className={`flex flex-col p-4 rounded-2xl border-2 cursor-pointer transition-all ${editingTenant?.features?.smsEnabled !== false ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'}`}>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-xs font-black text-slate-700 uppercase tracking-wide">SMS Alerts</span>
+                                            <input type="checkbox" checked={editingTenant?.features?.smsEnabled !== false} onChange={(e) => editingTenant && setEditingTenant({...editingTenant, features: {...(editingTenant.features || {}), smsEnabled: e.target.checked}})} className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" />
+                                        </div>
+                                    </label>
+                                    <label className={`flex flex-col p-4 rounded-2xl border-2 cursor-pointer transition-all ${editingTenant?.features?.biometricEnabled !== false ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'}`}>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-xs font-black text-slate-700 uppercase tracking-wide">Biometrics</span>
+                                            <input type="checkbox" checked={editingTenant?.features?.biometricEnabled !== false} onChange={(e) => editingTenant && setEditingTenant({...editingTenant, features: {...(editingTenant.features || {}), biometricEnabled: e.target.checked}})} className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500" />
+                                        </div>
+                                    </label>
+                                    <label className={`flex flex-col p-4 rounded-2xl border-2 cursor-pointer transition-all ${editingTenant?.features?.advancedAnalytics === true ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'}`}>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-xs font-black text-slate-700 uppercase tracking-wide">Analytics+</span>
+                                            <input type="checkbox" checked={editingTenant?.features?.advancedAnalytics === true} onChange={(e) => editingTenant && setEditingTenant({...editingTenant, features: {...(editingTenant.features || {}), advancedAnalytics: e.target.checked}})} className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500" />
+                                        </div>
+                                    </label>
                                 </div>
                             </div>
 
@@ -1074,6 +1166,51 @@ export default function SuperAdminDashboard() {
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* Broadcast Modal */}
+            {showBroadcastModal && (
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl overflow-hidden border border-white animate-in zoom-in duration-500">
+                        <div className="bg-indigo-600 p-10 text-white relative">
+                            <h3 className="text-3xl font-black uppercase tracking-tighter">Global Broadcast</h3>
+                            <p className="text-indigo-200 text-[10px] font-black uppercase tracking-widest mt-1">Push Alert to All Nodes</p>
+                            <button onClick={() => setShowBroadcastModal(false)} className="absolute top-10 right-10 text-indigo-300 hover:text-white transition-colors bg-white/10 h-10 w-10 rounded-full flex items-center justify-center hover:rotate-90">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleBroadcast} className="p-10 space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Broadcast Type</label>
+                                <select 
+                                    value={broadcastType} 
+                                    onChange={(e) => setBroadcastType(e.target.value as any)}
+                                    className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none appearance-none transition-all text-slate-700"
+                                >
+                                    <option value="info">Information (Blue)</option>
+                                    <option value="warning">Warning (Yellow)</option>
+                                    <option value="alert">Critical Alert (Red)</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Message Content (Leave empty to clear)</label>
+                                <textarea
+                                    value={broadcastMessage}
+                                    onChange={(e) => setBroadcastMessage(e.target.value)}
+                                    placeholder="System will be undergoing maintenance..."
+                                    className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all placeholder:text-gray-300 min-h-[120px] text-slate-700"
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={isBroadcasting}
+                                className="w-full p-5 rounded-2xl bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-indigo-500/20 active:scale-95 transition-all"
+                            >
+                                {isBroadcasting ? "Transmitting..." : "Send Broadcast"}
+                            </button>
+                        </form>
                     </div>
                 </div>
             )}

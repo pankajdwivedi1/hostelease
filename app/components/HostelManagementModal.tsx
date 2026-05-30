@@ -217,6 +217,24 @@ export default function HostelManagementModal({
                             </button>
                           </div>
                         </div>
+                        <div>
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block px-1">Total Rooms (Capacity)</label>
+                          <div className="flex items-center gap-3 bg-white p-2.5 rounded-lg border border-slate-200">
+                            <div className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+                            <input
+                              type="number"
+                              defaultValue={hostel.totalRooms || 0}
+                              placeholder="0"
+                              onBlur={(e) => {
+                                const newVal = parseInt(e.target.value);
+                                if (!isNaN(newVal)) {
+                                  handleUpdateHostelConfig({ ...hostel, id: hostel._id, totalRooms: newVal });
+                                }
+                              }}
+                              className="font-black text-slate-700 text-sm bg-transparent border-none outline-none focus:ring-0 p-0 w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>

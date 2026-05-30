@@ -184,7 +184,7 @@ export default function RegisterPage() {
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1">Point of Contact Name</label>
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1">Contact Name</label>
                                         <input
                                             required
                                             value={formData.contactName}

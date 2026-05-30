@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 /**
  * GET: Fetch all colleges (Tenants) with extended stats
  */
@@ -51,7 +54,9 @@ export async function GET(request: NextRequest) {
                 renewalSubmittedAt: bankDetails.renewalSubmittedAt || null,
                 contactName: bankDetails.contactName || null,
                 contactPhone: bankDetails.contactPhone || null,
-                totalHostelars: bankDetails.totalHostelars || null
+                totalHostelars: bankDetails.totalHostelars || null,
+                features: bankDetails.features || { smsEnabled: true, biometricEnabled: true, advancedAnalytics: false },
+                storageBytes: bankDetails.lastStorageBytes || null
             };
         }));
 
@@ -78,7 +83,9 @@ export async function GET(request: NextRequest) {
                 renewalSubmittedAt: stats?.renewalSubmittedAt || null,
                 contactName: stats?.contactName || null,
                 contactPhone: stats?.contactPhone || null,
-                totalHostelars: stats?.totalHostelars || null
+                totalHostelars: stats?.totalHostelars || null,
+                features: stats?.features,
+                storageBytes: stats?.storageBytes || 0
             };
         }) || [];
 
@@ -179,7 +186,7 @@ export async function POST(request: NextRequest) {
     export async function PATCH(request: NextRequest) {
     try {
         const body = await request.json();
-        const { id, is_active, subscriptionStatus, subscriptionEndDate, contactName, contactPhone, totalHostelars } = body;
+        const { id, is_active, subscriptionStatus, subscriptionEndDate, contactName, contactPhone, totalHostelars, features } = body;
 
         if (!id) return NextResponse.json({ success: false, error: "Tenant ID is required" }, { status: 400 });
 
@@ -201,7 +208,7 @@ export async function POST(request: NextRequest) {
         if (error || !tenant) return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
 
         // Update admin_settings if subscription is changing or contact details are provided
-        const hasContactUpdates = contactName !== undefined || contactPhone !== undefined || totalHostelars !== undefined;
+        const hasContactUpdates = contactName !== undefined || contactPhone !== undefined || totalHostelars !== undefined || features !== undefined;
         if (subscriptionStatus || subscriptionEndDate || hasContactUpdates) {
             const { data: settings } = await supabase
                 .from('admin_settings')
@@ -221,6 +228,7 @@ export async function POST(request: NextRequest) {
                 if (contactName !== undefined) bankDetails.contactName = contactName;
                 if (contactPhone !== undefined) bankDetails.contactPhone = contactPhone;
                 if (totalHostelars !== undefined) bankDetails.totalHostelars = totalHostelars;
+                if (features !== undefined) bankDetails.features = features;
             }
 
             if (settings) {
@@ -246,7 +254,8 @@ export async function POST(request: NextRequest) {
                 subscriptionEndDate: tenant.subscription_end_date,
                 contactName,
                 contactPhone,
-                totalHostelars
+                totalHostelars,
+                features
             }
         });
     } catch (error: any) {

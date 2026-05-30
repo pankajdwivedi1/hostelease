@@ -95,37 +95,69 @@ export default function TenantSettingsView() {
     };
 
     if (loading) {
-        return <div className="p-8 text-center text-gray-500 font-bold animate-pulse">Loading Account Settings...</div>;
+        return <div className="p-8 text-center text-gray-500 font-bold animate-pulse">Loading Profile Settings...</div>;
     }
 
     if (!settings) return null;
 
+    const daysRemaining = settings.subscriptionEndDate 
+        ? Math.max(0, Math.ceil((new Date(settings.subscriptionEndDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
+        : null;
+
     return (
         <div className="space-y-6 max-w-4xl">
             <div>
-                <h2 className="text-xl font-black text-slate-800 tracking-tight">Account Settings</h2>
+                <h2 className="text-xl font-black text-slate-800 tracking-tight">Profile Settings</h2>
                 <p className="text-sm font-medium text-slate-500 mt-1">Manage your university registration and contact details.</p>
             </div>
 
             <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-100">
                 <div className="space-y-6">
                     {/* View Only Section */}
-                    <div>
-                        <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4">Subscription Details (Read Only)</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Global Admin Email</p>
-                                <p className="font-bold text-slate-700 mt-1">{settings.adminEmail || "N/A"}</p>
-                            </div>
-                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Subscription Status</p>
-                                <p className="font-bold text-slate-700 mt-1 uppercase">
-                                    {settings.subscriptionStatus === 'trial' ? '🟢 Active (Trial)' :
-                                     settings.subscriptionStatus === 'active' ? '🟢 Active' :
-                                     settings.subscriptionStatus === 'expired' ? '🔴 Expired' : '⚪ Unknown'}
-                                </p>
-                            </div>
+                    {/* View Only Section */}
+                    <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-3xl">
+                      <div className="flex items-center gap-3 mb-6">
+                        <span className="p-3 bg-white text-indigo-600 rounded-xl shadow-sm text-xl">💳</span>
+                        <div>
+                          <h3 className="text-lg font-black text-indigo-900 uppercase tracking-tight">Subscription Details</h3>
+                          <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest">Campus Activation Status</p>
                         </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-100/50">
+                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Status</p>
+                          <div className="flex items-center gap-2">
+                            <span className={`w-3 h-3 rounded-full ${settings.subscriptionStatus === 'expired' ? 'bg-red-500' : 'bg-green-500'}`}></span>
+                            <p className="text-sm font-black text-gray-900 uppercase">
+                              {settings.subscriptionStatus === 'expired' ? "Expired" : "Active"}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-100/50">
+                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Time Remaining</p>
+                          <p className="text-sm font-black text-gray-900">
+                            {daysRemaining !== null 
+                              ? `${daysRemaining} Days` 
+                              : "N/A"}
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-100/50">
+                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Activation Date</p>
+                          <p className="text-sm font-bold text-gray-900">
+                            {settings.subscriptionStartDate ? new Date(settings.subscriptionStartDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-100/50">
+                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Expiry Date</p>
+                          <p className="text-sm font-bold text-gray-900">
+                            {settings.subscriptionEndDate ? new Date(settings.subscriptionEndDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="h-px bg-slate-100 w-full my-6"></div>
@@ -135,7 +167,7 @@ export default function TenantSettingsView() {
                         <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4">Contact Information</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Point of Contact Name</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Contact Name</label>
                                 <input
                                     type="text"
                                     value={contactName}
