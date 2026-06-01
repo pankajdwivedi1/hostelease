@@ -278,8 +278,8 @@ export default function RegisterPage() {
                             <div className="bg-black/50 border border-white/5 p-6 rounded-2xl space-y-4 text-left">
                                 <div>
                                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Your Login Portal</label>
-                                    <a href={`http://localhost:3000/login?tenant=${successData.slug}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 font-bold break-all hover:underline block">
-                                        http://localhost:3000/login?tenant={successData.slug}
+                                    <a href={`/login?tenant=${successData.slug}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 font-bold break-all hover:underline block">
+                                        {typeof window !== 'undefined' ? window.location.origin : ''}/login?tenant={successData.slug}
                                     </a>
                                     <p className="text-[10px] text-gray-500 mt-1">Note: In production this will be {successData.slug}.hostelease.com</p>
                                 </div>
