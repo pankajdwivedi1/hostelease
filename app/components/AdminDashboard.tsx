@@ -273,6 +273,7 @@ interface Permission {
   status: "pending" | "allowed" | "rejected";
   wardenStatus: "pending" | "allowed" | "rejected";
   deanStatus: "pending" | "allowed" | "rejected";
+  createdAt?: string | Date;
 }
 
 interface SimplePermission {
@@ -283,6 +284,7 @@ interface SimplePermission {
   status: "pending" | "allowed" | "rejected";
   wardenStatus: "pending" | "allowed" | "rejected";
   deanStatus: "pending" | "allowed" | "rejected";
+  createdAt?: string | Date;
 }
 
 interface AttendanceLog {
@@ -3695,6 +3697,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         const initials = getInitials(student.name);
                         const profilePic = student.profilePicture && student.profilePicture.trim() !== "" && student.profilePicture !== "undefined";
 
+                        const isOlderThan24Hours = permission.createdAt 
+                          ? (Date.now() - new Date(permission.createdAt).getTime()) > 24 * 60 * 60 * 1000 
+                          : false;
+
                         return (
                           <div key={permission._id} className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4">
                             <div className="flex flex-col gap-3">
@@ -3725,16 +3731,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <span className="text-[9px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter">Warden</span>
                                         <div className="flex items-center gap-1.5 md:gap-2 bg-white/50 p-1 rounded-full border border-gray-100">
                                           <button
-                                            onClick={() => userType === "warden" && handleStatusChange(permission._id, "allowed")}
+                                            onClick={() => {
+                                              if (isOlderThan24Hours) {
+                                                showToast("Cannot modify: 24 hours have passed since the student applied.", "error");
+                                                return;
+                                              }
+                                              if (userType === "warden") handleStatusChange(permission._id, "allowed");
+                                            }}
                                             disabled={userType !== "warden" || permission.deanStatus !== "pending"}
-                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${userType !== "warden" ? "cursor-default" : "cursor-pointer"}`}
+                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                           </button>
                                           <button
-                                            onClick={() => userType === "warden" && handleStatusChange(permission._id, "rejected")}
+                                            onClick={() => {
+                                              if (isOlderThan24Hours) {
+                                                showToast("Cannot modify: 24 hours have passed since the student applied.", "error");
+                                                return;
+                                              }
+                                              if (userType === "warden") handleStatusChange(permission._id, "rejected");
+                                            }}
                                             disabled={userType !== "warden" || permission.deanStatus !== "pending"}
-                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${userType !== "warden" ? "cursor-default" : "cursor-pointer"}`}
+                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                           </button>
@@ -3755,16 +3773,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <span className="text-[9px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter">Dean</span>
                                         <div className="flex items-center gap-1.5 md:gap-2 bg-white/50 p-1 rounded-full border border-gray-100">
                                           <button
-                                            onClick={() => (userType === "admin" || userType === "superadmin") && handleStatusChange(permission._id, "allowed")}
+                                            onClick={() => {
+                                              if (isOlderThan24Hours) {
+                                                showToast("Cannot modify: 24 hours have passed since the student applied.", "error");
+                                                return;
+                                              }
+                                              if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed");
+                                            }}
                                             disabled={userType !== "admin" && userType !== "superadmin"}
-                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300"} ${userType !== "admin" && userType !== "superadmin" ? "cursor-default" : "cursor-pointer"}`}
+                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300"} ${((userType !== "admin" && userType !== "superadmin") || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                           </button>
                                           <button
-                                            onClick={() => (userType === "admin" || userType === "superadmin") && handleStatusChange(permission._id, "rejected")}
+                                            onClick={() => {
+                                              if (isOlderThan24Hours) {
+                                                showToast("Cannot modify: 24 hours have passed since the student applied.", "error");
+                                                return;
+                                              }
+                                              if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected");
+                                            }}
                                             disabled={userType !== "admin" && userType !== "superadmin"}
-                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${userType !== "admin" && userType !== "superadmin" ? "cursor-default" : "cursor-pointer"}`}
+                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${((userType !== "admin" && userType !== "superadmin") || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                           </button>
