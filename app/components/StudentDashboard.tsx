@@ -516,6 +516,24 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
         }
     };
 
+    const handleDeletePayment = async (id: string) => {
+        if (!confirm("Are you sure you want to delete this payment claim?")) return;
+        try {
+            const res = await fetch(`/api/students/payments?id=${id}&studentId=${studentProfile?._id}${getTenantParam(false)}`, {
+                method: "DELETE"
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                setPaymentHistory(prev => prev.filter(p => p._id !== id));
+            } else {
+                alert(data.error || "Failed to delete payment");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Error deleting payment");
+        }
+    };
+
     const handlePaymentSubmit = async () => {
         if (!paymentForm.utrNumber || !paymentForm.amount || !studentProfile) {
             alert("Please fill all fields");
@@ -2513,7 +2531,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                 </div>
                             )}
 
-                            <div className="mb-6">
+                            <div className="mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
                                 <button
                                     onClick={() => setShowPermissionsHistory(true)}
                                     className="w-full md:w-48 h-10 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
@@ -2521,6 +2539,99 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                     🕙 View Outing History
                                 </button>
                             </div>
+
+                            {/* Hostel/Mess Fee Details Table */}
+                            {bankSettings?.isPaymentEnabled && (
+                                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden font-outfit mb-8">
+                                    <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/30">
+                                        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Hostel/Mess Fee Details</h3>
+                                        <button 
+                                            onClick={() => setShowPaymentModal(true)}
+                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold uppercase tracking-widest transition-all active:scale-95 shadow-md shadow-blue-200 flex items-center gap-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                            Add
+                                        </button>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left text-sm border-collapse">
+                                            <thead className="bg-gray-50/50 border-b border-gray-100 text-[10px] font-black uppercase tracking-widest text-secondary">
+                                                <tr>
+                                                    <th className="px-2 py-4 text-center leading-tight">Student<br />Name</th>
+                                                    <th className="px-2 py-4 text-center leading-tight">ERP ID</th>
+                                                    <th className="px-2 py-4 text-center leading-tight">Hostel<br />Name</th>
+                                                    <th className="px-2 py-4 text-center leading-tight">Room No.</th>
+                                                    <th className="px-2 py-4 text-center leading-tight">UTR &<br />Source</th>
+                                                    <th className="px-2 py-4 text-center leading-tight">Amount</th>
+                                                    <th className="px-2 py-4 text-center leading-tight">Date</th>
+                                                    <th className="px-2 py-4 text-center leading-tight">Status</th>
+                                                    <th className="px-2 py-4 text-center leading-tight">Verify/<br />Unverify</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-50">
+                                                {!paymentHistory || paymentHistory.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={9} className="py-20 text-center text-secondary">No payment claims found...</td>
+                                                    </tr>
+                                                ) : (
+                                                    paymentHistory.map((p) => (
+                                                        <tr key={p._id} className="hover:bg-gray-50/50 transition-colors group">
+                                                            <td className="px-2 py-4 min-w-[120px] text-center">
+                                                                <div className="flex flex-col leading-tight items-center">
+                                                                    <span className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors uppercase text-[9px]">{studentProfile?.name || "Unknown"}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-2 py-4 text-center">
+                                                                <span className="text-[9px] text-gray-700 font-bold">{p.registrationId}</span>
+                                                            </td>
+                                                            <td className="px-2 py-4 text-center">
+                                                                <span className="text-[9px] text-gray-700 font-bold uppercase">{studentProfile?.hostelName || "N/A"}</span>
+                                                            </td>
+                                                            <td className="px-2 py-4 text-center">
+                                                                <span className="text-[9px] text-gray-700 font-bold uppercase">{studentProfile?.roomNumber || "N/A"}</span>
+                                                            </td>
+                                                            <td className="px-2 py-4 text-center">
+                                                                <div className="flex flex-col items-center">
+                                                                    <span className="font-mono text-[8px] font-bold text-gray-800">{p.utrNumber}</span>
+                                                                    <span className="text-[8px] text-blue-600 font-black uppercase tracking-tight">{p.paymentSource}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-2 py-4 text-center">
+                                                                <span className="font-black text-gray-900 text-[9px]">₹{p.amount}</span>
+                                                            </td>
+                                                            <td className="px-2 py-4 text-center">
+                                                                <span className="text-[8px] text-gray-500 font-bold">{new Date(p.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                                            </td>
+                                                            <td className="px-2 py-4 text-center">
+                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${
+                                                                    p.status === 'verified' ? 'bg-green-100 text-green-700' :
+                                                                    p.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                                                    p.status === 'flagged' ? 'bg-yellow-100 text-yellow-700' :
+                                                                    'bg-blue-100 text-blue-700'
+                                                                }`}>
+                                                                    {p.status}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-2 py-4 text-center">
+                                                                {p.status === 'pending' ? (
+                                                                    <button
+                                                                        onClick={() => handleDeletePayment(p._id)}
+                                                                        className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded text-[8px] font-black uppercase tracking-widest transition-colors"
+                                                                    >
+                                                                        Delete
+                                                                    </button>
+                                                                ) : (
+                                                                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Locked</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
 
                             {showRequestForm && (
                                 <div className="p-6 rounded-3xl border border-blue-100 bg-gradient-to-br from-white to-blue-50/30 shadow-xl shadow-blue-100/50 space-y-6 mb-6 animate-in slide-in-from-top-4 duration-300">

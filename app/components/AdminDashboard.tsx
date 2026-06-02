@@ -429,6 +429,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [payments, setPayments] = useState<any[]>([]);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
+  const [paymentHostelFilter, setPaymentHostelFilter] = useState<string>("all");
+  const [paymentStartDate, setPaymentStartDate] = useState<string>("");
+  const [paymentEndDate, setPaymentEndDate] = useState<string>("");
   const [paymentSearch, setPaymentSearch] = useState("");
   const [showBankSettingsModal, setShowBankSettingsModal] = useState(false);
   const [bankFormData, setBankFormData] = useState({
@@ -1430,6 +1433,152 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
 
+  const exportPaymentsToExcel = async () => {
+    const filteredPayments = payments.filter(p => {
+      if (paymentStatusFilter !== 'all' && p.status !== paymentStatusFilter) return false;
+      if (paymentHostelFilter !== 'all' && p.studentId?.hostelName !== paymentHostelFilter) return false;
+      if (paymentStartDate && new Date(p.createdAt) < new Date(paymentStartDate)) return false;
+      if (paymentEndDate && new Date(p.createdAt) > new Date(paymentEndDate)) return false;
+      if (paymentSearch) {
+        const term = paymentSearch.toLowerCase();
+        return p.studentId?.name?.toLowerCase().includes(term) ||
+               p.studentId?.registrationId?.toLowerCase().includes(term) ||
+               p.utrNumber?.toLowerCase().includes(term);
+      }
+      return true;
+    });
+
+    if (filteredPayments.length === 0) {
+      alert("No payments to export.");
+      return;
+    }
+
+    try {
+      const XLSX = await import('xlsx-js-style');
+
+      const dateText = (paymentStartDate && paymentEndDate) ? `${paymentStartDate} to ${paymentEndDate}` : 
+                       (paymentStartDate ? `From ${paymentStartDate}` : 
+                       (paymentEndDate ? `Until ${paymentEndDate}` : 'All Time'));
+      const hostelText = paymentHostelFilter === 'all' ? 'All Hostels' : paymentHostelFilter;
+
+      const wsData: any[][] = [];
+      
+      wsData.push(["", "", "Hostel/Mess Fee Payment Details"]);
+      wsData.push([]);
+      wsData.push(["", "", "", "Hostel Name:", hostelText]);
+      wsData.push(["", "", "", "Date:", dateText]);
+      wsData.push([]);
+
+      const headers = ["S.N.", "Student Name", "ERP ID", "Hostel Name", "Room No.", "UTR Number", "Source", "Amount", "Date", "Status"];
+      wsData.push(headers);
+
+      filteredPayments.forEach((p, index) => {
+        wsData.push([
+          index + 1,
+          p.studentId?.name || 'Unknown',
+          p.studentId?.registrationId || 'N/A',
+          p.studentId?.hostelName || 'N/A',
+          p.studentId?.roomNumber || 'N/A',
+          p.utrNumber || '',
+          p.paymentSource || '',
+          p.amount || 0,
+          new Date(p.createdAt).toLocaleDateString('en-GB'),
+          p.status
+        ]);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      ws["!merges"] = [
+        { s: { r: 0, c: 2 }, e: { r: 0, c: 6 } } 
+      ];
+
+      const borderThin = {
+        top: { style: "thin", color: { auto: 1 } },
+        bottom: { style: "thin", color: { auto: 1 } },
+        left: { style: "thin", color: { auto: 1 } },
+        right: { style: "thin", color: { auto: 1 } }
+      };
+
+      const titleStyle = {
+        font: { bold: true },
+        alignment: { horizontal: "center", vertical: "center" },
+        fill: { patternType: "solid", fgColor: { rgb: "FCE4D6" } },
+        border: borderThin
+      };
+
+      const labelStyle = {
+        fill: { patternType: "solid", fgColor: { rgb: "D9E1F2" } },
+        border: borderThin
+      };
+
+      const valStyle = {
+        fill: { patternType: "solid", fgColor: { rgb: "FFF2CC" } },
+        border: borderThin
+      };
+
+      const headerStyle = {
+        font: { bold: true },
+        alignment: { horizontal: "center", vertical: "center" },
+        border: borderThin
+      };
+
+      const dataStyle = {
+        alignment: { horizontal: "center", vertical: "center" },
+        border: borderThin
+      };
+
+      if (!ws["C1"]) ws["C1"] = { t: 's', v: "Hostel/Mess Fee Payment Details" };
+      ws["C1"].s = titleStyle;
+
+      ['D1', 'E1', 'F1', 'G1'].forEach(cell => {
+        if (!ws[cell]) ws[cell] = { t: 's', v: "" };
+        ws[cell].s = titleStyle;
+      });
+
+      if (ws["D3"]) ws["D3"].s = labelStyle;
+      if (ws["E3"]) ws["E3"].s = valStyle;
+      if (ws["D4"]) ws["D4"].s = labelStyle;
+      if (ws["E4"]) ws["E4"].s = valStyle;
+
+      for (let R = 5; R < wsData.length; ++R) { 
+        for (let C = 0; C < 10; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+          
+          if (R === 5) {
+            ws[cellAddress].s = headerStyle;
+          } else {
+            ws[cellAddress].s = dataStyle;
+            if (C === 5 && ws[cellAddress].v) {
+                ws[cellAddress].t = 's'; 
+            }
+          }
+        }
+      }
+
+      ws["!cols"] = [
+        { wch: 6 },  
+        { wch: 25 }, 
+        { wch: 20 }, 
+        { wch: 20 }, 
+        { wch: 12 }, 
+        { wch: 20 }, 
+        { wch: 15 }, 
+        { wch: 12 }, 
+        { wch: 15 }, 
+        { wch: 15 }  
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Payments");
+      XLSX.writeFile(wb, `payments_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+    } catch (err) {
+      console.error("Error generating excel:", err);
+      alert("Failed to generate Excel file.");
+    }
+  };
 
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1858,6 +2007,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           hostelName: s.hostelName,
           roomNumber: s.room_number || s.roomNumber,
           profilePicture: null, // Defer loading to on-demand fetch (saves bandwidth)
+          dob: s.dob,
+          category: s.category,
           fatherName: s.fatherName,
           fatherNumber: s.fatherNumber,
           motherName: s.motherName,
@@ -2255,9 +2406,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             setStudentsLoading(false);
         });
 
-      // Fetch hostels and notifications (only once)
+      // Fetch hostels, notifications, and settings (only once)
       fetchHostels();
       fetchAdminNotifications();
+      fetchBankSettings();
 
       if (currentTab === 'permissions') {
         fetchPermissions('pending'); 
@@ -3444,6 +3596,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     GATEPASS
                   </button>
                 )}
+                {!isWarden && (title === "Super Admin Dashboard" || (title === "Dean Dashboard" && bankFormData.isPaymentEnabled)) && (
+                  <button
+                    onClick={() => setCurrentTab('payments')}
+                    className={`flex-1 py-1.5 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all ${currentTab === 'payments' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                  >
+                    Payments
+                  </button>
+                )}
                 {!isWarden && (title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
                   <button
                     onClick={() => setCurrentTab('settings')}
@@ -4518,14 +4678,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
               )}
 
-              {false && currentTab === 'payments' && (
+              {currentTab === 'payments' && (
                 <div className="space-y-6">
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                     <div>
-                      <h2 className="text-lg font-bold text-foreground">Fee Payment Management</h2>
+                      <h2 className="text-lg font-bold text-foreground">Hostel/Mess Fee Payment Details</h2>
                       <p className="text-sm text-secondary">Verify student claims and reconcile with bank statements</p>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={exportPaymentsToExcel}
+                        className="px-4 py-2 bg-white text-blue-600 border border-blue-200 rounded-lg text-xs font-bold hover:bg-blue-50 transition-all flex items-center gap-2 shadow-sm"
+                        title="Download Filtered Payments as Excel"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                        Excel
+                      </button>
                       <button
                         onClick={() => setShowBankSettingsModal(true)}
                         className="px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all flex items-center gap-2"
@@ -4542,6 +4710,33 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
 
                   <div className="flex flex-col md:flex-row gap-3">
+                    <select
+                      value={paymentHostelFilter}
+                      onChange={(e) => setPaymentHostelFilter(e.target.value)}
+                      className="h-[42px] px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-blue-500 bg-white min-w-[150px]"
+                    >
+                      <option value="all">All Hostels</option>
+                      {hostels.map(h => (
+                        <option key={h._id || h.name} value={h.name}>{h.name}</option>
+                      ))}
+                    </select>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="date"
+                        value={paymentStartDate}
+                        onChange={(e) => setPaymentStartDate(e.target.value)}
+                        className="h-[42px] px-3 rounded-xl border border-gray-200 text-sm text-gray-600 focus:outline-none focus:border-blue-500 bg-white"
+                        title="Start Date"
+                      />
+                      <span className="text-gray-400 text-xs font-bold uppercase">to</span>
+                      <input
+                        type="date"
+                        value={paymentEndDate}
+                        onChange={(e) => setPaymentEndDate(e.target.value)}
+                        className="h-[42px] px-3 rounded-xl border border-gray-200 text-sm text-gray-600 focus:outline-none focus:border-blue-500 bg-white"
+                        title="End Date"
+                      />
+                    </div>
                     <div className="relative flex-1">
                       <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                       <input
@@ -4570,43 +4765,180 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <table className="w-full text-left text-sm border-collapse">
                         <thead className="bg-gray-50/50 border-b border-gray-100 text-[10px] font-black uppercase tracking-widest text-secondary">
                           <tr>
-                            <th className="px-4 py-4">Student Details</th>
-                            <th className="px-4 py-4">UTR & Source</th>
-                            <th className="px-4 py-4 text-center">Amount</th>
-                            <th className="px-4 py-4 text-center">Status</th>
-                            <th className="px-4 py-4 text-right">Actions</th>
+                            <th className="px-2 py-4 min-w-[120px] text-center leading-tight">Student<br />Name</th>
+                            <th className="px-2 py-4 text-center leading-tight">ERP ID</th>
+                            <th className="px-2 py-4 text-center leading-tight">Hostel<br />Name</th>
+                            <th className="px-2 py-4 text-center leading-tight">Room No.</th>
+                            <th className="px-2 py-4 text-center leading-tight">UTR &<br />Source</th>
+                            <th className="px-2 py-4 text-center leading-tight">Amount</th>
+                            <th className="px-2 py-4 text-center leading-tight">Date</th>
+                            <th className="px-2 py-4 text-center leading-tight">Status</th>
+                            <th className="px-2 py-4 text-center leading-tight">Verify/<br />Unverify</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-50 italic font-medium">
+                        <tbody className="divide-y divide-gray-50">
                           {paymentsLoading ? (
                             <tr>
-                              <td colSpan={5} className="py-20 text-center text-secondary">Loading transactions...</td>
+                              <td colSpan={9} className="py-20 text-center text-secondary">Loading transactions...</td>
                             </tr>
                           ) : payments.length === 0 ? (
                             <tr>
-                              <td colSpan={5} className="py-20 text-center text-secondary">No payment claims found</td>
+                              <td colSpan={9} className="py-20 text-center text-secondary">No payment claims found...</td>
+                            </tr>
+                          ) : payments.filter(p => {
+                            if (paymentStatusFilter !== 'all' && p.status !== paymentStatusFilter) return false;
+                            if (paymentHostelFilter !== 'all' && p.studentId?.hostelName !== paymentHostelFilter) return false;
+                            if (paymentStartDate && new Date(p.createdAt) < new Date(paymentStartDate)) return false;
+                            if (paymentEndDate) {
+                              const end = new Date(paymentEndDate);
+                              end.setHours(23, 59, 59, 999);
+                              if (new Date(p.createdAt) > end) return false;
+                            }
+                            if (paymentSearch) {
+                              const term = paymentSearch.toLowerCase();
+                              const matchReg = p.registrationId?.toLowerCase().includes(term);
+                              const matchUtr = p.utrNumber?.toLowerCase().includes(term);
+                              if (!matchReg && !matchUtr) return false;
+                            }
+                            return true;
+                          }).length === 0 ? (
+                            <tr>
+                              <td colSpan={9} className="py-20 text-center text-secondary">
+                                No payment claims match the selected filters.
+                              </td>
                             </tr>
                           ) : (
-                            payments.map((p) => (
+                            payments
+                              .filter(p => {
+                                if (paymentStatusFilter !== 'all' && p.status !== paymentStatusFilter) return false;
+                                if (paymentHostelFilter !== 'all' && p.studentId?.hostelName !== paymentHostelFilter) return false;
+                                if (paymentStartDate && new Date(p.createdAt) < new Date(paymentStartDate)) return false;
+                                if (paymentEndDate) {
+                                  const end = new Date(paymentEndDate);
+                                  end.setHours(23, 59, 59, 999);
+                                  if (new Date(p.createdAt) > end) return false;
+                                }
+                                if (paymentSearch) {
+                                  const term = paymentSearch.toLowerCase();
+                                  const matchReg = p.registrationId?.toLowerCase().includes(term);
+                                  const matchUtr = p.utrNumber?.toLowerCase().includes(term);
+                                  if (!matchReg && !matchUtr) return false;
+                                }
+                                return true;
+                              })
+                              .map((p) => (
                               <tr key={p._id} className="hover:bg-gray-50/50 transition-colors group">
-                                <td className="px-4 py-4 min-w-[150px]">
-                                  <div className="flex flex-col leading-tight">
-                                    <span className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors uppercase">{p.studentId?.name || "Unknown"}</span>
-                                    <span className="text-[10px] text-gray-500 font-bold">{p.registrationId}</span>
-                                    <span className="text-[9px] text-gray-400 capitalize">{p.studentId?.hostelName} • {p.studentId?.roomNumber}</span>
+                                <td className="px-2 py-4 min-w-[120px] text-center">
+                                  <div className="flex flex-col leading-tight items-center">
+                                    <span 
+                                      className="font-bold text-gray-900 group-hover:text-blue-600 hover:underline cursor-pointer transition-colors uppercase text-[10px]"
+                                      onClick={async () => {
+                                        const derivedId = typeof p.studentId === 'string' ? p.studentId : (p.studentId?._id || p.studentId?.id || p.registrationId || "unknown_id");
+                                        let fullStudent = students.find((s: any) => s.id === derivedId || s._id === derivedId);
+                                        
+                                        if (!fullStudent && p.registrationId) {
+                                            fullStudent = students.find((s: any) => s.registrationId === p.registrationId);
+                                        }
+                                        
+                                        if (!fullStudent && typeof p.studentId === 'object' && p.studentId?.name) {
+                                            fullStudent = students.find((s: any) => s.name === p.studentId.name && s.roomNumber === p.studentId.roomNumber);
+                                        }
+
+                                        if (fullStudent) {
+                                          setSelectedStudent(fullStudent);
+                                        } else {
+                                          try {
+                                            const searchParam = p.registrationId || derivedId;
+                                            const res = await fetch(`/api/students?search=${encodeURIComponent(searchParam)}`);
+                                            const data = await res.json();
+                                            if (data.students && data.students.length > 0) {
+                                              const s = data.students[0];
+                                              setSelectedStudent({
+                                                id: s._id,
+                                                name: s.name,
+                                                email: s.email,
+                                                phoneNumber: s.phoneNumber,
+                                                hostelName: s.hostelName,
+                                                roomNumber: s.room_number || s.roomNumber,
+                                                profilePicture: s.profilePicture,
+                                                dob: s.dob,
+                                                category: s.category,
+                                                fatherName: s.fatherName,
+                                                fatherNumber: s.fatherNumber,
+                                                motherName: s.motherName,
+                                                motherNumber: s.motherNumber,
+                                                homePinCode: s.homePinCode,
+                                                erpInformation: s.erpInformation,
+                                                joiningDate: s.joiningDate,
+                                                branch: s.branch,
+                                                collegeName: s.collegeName,
+                                                year: s.year,
+                                                semester: s.semester,
+                                                section: s.section,
+                                                floorNumber: s.floorNumber,
+                                                localGuardianAddress: s.localGuardianAddress,
+                                                localGuardianPhoneNumber: s.localGuardianPhoneNumber,
+                                                homeState: s.homeState,
+                                                studentStatus: s.studentStatus || "in",
+                                                registrationId: s.registrationId,
+                                                isProfileLocked: s.isProfileLocked || false,
+                                                deviceId: s.deviceId,
+                                                webAuthnCredentials: s.webAuthnCredentials || [],
+                                                deviceResetCount: s.deviceResetCount || 0,
+                                                deviceHistory: s.deviceHistory || [],
+                                                attendanceMode: s.attendanceMode || "default",
+                                                outingType: s.outingType,
+                                                permissions: []
+                                              });
+                                              return;
+                                            }
+                                          } catch (e) {
+                                            console.error("Failed to dynamically fetch student profile", e);
+                                          }
+
+                                          // Ultimate fallback
+                                          setSelectedStudent({
+                                            id: derivedId,
+                                            name: typeof p.studentId === 'string' ? p.studentId : (p.studentId?.name || "Unknown"),
+                                            email: p.studentId?.email || "",
+                                            phoneNumber: p.studentId?.phoneNumber || "",
+                                            hostelName: p.studentId?.hostelName || "",
+                                            roomNumber: p.studentId?.roomNumber || "",
+                                            registrationId: p.registrationId,
+                                            permissions: []
+                                          } as any);
+                                        }
+                                      }}
+                                    >
+                                      {p.studentId?.name || "Unknown"}
+                                    </span>
                                   </div>
                                 </td>
-                                <td className="px-4 py-4">
-                                  <div className="flex flex-col">
-                                    <span className="font-mono text-xs font-bold text-gray-800">{p.utrNumber}</span>
-                                    <span className="text-[10px] text-blue-600 font-black uppercase tracking-tight">{p.paymentSource}</span>
+                                <td className="px-2 py-4 text-center">
+                                  <span className="text-[9px] text-gray-700 font-bold">{p.registrationId}</span>
+                                </td>
+                                <td className="px-2 py-4 text-center">
+                                  <span className="text-[9px] text-gray-700 font-bold uppercase">{p.studentId?.hostelName || "N/A"}</span>
+                                </td>
+                                <td className="px-2 py-4 text-center">
+                                  <span className="text-[9px] text-gray-700 font-bold uppercase">{p.studentId?.roomNumber || "N/A"}</span>
+                                </td>
+                                <td className="px-2 py-4 text-center">
+                                  <div className="flex flex-col items-center">
+                                    <span className="font-mono text-[10px] font-bold text-gray-800">{p.utrNumber}</span>
+                                    <span className="text-[9px] text-blue-600 font-black uppercase tracking-tight">{p.paymentSource}</span>
                                   </div>
                                 </td>
-                                <td className="px-4 py-4 text-center">
-                                  <span className="font-black text-gray-900">₹{p.amount}</span>
+                                <td className="px-2 py-4 text-center">
+                                  <span className="font-black text-gray-900 text-[10px]">₹{p.amount}</span>
                                 </td>
-                                <td className="px-4 py-4 text-center">
-                                  <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${p.status === 'verified' ? 'bg-green-100 text-green-700' :
+                                <td className="px-2 py-4 text-center">
+                                  <span className="text-[9px] font-medium text-gray-600">
+                                    {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "N/A"}
+                                  </span>
+                                </td>
+                                <td className="px-2 py-4 text-center">
+                                  <span className={`px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest ${p.status === 'verified' ? 'bg-green-100 text-green-700' :
                                     p.status === 'rejected' ? 'bg-red-100 text-red-700' :
                                       p.status === 'flagged' ? 'bg-orange-100 text-orange-700' :
                                         'bg-yellow-100 text-yellow-700'
@@ -4614,26 +4946,42 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     {p.status}
                                   </span>
                                   {p.reconciledViaCSV && (
-                                    <div className="text-[8px] text-green-600 font-bold mt-1 uppercase">Reconciled via Bank</div>
+                                    <div className="text-[7px] text-green-600 font-bold mt-1 uppercase">Reconciled via Bank</div>
                                   )}
                                 </td>
-                                <td className="px-4 py-4 text-right">
-                                  <div className="flex justify-end gap-2 text-xs">
-                                    {p.status !== 'verified' && (
-                                      <button
-                                        onClick={() => handleManualPaymentAction(p._id, 'verified')}
-                                        className="px-2.5 py-1.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 font-bold transition-all"
-                                      >
-                                        Verify
-                                      </button>
-                                    )}
-                                    {p.status === 'pending' && (
-                                      <button
-                                        onClick={() => handleManualPaymentAction(p._id, 'rejected')}
-                                        className="px-2.5 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-bold transition-all"
-                                      >
-                                        Reject
-                                      </button>
+                                <td className="px-2 py-4 text-center">
+                                  <div className="flex flex-col items-center gap-2 text-[10px]">
+                                    <div className="flex justify-center gap-2">
+                                      {p.status !== 'verified' && (
+                                        <button
+                                          onClick={() => handleManualPaymentAction(p._id, 'verified')}
+                                          className="px-2.5 py-1.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 font-bold transition-all"
+                                        >
+                                          Verify
+                                        </button>
+                                      )}
+                                      {p.status === 'pending' && (
+                                        <button
+                                          onClick={() => handleManualPaymentAction(p._id, 'rejected')}
+                                          className="px-2.5 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-bold transition-all"
+                                        >
+                                          Reject
+                                        </button>
+                                      )}
+                                      {p.status === 'verified' && (
+                                        <button
+                                          onClick={() => handleManualPaymentAction(p._id, 'pending')}
+                                          className="px-2.5 py-1.5 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 font-bold transition-all"
+                                        >
+                                          Unverify
+                                        </button>
+                                      )}
+                                    </div>
+                                    {p.screenshot && (
+                                      <a href={p.screenshot} target="_blank" rel="noopener noreferrer" className="text-[9px] font-bold text-blue-600 hover:underline uppercase flex items-center gap-1">
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                        View Proof
+                                      </a>
                                     )}
                                   </div>
                                 </td>
@@ -7737,13 +8085,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <div className="bg-red-50 border-2 border-red-100 p-4 rounded-2xl flex items-start gap-4">
                           <span className="text-xl sm:text-2xl">⚡</span>
                           <p className="text-xs sm:text-sm text-red-800 font-medium">
-                            CAUTION: This changes the Developer Password. This is the master access for your university's configuration.
+                            CAUTION: This changes the Super Admin Password. This is the master access for your College/University/Hostel configuration.
                           </p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30">
                             <div className="space-y-4">
-                              <h4 className="font-black text-gray-900 uppercase tracking-tight mb-4">Developer Credentials</h4>
+                              <h4 className="font-black text-gray-900 uppercase tracking-tight mb-4">Super Admin Credentials</h4>
                               <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">New Master Password</label>
                               <div className="relative">
                                 <input

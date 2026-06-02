@@ -69,3 +69,40 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Failed to submit payment" }, { status: 500 });
     }
 }
+
+// DELETE - Delete a pending payment claim
+export async function DELETE(request: NextRequest) {
+    try {
+        const searchParams = request.nextUrl.searchParams;
+        const id = searchParams.get("id");
+        const studentId = searchParams.get("studentId");
+
+        if (!id || !studentId) {
+            return NextResponse.json({ error: "Payment ID and Student ID required" }, { status: 400 });
+        }
+
+        const payment = await db.transactions.findById(id);
+        
+        if (!payment) {
+            return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+        }
+        
+        if (payment.studentId !== studentId) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+        }
+        
+        if (payment.status !== "pending") {
+            return NextResponse.json({ error: "Only pending payments can be deleted" }, { status: 400 });
+        }
+
+        await db.transactions.delete(id);
+
+        return NextResponse.json({
+            success: true,
+            message: "Payment claim removed successfully",
+        });
+    } catch (error: any) {
+        console.error("Error deleting payment:", error);
+        return NextResponse.json({ error: "Failed to delete payment" }, { status: 500 });
+    }
+}

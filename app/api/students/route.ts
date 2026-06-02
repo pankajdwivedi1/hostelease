@@ -54,22 +54,11 @@ export async function POST(request: NextRequest) {
     let registrationId = existingStudent?.registrationId;
 
     if (!registrationId) {
-      // ✅ NEW FIX #13: Load hostel prefix mapping from AdminSettings (configurable)
-      const adminSettings = await db.settings.get();
-      let hostelPrefixMap = adminSettings?.hostelPrefixMap || [
-        { hostelName: "GHB Hostel", prefix: "GUEST" },
-        { hostelName: "Boys Hostel", prefix: "BOYS" },
-        { hostelName: "Gangotri Hostel", prefix: "GANGOTRI" },
-        { hostelName: "Gaytri Hostel", prefix: "GAYTRI" }
-      ];
-
-      let prefix = "STUDENT";
-      for (const mapping of hostelPrefixMap) {
-        if (hostelName.toLowerCase().includes(mapping.hostelName.toLowerCase())) {
-          prefix = mapping.prefix;
-          break;
-        }
-      }
+      // Format: ST + CollegeCode + Year (last 2 digits) + Sequence Number
+      // Example: STOIST25497
+      const colName = collegeName ? collegeName.toUpperCase().replace(/[^A-Z]/g, '') : "UNK";
+      const yearStr = joiningDate ? new Date(joiningDate).getFullYear().toString().slice(-2) : new Date().getFullYear().toString().slice(-2);
+      const prefix = `ST${colName}${yearStr}`;
 
       // Find the highest number for this prefix
       const students = await db.students.list({ search: prefix });
@@ -78,17 +67,17 @@ export async function POST(request: NextRequest) {
       if (students && students.length > 0) {
         const regIds = students
           .map((s: any) => s.registrationId)
-          .filter((id: string) => id && id.startsWith(`${prefix}-`));
+          .filter((id: string) => id && id.startsWith(prefix));
 
         if (regIds.length > 0) {
-          const numbers = regIds.map((id: string) => parseInt(id.split('-')[1])).filter((n: number) => !isNaN(n));
+          const numbers = regIds.map((id: string) => parseInt(id.replace(prefix, ''))).filter((n: number) => !isNaN(n));
           if (numbers.length > 0) {
             nextNumber = Math.max(...numbers) + 1;
           }
         }
       }
 
-      registrationId = `${prefix}-${String(nextNumber).padStart(4, '0')}`;
+      registrationId = `${prefix}${String(nextNumber).padStart(3, '0')}`;
     }
 
     // ✅ NEW: Sanitize inputs before storing

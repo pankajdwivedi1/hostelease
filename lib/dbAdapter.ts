@@ -999,7 +999,7 @@ export const db = {
         // ⚡ DATABASE-AWARE LIST WITH FILTERS
         list: async (filters: any = {}, options: { light?: boolean; select?: string; limit?: number } = {}) => {
             const source = await getDbSource();
-            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id,father_name,father_number,mother_name,mother_number,permanent_address,home_state,local_guardian_address,local_guardian_phone_number,erp_id,floor_number';
+            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id,father_name,father_number,mother_name,mother_number,permanent_address,home_state,local_guardian_address,local_guardian_phone_number,erp_id,floor_number,dob,category,year,joining_date';
             const selection = options.select || (options.light ? lightFields : '*');
 
             if (source === 'SUPABASE') {
@@ -2576,16 +2576,11 @@ export const db = {
                     console.error("❌ [SUPABASE_TRANSACTION_LIST_ERROR]:", error);
                     // Fallback to simple list if join fails
                     const { data: fallbackData } = await supabase.from('transactions').select('*, students!student_id(name, hostel_name, room_number, email)').limit(limit);
-                    return (fallbackData || []).map(t => ({
-                        ...mapTransactionToCamelCase(t),
-                        studentId: (t as any).students
-                    }));
+                    const fallbackDataMap = (fallbackData || []).map(t => mapTransactionToCamelCase(t));
+                    return fallbackDataMap;
                 }
 
-                return (data || []).map(t => ({
-                    ...mapTransactionToCamelCase(t),
-                    studentId: (t as any).students
-                }));
+                return (data || []).map(t => mapTransactionToCamelCase(t));
             } else {
                 await connectDB();
                 const TransactionModel = (await import('@/models/Transaction')).default;

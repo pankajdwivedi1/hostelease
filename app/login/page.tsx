@@ -230,8 +230,8 @@ function LoginForm() {
       // Preserve tenant context in redirect
       const tenant = searchParams.get('tenant');
       const redirectUrl = new URL(`${window.location.origin}/auth/callback`);
-      if (tenant) redirectUrl.searchParams.set('tenant', tenant);
-
+      // Do not append tenant query param here to avoid Supabase exact match failure on localhost
+      
       const { data, error: sbError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {

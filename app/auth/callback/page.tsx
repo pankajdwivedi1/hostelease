@@ -18,8 +18,8 @@ export default function AuthCallback() {
       }
 
       // Redirect to the dashboard while preserving tenant
-      const urlParams = new URLSearchParams(window.location.search);
-      const tenant = urlParams.get('tenant');
+      // We read from localStorage because Supabase strict redirect matching drops query params
+      const tenant = typeof window !== 'undefined' ? localStorage.getItem('lastTenantSlug') : null;
       
       if (tenant) {
           router.push(`/?tenant=${tenant}`);
