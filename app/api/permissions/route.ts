@@ -44,16 +44,20 @@ export async function POST(request: NextRequest) {
     // Determine the phone number to call
     const parentPhone = student.fatherNumber || student.motherNumber || student.phoneNumber;
     
-    // Trigger MSG91 Voice Call in the background
+    // Trigger MSG91 Voice Call
     if (parentPhone) {
-      triggerLeaveVoiceCall({
-        phoneNumber: parentPhone,
-        studentName: student.name,
-        hostelName: student.hostelName || "Hostel",
-        fromDate: fromDate.toLocaleDateString('hi-IN'),
-        toDate: toDate.toLocaleDateString('hi-IN'),
-        leaveId: permission._id?.toString() || "",
-      }).catch(err => console.error("Error in triggerLeaveVoiceCall background task:", err));
+      try {
+        await triggerLeaveVoiceCall({
+          phoneNumber: parentPhone,
+          studentName: student.name,
+          hostelName: student.hostelName || "Hostel",
+          fromDate: fromDate.toLocaleDateString('hi-IN'),
+          toDate: toDate.toLocaleDateString('hi-IN'),
+          leaveId: permission._id?.toString() || "",
+        });
+      } catch (err) {
+        console.error("Error in triggerLeaveVoiceCall:", err);
+      }
     }
 
     return NextResponse.json({ success: true, permission }, { status: 201 });
