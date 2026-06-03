@@ -273,6 +273,7 @@ interface Permission {
   status: "pending" | "allowed" | "rejected";
   wardenStatus: "pending" | "allowed" | "rejected";
   deanStatus: "pending" | "allowed" | "rejected";
+  parentStatus?: "pending" | "allowed" | "rejected" | "no_response";
   createdAt?: string | Date;
 }
 
@@ -3567,31 +3568,31 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               )}
 
               {/* Tab Navigation */}
-              <div className="flex items-center gap-0.5 md:gap-1 bg-filler p-1 rounded-xl mb-6">
+              <div className="flex items-center flex-wrap justify-center gap-1 md:gap-2 bg-filler p-1 rounded-xl mb-6 w-full">
                 <button
                   onClick={() => setCurrentTab('permissions')}
-                  className={`flex-1 py-1.5 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all ${currentTab === 'permissions' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                  className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'permissions' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
                 >
                   Permissions
                 </button>
                 <button
                   onClick={() => setCurrentTab('attendance')}
-                  className={`flex-1 py-1.5 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all ${currentTab === 'attendance' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                  className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'attendance' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
                 >
                   Attendance
                 </button>
                 <button
                   onClick={() => setCurrentTab('messaging')}
-                  className={`flex-1 py-1.5 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all ${currentTab === 'messaging' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                  className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'messaging' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
                 >
                   Broadcast
                 </button>
                 {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
                   <button
                     onClick={() => setShowGatepassOverlay(true)}
-                    className="flex-1 py-1.5 md:py-2.5 rounded-lg text-[11px] md:text-sm font-black transition-all text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-1.5 group"
+                    className="px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-black transition-all text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-1.5 whitespace-nowrap flex-grow group"
                   >
-                    <div className="relative flex h-1.5 w-1.5 md:h-2 md:w-2">
+                    <div className="relative flex h-1.5 w-1.5 md:h-2 md:w-2 flex-shrink-0">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-1.5 w-1.5 md:h-2 md:w-2 bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]"></span>
                     </div>
@@ -3601,7 +3602,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 {!isWarden && (title === "Super Admin Dashboard" || (title === "Dean Dashboard" && bankFormData.isPaymentEnabled)) && (
                   <button
                     onClick={() => setCurrentTab('payments')}
-                    className={`flex-1 py-1.5 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all ${currentTab === 'payments' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                    className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'payments' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
                   >
                     Payments
                   </button>
@@ -3609,7 +3610,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 {!isWarden && (title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
                   <button
                     onClick={() => setCurrentTab('settings')}
-                    className={`flex-1 py-1.5 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all ${currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                    className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
                   >
                     Settings
                   </button>
@@ -3702,134 +3703,145 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           : false;
 
                         return (
-                          <div key={permission._id} className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-3 md:p-4">
-                            <div className="flex flex-col gap-3">
-                              <div className="flex items-start gap-3 md:gap-4">
-                                <button
-                                  onClick={() => handleProfileClick(student._id)}
-                                  className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
-                                >
-                                  {profilePic ? (
-                                    <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
-                                  ) : (
-                                    initials
-                                  )}
-                                </button>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex justify-between items-start gap-2">
-                                    <div>
-                                      <p className="text-[11px] md:text-[13px] font-semibold text-foreground uppercase tracking-tight">{student.name}</p>
-                                      <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-2 mt-0.5 md:mt-1 text-[9px] md:text-xs text-secondary font-medium">
-                                        <span>{new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
-                                        <span className="hidden md:inline">•</span>
-                                        <span>to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
+                          <div key={permission._id} className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-2 md:p-3">
+                            <div className="flex flex-row gap-2 md:gap-4 items-stretch">
+                              {/* Left Side: Student Info & Approvals */}
+                              <div className="w-[46%] md:w-[45%] lg:w-[40%] shrink-0 flex flex-col gap-2 md:gap-2.5">
+                                <div className="flex items-start gap-3 md:gap-4">
+                                  <button
+                                    onClick={() => handleProfileClick(student._id)}
+                                    className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                                  >
+                                    {profilePic ? (
+                                      <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
+                                    ) : (
+                                      initials
+                                    )}
+                                  </button>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[11px] md:text-[13px] font-semibold text-foreground uppercase tracking-tight leading-tight">{student.name}</p>
+                                    <div className="flex flex-col md:flex-row md:items-center md:flex-wrap gap-0.5 md:gap-1.5 mt-0.5 text-[9px] md:text-xs text-secondary font-medium">
+                                      <span className="whitespace-nowrap">{new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
+                                      <span className="hidden md:inline">•</span>
+                                      <span className="whitespace-nowrap">to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {/* Permissions Block under name */}
+                                <div className="pl-1 md:pl-8 lg:pl-[52px]">
+                                  <div className="flex flex-col items-start gap-1 origin-top-left border border-gray-200 rounded-md p-2 bg-white/30 shadow-sm w-[95%] md:w-full max-w-[200px]">
+                                    <div className="flex items-center justify-between w-full">
+                                      <span className="text-[9px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left pr-2">Parent</span>
+                                      <div className="flex flex-col items-center gap-1 relative">
+                                        <div className="flex items-center gap-2 md:gap-2.5 bg-white p-1 rounded-md border border-gray-100">
+                                          <div className={`w-6 h-6 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
+                                            <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                          </div>
+                                          <div className={`w-6 h-6 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
+                                            <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                          </div>
+                                        </div>
+                                        {permission.parentStatus === "rejected" && (
+                                          <span className="text-[8px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-red-100 absolute -right-14 top-1">
+                                            Rejected
+                                          </span>
+                                        )}
+                                        {permission.parentStatus === "allowed" && (
+                                          <span className="text-[8px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-green-100 absolute -right-14 top-1">
+                                            Accepted
+                                          </span>
+                                        )}
+                                        {permission.parentStatus === "no_response" && (
+                                          <span className="text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-yellow-100 absolute -right-16 top-1">
+                                            No Response
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
 
-                                    <div className="flex items-start gap-2 md:gap-4 pr-1 scale-90 origin-top-right md:scale-100">
-                                      <div className="flex flex-col items-center gap-1">
-                                        <span className="text-[9px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter">Warden</span>
-                                        <div className="flex items-center gap-1.5 md:gap-2 bg-white/50 p-1 rounded-full border border-gray-100">
+                                    <div className="flex items-center justify-between w-full">
+                                      <span className="text-[9px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left pr-2">Warden</span>
+                                      <div className="flex flex-col items-center gap-1 relative">
+                                        <div className="flex items-center gap-2 md:gap-2.5 bg-white p-1 rounded-md border border-gray-100">
                                           <button
                                             onClick={() => {
-                                              if (isOlderThan24Hours) {
-                                                showToast("Cannot modify: 24 hours have passed since the student applied.", "error");
-                                                return;
-                                              }
+                                              if (isOlderThan24Hours) return showToast("Cannot modify: 24 hours have passed.", "error");
                                               if (userType === "warden") handleStatusChange(permission._id, "allowed");
                                             }}
                                             disabled={userType !== "warden" || permission.deanStatus !== "pending"}
-                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                           </button>
                                           <button
                                             onClick={() => {
-                                              if (isOlderThan24Hours) {
-                                                showToast("Cannot modify: 24 hours have passed since the student applied.", "error");
-                                                return;
-                                              }
+                                              if (isOlderThan24Hours) return showToast("Cannot modify: 24 hours have passed.", "error");
                                               if (userType === "warden") handleStatusChange(permission._id, "rejected");
                                             }}
                                             disabled={userType !== "warden" || permission.deanStatus !== "pending"}
-                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                           </button>
                                         </div>
-                                        {permission.wardenStatus === "rejected" && (
-                                          <span className="text-[8px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-red-100">
-                                            Rejected
-                                          </span>
-                                        )}
-                                        {permission.wardenStatus === "allowed" && (
-                                          <span className="text-[8px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-green-100">
-                                            Accepted
-                                          </span>
-                                        )}
                                       </div>
+                                    </div>
 
-                                      <div className="flex flex-col items-center gap-1">
-                                        <span className="text-[9px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter">Dean</span>
-                                        <div className="flex items-center gap-1.5 md:gap-2 bg-white/50 p-1 rounded-full border border-gray-100">
+                                    <div className="flex items-center justify-between w-full">
+                                      <span className="text-[9px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left pr-2">Dean</span>
+                                      <div className="flex flex-col items-center gap-1 relative">
+                                        <div className="flex items-center gap-2 md:gap-2.5 bg-white p-1 rounded-md border border-gray-100">
                                           <button
                                             onClick={() => {
-                                              if (isOlderThan24Hours) {
-                                                showToast("Cannot modify: 24 hours have passed since the student applied.", "error");
-                                                return;
-                                              }
+                                              if (isOlderThan24Hours) return showToast("Cannot modify: 24 hours have passed.", "error");
                                               if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed");
                                             }}
                                             disabled={userType !== "admin" && userType !== "superadmin"}
-                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300"} ${((userType !== "admin" && userType !== "superadmin") || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300"} ${((userType !== "admin" && userType !== "superadmin") || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                           </button>
                                           <button
                                             onClick={() => {
-                                              if (isOlderThan24Hours) {
-                                                showToast("Cannot modify: 24 hours have passed since the student applied.", "error");
-                                                return;
-                                              }
+                                              if (isOlderThan24Hours) return showToast("Cannot modify: 24 hours have passed.", "error");
                                               if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected");
                                             }}
                                             disabled={userType !== "admin" && userType !== "superadmin"}
-                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${((userType !== "admin" && userType !== "superadmin") || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${((userType !== "admin" && userType !== "superadmin") || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                           </button>
                                         </div>
-                                        {permission.deanStatus === "rejected" && (
-                                          <span className="text-[8px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-red-100">
-                                            Rejected
-                                          </span>
-                                        )}
-                                        {permission.deanStatus === "allowed" && (
-                                          <span className="text-[8px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-green-100">
-                                            Accepted
-                                          </span>
-                                        )}
                                       </div>
-
-                                      {/* ⚡ NEW: Manual Campus Toggle for Wardens */}
-                                      {student.studentStatus === 'out' && (
-                                        <div className="flex flex-col items-center gap-1">
-                                          <span className="text-[9px] md:text-[10px] font-black text-amber-600 uppercase whitespace-nowrap tracking-tighter">Status</span>
-                                          <button
-                                            onClick={() => handleManualToggle(student._id, "out")}
-                                            className="w-14 md:w-16 py-1.5 rounded-lg bg-amber-500 text-white text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 shadow-sm transition-all active:scale-95"
-                                          >
-                                            MARK IN
-                                          </button>
-                                        </div>
-                                      )}
                                     </div>
+                                    
+                                    {/* Manual Campus Toggle for Wardens */}
+                                    {student.studentStatus === 'out' && (
+                                      <div className="flex items-center gap-2 w-full mt-1 pt-1 border-t border-gray-100">
+                                        <span className="text-[9px] md:text-[10px] font-black text-amber-600 uppercase whitespace-nowrap tracking-tighter w-12 text-left">Status</span>
+                                        <button
+                                          onClick={() => handleManualToggle(student._id, "out")}
+                                          className="flex-1 py-1.5 rounded-lg bg-amber-500 text-white text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 shadow-sm transition-all active:scale-95"
+                                        >
+                                          MARK IN
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
-
                                 </div>
                               </div>
-                              <div className="mt-1 md:mt-2">
-                                <p className="text-[10px] md:text-xs text-foreground font-medium">{permission.reason}</p>
+
+                              {/* Vertical Separator */}
+                              <div className="block w-[1px] md:w-[2px] bg-blue-500/20 my-1 rounded-full"></div>
+
+                              {/* Right Side: Reason Message */}
+                              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                <div className="bg-white/40 p-2 md:p-3 rounded-lg border border-gray-100 h-full">
+                                  <p className="text-[10px] md:text-xs text-foreground/90 font-medium leading-relaxed italic">
+                                    "{permission.reason}"
+                                  </p>
+                                </div>
                               </div>
                             </div>
                           </div>

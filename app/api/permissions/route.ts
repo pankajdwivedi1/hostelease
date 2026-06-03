@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { triggerLeaveVoiceCall } from "@/lib/msg91";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,21 @@ export async function POST(request: NextRequest) {
       requestType: requestType || "outing",
       status: "pending",
     });
+
+    // Determine the phone number to call
+    const parentPhone = student.fatherNumber || student.motherNumber || student.phoneNumber;
+    
+    // Trigger MSG91 Voice Call in the background
+    if (parentPhone) {
+      triggerLeaveVoiceCall({
+        phoneNumber: parentPhone,
+        studentName: student.name,
+        hostelName: student.hostelName || "Hostel",
+        fromDate: fromDate.toLocaleDateString('hi-IN'),
+        toDate: toDate.toLocaleDateString('hi-IN'),
+        leaveId: permission._id?.toString() || "",
+      }).catch(err => console.error("Error in triggerLeaveVoiceCall background task:", err));
+    }
 
     return NextResponse.json({ success: true, permission }, { status: 201 });
   } catch (error: any) {
