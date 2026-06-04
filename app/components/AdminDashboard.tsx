@@ -487,7 +487,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     image: "",
     expiryHours: "24" // Default 24 hours
   });
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const d = new Date();
+    // Offset by +5:30 for IST
+    const ist = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+    return ist.toISOString().split('T')[0];
+  });
   const [attendanceHostelFilter, setAttendanceHostelFilter] = useState("all");
   const [showExportPreview, setShowExportPreview] = useState(false);
   const [exportPreviewData, setExportPreviewData] = useState<any[]>([]);
@@ -574,6 +579,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [getpassPassword, setGetpassPassword] = useState("GET456"); // ⚡ NEW
   const [wifiWhitelist, setWifiWhitelist] = useState<any[]>([]); // ⚡ NEW: Global IP Whitelist
   const [enableManualAttendance, setEnableManualAttendance] = useState(false); // ⚡ NEW: Toggle for Manual Marking Toolbar
+  const [leaveApprovalMethod, setLeaveApprovalMethod] = useState("app"); // ⚡ NEW: Leave Approval Method
 
 
   // Audit States
@@ -687,6 +693,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         setPresentStudentIds((prev) => [...prev, ...studentIds]);
         setSelectedStudentIds([]); // Clear selection
         fetchAttendanceSummary(); // Refresh counts
+        fetchAttendanceLogs(); // Refresh the detailed logs list
         alert(`Successfully marked attendance for ${data.count} students.`);
       } else {
         alert(data.error || "Failed to mark attendance");
@@ -1047,6 +1054,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (settingsData.overlapRadius !== undefined) setOverlapRadius(settingsData.overlapRadius);
         if (settingsData.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(settingsData.prioritizeAssignedHostel);
         if (settingsData.getpassPassword) setGetpassPassword(settingsData.getpassPassword);
+        if (settingsData.enableManualAttendance !== undefined) setEnableManualAttendance(settingsData.enableManualAttendance);
+        if (settingsData.developerPassword) setDeveloperPassword(settingsData.developerPassword);
+        if (settingsData.leaveApprovalMethod) setLeaveApprovalMethod(settingsData.leaveApprovalMethod);
         if (settingsData.wifiWhitelist) setWifiWhitelist(settingsData.wifiWhitelist);
         if (settingsData.enableManualAttendance !== undefined) setEnableManualAttendance(settingsData.enableManualAttendance);
       }
@@ -2093,7 +2103,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const fetchAttendanceSummary = async () => {
     try {
-      const url = new URL(`/api/admin/attendance-summary?date=${selectedDate}`, window.location.origin);
+      const url = new URL(`/api/admin/attendance-summary?date=${selectedDate}&_t=${Date.now()}`, window.location.origin);
       
       // ⚡ WARDEN FILTER: Automatically scope summary stats to warden's assigned hostels
       if (isWarden) {
@@ -2132,7 +2142,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const fetchAttendanceLogs = async () => {
     try {
       setAttendanceLogsLoading(true);
-      const url = new URL(`/api/admin/attendance?date=${selectedDate}&hostelName=${attendanceHostelFilter}`, window.location.origin);
+      const url = new URL(`/api/admin/attendance?date=${selectedDate}&hostelName=${attendanceHostelFilter}&_t=${Date.now()}`, window.location.origin);
       const response = await fetch(url.href);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
@@ -3762,29 +3772,36 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                                     <div className="flex items-center justify-between w-full">
                                       <span className="text-[9px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left pr-2">Warden</span>
-                                      <div className="flex flex-col items-center gap-1 relative">
+                                      <div className="flex flex-col items-center gap-1 relative group">
                                         <div className="flex items-center gap-2 md:gap-2.5 bg-white p-1 rounded-md border border-gray-100">
                                           <button
                                             onClick={() => {
                                               if (isOlderThan24Hours) return showToast("Cannot modify: 24 hours have passed.", "error");
+                                              if (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden') return showToast("Waiting for parent approval.", "error");
                                               if (userType === "warden") handleStatusChange(permission._id, "allowed");
                                             }}
-                                            disabled={userType !== "warden" || permission.deanStatus !== "pending"}
-                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                            disabled={userType !== "warden" || permission.deanStatus !== "pending" || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')}
+                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                           </button>
                                           <button
                                             onClick={() => {
                                               if (isOlderThan24Hours) return showToast("Cannot modify: 24 hours have passed.", "error");
+                                              if (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden') return showToast("Waiting for parent approval.", "error");
                                               if (userType === "warden") handleStatusChange(permission._id, "rejected");
                                             }}
-                                            disabled={userType !== "warden" || permission.deanStatus !== "pending"}
-                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                            disabled={userType !== "warden" || permission.deanStatus !== "pending" || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')}
+                                            className={`w-6 h-6 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                           >
                                             <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                           </button>
                                         </div>
+                                        {(leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden') && (
+                                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+                                              Waiting for Parent
+                                            </div>
+                                        )}
                                       </div>
                                     </div>
 
@@ -3878,14 +3895,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
                           <div>
                             <h2 className="text-lg font-bold text-foreground">Daily Attendance Monitoring</h2>
-                            <p className="text-sm text-secondary">Student entries and absentees for {selectedDate === new Date().toISOString().split('T')[0] ? 'today' : selectedDate}</p>
+                            <p className="text-sm text-secondary">Student entries and absentees for {selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? 'today' : selectedDate}</p>
                           </div>
                           <div className="grid grid-cols-2 gap-3 w-full sm:w-auto sm:flex sm:items-center">
                             <input
                               type="date"
                               value={selectedDate}
                               onChange={(e) => setSelectedDate(e.target.value)}
-                              max={new Date().toISOString().split('T')[0]}
+                              max={new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0]}
                               className="h-11 px-4 rounded-xl border border-gray-200 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500 bg-white shadow-sm cursor-pointer hover:border-blue-300 transition-colors w-full sm:w-auto sm:min-w-[160px]"
                             />
                             <select
@@ -4108,7 +4125,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       {!selectedAttendanceHostel && (
                         <div ref={entryLogsRef} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                           <div className="bg-filler px-1 py-1 flex border-b border-gray-200">
-                            <p className="px-4 py-2 text-xs font-bold text-secondary uppercase tracking-widest">Entry Logs ({selectedDate === new Date().toISOString().split('T')[0] ? 'Today' : selectedDate})</p>
+                            <p className="px-4 py-2 text-xs font-bold text-secondary uppercase tracking-widest">Entry Logs ({selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? 'Today' : selectedDate})</p>
                           </div>
                           <div className="overflow-x-hidden">
                             <table className="w-full text-left table-fixed border-collapse">
@@ -4125,7 +4142,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 {attendanceLogsLoading ? (
                                   <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">Refreshing database...</td></tr>
                                 ) : filteredAttendanceLogs.length === 0 ? (
-                                  <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">No entries found for {selectedDate === new Date().toISOString().split('T')[0] ? '9:00 PM onwards' : selectedDate}.</td></tr>
+                                  <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">No entries found for {selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? '9:00 PM onwards' : selectedDate}.</td></tr>
                                 ) : (
                                   (showAllEntryLogs ? filteredAttendanceLogs : filteredAttendanceLogs.slice(0, 10)).map((log) => (
                                     <tr key={log._id} className="hover:bg-filler/50 transition-colors">
@@ -4144,6 +4161,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             >
                                               {log.studentId?.hostelName} - {log.studentId?.roomNumber}
                                               {log.faceMatchPercentage !== undefined && ` • ${log.faceMatchPercentage}% Match ${log.faceMatchStatus === 'flagged' ? '🚩' : ''}`}
+                                              {log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) && ` • Marked by DEAN`}
+                                              {log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) && ` • Marked by WARDEN`}
                                             </span>
                                           </div>
                                         </div>
@@ -4168,6 +4187,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           >
                                             {log.faceMatchPercentage}% {log.faceMatchStatus === 'flagged' && "🚩"}
                                           </button>
+                                        ) : (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? (
+                                          <span className="text-[9px] text-blue-600 font-black px-1.5 py-0.5 bg-blue-50 border border-blue-200 rounded tracking-widest whitespace-nowrap">DEAN</span>
+                                        ) : (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? (
+                                          <span className="text-[9px] text-purple-600 font-black px-1.5 py-0.5 bg-purple-50 border border-purple-200 rounded tracking-widest whitespace-nowrap">WARDEN</span>
                                         ) : (
                                           <span className="text-[9px] text-gray-300 font-black">---</span>
                                         )}
@@ -4228,7 +4251,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <div ref={absenteesRef} className="bg-red-50/30 rounded-xl border border-red-100 p-4">
                         <h3 className="text-sm font-bold text-red-900 mb-3 flex items-center gap-2">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                          {selectedDate === new Date().toISOString().split('T')[0] ? "Today's" : selectedDate} Absentee List ({displayedAbsentees.length} students)
+{selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? "Today's" : selectedDate} Absentee List ({displayedAbsentees.length} students)
                         </h3>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                           {(showAllAbsentees ? displayedAbsentees : displayedAbsentees.slice(0, 9)).map(s => (

@@ -40,7 +40,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { studentIds, markedBy } = body;
+        const { studentIds } = body;
 
         if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
             return NextResponse.json({ error: "Student IDs are required" }, { status: 400 });
@@ -51,10 +51,14 @@ export async function POST(request: Request) {
         const istTime = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
         const today = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
 
+        const { cookies } = await import('next/headers');
+        const userType = cookies().get('userType')?.value || 'admin';
+
         // ⚡ BATCH OPTIMIZATION: Fetch all students in one single query instead of a loop
+        const currentTenantId = await db.getTenantIdOrThrow();
         const students = await db.students.list({ 
             _id: { $in: studentIds },
-            tenant_id: (await db.getTenantIdOrThrow()) 
+            tenant_id: currentTenantId 
         }, { limit: studentIds.length });
 
         const attendanceRecords: any[] = [];
@@ -82,9 +86,8 @@ export async function POST(request: Request) {
                 needsReview: false,
                 isTest: false,
                 timestamp: now.toISOString(),
-                verificationMethod: "warden",
-                markedBy: markedBy || "Warden",
-                tenantId: student.tenantId
+                tenantId: currentTenantId,
+                deviceId: `marked-by-${userType}`
             });
         }
 

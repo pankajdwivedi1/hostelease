@@ -61,6 +61,7 @@ export interface IAdminSettings {
   prioritizeAssignedHostel?: boolean; // ⚡ NEW: Filter list to prioritize assigned hostel
   activeDatabaseSource?: 'MONGODB' | 'SUPABASE'; // ⚡ LIVE SWITCH: Controls which DB is active
   getpassPassword?: string; // ⚡ NEW: Independent password for GETPASS access
+  leaveApprovalMethod?: 'ivr' | 'app'; // ⚡ NEW: Parent leave approval method
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -244,7 +245,11 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
       type: String,
       default: "GET456"
     },
-
+    leaveApprovalMethod: {
+      type: String,
+      enum: ['ivr', 'app'],
+      default: 'app'
+    },
   },
   {
     timestamps: true,

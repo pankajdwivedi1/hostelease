@@ -6,7 +6,7 @@ import { otpCache } from "@/lib/otpCache";
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { otp, contactName, contactPhone, totalHostelars } = body;
+        const { otp, contactName, contactPhone, totalHostelars, leaveApprovalMethod } = body;
 
         if (!otp || otp.length !== 6) {
             return NextResponse.json({ success: false, error: "A valid 6-digit OTP is required." }, { status: 400 });
@@ -54,13 +54,20 @@ export async function POST(request: Request) {
         if (settings) {
             const { error } = await db.supabase
                 .from('admin_settings')
-                .update({ university_bank_details: bankDetails })
+                .update({ 
+                    university_bank_details: bankDetails,
+                    ...(leaveApprovalMethod ? { leave_approval_method: leaveApprovalMethod } : {})
+                })
                 .eq('_id', settings._id);
             if (error) throw error;
         } else {
             const { error } = await db.supabase
                 .from('admin_settings')
-                .insert({ tenant_id: tenantId, university_bank_details: bankDetails });
+                .insert({ 
+                    tenant_id: tenantId, 
+                    university_bank_details: bankDetails,
+                    ...(leaveApprovalMethod ? { leave_approval_method: leaveApprovalMethod } : {})
+                });
             if (error) throw error;
         }
 

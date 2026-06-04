@@ -147,6 +147,7 @@ const mapAttendanceToCamelCase = (a: any) => {
         needsReview: a.needs_review || a.needsReview,
         isTest: a.is_test || a.isTest,
         timestamp: a.timestamp,
+        deviceId: a.device_id || a.deviceId,
         method: a.method,
         wardenId: a.warden_id || a.wardenId,
         semester: a.semester,
@@ -186,7 +187,9 @@ const mapAttendanceToSnakeCase = (a: any) => {
         needsReview: 'needs_review',
         isTest: 'is_test',
         wardenId: 'warden_id',
-        collegeName: 'college_name'
+        collegeName: 'college_name',
+        tenantId: 'tenant_id',
+        deviceId: 'device_id'
     };
 
     Object.keys(a).forEach(key => {
@@ -227,6 +230,7 @@ const mapSettingsToCamelCase = (s: any) => {
         getpassPassword: s.getpass_password,
         enableManualAttendance: s.enable_manual_attendance,
         developerPassword: s.developer_password,
+        leaveApprovalMethod: s.leave_approval_method || 'app',
         createdAt: s.created_at,
         updatedAt: s.updated_at
     };
@@ -258,7 +262,8 @@ const mapSettingsToSnakeCase = (s: any) => {
         prioritizeAssignedHostel: 'prioritize_assigned_hostel',
         getpassPassword: 'getpass_password',
         enableManualAttendance: 'enable_manual_attendance',
-        developerPassword: 'developer_password'
+        developerPassword: 'developer_password',
+        leaveApprovalMethod: 'leave_approval_method'
     };
 
     Object.keys(s).forEach(key => {
@@ -432,6 +437,7 @@ const mapPermissionToCamelCase = (p: any) => {
         status: p.status,
         wardenStatus: p.warden_status,
         deanStatus: p.dean_status,
+        parentStatus: p.parent_status,
         requestType: p.request_type,
         createdAt: p.created_at,
         updatedAt: p.updated_at
@@ -462,6 +468,7 @@ const mapPermissionToSnakeCase = (p: any) => {
         status: 'status',
         wardenStatus: 'warden_status',
         deanStatus: 'dean_status',
+        parentStatus: 'parent_status',
         requestType: 'request_type'
     };
 
@@ -2647,6 +2654,40 @@ export const db = {
             }
         },
 
+        findById: async (id: string) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const { data, error } = await supabase
+                    .from('transactions')
+                    .select('*')
+                    .eq('_id', id)
+                    .single();
+                if (error) return null;
+                return mapTransactionToCamelCase(data);
+            } else {
+                await connectDB();
+                const TransactionModel = (await import('@/models/Transaction')).default;
+                const record = await TransactionModel.findById(id).lean();
+                return record ? JSON.parse(JSON.stringify(record)) : null;
+            }
+        },
+
+        delete: async (id: string) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const { error } = await supabase
+                    .from('transactions')
+                    .delete()
+                    .eq('_id', id);
+                if (error) throw error;
+                return true;
+            } else {
+                await connectDB();
+                const TransactionModel = (await import('@/models/Transaction')).default;
+                await TransactionModel.findByIdAndDelete(id);
+                return true;
+            }
+        },
         create: async (transactionData: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {

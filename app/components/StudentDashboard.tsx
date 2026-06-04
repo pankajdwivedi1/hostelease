@@ -78,6 +78,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
     const [showRequestForm, setShowRequestForm] = useState(false);
     const [showProfile, setShowProfile] = useState(false);
     const [showPermissionsHistory, setShowPermissionsHistory] = useState(false);
+    const [showFeeDetailsModal, setShowFeeDetailsModal] = useState(false);
     const [showDeviceRegistration, setShowDeviceRegistration] = useState(false);
     const [fromDateTime, setFromDateTime] = useState("");
     const [toDateTime, setToDateTime] = useState("");
@@ -525,6 +526,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
             const data = await res.json();
             if (res.ok && data.success) {
                 setPaymentHistory(prev => prev.filter(p => p._id !== id));
+                alert(data.message || "Payment claim removed successfully");
             } else {
                 alert(data.error || "Failed to delete payment");
             }
@@ -1105,6 +1107,47 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
             // Ideally we should move it to effect scope.
         };
     }, [initialData]);
+
+    const [isUpdatingParentStatus, setIsUpdatingParentStatus] = useState(false);
+
+    const handleParentApproval = async (permissionId: string, status: "allowed" | "rejected") => {
+        setIsUpdatingParentStatus(true);
+        try {
+            const response = await fetch("/api/permissions", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    permissionId,
+                    parentStatus: status
+                })
+            });
+            const data = await response.json();
+            if (data.success) {
+                // Update local state for permissions history
+                setPermissionsHistory(prev => 
+                    prev.map(p => p._id === permissionId ? data.permission : p)
+                );
+                // Also trigger full refresh if needed
+                if (studentData?._id) {
+                    fetchStudentData(studentData._id);
+                }
+                setToastMessage(`Permission ${status === 'allowed' ? 'approved' : 'rejected'} successfully`);
+                setShowToast(true);
+                setTimeout(() => setShowToast(false), 3000);
+            } else {
+                setToastMessage(data.error || "Failed to update permission");
+                setShowToast(true);
+                setTimeout(() => setShowToast(false), 3000);
+            }
+        } catch (error: any) {
+            console.error("Error updating parent status:", error);
+            setToastMessage("Failed to update status");
+            setShowToast(true);
+            setTimeout(() => setShowToast(false), 3000);
+        } finally {
+            setIsUpdatingParentStatus(false);
+        }
+    };
 
     const handleRequestPermission = async () => {
         if (!fromDateTime || !toDateTime || !reason || !studentProfile) return;
@@ -2168,7 +2211,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
     }
 
     const gridColsClass = isParentView 
-        ? (bankSettings?.isPaymentEnabled ? "lg:grid-cols-4" : "lg:grid-cols-3")
+        ? "lg:grid-cols-3"
         : (bankSettings?.isPaymentEnabled ? "lg:grid-cols-5" : "lg:grid-cols-4");
 
     return (
@@ -2390,7 +2433,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                 )}
 
 
-                                {bankSettings?.isPaymentEnabled && (
+                                {!isParentView && bankSettings?.isPaymentEnabled && (
                                     <div className="bg-white p-2 md:p-2.5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between gap-1 transition-all hover:border-blue-200 group col-span-2 lg:col-span-1">
 
                                         <div className="flex-1">
@@ -2418,89 +2461,29 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                 )}
                             </div>
 
-                            {/* Latest Permission Status Card */}
-                            {!isParentView && latestPermission && (
-                                (() => {
-                                    // ⚡ LOGIC: Visible only for 6 hours after both warden and dean have responded
-                                    const isFinalized = latestPermission.wardenStatus !== 'pending' && latestPermission.deanStatus !== 'pending';
-                                    if (isFinalized) {
-                                        const lastUpdated = new Date(latestPermission.updatedAt || latestPermission.createdAt || Date.now()).getTime();
-                                        const sixHoursInMs = 6 * 60 * 60 * 1000;
-                                        const hoursPassed = (Date.now() - lastUpdated) / (1000 * 60 * 60);
-                                        if (hoursPassed > 6) return null;
-                                    }
-
-                                    return (
-                                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm mb-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Active Request Status</h3>
-                                                <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${latestPermission.status === 'allowed' ? 'bg-green-100 text-green-700' : latestPermission.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                                    {latestPermission.status}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center justify-around py-2">
-                                                <div className="flex flex-col items-center gap-2">
-                                                    <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Campus approval</span>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.wardenStatus === "allowed" ? "border-green-500 bg-green-50 text-green-600 shadow-sm ring-4 ring-green-50" : "border-gray-100 text-gray-300"}`}>
-                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                                                        </div>
-                                                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm ring-4 ring-red-50" : "border-gray-100 text-gray-300"}`}>
-                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
-                                                        </div>
-                                                    </div>
-                                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${latestPermission.wardenStatus === 'allowed' ? 'text-green-600 bg-green-50' : latestPermission.wardenStatus === 'rejected' ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-100'}`}>
-                                                        {latestPermission.wardenStatus === 'allowed' ? 'Accepted' : latestPermission.wardenStatus === 'rejected' ? 'Rejected' : 'Pending'}
-                                                    </span>
-                                                </div>
-
-                                                <div className="h-10 w-px bg-slate-100" />
-
-                                                <div className="flex flex-col items-center gap-2">
-                                                    <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Dean approval</span>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-lg shadow-green-100 scale-110" : "border-gray-100 text-gray-300"}`}>
-                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                                                        </div>
-                                                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${latestPermission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm ring-4 ring-red-50" : "border-gray-100 text-gray-300"}`}>
-                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
-                                                        </div>
-                                                    </div>
-                                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${latestPermission.deanStatus === 'allowed' ? 'text-green-600 bg-green-50' : latestPermission.deanStatus === 'rejected' ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-100'}`}>
-                                                        {latestPermission.deanStatus === 'allowed' ? 'Accepted' : latestPermission.deanStatus === 'rejected' ? 'Rejected' : 'Pending'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })()
-                            )}
-
                             {/* Action Buttons Row */}
                             {!isParentView && (
                                 <div className="grid grid-cols-2 gap-3 mb-4">
-                                    {/* ⚡ PRIMARY ACTION: Scan GATEPASS */}
                                     <button
                                         onClick={() => router.push("/getpass/scan")}
-                                        className="w-full h-24 rounded-2xl bg-[#EEF2FF] border-2 border-[#C7D2FE] text-[#4F46E5] font-black hover:bg-[#E0E7FF] transition-all flex flex-col items-center justify-center gap-2 group px-2 text-center"
+                                        className="w-full h-12 rounded-xl bg-[#EEF2FF] border-2 border-[#C7D2FE] text-[#4F46E5] font-black hover:bg-[#E0E7FF] transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left"
                                     >
-                                        <div className="w-10 h-10 bg-[#C7D2FE]/50 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                                            <svg className="w-6 h-6 text-[#4F46E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <div className="w-8 h-8 shrink-0 bg-[#C7D2FE]/50 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                                            <svg className="w-4 h-4 text-[#4F46E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                                             </svg>
                                         </div>
-                                        <div>
-                                            <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 opacity-70">Gatepass</span>
-                                            <span className="text-[10px] md:text-xs uppercase tracking-tight block">Scan QR code</span>
+                                        <div className="flex flex-col overflow-hidden min-w-0">
+                                            <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 opacity-70 truncate">Gatepass</span>
+                                            <span className="text-[10px] md:text-xs uppercase tracking-tight block truncate">Scan QR code</span>
                                         </div>
                                     </button>
 
-                                    {/* ⚡ SECONDARY ACTION: Go to Leave */}
+                                {/* ⚡ SECONDARY ACTION: Go to Leave */}
                                     {studentProfile?.studentStatus !== "out" && (
                                         <button
                                             onClick={() => {
-                                                if (!isAtHostel) {
+                                                if (!isAtHostel && !isParentView) {
                                                     setHighlightLocation(true);
                                                     // Scroll to top to show the location card
                                                     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2510,20 +2493,20 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                 setRequestType("leave");
                                                 setShowRequestForm(true);
                                             }}
-                                            className={`w-full h-24 rounded-2xl font-black border-2 transition-all flex flex-col items-center justify-center gap-2 group px-2 text-center ${isAtHostel
+                                            className={`w-full h-12 rounded-xl font-black border-2 transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left ${isAtHostel || isParentView
                                                 ? "bg-[#FFF7ED] border-[#FED7AA] text-[#C2410C] hover:bg-[#FFEDD5]"
                                                 : "bg-gray-50 border-gray-100 text-gray-400 hover:bg-red-50 hover:border-red-200"
                                                 }`}
                                         >
-                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${isAtHostel ? "bg-[#FED7AA]/50 group-hover:scale-110" : "bg-gray-100 group-hover:bg-red-100"}`}>
-                                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <div className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center transition-all ${(isAtHostel || isParentView) ? "bg-[#FED7AA]/50 group-hover:scale-110" : "bg-gray-100 group-hover:bg-red-100"}`}>
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                                                 </svg>
                                             </div>
-                                            <div>
-                                                <span className={`block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 ${isAtHostel ? "opacity-70" : "opacity-40"}`}>Leave Request</span>
-                                                <span className="text-[10px] md:text-xs uppercase tracking-tight block">
-                                                    {isAtHostel ? "Go to Home" : "Locked"}
+                                            <div className="flex flex-col overflow-hidden min-w-0">
+                                                <span className={`block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${(isAtHostel || isParentView) ? "opacity-70" : "opacity-40"}`}>Leave Request</span>
+                                                <span className="text-[10px] md:text-xs uppercase tracking-tight block truncate">
+                                                    {(isAtHostel || isParentView) ? "Go to Home" : "Locked"}
                                                 </span>
                                             </div>
                                         </button>
@@ -2531,106 +2514,156 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                 </div>
                             )}
 
-                            <div className="mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+                            <div className="grid grid-cols-2 gap-3 mb-6">
                                 <button
                                     onClick={() => setShowPermissionsHistory(true)}
-                                    className="w-full md:w-48 h-10 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
+                                    className="w-full h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5"
                                 >
-                                    🕙 View Outing History
+                                    <span>🕙</span> <span className="truncate">View Outing History</span>
                                 </button>
+                                {bankSettings?.isPaymentEnabled && (
+                                    <button
+                                        onClick={() => setShowFeeDetailsModal(true)}
+                                        className="w-full h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5 text-center leading-tight"
+                                    >
+                                        <span>💳</span> <span className="truncate">View Fee Details</span>
+                                    </button>
+                                )}
                             </div>
 
-                            {/* Hostel/Mess Fee Details Table */}
-                            {bankSettings?.isPaymentEnabled && (
-                                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden font-outfit mb-8">
-                                    <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/30">
-                                        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Hostel/Mess Fee Details</h3>
-                                        <button 
-                                            onClick={() => setShowPaymentModal(true)}
-                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold uppercase tracking-widest transition-all active:scale-95 shadow-md shadow-blue-200 flex items-center gap-2"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                                            Add
-                                        </button>
-                                    </div>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left text-sm border-collapse">
-                                            <thead className="bg-gray-50/50 border-b border-gray-100 text-[10px] font-black uppercase tracking-widest text-secondary">
-                                                <tr>
-                                                    <th className="px-2 py-4 text-center leading-tight">Student<br />Name</th>
-                                                    <th className="px-2 py-4 text-center leading-tight">ERP ID</th>
-                                                    <th className="px-2 py-4 text-center leading-tight">Hostel<br />Name</th>
-                                                    <th className="px-2 py-4 text-center leading-tight">Room No.</th>
-                                                    <th className="px-2 py-4 text-center leading-tight">UTR &<br />Source</th>
-                                                    <th className="px-2 py-4 text-center leading-tight">Amount</th>
-                                                    <th className="px-2 py-4 text-center leading-tight">Date</th>
-                                                    <th className="px-2 py-4 text-center leading-tight">Status</th>
-                                                    <th className="px-2 py-4 text-center leading-tight">Verify/<br />Unverify</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-50">
-                                                {!paymentHistory || paymentHistory.length === 0 ? (
-                                                    <tr>
-                                                        <td colSpan={9} className="py-20 text-center text-secondary">No payment claims found...</td>
-                                                    </tr>
-                                                ) : (
-                                                    paymentHistory.map((p) => (
-                                                        <tr key={p._id} className="hover:bg-gray-50/50 transition-colors group">
-                                                            <td className="px-2 py-4 min-w-[120px] text-center">
-                                                                <div className="flex flex-col leading-tight items-center">
-                                                                    <span className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors uppercase text-[9px]">{studentProfile?.name || "Unknown"}</span>
+                            {/* Latest Permission Status Card */}
+                            {latestPermission && (
+                                (() => {
+                                    // ⚡ LOGIC: Visible only for 24 hours after both warden and dean have responded (finalized)
+                                    const isFinalized = latestPermission.wardenStatus !== 'pending' && latestPermission.deanStatus !== 'pending';
+                                    if (isFinalized) {
+                                        const lastUpdated = new Date(latestPermission.updatedAt || latestPermission.createdAt || Date.now()).getTime();
+                                        const hoursPassed = (Date.now() - lastUpdated) / (1000 * 60 * 60);
+                                        if (hoursPassed > 24) return null;
+                                    }
+
+                                    return (
+                                        <div className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm mb-4 animate-in fade-in slide-in-from-bottom-2 duration-500 font-outfit">
+                                            <div className="flex items-center justify-between mb-2 border-b border-gray-100 pb-1.5">
+                                                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Active Request Status</h3>
+                                                <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${latestPermission.status === 'allowed' ? 'bg-green-100 text-green-700' : latestPermission.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                                    {latestPermission.status}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-row gap-2 md:gap-4 items-stretch">
+                                                {/* Left Side: Student Info & Approvals */}
+                                                <div className="w-[52%] md:w-[50%] lg:w-[45%] shrink-0 flex flex-col gap-2">
+                                                    <div className="flex flex-col gap-2">
+                                                        <p className="text-[10px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest leading-none">Schedule Details</p>
+                                                        <div className="flex flex-col gap-1.5 bg-gray-50/80 p-2.5 rounded-lg border border-gray-100">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-5 h-5 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
                                                                 </div>
-                                                            </td>
-                                                            <td className="px-2 py-4 text-center">
-                                                                <span className="text-[9px] text-gray-700 font-bold">{p.registrationId}</span>
-                                                            </td>
-                                                            <td className="px-2 py-4 text-center">
-                                                                <span className="text-[9px] text-gray-700 font-bold uppercase">{studentProfile?.hostelName || "N/A"}</span>
-                                                            </td>
-                                                            <td className="px-2 py-4 text-center">
-                                                                <span className="text-[9px] text-gray-700 font-bold uppercase">{studentProfile?.roomNumber || "N/A"}</span>
-                                                            </td>
-                                                            <td className="px-2 py-4 text-center">
-                                                                <div className="flex flex-col items-center">
-                                                                    <span className="font-mono text-[8px] font-bold text-gray-800">{p.utrNumber}</span>
-                                                                    <span className="text-[8px] text-blue-600 font-black uppercase tracking-tight">{p.paymentSource}</span>
+                                                                <div>
+                                                                    <p className="text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5">Campus Out Time</p>
+                                                                    <p className="text-[11px] font-bold text-gray-900 leading-none whitespace-nowrap">{latestPermission.fromDateTime ? new Date(latestPermission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) : "N/A"}</p>
                                                                 </div>
-                                                            </td>
-                                                            <td className="px-2 py-4 text-center">
-                                                                <span className="font-black text-gray-900 text-[9px]">₹{p.amount}</span>
-                                                            </td>
-                                                            <td className="px-2 py-4 text-center">
-                                                                <span className="text-[8px] text-gray-500 font-bold">{new Date(p.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                                                            </td>
-                                                            <td className="px-2 py-4 text-center">
-                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${
-                                                                    p.status === 'verified' ? 'bg-green-100 text-green-700' :
-                                                                    p.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                                                                    p.status === 'flagged' ? 'bg-yellow-100 text-yellow-700' :
-                                                                    'bg-blue-100 text-blue-700'
-                                                                }`}>
-                                                                    {p.status}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-2 py-4 text-center">
-                                                                {p.status === 'pending' ? (
-                                                                    <button
-                                                                        onClick={() => handleDeletePayment(p._id)}
-                                                                        className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded text-[8px] font-black uppercase tracking-widest transition-colors"
-                                                                    >
-                                                                        Delete
-                                                                    </button>
-                                                                ) : (
-                                                                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Locked</span>
-                                                                )}
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                )}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-5 h-5 rounded-md bg-green-100 text-green-600 flex items-center justify-center shrink-0">
+                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5">Return Time</p>
+                                                                    <p className="text-[11px] font-bold text-gray-900 leading-none whitespace-nowrap">{latestPermission.toDateTime ? new Date(latestPermission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) : "N/A"}</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* Permissions Block */}
+                                                    <div className="w-full">
+                                                        <div className="flex flex-col items-start gap-0.5 border border-gray-100 rounded-md p-1.5 bg-gray-50/50 w-full">
+                                                            
+                                                            <div className="flex items-center justify-between w-full">
+                                                                <span className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left pr-2">Parent</span>
+                                                                <div className="flex items-center gap-1.5 relative">
+                                                                    <div className="flex items-center gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
+                                                                        {isParentView && latestPermission.status === 'pending' ? (
+                                                                            <>
+                                                                                <button
+                                                                                    onClick={() => handleParentApproval(latestPermission._id, "allowed")}
+                                                                                    disabled={isUpdatingParentStatus}
+                                                                                    className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center transition-all ${latestPermission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} cursor-pointer disabled:opacity-50`}
+                                                                                >
+                                                                                    <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => handleParentApproval(latestPermission._id, "rejected")}
+                                                                                    disabled={isUpdatingParentStatus}
+                                                                                    className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center transition-all ${latestPermission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} cursor-pointer disabled:opacity-50`}
+                                                                                >
+                                                                                    <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                                </button>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <div className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${latestPermission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                    <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                                </div>
+                                                                                <div className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${latestPermission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                    <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                                </div>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex items-center justify-between w-full">
+                                                                <span className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left pr-2">Warden</span>
+                                                                <div className="flex items-center gap-1.5 relative">
+                                                                    <div className="flex items-center gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
+                                                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${latestPermission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                        </div>
+                                                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${latestPermission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex items-center justify-between w-full">
+                                                                <span className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left pr-2">Dean</span>
+                                                                <div className="flex items-center gap-1.5 relative">
+                                                                    <div className="flex items-center gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
+                                                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${latestPermission.deanStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm scale-110" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                        </div>
+                                                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${latestPermission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Vertical Separator */}
+                                                <div className="block w-[1px] md:w-[2px] bg-blue-100/50 my-1 rounded-full"></div>
+
+                                                {/* Right Side: Reason Message */}
+                                                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                                    <div className="bg-gray-50/50 p-3 md:p-4 rounded-xl border border-gray-100 h-full flex items-center justify-center">
+                                                        <p className="text-[11px] md:text-xs text-gray-600 font-medium leading-relaxed italic text-center md:text-left">
+                                                            "{latestPermission.reason}"
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()
                             )}
 
                             {showRequestForm && (
@@ -2705,7 +2738,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                             )}
 
                             {/* Detailed Student Information Section */}
-                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
+                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                                 <div className="bg-gray-50/50 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                                     <h2 className="text-[12px] font-bold text-gray-800 uppercase tracking-wider">Student Profile Details</h2>
                                     <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">Official Record</span>
@@ -2737,6 +2770,113 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                 </div>
                             </div>
 
+
+                            {showFeeDetailsModal && (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+                                    <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden shadow-2xl flex flex-col font-outfit">
+                                        <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/30">
+                                            <h3 className="text-lg font-bold text-gray-900 uppercase tracking-widest">Hostel/Mess Fee Details</h3>
+                                            <div className="flex items-center gap-2">
+                                                {!isParentView && (
+                                                    <button 
+                                                        onClick={() => {
+                                                            setShowFeeDetailsModal(false);
+                                                            setShowPaymentModal(true);
+                                                        }}
+                                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold uppercase tracking-widest transition-all active:scale-95 shadow-md shadow-blue-200 flex items-center gap-2"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                                        Add
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => setShowFeeDetailsModal(false)}
+                                                    className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                                                >
+                                                    <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="overflow-x-auto overflow-y-auto p-4">
+                                            <table className="w-full text-left text-sm border-collapse">
+                                                <thead className="bg-gray-50/50 border-b border-gray-100 text-[10px] font-black uppercase tracking-widest text-secondary">
+                                                    <tr>
+                                                        <th className="px-2 py-4 text-center leading-tight">Student<br />Name</th>
+                                                        <th className="px-2 py-4 text-center leading-tight">ERP ID</th>
+                                                        <th className="px-2 py-4 text-center leading-tight">Hostel<br />Name</th>
+                                                        <th className="px-2 py-4 text-center leading-tight">Room No.</th>
+                                                        <th className="px-2 py-4 text-center leading-tight">UTR &<br />Source</th>
+                                                        <th className="px-2 py-4 text-center leading-tight">Amount</th>
+                                                        <th className="px-2 py-4 text-center leading-tight">Date</th>
+                                                        <th className="px-2 py-4 text-center leading-tight">Status</th>
+                                                        <th className="px-2 py-4 text-center leading-tight">Verify/<br />Unverify</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-50">
+                                                    {!paymentHistory || paymentHistory.length === 0 ? (
+                                                        <tr>
+                                                            <td colSpan={9} className="py-20 text-center text-secondary">No payment claims found...</td>
+                                                        </tr>
+                                                    ) : (
+                                                        paymentHistory.map((p) => (
+                                                            <tr key={p._id} className="hover:bg-gray-50/50 transition-colors group">
+                                                                <td className="px-2 py-4 min-w-[120px] text-center">
+                                                                    <div className="flex flex-col leading-tight items-center">
+                                                                        <span className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors uppercase text-[9px]">{studentProfile?.name || "Unknown"}</span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-2 py-4 text-center">
+                                                                    <span className="text-[9px] text-gray-700 font-bold">{p.registrationId}</span>
+                                                                </td>
+                                                                <td className="px-2 py-4 text-center">
+                                                                    <span className="text-[9px] text-gray-700 font-bold uppercase">{studentProfile?.hostelName || "N/A"}</span>
+                                                                </td>
+                                                                <td className="px-2 py-4 text-center">
+                                                                    <span className="text-[9px] text-gray-700 font-bold uppercase">{studentProfile?.roomNumber || "N/A"}</span>
+                                                                </td>
+                                                                <td className="px-2 py-4 text-center">
+                                                                    <div className="flex flex-col items-center">
+                                                                        <span className="font-mono text-[8px] font-bold text-gray-800">{p.utrNumber}</span>
+                                                                        <span className="text-[8px] text-blue-600 font-black uppercase tracking-tight">{p.paymentSource}</span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-2 py-4 text-center">
+                                                                    <span className="font-black text-gray-900 text-[9px]">₹{p.amount}</span>
+                                                                </td>
+                                                                <td className="px-2 py-4 text-center">
+                                                                    <span className="text-[8px] text-gray-500 font-bold">{new Date(p.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                                                </td>
+                                                                <td className="px-2 py-4 text-center">
+                                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${
+                                                                        p.status === 'verified' ? 'bg-green-100 text-green-700' :
+                                                                        p.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                                                        p.status === 'flagged' ? 'bg-yellow-100 text-yellow-700' :
+                                                                        'bg-blue-100 text-blue-700'
+                                                                    }`}>
+                                                                        {p.status}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-2 py-4 text-center">
+                                                                    {p.status === 'pending' ? (
+                                                                        <button
+                                                                            onClick={() => handleDeletePayment(p._id)}
+                                                                            className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded text-[8px] font-black uppercase tracking-widest transition-colors"
+                                                                        >
+                                                                            Delete
+                                                                        </button>
+                                                                    ) : (
+                                                                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Locked</span>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        ))
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {showPermissionsHistory && (
                                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
@@ -2983,59 +3123,122 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                         permissions.map((permission) => (
                                                             <div
                                                                 key={permission._id}
-                                                                className="rounded-2xl border-0 bg-slate-50 p-5 shadow-sm hover:shadow-md transition-all duration-300"
+                                                                className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm mb-4 font-outfit hover:shadow-md transition-all duration-300"
                                                             >
-                                                                <div className="flex justify-between items-start mb-3">
-                                                                    <div className="space-y-1.5">
-                                                                        <p className="text-[13px] font-black text-[#2D5A9E]">
-                                                                            {new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}
-                                                                        </p>
-                                                                        <p className="text-[13px] font-black text-[#2D5A9E]">
-                                                                            To {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}
-                                                                        </p>
-                                                                    </div>
-                                                                    <div className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${permission.status === 'allowed' ? 'bg-green-100 text-green-700 border border-green-200' :
-                                                                        permission.status === 'rejected' ? 'bg-red-100 text-red-700 border border-red-200' :
-                                                                            'bg-yellow-100 text-yellow-700 border border-yellow-200'
-                                                                        }`}>
-                                                                        {permission.status === 'allowed' ? 'Accepted' : permission.status === 'rejected' ? 'Rejected' : 'Pending'}
+                                                                <div className="flex items-center justify-end mb-2 border-b border-gray-100 pb-1.5">
+                                                                    <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${permission.status === 'allowed' ? 'bg-green-100 text-green-700' : permission.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                                                        {permission.status}
                                                                     </div>
                                                                 </div>
-                                                                <div className="h-px w-full bg-slate-200/50 mb-3" />
-                                                                <p className="text-[11px] text-slate-800 leading-relaxed font-medium">
-                                                                    {permission.reason}
-                                                                </p>
 
-                                                                {/* Staff Approval Indicators */}
-                                                                <div className="flex items-center justify-around pt-4 border-t border-slate-200/50 mt-4">
-                                                                    <div className="flex flex-col items-center gap-2">
-                                                                        <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider">Campus approval</span>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <div className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-500 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-300"}`}>
-                                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                                                            </div>
-                                                                            <div className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-300"}`}>
-                                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                <div className="flex flex-row gap-2 md:gap-4 items-stretch">
+                                                                    {/* Left Side: Student Info & Approvals */}
+                                                                    <div className="w-[52%] md:w-[50%] lg:w-[45%] shrink-0 flex flex-col gap-2">
+                                                                        <div className="flex flex-col gap-2">
+                                                                            <p className="text-[10px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest leading-none">Schedule Details</p>
+                                                                            <div className="flex flex-col gap-1.5 bg-gray-50/80 p-2.5 rounded-lg border border-gray-100">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <div className="w-5 h-5 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                                                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                                                                                    </div>
+                                                                                    <div>
+                                                                                        <p className="text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5">Campus Out Time</p>
+                                                                                        <p className="text-[11px] font-bold text-gray-900 leading-none whitespace-nowrap">{permission.fromDateTime ? new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) : "N/A"}</p>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <div className="w-5 h-5 rounded-md bg-green-100 text-green-600 flex items-center justify-center shrink-0">
+                                                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+                                                                                    </div>
+                                                                                    <div>
+                                                                                        <p className="text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5">Return Time</p>
+                                                                                        <p className="text-[11px] font-bold text-gray-900 leading-none whitespace-nowrap">{permission.toDateTime ? new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) : "N/A"}</p>
+                                                                                    </div>
+                                                                                </div>
                                                                             </div>
                                                                         </div>
-                                                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${permission.wardenStatus === 'allowed' ? 'text-green-600 bg-green-50' : permission.wardenStatus === 'rejected' ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-100'}`}>
-                                                                            {permission.wardenStatus === 'allowed' ? 'Accepted' : permission.wardenStatus === 'rejected' ? 'Rejected' : 'Pending'}
-                                                                        </span>
+                                                                        
+                                                                        {/* Permissions Block */}
+                                                                        <div className="w-full">
+                                                                            <div className="flex flex-col items-start gap-0.5 border border-gray-100 rounded-md p-1.5 bg-gray-50/50 w-full">
+                                                                                
+                                                                                <div className="flex items-center justify-between w-full">
+                                                                                    <span className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left pr-2">Parent</span>
+                                                                                    <div className="flex items-center gap-1.5 relative">
+                                                                                        <div className="flex items-center gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
+                                                                                            {isParentView && permission.status === 'pending' ? (
+                                                                                                <>
+                                                                                                    <button
+                                                                                                        onClick={() => handleParentApproval(permission._id, "allowed")}
+                                                                                                        disabled={isUpdatingParentStatus}
+                                                                                                        className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} cursor-pointer disabled:opacity-50`}
+                                                                                                    >
+                                                                                                        <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                                                    </button>
+                                                                                                    <button
+                                                                                                        onClick={() => handleParentApproval(permission._id, "rejected")}
+                                                                                                        disabled={isUpdatingParentStatus}
+                                                                                                        className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} cursor-pointer disabled:opacity-50`}
+                                                                                                    >
+                                                                                                        <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                                                    </button>
+                                                                                                </>
+                                                                                            ) : (
+                                                                                                <>
+                                                                                                    <div className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                                        <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                                                    </div>
+                                                                                                    <div className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                                        <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                                                    </div>
+                                                                                                </>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+
+                                                                                <div className="flex items-center justify-between w-full">
+                                                                                    <span className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left pr-2">Warden</span>
+                                                                                    <div className="flex items-center gap-1.5 relative">
+                                                                                        <div className="flex items-center gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
+                                                                                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                                            </div>
+                                                                                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+
+                                                                                <div className="flex items-center justify-between w-full">
+                                                                                    <span className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left pr-2">Dean</span>
+                                                                                    <div className="flex items-center gap-1.5 relative">
+                                                                                        <div className="flex items-center gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
+                                                                                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${permission.deanStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm scale-110" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                                            </div>
+                                                                                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
 
-                                                                    <div className="flex flex-col items-center gap-2">
-                                                                        <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider">Dean approval</span>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <div className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-300"}`}>
-                                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                                                            </div>
-                                                                            <div className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-300"}`}>
-                                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                                                            </div>
+                                                                    {/* Vertical Separator */}
+                                                                    <div className="block w-[1px] md:w-[2px] bg-blue-100/50 my-1 rounded-full"></div>
+
+                                                                    {/* Right Side: Reason Message */}
+                                                                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                                                        <div className="bg-gray-50/50 p-3 md:p-4 rounded-xl border border-gray-100 h-full flex items-center justify-center">
+                                                                            <p className="text-[11px] md:text-xs text-gray-600 font-medium leading-relaxed italic text-center md:text-left">
+                                                                                "{permission.reason}"
+                                                                            </p>
                                                                         </div>
-                                                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${permission.deanStatus === 'allowed' ? 'text-green-600 bg-green-50' : permission.deanStatus === 'rejected' ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-100'}`}>
-                                                                            {permission.deanStatus === 'allowed' ? 'Accepted' : permission.deanStatus === 'rejected' ? 'Rejected' : 'Pending'}
-                                                                        </span>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -4036,12 +4239,12 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                     </div>
                 )
             }
-            <footer className="mt-12 mb-8 py-6 border-t border-gray-100/10">
+            <footer className="mt-2 py-6 border-t border-gray-100/50">
                 <div className="flex flex-col items-center gap-1.5 text-center px-4">
-                    <p className="text-[9px] sm:text-[10px] font-bold tracking-[0.15em] text-white/30 uppercase">
+                    <p className="text-[9px] sm:text-[11px] font-bold tracking-widest text-gray-400/80 uppercase">
                         &copy; 2026 HOSTELEASE. All Rights Reserved.
                     </p>
-                    <p className="text-[8px] font-medium text-white/10 uppercase tracking-wider leading-tight">
+                    <p className="text-[8px] sm:text-[9px] font-medium text-gray-300 uppercase tracking-[0.15em] opacity-60">
                         Unauthorized copying, modification, or distribution is strictly prohibited
                     </p>
                 </div>

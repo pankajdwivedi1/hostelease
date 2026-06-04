@@ -11,6 +11,7 @@ export default function TenantSettingsView() {
     const [contactName, setContactName] = useState("");
     const [contactPhone, setContactPhone] = useState("");
     const [totalHostelars, setTotalHostelars] = useState("");
+    const [leaveApprovalMethod, setLeaveApprovalMethod] = useState("app");
 
     // OTP Modal state
     const [showOtpModal, setShowOtpModal] = useState(false);
@@ -27,6 +28,7 @@ export default function TenantSettingsView() {
                 setContactName(data.settings.contactName || "");
                 setContactPhone(data.settings.contactPhone || "");
                 setTotalHostelars(data.settings.totalHostelars || "");
+                setLeaveApprovalMethod(data.settings.leaveApprovalMethod || "app");
             } else {
                 alert("Failed to load settings.");
             }
@@ -76,7 +78,8 @@ export default function TenantSettingsView() {
                     otp,
                     contactName,
                     contactPhone,
-                    totalHostelars
+                    totalHostelars,
+                    leaveApprovalMethod
                 })
             });
             const data = await res.json();
@@ -192,6 +195,18 @@ export default function TenantSettingsView() {
                                     onChange={e => setTotalHostelars(e.target.value)}
                                     className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 max-w-md"
                                 />
+                            </div>
+                            <div className="space-y-2 md:col-span-2 mt-4">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Parent Leave Approval Method</label>
+                                <select
+                                    value={leaveApprovalMethod}
+                                    onChange={e => setLeaveApprovalMethod(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 max-w-md cursor-pointer"
+                                >
+                                    <option value="app">APP (Parent must approve via App)</option>
+                                    <option value="ivr">IVR Call (Automated Voice Call)</option>
+                                </select>
+                                <p className="text-[10px] font-bold text-slate-400 px-2 mt-1">If set to APP, wardens cannot approve until the parent gives consent.</p>
                             </div>
                         </div>
 

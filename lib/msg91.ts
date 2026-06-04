@@ -232,7 +232,7 @@ export async function triggerLeaveVoiceCall(params: {
         "authkey": authKey,
       },
       body: JSON.stringify({
-        template: campaignId,
+        flow: campaignId,
         client_number: formattedPhone,
         caller_id: process.env.MSG91_VOICE_CALLER_ID || "",
         variables: {

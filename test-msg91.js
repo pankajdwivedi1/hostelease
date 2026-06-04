@@ -15,8 +15,9 @@ async function testVoice() {
         "authkey": authKey,
       },
       body: JSON.stringify({
-        template: campaignId,
+        flow: campaignId,
         client_number: phone,
+        caller_id: "7974704918",
         variables: {
           var1: { type: "text", value: "Test Hostel" },
           var2: { type: "text", value: "Test Student" },

@@ -85,8 +85,10 @@ export async function GET(request: NextRequest) {
         });
 
         // 5. Fetch Attendance Summary from DB
-        console.log(`[ATTENDANCE_SUMMARY] Fetching for date: ${date}`);
+        const tenantIdForLog = await db.getTenantIdOrThrow();
+        console.log(`[ATTENDANCE_SUMMARY] Fetching for date: ${date}, tenantId: ${tenantIdForLog}`);
         const result = await db.attendance.summary(date);
+        console.log(`[ATTENDANCE_SUMMARY] result.presentStudentIds count:`, result?.presentStudentIds?.length);
 
         if (!result) {
             console.error("[ATTENDANCE_SUMMARY] db.attendance.summary returned null/undefined");

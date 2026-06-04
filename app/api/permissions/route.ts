@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { permissionId, status, wardenStatus, deanStatus } = body;
+    const { permissionId, status, wardenStatus, deanStatus, parentStatus } = body;
 
     if (!permissionId) {
       return NextResponse.json(
@@ -119,6 +119,7 @@ export async function PATCH(request: NextRequest) {
     if (status) update.status = status;
     if (wardenStatus) update.wardenStatus = wardenStatus;
     if (deanStatus) update.deanStatus = deanStatus;
+    if (parentStatus) update.parentStatus = parentStatus;
 
     // Logic for final status
     const finalWardenStatus = wardenStatus || currentPermission.wardenStatus;
