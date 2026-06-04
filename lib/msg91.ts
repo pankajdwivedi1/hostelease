@@ -30,18 +30,16 @@ export async function triggerLeaveVoiceCall(params: {
         "authkey": authKey,
       },
       body: JSON.stringify({
-        template_id: campaignId,
-        short_url: "0",
-        recipients: [
-          {
-            mobiles: formattedPhone,
-            var1: hostelName,
-            var2: studentName,
-            var3: fromDate,
-            var4: toDate,
-            var5: leaveId,
-          },
-        ],
+        template: campaignId,
+        client_number: formattedPhone,
+        caller_id: process.env.MSG91_VOICE_CALLER_ID || "",
+        variables: {
+          var1: { type: "text", value: hostelName },
+          var2: { type: "text", value: studentName },
+          var3: { type: "text", value: fromDate },
+          var4: { type: "text", value: toDate },
+          var5: { type: "text", value: leaveId }
+        },
       }),
     });
 

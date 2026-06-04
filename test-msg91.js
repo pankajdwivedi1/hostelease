@@ -8,25 +8,22 @@ async function testVoice() {
   console.log("Testing MSG91 Flow API...");
 
   try {
-    const response = await fetch("https://control.msg91.com/api/v5/flow/", {
+    const response = await fetch("https://control.msg91.com/api/v5/voice/call/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "authkey": authKey,
       },
       body: JSON.stringify({
-        template_id: campaignId,
-        short_url: "0",
-        recipients: [
-          {
-            mobiles: phone,
-            var1: "Test Hostel",
-            var2: "Test Student",
-            var3: "2026-06-04",
-            var4: "2026-06-05",
-            var5: "leave-12345",
-          },
-        ],
+        template: campaignId,
+        client_number: phone,
+        variables: {
+          var1: { type: "text", value: "Test Hostel" },
+          var2: { type: "text", value: "Test Student" },
+          var3: { type: "text", value: "2026-06-04" },
+          var4: { type: "text", value: "2026-06-05" },
+          var5: { type: "text", value: "leave-12345" }
+        }
       }),
     });
 
