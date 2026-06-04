@@ -225,7 +225,7 @@ export async function triggerLeaveVoiceCall(params: {
   }
 
   try {
-    const response = await fetch("https://control.msg91.com/api/v5/flow/", {
+    const response = await fetch("https://control.msg91.com/api/v5/voice/call/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
