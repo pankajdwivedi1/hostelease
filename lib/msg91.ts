@@ -23,7 +23,7 @@ export async function triggerLeaveVoiceCall(params: {
   }
 
   try {
-    const response = await fetch("https://control.msg91.com/api/v5/voice/process", {
+    const response = await fetch("https://control.msg91.com/api/v5/flow/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -31,7 +31,8 @@ export async function triggerLeaveVoiceCall(params: {
       },
       body: JSON.stringify({
         template_id: campaignId,
-        variables_info: [
+        short_url: "0",
+        recipients: [
           {
             mobiles: formattedPhone,
             var1: hostelName,
