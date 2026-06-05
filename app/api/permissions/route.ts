@@ -150,7 +150,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true, permission: populatedPermission }, { status: 200 });
   } catch (error: any) {
-    console.error("Error updating permission:", error);
+    console.error("Error updating permission. Full error:", JSON.stringify(error, null, 2), error);
     return NextResponse.json(
       { error: error.message || "Failed to update permission" },
       { status: 500 }

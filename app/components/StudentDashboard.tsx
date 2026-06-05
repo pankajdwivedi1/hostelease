@@ -7,6 +7,7 @@ import { auth as firebaseAuth } from "@/lib/firebase";
 import { supabase } from "@/lib/supabase";
 import Barcode from "react-barcode";
 import * as faceMatching from "@/lib/faceMatching";
+import { showToast } from "@/lib/toast";
 
 interface Permission {
     _id: string;
@@ -132,8 +133,6 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
     const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
     const [attendanceWindow, setAttendanceWindow] = useState({ start: "21:00", end: "23:00" });
     const [attendanceError, setAttendanceError] = useState<string | null>(null);
-    const [showToast, setShowToast] = useState(false);
-    const [toastMessage, setToastMessage] = useState("");
     const [notifications, setNotifications] = useState<DBNotification[]>([]);
     const [currentNotification, setCurrentNotification] = useState<DBNotification | null>(null);
     const [showNotifPopup, setShowNotifPopup] = useState(false);
@@ -955,8 +954,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                     console.log("⚠️ Missing Fields Detected:", missing);
                                     setMissingRequiredFields(missing);
                                     setShowProfile(true); // Force open profile
-                                    setToastMessage(`Action Required: Please update your profile.`);
-                                    setShowToast(true);
+                                    showToast("Action Required: Please update your profile.", "warning");
                                 }
                             }
                         }
@@ -1124,26 +1122,17 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
             const data = await response.json();
             if (data.success) {
                 // Update local state for permissions history
-                setPermissionsHistory(prev => 
+                setPermissions(prev => 
                     prev.map(p => p._id === permissionId ? data.permission : p)
                 );
-                // Also trigger full refresh if needed
-                if (studentData?._id) {
-                    fetchStudentData(studentData._id);
-                }
-                setToastMessage(`Permission ${status === 'allowed' ? 'approved' : 'rejected'} successfully`);
-                setShowToast(true);
-                setTimeout(() => setShowToast(false), 3000);
+                // UI is updated via setPermissions above.
+                showToast(`Permission ${status === 'allowed' ? 'approved' : 'rejected'} successfully`, "success");
             } else {
-                setToastMessage(data.error || "Failed to update permission");
-                setShowToast(true);
-                setTimeout(() => setShowToast(false), 3000);
+                showToast(data.error || "Failed to update permission", "error");
             }
         } catch (error: any) {
             console.error("Error updating parent status:", error);
-            setToastMessage("Failed to update status");
-            setShowToast(true);
-            setTimeout(() => setShowToast(false), 3000);
+            showToast("Failed to update status", "error");
         } finally {
             setIsUpdatingParentStatus(false);
         }
@@ -2026,9 +2015,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
 
         if (istTime < attendanceWindow.start || istTime > attendanceWindow.end) {
             console.log(`🕒 Attendance refused: Outside window (${istTime} vs ${attendanceWindow.start}-${attendanceWindow.end})`);
-            setToastMessage(`Daily attendance will be allowed between ${attendanceWindow.start} to ${attendanceWindow.end}`);
-            setShowToast(true);
-            setTimeout(() => setShowToast(false), 5000);
+            showToast(`Daily attendance will be allowed between ${attendanceWindow.start} to ${attendanceWindow.end}`, "info");
             return;
         }
         console.log(`🕒 Attendance window check passed: ${istTime}`);
@@ -2169,9 +2156,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                         // ⚡ USER REQUEST: Instant closure and non-blocking notification
                         setAttendanceStep('idle');
                         setIsMarkingAttendance(false);
-                        setToastMessage(data.message || "Attendance marked successfully!");
-                        setShowToast(true);
-                        setTimeout(() => setShowToast(false), 3000);
+                        showToast(data.message || "Attendance marked successfully!", "success");
                     }, 800);
                 } else {
                     setAttendanceStep('error');
@@ -2531,141 +2516,6 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                 )}
                             </div>
 
-                            {/* Latest Permission Status Card */}
-                            {latestPermission && (
-                                (() => {
-                                    // ⚡ LOGIC: Visible only for 24 hours after both warden and dean have responded (finalized)
-                                    const isFinalized = latestPermission.wardenStatus !== 'pending' && latestPermission.deanStatus !== 'pending';
-                                    if (isFinalized) {
-                                        const lastUpdated = new Date(latestPermission.updatedAt || latestPermission.createdAt || Date.now()).getTime();
-                                        const hoursPassed = (Date.now() - lastUpdated) / (1000 * 60 * 60);
-                                        if (hoursPassed > 24) return null;
-                                    }
-
-                                    return (
-                                        <div className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm mb-4 animate-in fade-in slide-in-from-bottom-2 duration-500 font-outfit">
-                                            <div className="flex items-center justify-between mb-2 border-b border-gray-100 pb-1.5">
-                                                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Active Request Status</h3>
-                                                <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${latestPermission.status === 'allowed' ? 'bg-green-100 text-green-700' : latestPermission.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                                    {latestPermission.status}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex flex-row gap-2 md:gap-4 items-stretch">
-                                                {/* Left Side: Student Info & Approvals */}
-                                                <div className="w-[52%] md:w-[50%] lg:w-[45%] shrink-0 flex flex-col gap-2">
-                                                    <div className="flex flex-col gap-2">
-                                                        <p className="text-[10px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest leading-none">Schedule Details</p>
-                                                        <div className="flex flex-col gap-1.5 bg-gray-50/80 p-2.5 rounded-lg border border-gray-100">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="w-5 h-5 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
-                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                                                                </div>
-                                                                <div>
-                                                                    <p className="text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5">Campus Out Time</p>
-                                                                    <p className="text-[11px] font-bold text-gray-900 leading-none whitespace-nowrap">{latestPermission.fromDateTime ? new Date(latestPermission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) : "N/A"}</p>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="w-5 h-5 rounded-md bg-green-100 text-green-600 flex items-center justify-center shrink-0">
-                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-                                                                </div>
-                                                                <div>
-                                                                    <p className="text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5">Return Time</p>
-                                                                    <p className="text-[11px] font-bold text-gray-900 leading-none whitespace-nowrap">{latestPermission.toDateTime ? new Date(latestPermission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) : "N/A"}</p>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    
-                                                    {/* Permissions Block */}
-                                                    <div className="w-full">
-                                                        <div className="flex flex-col items-start gap-0.5 border border-gray-100 rounded-md p-1.5 bg-gray-50/50 w-full">
-                                                            
-                                                            <div className="flex items-center justify-between w-full">
-                                                                <span className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left pr-2">Parent</span>
-                                                                <div className="flex items-center gap-1.5 relative">
-                                                                    <div className="flex items-center gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
-                                                                        {isParentView && latestPermission.status === 'pending' ? (
-                                                                            <>
-                                                                                <button
-                                                                                    onClick={() => handleParentApproval(latestPermission._id, "allowed")}
-                                                                                    disabled={isUpdatingParentStatus}
-                                                                                    className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center transition-all ${latestPermission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} cursor-pointer disabled:opacity-50`}
-                                                                                >
-                                                                                    <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                                                                </button>
-                                                                                <button
-                                                                                    onClick={() => handleParentApproval(latestPermission._id, "rejected")}
-                                                                                    disabled={isUpdatingParentStatus}
-                                                                                    className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center transition-all ${latestPermission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} cursor-pointer disabled:opacity-50`}
-                                                                                >
-                                                                                    <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                                                                </button>
-                                                                            </>
-                                                                        ) : (
-                                                                            <>
-                                                                                <div className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${latestPermission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                                    <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                                                                </div>
-                                                                                <div className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${latestPermission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                                    <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                                                                </div>
-                                                                            </>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="flex items-center justify-between w-full">
-                                                                <span className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left pr-2">Warden</span>
-                                                                <div className="flex items-center gap-1.5 relative">
-                                                                    <div className="flex items-center gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
-                                                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${latestPermission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                                                        </div>
-                                                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${latestPermission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="flex items-center justify-between w-full">
-                                                                <span className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left pr-2">Dean</span>
-                                                                <div className="flex items-center gap-1.5 relative">
-                                                                    <div className="flex items-center gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
-                                                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${latestPermission.deanStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm scale-110" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                                                        </div>
-                                                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${latestPermission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Vertical Separator */}
-                                                <div className="block w-[1px] md:w-[2px] bg-blue-100/50 my-1 rounded-full"></div>
-
-                                                {/* Right Side: Reason Message */}
-                                                <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                                    <div className="bg-gray-50/50 p-3 md:p-4 rounded-xl border border-gray-100 h-full flex items-center justify-center">
-                                                        <p className="text-[11px] md:text-xs text-gray-600 font-medium leading-relaxed italic text-center md:text-left">
-                                                            "{latestPermission.reason}"
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })()
-                            )}
-
                             {showRequestForm && (
                                 <div className="p-6 rounded-3xl border border-blue-100 bg-gradient-to-br from-white to-blue-50/30 shadow-xl shadow-blue-100/50 space-y-6 mb-6 animate-in slide-in-from-top-4 duration-300">
                                     <div className="flex items-center justify-between mb-2">
@@ -2705,13 +2555,18 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                         </label>
                                         <textarea
                                             value={reason}
-                                            onChange={(e) => setReason(e.target.value.slice(0, 100))}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                const wordCount = val.trim() === '' ? 0 : val.trim().split(/\s+/).length;
+                                                if (wordCount <= 100) {
+                                                    setReason(val);
+                                                }
+                                            }}
                                             placeholder={requestType === 'leave' ? "Mention if going to home, village, etc." : "Local market, hospital, etc."}
-                                            maxLength={100}
                                             rows={3}
                                             className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-800 font-bold placeholder:text-gray-300 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none resize-none"
                                         />
-                                        <p className="text-right text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tighter">{reason.length}/100</p>
+                                        <p className="text-right text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tighter">{(reason.trim() === '' ? 0 : reason.trim().split(/\s+/).length)}/100 WORDS</p>
                                     </div>
 
                                     <div className="flex gap-3 pt-2">
@@ -2735,6 +2590,191 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                         </button>
                                     </div>
                                 </div>
+                            )}
+
+                            {/* Latest Permission Status Card */}
+                            {latestPermission && (
+                                (() => {
+                                    // ⚡ LOGIC: Visible only for 24 hours after both warden and dean have responded (finalized)
+                                    const isFinalized = latestPermission.wardenStatus !== 'pending' && latestPermission.deanStatus !== 'pending';
+                                    if (isFinalized) {
+                                        const lastUpdated = new Date(latestPermission.updatedAt || latestPermission.createdAt || Date.now()).getTime();
+                                        const hoursPassed = (Date.now() - lastUpdated) / (1000 * 60 * 60);
+                                        if (hoursPassed > 24) return null;
+                                    }
+
+                                    return (
+                                        <div className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm mb-4 animate-in fade-in slide-in-from-bottom-2 duration-500 font-outfit">
+                                            <div className="flex items-center justify-between mb-2 border-b border-gray-100 pb-1.5">
+                                                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Active Request Status</h3>
+                                                <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${latestPermission.status === 'allowed' ? 'bg-green-100 text-green-700' : latestPermission.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                                    {latestPermission.status}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-stretch">
+                                                {/* Left Side: Student Info & Approvals */}
+                                                <div className="w-full md:w-[45%] lg:w-[40%] shrink-0 flex flex-row md:flex-col gap-2">
+                                                    <div className="flex flex-col gap-2 w-1/2 md:w-full">
+                                                        <p className="text-[9px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest leading-none">Schedule Details</p>
+                                                        <div className="flex flex-col gap-1.5 bg-gray-50/80 p-2 md:p-2.5 rounded-lg border border-gray-100">
+                                                            <div className="flex items-center gap-1.5 md:gap-2">
+                                                                <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                                                                    <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-[7.5px] md:text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5 truncate">Campus Out</p>
+                                                                    <p className="text-[9px] md:text-[11px] font-bold text-gray-900 leading-none truncate">{latestPermission.fromDateTime ? new Date(latestPermission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) : "N/A"}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 md:gap-2">
+                                                                <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-green-100 text-green-600 flex items-center justify-center shrink-0">
+                                                                    <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-[7.5px] md:text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5 truncate">Campus In</p>
+                                                                    <p className="text-[9px] md:text-[11px] font-bold text-gray-900 leading-none truncate">{latestPermission.toDateTime ? new Date(latestPermission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) : "N/A"}</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* Permissions Block */}
+                                                    <div className="w-1/2 md:w-full">
+                                                        <div className="flex flex-col items-start gap-0.5 border border-gray-100 rounded-md p-1 md:p-1.5 bg-gray-50/50 w-full h-full">
+                                                            <div className="flex items-center justify-between w-full mt-1">
+                                                                <div className="flex items-center gap-0.5 md:gap-1.5">
+                                                                    <span className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Parent</span>
+                                                                    {latestPermission.parentStatus === "rejected" && (
+                                                                        <span className="text-[6.5px] md:text-[8px] font-bold text-red-600 bg-red-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
+                                                                            Rejected
+                                                                        </span>
+                                                                    )}
+                                                                    {latestPermission.parentStatus === "allowed" && (
+                                                                        <span className="text-[6.5px] md:text-[8px] font-bold text-green-600 bg-green-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
+                                                                            AGREE
+                                                                        </span>
+                                                                    )}
+                                                                    {(latestPermission.parentStatus === "no_response" || latestPermission.parentStatus === "pending") && (
+                                                                        <span className="text-[6.5px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                                                            Pending
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5 relative">
+                                                                    <div className="flex items-center gap-1 md:gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
+                                                                        {isParentView && latestPermission.status === 'pending' ? (
+                                                                            <>
+                                                                                <button
+                                                                                    onClick={() => handleParentApproval(latestPermission._id, "allowed")}
+                                                                                    disabled={isUpdatingParentStatus}
+                                                                                    className={`w-3.5 h-3.5 md:w-6 md:h-6 rounded-md border flex items-center justify-center transition-all ${latestPermission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} cursor-pointer disabled:opacity-50`}
+                                                                                >
+                                                                                    <svg className="w-2 h-2 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => handleParentApproval(latestPermission._id, "rejected")}
+                                                                                    disabled={isUpdatingParentStatus}
+                                                                                    className={`w-3.5 h-3.5 md:w-6 md:h-6 rounded-md border flex items-center justify-center transition-all ${latestPermission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} cursor-pointer disabled:opacity-50`}
+                                                                                >
+                                                                                    <svg className="w-2 h-2 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                                </button>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <div className={`w-3.5 h-3.5 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${latestPermission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                    <svg className="w-2 h-2 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                                </div>
+                                                                                <div className={`w-3.5 h-3.5 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${latestPermission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                    <svg className="w-2 h-2 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                                </div>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex items-center justify-between w-full mt-1">
+                                                                <div className="flex items-center gap-0.5 md:gap-1.5">
+                                                                    <span className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Warden</span>
+                                                                    {latestPermission.wardenStatus === "rejected" && (
+                                                                        <span className="text-[6.5px] md:text-[8px] font-bold text-red-600 bg-red-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
+                                                                            Rejected
+                                                                        </span>
+                                                                    )}
+                                                                    {latestPermission.wardenStatus === "allowed" && (
+                                                                        <span className="text-[6.5px] md:text-[8px] font-bold text-green-600 bg-green-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
+                                                                            Accepted
+                                                                        </span>
+                                                                    )}
+                                                                    {latestPermission.wardenStatus === "pending" && (
+                                                                        <span className="text-[6.5px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                                                            Pending
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5 relative">
+                                                                    <div className="flex items-center gap-1 md:gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
+                                                                        <div className={`w-3.5 h-3.5 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${latestPermission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                            <svg className="w-2 h-2 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                        </div>
+                                                                        <div className={`w-3.5 h-3.5 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${latestPermission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                            <svg className="w-2 h-2 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex items-center justify-between w-full mt-1">
+                                                                <div className="flex items-center gap-0.5 md:gap-1.5">
+                                                                    <span className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Dean</span>
+                                                                    {latestPermission.deanStatus === "rejected" && (
+                                                                        <span className="text-[6.5px] md:text-[8px] font-bold text-red-600 bg-red-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
+                                                                            Rejected
+                                                                        </span>
+                                                                    )}
+                                                                    {latestPermission.deanStatus === "allowed" && (
+                                                                        <span className="text-[6.5px] md:text-[8px] font-bold text-green-600 bg-green-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
+                                                                            Accepted
+                                                                        </span>
+                                                                    )}
+                                                                    {latestPermission.deanStatus === "pending" && (
+                                                                        <span className="text-[6.5px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                                                            Pending
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5 relative">
+                                                                    <div className="flex items-center gap-1 md:gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
+                                                                        <div className={`w-3.5 h-3.5 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${latestPermission.deanStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm scale-110" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                            <svg className="w-2 h-2 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                        </div>
+                                                                        <div className={`w-3.5 h-3.5 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${latestPermission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                            <svg className="w-2 h-2 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Vertical Separator */}
+                                                <div className="hidden md:block w-[1px] md:w-[2px] bg-blue-100/50 my-1 rounded-full"></div>
+
+                                                {/* Right Side: Reason Message */}
+                                                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                                    <div className="bg-gray-50/50 p-2 md:p-4 rounded-xl border border-gray-100 h-full flex items-center justify-center">
+                                                        <p className="text-[8.5px] md:text-xs text-gray-600 font-medium leading-relaxed italic text-justify">
+                                                            "{latestPermission.reason}"
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()
                             )}
 
                             {/* Detailed Student Information Section */}
@@ -3131,10 +3171,10 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                     </div>
                                                                 </div>
 
-                                                                <div className="flex flex-row gap-2 md:gap-4 items-stretch">
+                                                                <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-stretch">
                                                                     {/* Left Side: Student Info & Approvals */}
-                                                                    <div className="w-[52%] md:w-[50%] lg:w-[45%] shrink-0 flex flex-col gap-2">
-                                                                        <div className="flex flex-col gap-2">
+                                                                    <div className="w-full md:w-[45%] lg:w-[40%] shrink-0 flex flex-row md:flex-col gap-2">
+                                                                        <div className="flex flex-col gap-2 w-1/2 md:w-full">
                                                                             <p className="text-[10px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest leading-none">Schedule Details</p>
                                                                             <div className="flex flex-col gap-1.5 bg-gray-50/80 p-2.5 rounded-lg border border-gray-100">
                                                                                 <div className="flex items-center gap-2">
@@ -3151,7 +3191,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
                                                                                     </div>
                                                                                     <div>
-                                                                                        <p className="text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5">Return Time</p>
+                                                                                        <p className="text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5">Campus In Time</p>
                                                                                         <p className="text-[11px] font-bold text-gray-900 leading-none whitespace-nowrap">{permission.toDateTime ? new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) : "N/A"}</p>
                                                                                     </div>
                                                                                 </div>
@@ -3159,37 +3199,54 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                         </div>
                                                                         
                                                                         {/* Permissions Block */}
-                                                                        <div className="w-full">
-                                                                            <div className="flex flex-col items-start gap-0.5 border border-gray-100 rounded-md p-1.5 bg-gray-50/50 w-full">
+                                                                        <div className="w-1/2 md:w-full">
+                                                                            <div className="flex flex-col items-start gap-1 border border-gray-100 rounded-md p-2 bg-gray-50/50 w-full h-full">
                                                                                 
-                                                                                <div className="flex items-center justify-between w-full">
-                                                                                    <span className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left pr-2">Parent</span>
+                                                                                <div className="flex items-center justify-between w-full mt-1">
+                                                                                    <div className="flex items-center gap-0.5 md:gap-1.5">
+                                                                                        <span className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Parent</span>
+                                                                                        {permission.parentStatus === "rejected" && (
+                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
+                                                                                                Rejected
+                                                                                            </span>
+                                                                                        )}
+                                                                                        {permission.parentStatus === "allowed" && (
+                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
+                                                                                                AGREE
+                                                                                            </span>
+                                                                                        )}
+                                                                                        {(permission.parentStatus === "no_response" || permission.parentStatus === "pending") && (
+                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                                                                                Pending
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
                                                                                     <div className="flex items-center gap-1.5 relative">
-                                                                                        <div className="flex items-center gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
+                                                                                        <div className="flex items-center gap-1 md:gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
                                                                                             {isParentView && permission.status === 'pending' ? (
                                                                                                 <>
                                                                                                     <button
                                                                                                         onClick={() => handleParentApproval(permission._id, "allowed")}
                                                                                                         disabled={isUpdatingParentStatus}
-                                                                                                        className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} cursor-pointer disabled:opacity-50`}
+                                                                                                        className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} cursor-pointer disabled:opacity-50`}
                                                                                                     >
-                                                                                                        <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                                                        <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                                                                                     </button>
                                                                                                     <button
                                                                                                         onClick={() => handleParentApproval(permission._id, "rejected")}
                                                                                                         disabled={isUpdatingParentStatus}
-                                                                                                        className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} cursor-pointer disabled:opacity-50`}
+                                                                                                        className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} cursor-pointer disabled:opacity-50`}
                                                                                                     >
-                                                                                                        <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                                                        <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                                                                                     </button>
                                                                                                 </>
                                                                                             ) : (
                                                                                                 <>
-                                                                                                    <div className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                                                        <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                                                    <div className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                                        <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                                                                                     </div>
-                                                                                                    <div className={`w-5 h-5 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                                                        <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                                                    <div className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                                        <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                                                                                     </div>
                                                                                                 </>
                                                                                             )}
@@ -3197,29 +3254,63 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                                     </div>
                                                                                 </div>
 
-                                                                                <div className="flex items-center justify-between w-full">
-                                                                                    <span className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left pr-2">Warden</span>
+                                                                                <div className="flex items-center justify-between w-full mt-1">
+                                                                                    <div className="flex items-center gap-0.5 md:gap-1.5">
+                                                                                        <span className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Warden</span>
+                                                                                        {permission.wardenStatus === "rejected" && (
+                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
+                                                                                                Rejected
+                                                                                            </span>
+                                                                                        )}
+                                                                                        {permission.wardenStatus === "allowed" && (
+                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
+                                                                                                Accepted
+                                                                                            </span>
+                                                                                        )}
+                                                                                        {permission.wardenStatus === "pending" && (
+                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                                                                                Pending
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
                                                                                     <div className="flex items-center gap-1.5 relative">
-                                                                                        <div className="flex items-center gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
-                                                                                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                                        <div className="flex items-center gap-1 md:gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
+                                                                                            <div className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                                <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                                                                             </div>
-                                                                                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                                            <div className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                                <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                                                                             </div>
                                                                                         </div>
                                                                                     </div>
                                                                                 </div>
 
-                                                                                <div className="flex items-center justify-between w-full">
-                                                                                    <span className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left pr-2">Dean</span>
+                                                                                <div className="flex items-center justify-between w-full mt-1">
+                                                                                    <div className="flex items-center gap-0.5 md:gap-1.5">
+                                                                                        <span className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Dean</span>
+                                                                                        {permission.deanStatus === "rejected" && (
+                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
+                                                                                                Rejected
+                                                                                            </span>
+                                                                                        )}
+                                                                                        {permission.deanStatus === "allowed" && (
+                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
+                                                                                                Accepted
+                                                                                            </span>
+                                                                                        )}
+                                                                                        {permission.deanStatus === "pending" && (
+                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                                                                                Pending
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
                                                                                     <div className="flex items-center gap-1.5 relative">
-                                                                                        <div className="flex items-center gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
-                                                                                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${permission.deanStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm scale-110" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                                        <div className="flex items-center gap-1 md:gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
+                                                                                            <div className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.deanStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm scale-110" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                                <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                                                                             </div>
-                                                                                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                                            <div className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
+                                                                                                <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                                                                             </div>
                                                                                         </div>
                                                                                     </div>
@@ -3230,12 +3321,12 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                     </div>
 
                                                                     {/* Vertical Separator */}
-                                                                    <div className="block w-[1px] md:w-[2px] bg-blue-100/50 my-1 rounded-full"></div>
+                                                                    <div className="hidden md:block w-[1px] md:w-[2px] bg-blue-100/50 my-1 rounded-full"></div>
 
                                                                     {/* Right Side: Reason Message */}
                                                                     <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                                                        <div className="bg-gray-50/50 p-3 md:p-4 rounded-xl border border-gray-100 h-full flex items-center justify-center">
-                                                                            <p className="text-[11px] md:text-xs text-gray-600 font-medium leading-relaxed italic text-center md:text-left">
+                                                                        <div className="bg-gray-50/50 p-2 md:p-4 rounded-xl border border-gray-100 h-full flex items-center justify-center">
+                                                                            <p className="text-[8.5px] md:text-xs text-gray-600 font-medium leading-relaxed italic text-justify">
                                                                                 "{permission.reason}"
                                                                             </p>
                                                                         </div>
@@ -4226,19 +4317,6 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                 )
             }
 
-
-            {
-                showToast && (
-                    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-5 duration-300 px-4 w-full max-w-sm">
-                        <div className="bg-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-red-500/20 backdrop-blur-md">
-                            <svg className="w-6 h-6 text-white/90 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <p className="text-sm font-bold tracking-tight" style={{ fontFamily: 'var(--font-lora), Cambria' }}>{toastMessage}</p>
-                        </div>
-                    </div>
-                )
-            }
             <footer className="mt-2 py-6 border-t border-gray-100/50">
                 <div className="flex flex-col items-center gap-1.5 text-center px-4">
                     <p className="text-[9px] sm:text-[11px] font-bold tracking-widest text-gray-400/80 uppercase">

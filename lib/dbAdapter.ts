@@ -2806,7 +2806,14 @@ export const db = {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const query = supabase.from('permissions').select(options.populate ? '*, students!student_id(*)' : '*').eq('_id', id).single();
-                const { data, error } = await query;
+                let { data, error } = await query;
+                if (error && options.populate) {
+                    console.error("❌ [SUPABASE_PERMISSION_GETBYID_ERROR]:", error);
+                    // Fallback to non-populated
+                    const fallback = await supabase.from('permissions').select('*').eq('_id', id).single();
+                    data = fallback.data;
+                    error = fallback.error;
+                }
                 if (error) return null;
                 return mapPermissionToCamelCase(data);
             } else {
@@ -2889,7 +2896,10 @@ export const db = {
                     error = retry.error;
                 }
 
-                if (error) throw error;
+                if (error) {
+                    console.error("DB Adapter permissions.update error:", error);
+                    throw error;
+                }
                 return mapPermissionToCamelCase(data);
             } else {
                 await connectDB();

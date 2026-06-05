@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { cookies } from "next/headers";
 
 export async function GET(request: Request) {
     try {
@@ -51,8 +52,8 @@ export async function POST(request: Request) {
         const istTime = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
         const today = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
 
-        const { cookies } = await import('next/headers');
-        const userType = cookies().get('userType')?.value || 'admin';
+        const cookieStore = await cookies();
+        const userType = cookieStore.get('userType')?.value || 'admin';
 
         // ⚡ BATCH OPTIMIZATION: Fetch all students in one single query instead of a loop
         const currentTenantId = await db.getTenantIdOrThrow();
