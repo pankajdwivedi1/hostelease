@@ -178,11 +178,11 @@ export default function TenantSettingsView() {
                           
                           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-50 border border-slate-200 p-2 sm:p-3 rounded-lg sm:rounded-xl relative z-10">
                               <code className="flex-1 text-[10px] sm:text-xs font-bold text-slate-700 break-all select-all px-1">
-                                {typeof window !== 'undefined' ? `${window.location.origin}?tenant=${new URLSearchParams(window.location.search).get('tenant')}` : ''}
+                                {typeof window !== 'undefined' ? `${window.location.origin}?tenant=${settings?.slug || new URLSearchParams(window.location.search).get('tenant')}` : ''}
                               </code>
                               <button 
                                 onClick={(e) => {
-                                  const url = typeof window !== 'undefined' ? `${window.location.origin}?tenant=${new URLSearchParams(window.location.search).get('tenant')}` : '';
+                                  const url = typeof window !== 'undefined' ? `${window.location.origin}?tenant=${settings?.slug || new URLSearchParams(window.location.search).get('tenant')}` : '';
                                   navigator.clipboard.writeText(url);
                                   const btn = e.currentTarget;
                                   const originalText = btn.innerText;

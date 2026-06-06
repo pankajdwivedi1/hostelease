@@ -8,7 +8,7 @@ export async function GET(request: Request) {
         // 1. Fetch tenant basic info
         const { data: tenant, error: tenantError } = await db.supabase
             .from('tenants')
-            .select('admin_email, subscription_status, subscription_end_date, created_at')
+            .select('admin_email, subscription_status, subscription_end_date, created_at, slug')
             .eq('id', tenantId)
             .single();
 
@@ -30,6 +30,7 @@ export async function GET(request: Request) {
                 subscriptionStatus: tenant?.subscription_status,
                 subscriptionEndDate: tenant?.subscription_end_date,
                 subscriptionStartDate: tenant?.created_at,
+                slug: tenant?.slug,
                 contactName: bankDetails.contactName || '',
                 contactPhone: bankDetails.contactPhone || '',
                 totalHostelars: bankDetails.totalHostelars || '',
