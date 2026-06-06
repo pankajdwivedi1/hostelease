@@ -112,58 +112,49 @@ export async function GET(request: NextRequest) {
         const settings = await db.settings.get();
         const enableManualAttendance = settings?.enableManualAttendance ?? false;
 
-        // ⚡ MAJOR OPTIMIZATION: Consolidate 20+ count queries into 1 single fetch
-        const [studentData, pendingCountResult] = await Promise.all([
-            db.students.list({}, { select: '_id,hostel_name,student_status' }),
-            db.permissions.count({ status: 'pending' })
-        ]);
-
-        let studentList = Array.isArray(studentData) ? studentData : [];
+        // ⚡ MAJOR OPTIMIZATION: Use parallel aggregate count queries instead of downloading entire database
+        const pendingCountResult = await db.permissions.count({ status: 'pending' });
         const pendingCount = typeof pendingCountResult === 'number' ? pendingCountResult : 0;
-        
-        // ⚡ WARDEN FILTER: If authorized hostels are specified, filter the student list
-        if (authorizedHostels.length > 0) {
-            studentList = studentList.filter((s: any) => {
-                const category = getHostelCategory(s.hostelName);
-                return authorizedHostels.includes(category);
-            });
 
-            // ⚡ FILTER PRESENT IDs: Only include IDs belonging to these authorized students
-            const authorizedIds = new Set(studentList.map(s => String(s.id || s._id)));
+        const activeHostels = authorizedHostels.length > 0 ? authorizedHostels : canonicalHostelNames;
+        const hostelStats: Record<string, { total: number; in: number; out: number }> = {};
+        
+        let totalStudents = 0;
+        let totalIn = 0;
+        let totalOut = 0;
+
+        // ⚡ SINGLE PASS PARALLEL COUNTS: Fetch all required stats instantly
+        await Promise.all(activeHostels.map(async (h) => {
+            const [hTotal, hIn, hOut] = await Promise.all([
+                db.students.count({ hostelName: h }),
+                db.students.count({ hostelName: h, studentStatus: 'in' }),
+                db.students.count({ hostelName: h, studentStatus: 'out' })
+            ]);
+            
+            hostelStats[h] = { total: hTotal, in: hIn, out: hOut };
+            totalStudents += hTotal;
+            totalIn += hIn;
+            totalOut += hOut;
+        }));
+
+        // ⚡ WARDEN FILTER: If authorized hostels are specified, filter the presentStudentIds
+        if (authorizedHostels.length > 0) {
+            const authorizedIds = new Set<string>();
+            // Only fetch strictly necessary lightweight IDs
+            await Promise.all(authorizedHostels.map(async (h) => {
+                const studentsInHostel = await db.students.list({ hostelName: h }, { select: '_id', limit: 5000 });
+                studentsInHostel.forEach((s: any) => authorizedIds.add(String(s.id || s._id)));
+            }));
             presentStudentIds = presentStudentIds.filter(id => authorizedIds.has(String(id)));
         }
 
-        // Global Stats (Now filtered for Wardens if applicable)
+        // Global Stats
         const stats = {
-            totalStudents: studentList.length,
-            totalIn: studentList.filter((s: any) => s.studentStatus === 'in').length,
-            totalOut: studentList.filter((s: any) => s.studentStatus === 'out').length,
-            pendingPermissions: pendingCount // Pending permissions count remains global for simplicity or can be filtered if needed
+            totalStudents,
+            totalIn,
+            totalOut,
+            pendingPermissions: pendingCount
         };
-
-        // Hostel-Specific Stats
-        const hostelStats: Record<string, { total: number; in: number; out: number }> = {};
-        
-        // Initialize hostelStats for all canonical hostels (or just authorized ones)
-        const activeHostels = authorizedHostels.length > 0 ? authorizedHostels : canonicalHostelNames;
-        activeHostels.forEach(h => {
-            hostelStats[h] = { total: 0, in: 0, out: 0 };
-        });
-
-
-        // ⚡ SINGLE PASS: Aggregate counts for each hostel in memory
-        studentList.forEach((s: any) => {
-            const hCategory = getHostelCategory(s.hostelName);
-            // Double check filtering
-            if (authorizedHostels.length > 0 && !authorizedHostels.includes(hCategory)) return;
-
-            if (!hostelStats[hCategory]) {
-                hostelStats[hCategory] = { total: 0, in: 0, out: 0 };
-            }
-            hostelStats[hCategory].total++;
-            if (s.studentStatus === 'in') hostelStats[hCategory].in++;
-            else if (s.studentStatus === 'out') hostelStats[hCategory].out++;
-        });
 
         return NextResponse.json({
             success: true,

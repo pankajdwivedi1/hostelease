@@ -32,6 +32,13 @@ export default function Dashboard() {
       const isRoot = (parts.length === 1 || (parts.length === 2 && (parts[0] === 'www' || parts[1] === 'localhost'))) && !activeTenant;
       const isMainBase = mainDomains.includes(hostname) && !activeTenant;
 
+      // ⚡ FAST PATH FOR ADMINS/STAFF: Skip Supabase network call completely
+      const storedUserType = localStorage.getItem("userType");
+      if (storedUserType === "admin") { setUserType("admin"); setLoading(false); return; }
+      if (storedUserType === "warden") { setUserType("warden"); setLoading(false); return; }
+      if (storedUserType === "superadmin") { setUserType("superadmin"); setLoading(false); return; }
+      if (storedUserType === "getpass") { router.push("/getpass"); setLoading(false); return; }
+
       // 1. ⚡ REGARDLESS of domain, Check Supabase Session First
       const { data: { session: sbSession } } = await supabase.auth.getSession();
       
@@ -139,10 +146,6 @@ export default function Dashboard() {
         return;
       }
 
-      if (storedUserType === "admin") { setUserType("admin"); setLoading(false); return; }
-      if (storedUserType === "warden") { setUserType("warden"); setLoading(false); return; }
-      if (storedUserType === "superadmin") { setUserType("superadmin"); setLoading(false); return; }
-      if (storedUserType === "getpass") { router.push("/getpass"); setLoading(false); return; }
 
       // Final Fallback
       router.push("/login");
