@@ -84,11 +84,15 @@ export async function GET(request: NextRequest) {
       filters.status = status;
     }
 
-    const light = searchParams.get("light") === "true";
-    // Adapter currently doesn't support field selection in list, but we can pass populate: true
-    const { records: permissions } = await db.permissions.list(filters, { populate: true });
+    const limitParam = searchParams.get("limit");
+    const options: any = { populate: true };
+    if (limitParam) {
+      options.limit = parseInt(limitParam, 10);
+    }
 
-    return NextResponse.json({ permissions, success: true }, { status: 200 });
+    const { records: permissions, total } = await db.permissions.list(filters, options);
+
+    return NextResponse.json({ permissions, total, success: true }, { status: 200 });
   } catch (error: any) {
     console.error("Error in GET /api/permissions:", error);
     return NextResponse.json(

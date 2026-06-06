@@ -387,8 +387,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const router = useRouter();
   const [filter, setFilter] = useState<"all" | "allowed" | "rejected" | "pending">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "in" | "out">("all");
-  const [students, setStudents] = useState<StudentDetails[]>([]);
+
   const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [isShowingAllPermissions, setIsShowingAllPermissions] = useState(false);
+  const [totalPermissionsCount, setTotalPermissionsCount] = useState(0);
+  const [students, setStudents] = useState<StudentDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState<StudentDetails | null>(null);
   const [showAllStudents, setShowAllStudents] = useState(false);
@@ -2066,34 +2069,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const fetchPermissions = async (statusArg?: string, forceRefresh = false) => {
+  const fetchPermissions = async (statusArg?: string, forceRefresh = false, fetchAll = false) => {
     try {
-      const status = statusArg || (currentTab === 'permissions' ? 'pending' : 'all');
+      const status = statusArg || filter;
+      setIsShowingAllPermissions(fetchAll);
       
-      // ? OPTIMIZATION: Check cache for Permissions (only for 'all' status)
-      if (!forceRefresh && status === 'all') {
-        const cached = sessionStorage.getItem('hostelease_permissions_cache');
-        if (cached) {
-          setPermissions(JSON.parse(cached));
-          return;
-        }
-      }
-
-      const response = await fetch(`/api/permissions?light=true&status=${status}`, { cache: "no-store" });
+      const limitQuery = fetchAll ? '' : '&limit=5';
+      const response = await fetch(`/api/permissions?light=true&status=${status}${limitQuery}`, { cache: "no-store" });
       const data = await response.json();
 
       // Handle both success and error responses
       if (data.permissions !== undefined) {
         const list = Array.isArray(data.permissions) ? data.permissions : [];
         setPermissions(list);
-        
-        // Only cache full list
-        if (status === 'all') {
-          sessionStorage.setItem('hostelease_permissions_cache', JSON.stringify(list));
-        }
+        setTotalPermissionsCount(data.total || list.length);
       } else if (!response.ok) {
         console.warn(`Permissions API returned status ${response.status}`);
         setPermissions([]);
+        setTotalPermissionsCount(0);
       }
     } catch (error) {
       console.error("Error fetching permissions:", error);
@@ -2425,7 +2418,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       fetchBankSettings();
 
       if (currentTab === 'permissions') {
-        fetchPermissions('pending'); 
+        fetchPermissions('all'); 
       }
     };
 
@@ -2454,6 +2447,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   // ⚡ OPTIMIZATION: Supabase Realtime Subscription removed to save massive bandwidth. 
   // Gatepass remains live, but other dashboards now use manual refresh.
+
+  // Intercept Native Back Button for Gatepass Overlay
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      if (showGatepassOverlay) {
+        setShowGatepassOverlay(false);
+      }
+    };
+    
+    if (showGatepassOverlay) {
+      window.history.pushState({ gatepassOpen: true }, "");
+      window.addEventListener("popstate", handlePopState);
+    }
+    
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [showGatepassOverlay]);
 
   useEffect(() => {
     // ⚡ OPTIMIZATION: Periodic polling removed to save massive bandwidth.
@@ -3583,7 +3594,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   onClick={() => setCurrentTab('permissions')}
                   className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'permissions' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
                 >
-                  Permissions
+                  Leave Permissions
                 </button>
                 <button
                   onClick={() => setCurrentTab('attendance')}
@@ -3914,6 +3925,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       })
                     )}
                   </div>
+                  
+                  {!isShowingAllPermissions && totalPermissionsCount > 5 && (
+                    <div className="flex justify-center mt-6">
+                      <button
+                        onClick={() => fetchPermissions(filter, true, true)}
+                        className="px-6 py-2.5 rounded-xl bg-blue-50 text-blue-600 font-bold text-sm tracking-wide border border-blue-100 hover:bg-blue-100 transition-colors shadow-sm active:scale-95"
+                      >
+                        Show All Permissions ({totalPermissionsCount})
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -8789,6 +8811,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           </div>
         </div>
       )}
+
+
       <footer className="mt-8 py-6 border-t border-gray-100/50">
         <div className="flex flex-col items-center gap-1.5 text-center">
           <p className="text-[9px] sm:text-[11px] font-bold tracking-widest text-gray-400/80 uppercase">
@@ -8803,7 +8827,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       {/* ⚡ LIVE GATEPASS OVERLAY */}
       {showGatepassOverlay && (
         <div className="fixed inset-0 z-[9999] bg-[#0a0a1a] overflow-y-auto animate-in fade-in duration-300">
-          <GatepassView onClose={() => setShowGatepassOverlay(false)} />
+          <GatepassView onClose={() => window.history.back()} />
         </div>
       )}
     </div >

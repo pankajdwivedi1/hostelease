@@ -2728,7 +2728,7 @@ export const db = {
                     ? `*, students!student_id!inner(${lightStudentFields}, tenant_id)` 
                     : `*, students!student_id!inner(tenant_id)`;
 
-                let query = supabase.from('permissions').select(selectStr);
+                let query = supabase.from('permissions').select(selectStr, { count: 'exact' });
 
                 // Filter by joined student's tenant_id for data isolation
                 query = query.eq('students.tenant_id', tenantId);
