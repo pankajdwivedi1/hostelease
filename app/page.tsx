@@ -80,7 +80,6 @@ export default function Dashboard() {
       }
 
       // 3. ⚡ Fallback to checking other roles in localStorage (Admins/Wardens)
-      const storedUserType = localStorage.getItem("userType");
 
       if (storedUserType === "student") {
         // Handle Firebase Fallback for existing users
