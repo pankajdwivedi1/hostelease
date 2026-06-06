@@ -7,6 +7,14 @@ export async function POST(request: Request) {
     try {
         const tenantId = await db.getTenantIdOrThrow();
 
+        let newPhone = "";
+        try {
+            const body = await request.json();
+            newPhone = body.contactPhone;
+        } catch (e) {
+            // body might be empty
+        }
+
         // Fetch current settings to get the existing contactPhone
         const { data: settings } = await db.supabase
             .from('admin_settings')
@@ -17,14 +25,16 @@ export async function POST(request: Request) {
         const bankDetails = settings?.university_bank_details || {};
         const existingPhone = bankDetails.contactPhone;
 
-        if (!existingPhone) {
+        const targetPhone = existingPhone || newPhone;
+
+        if (!targetPhone) {
             return NextResponse.json({ 
                 success: false, 
-                error: "No mobile number is currently registered for your account. Please contact the Super Admin to set your initial mobile number." 
+                error: "Please enter a mobile number to continue." 
             }, { status: 400 });
         }
 
-        let cleaned = existingPhone.replace(/\D/g, "");
+        let cleaned = targetPhone.replace(/\D/g, "");
         if (cleaned.length === 12 && cleaned.startsWith("91")) {
             cleaned = cleaned.substring(2);
         }

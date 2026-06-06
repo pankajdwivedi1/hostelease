@@ -17,7 +17,7 @@ export async function GET(request: Request) {
         // 2. Fetch admin settings (contact info)
         const { data: settings, error: settingsError } = await db.supabase
             .from('admin_settings')
-            .select('university_bank_details')
+            .select('university_bank_details, leave_approval_method')
             .eq('tenant_id', tenantId)
             .maybeSingle();
 
@@ -32,7 +32,8 @@ export async function GET(request: Request) {
                 subscriptionStartDate: tenant?.created_at,
                 contactName: bankDetails.contactName || '',
                 contactPhone: bankDetails.contactPhone || '',
-                totalHostelars: bankDetails.totalHostelars || ''
+                totalHostelars: bankDetails.totalHostelars || '',
+                leaveApprovalMethod: settings?.leave_approval_method || 'app'
             }
         });
     } catch (error: any) {

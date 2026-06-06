@@ -440,6 +440,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [paymentEndDate, setPaymentEndDate] = useState<string>("");
   const [paymentSearch, setPaymentSearch] = useState("");
   const [showBankSettingsModal, setShowBankSettingsModal] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"fieldEnforcement" | "profile">(title === "Super Admin Dashboard" ? "fieldEnforcement" : "profile");
   const [bankFormData, setBankFormData] = useState({
     accountName: "",
     accountNumber: "",
@@ -4546,11 +4547,42 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
               )}
               {currentTab === 'settings' && (
-                <div className="space-y-8 fade-in">
-                  {title === "Super Admin Dashboard" && (
-                    <FieldEnforcementComponent hostels={hostels.map(h => h.name)} />
-                  )}
-                  <TenantSettingsView />
+                <div className="space-y-6 fade-in">
+                  {/* Settings Sub-Navigation */}
+                  <div className="flex border-b border-gray-200">
+                    {title === "Super Admin Dashboard" && (
+                      <button
+                        onClick={() => setSettingsTab("fieldEnforcement")}
+                        className={`px-4 py-3 text-sm font-bold border-b-2 transition-colors ${
+                          settingsTab === "fieldEnforcement" 
+                            ? "border-blue-600 text-blue-600" 
+                            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                        }`}
+                      >
+                        Field Enforcement Settings
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setSettingsTab("profile")}
+                      className={`px-4 py-3 text-sm font-bold border-b-2 transition-colors ${
+                        settingsTab === "profile" 
+                          ? "border-blue-600 text-blue-600" 
+                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                      }`}
+                    >
+                      Profile Settings
+                    </button>
+                  </div>
+
+                  {/* Settings Content */}
+                  <div className="pt-2">
+                    {settingsTab === "fieldEnforcement" && title === "Super Admin Dashboard" && (
+                      <FieldEnforcementComponent hostels={hostels.map(h => h.name)} />
+                    )}
+                    {settingsTab === "profile" && (
+                      <TenantSettingsView />
+                    )}
+                  </div>
                 </div>
               )}
 

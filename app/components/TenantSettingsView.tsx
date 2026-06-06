@@ -47,7 +47,9 @@ export default function TenantSettingsView() {
         setSaving(true);
         try {
             const res = await fetch("/api/admin/settings/update/request-otp", {
-                method: "POST"
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ contactPhone })
             });
             const data = await res.json();
             if (data.success) {
@@ -109,9 +111,9 @@ export default function TenantSettingsView() {
 
     return (
         <div className="space-y-6 max-w-4xl">
-            <div>
-                <h2 className="text-xl font-black text-slate-800 tracking-tight">Profile Settings</h2>
-                <p className="text-sm font-medium text-slate-500 mt-1">Manage your university registration and contact details.</p>
+            <div className="mb-6 sm:mb-8">
+                <h2 className="text-lg sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2 tracking-tight">Profile Settings</h2>
+                <p className="text-[10px] sm:text-sm text-slate-600">Manage your university registration and contact details.</p>
             </div>
 
             <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-100">
@@ -120,46 +122,82 @@ export default function TenantSettingsView() {
                     {/* View Only Section */}
                     <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-3xl">
                       <div className="flex items-center gap-3 mb-6">
-                        <span className="p-3 bg-white text-indigo-600 rounded-xl shadow-sm text-xl">💳</span>
+                        <span className="p-2 sm:p-3 bg-white text-indigo-600 rounded-xl shadow-sm text-lg sm:text-xl">💳</span>
                         <div>
-                          <h3 className="text-lg font-black text-indigo-900 uppercase tracking-tight">Subscription Details</h3>
-                          <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest">Campus Activation Status</p>
+                          <h3 className="text-sm sm:text-lg font-black text-indigo-900 uppercase tracking-tight">Subscription Details</h3>
+                          <p className="text-[10px] sm:text-xs font-bold text-indigo-600 uppercase tracking-widest">Campus Activation Status</p>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-100/50">
-                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Status</p>
-                          <div className="flex items-center gap-2">
-                            <span className={`w-3 h-3 rounded-full ${settings.subscriptionStatus === 'expired' ? 'bg-red-500' : 'bg-green-500'}`}></span>
-                            <p className="text-sm font-black text-gray-900 uppercase">
+                      <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                        <div className="bg-white py-1 px-2 sm:p-5 rounded-lg sm:rounded-2xl shadow-sm border border-indigo-100/50 flex flex-col justify-center">
+                          <p className="text-[8px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-none mb-0.5 sm:mb-1">Status</p>
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <span className={`w-1.5 h-1.5 sm:w-3 sm:h-3 rounded-full ${settings.subscriptionStatus === 'expired' ? 'bg-red-500' : 'bg-green-500'}`}></span>
+                            <p className="text-[10px] sm:text-sm font-black text-gray-900 uppercase leading-none">
                               {settings.subscriptionStatus === 'expired' ? "Expired" : "Active"}
                             </p>
                           </div>
                         </div>
                         
-                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-100/50">
-                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Time Remaining</p>
-                          <p className="text-sm font-black text-gray-900">
+                        <div className="bg-white py-1 px-2 sm:p-5 rounded-lg sm:rounded-2xl shadow-sm border border-indigo-100/50 flex flex-col justify-center">
+                          <p className="text-[8px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-none mb-0.5 sm:mb-1">Time Remaining</p>
+                          <p className="text-[10px] sm:text-sm font-black text-gray-900 leading-none">
                             {daysRemaining !== null 
                               ? `${daysRemaining} Days` 
                               : "N/A"}
                           </p>
                         </div>
 
-                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-100/50">
-                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Activation Date</p>
-                          <p className="text-sm font-bold text-gray-900">
+                        <div className="bg-white py-1 px-2 sm:p-5 rounded-lg sm:rounded-2xl shadow-sm border border-indigo-100/50 flex flex-col justify-center">
+                          <p className="text-[8px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-none mb-0.5 sm:mb-1">Activation Date</p>
+                          <p className="text-[10px] sm:text-sm font-bold text-gray-900 leading-none">
                             {settings.subscriptionStartDate ? new Date(settings.subscriptionStartDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}
                           </p>
                         </div>
 
-                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-100/50">
-                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Expiry Date</p>
-                          <p className="text-sm font-bold text-gray-900">
+                        <div className="bg-white py-1 px-2 sm:p-5 rounded-lg sm:rounded-2xl shadow-sm border border-indigo-100/50 flex flex-col justify-center">
+                          <p className="text-[8px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-none mb-0.5 sm:mb-1">Expiry Date</p>
+                          <p className="text-[10px] sm:text-sm font-bold text-gray-900 leading-none">
                             {settings.subscriptionEndDate ? new Date(settings.subscriptionEndDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}
                           </p>
                         </div>
+                      </div>
+
+                      <div className="mt-4 sm:mt-6 bg-white p-4 sm:p-5 rounded-xl sm:rounded-2xl shadow-sm border border-indigo-100/50 relative overflow-hidden">
+                          <div className="absolute top-0 right-0 -mr-8 -mt-8 w-24 h-24 rounded-full bg-indigo-50 opacity-50 blur-xl"></div>
+                          
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm">🔗</span>
+                            <h4 className="text-[11px] sm:text-sm font-black text-indigo-900 uppercase tracking-widest">Your Dedicated Portal Link</h4>
+                          </div>
+                          
+                          <p className="text-[9px] sm:text-xs font-semibold text-slate-500 mb-3 leading-relaxed max-w-2xl relative z-10">
+                            Share this exact link with your <strong>Deans, Wardens, and Students</strong>. They can bookmark it to instantly access your university's dedicated Hostelease portal and start working smoothly without any extra setup.
+                          </p>
+                          
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-50 border border-slate-200 p-2 sm:p-3 rounded-lg sm:rounded-xl relative z-10">
+                              <code className="flex-1 text-[10px] sm:text-xs font-bold text-slate-700 break-all select-all px-1">
+                                {typeof window !== 'undefined' ? `${window.location.origin}?tenant=${new URLSearchParams(window.location.search).get('tenant')}` : ''}
+                              </code>
+                              <button 
+                                onClick={(e) => {
+                                  const url = typeof window !== 'undefined' ? `${window.location.origin}?tenant=${new URLSearchParams(window.location.search).get('tenant')}` : '';
+                                  navigator.clipboard.writeText(url);
+                                  const btn = e.currentTarget;
+                                  const originalText = btn.innerText;
+                                  btn.innerText = "COPIED!";
+                                  btn.classList.add("bg-green-100", "text-green-700");
+                                  setTimeout(() => {
+                                    btn.innerText = originalText;
+                                    btn.classList.remove("bg-green-100", "text-green-700");
+                                  }, 2000);
+                                }}
+                                className="px-3 py-2 sm:px-4 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] sm:text-xs font-bold uppercase tracking-widest rounded-md sm:rounded-lg transition-colors whitespace-nowrap text-center"
+                              >
+                                Copy Link
+                              </button>
+                          </div>
                       </div>
                     </div>
 
@@ -168,45 +206,45 @@ export default function TenantSettingsView() {
                     {/* Editable Section */}
                     <div>
                         <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4">Contact Information</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Contact Name</label>
+                        <div className="grid grid-cols-3 gap-2 sm:gap-6">
+                            <div className="space-y-1 sm:space-y-2 col-span-1">
+                                <label className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Contact Name</label>
                                 <input
                                     type="text"
                                     value={contactName}
                                     onChange={e => setContactName(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700"
+                                    className="w-full bg-slate-50 border border-slate-200 p-1.5 sm:p-4 rounded-lg sm:rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-[9px] sm:text-sm"
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Mobile Number</label>
+                            <div className="space-y-1 sm:space-y-2 col-span-1">
+                                <label className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Mobile Number</label>
                                 <input
                                     type="tel"
                                     value={contactPhone}
                                     onChange={e => setContactPhone(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700"
+                                    className="w-full bg-slate-50 border border-slate-200 p-1.5 sm:p-4 rounded-lg sm:rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-[9px] sm:text-sm"
                                 />
                             </div>
-                            <div className="space-y-2 md:col-span-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Total Hostelars</label>
+                            <div className="space-y-1 sm:space-y-2 col-span-1">
+                                <label className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Hostelars</label>
                                 <input
                                     type="number"
                                     value={totalHostelars}
                                     onChange={e => setTotalHostelars(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 max-w-md"
+                                    className="w-full bg-slate-50 border border-slate-200 p-1.5 sm:p-4 rounded-lg sm:rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-[9px] sm:text-sm"
                                 />
                             </div>
-                            <div className="space-y-2 md:col-span-2 mt-4">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Parent Leave Approval Method</label>
+                            <div className="space-y-1 sm:space-y-2 col-span-3 mt-2 sm:mt-4">
+                                <label className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Parent Leave Approval Method</label>
                                 <select
                                     value={leaveApprovalMethod}
                                     onChange={e => setLeaveApprovalMethod(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 max-w-md cursor-pointer"
+                                    className="w-full bg-slate-50 border border-slate-200 p-1.5 sm:p-4 rounded-lg sm:rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 cursor-pointer text-[9px] sm:text-sm"
                                 >
                                     <option value="app">APP (Parent must approve via App)</option>
                                     <option value="ivr">IVR Call (Automated Voice Call)</option>
                                 </select>
-                                <p className="text-[10px] font-bold text-slate-400 px-2 mt-1">If set to APP, wardens cannot approve until the parent gives consent.</p>
+                                <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 mt-1">If set to APP, wardens cannot approve until the parent gives consent.</p>
                             </div>
                         </div>
 
