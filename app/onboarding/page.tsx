@@ -389,9 +389,11 @@ export default function OnboardingPage() {
               blinkState = 'closed';
             } else if (liveness.ear > 0.27 && blinkState === 'closed') {
               blinkState = 'open'; // Reset state
-              setIsFaceInFrame(true); // Unlock immediately on first blink
+              hasDetectedLiveness = true; // Fix: Actually update the interval variable so it persists
             }
           }
+
+          setIsFaceInFrame(hasDetectedLiveness);
         }
       }, 100); // Back to 100ms to ensure we don't miss the 'closed' frame during a fast blink
     }
