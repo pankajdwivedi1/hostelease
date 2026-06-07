@@ -23,6 +23,7 @@ export interface IAttendance extends Document {
     flaggedPhotoUrl?: string; // Only for flagged cases (match < 70%)
     needsReview?: boolean;
     isTest?: boolean;
+    markedBy?: string; // Track who manually marked this
     createdAt: Date;
     updatedAt: Date;
 }
@@ -106,6 +107,10 @@ const AttendanceSchema = new Schema<IAttendance>(
             type: Boolean,
             default: false,
             index: true,
+        },
+        markedBy: {
+            type: String,
+            required: false,
         },
     },
     {

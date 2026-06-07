@@ -75,6 +75,8 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const studentId = searchParams.get("studentId");
     const status = searchParams.get("status");
+    const hostelName = searchParams.get("hostelName");
+    const authorizedHostelsStr = searchParams.get("authorizedHostels");
 
     const filters: any = {};
     if (studentId) {
@@ -82,6 +84,16 @@ export async function GET(request: NextRequest) {
     }
     if (status && status !== "all") {
       filters.status = status;
+    }
+    if (hostelName) {
+      filters.hostelName = hostelName;
+    }
+    if (authorizedHostelsStr) {
+      try {
+        filters.authorizedHostels = JSON.parse(authorizedHostelsStr);
+      } catch (e) {
+        console.error("Invalid authorizedHostels JSON:", authorizedHostelsStr);
+      }
     }
 
     const limitParam = searchParams.get("limit");

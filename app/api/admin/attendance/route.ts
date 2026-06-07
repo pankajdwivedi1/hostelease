@@ -41,7 +41,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { studentIds } = body;
+        const { studentIds, markedBy } = body;
 
         if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
             return NextResponse.json({ error: "Student IDs are required" }, { status: 400 });
@@ -88,7 +88,8 @@ export async function POST(request: Request) {
                 isTest: false,
                 timestamp: now.toISOString(),
                 tenantId: currentTenantId,
-                deviceId: `marked-by-${userType}`
+                deviceId: `marked-by-${userType}`,
+                markedBy: markedBy || `Admin (${userType})`
             });
         }
 
@@ -108,6 +109,24 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true, count: attendanceRecords.length });
     } catch (error: any) {
         console.error("Error marking manual attendance:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+export async function DELETE(request: Request) {
+    try {
+        const { searchParams } = new URL(request.url);
+        const id = searchParams.get("id");
+
+        if (!id) {
+            return NextResponse.json({ error: "Attendance ID is required" }, { status: 400 });
+        }
+
+        await db.attendance.delete(id);
+        
+        return NextResponse.json({ success: true });
+    } catch (error: any) {
+        console.error("Error unmarking attendance:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

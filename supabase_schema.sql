@@ -112,6 +112,7 @@ CREATE TABLE IF NOT EXISTS attendance (
     flagged_photo_url TEXT,
     needs_review BOOLEAN DEFAULT FALSE,
     is_test BOOLEAN DEFAULT FALSE,
+    marked_by TEXT,
     
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()

@@ -309,6 +309,8 @@ interface AttendanceLog {
   faceMatchStatus?: "auto-approved" | "flagged" | "manual-override";
   flaggedPhotoUrl?: string;
   needsReview?: boolean;
+  markedBy?: string;
+  deviceId?: string;
 }
 
 interface DBNotification {
@@ -685,10 +687,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
     setIsBulkMarking(true);
     try {
+      const storedUserName = typeof window !== 'undefined' ? (localStorage.getItem("userName") || localStorage.getItem("wardenUsername") || localStorage.getItem("userType") || "Admin") : "Admin";
       const res = await fetch("/api/admin/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentIds, markedBy: "Warden" }),
+        body: JSON.stringify({ studentIds, markedBy: storedUserName }),
       });
 
       const data = await res.json();
@@ -707,6 +710,55 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       alert("An error occurred while marking attendance.");
     } finally {
       setIsBulkMarking(false);
+    }
+  };
+
+  const handleUnmarkBulkAttendance = async (studentIds: string[]) => {
+    if (!studentIds || studentIds.length === 0) return;
+    if (!confirm(`Are you sure you want to unmark ${studentIds.length} students? They will be marked as absent.`)) return;
+
+    setIsBulkMarking(true);
+    let successCount = 0;
+    try {
+      for (const sId of studentIds) {
+        const log = attendanceLogs.find(l => l.studentId?._id === sId || (l.studentId as any) === sId);
+        if (log) {
+          const res = await fetch(`/api/admin/attendance?id=${log._id}`, { method: "DELETE" });
+          const data = await res.json();
+          if (data.success) {
+            successCount++;
+            setAttendanceLogs(prev => prev.filter(l => l._id !== log._id));
+            setPresentStudentIds(prev => prev.filter(id => id !== sId));
+          }
+        }
+      }
+      fetchAttendanceSummary();
+      setSelectedStudentIds([]);
+      if (successCount > 0) alert(`Successfully unmarked ${successCount} students.`);
+    } catch (error) {
+      console.error("Bulk unmark error:", error);
+      alert("An error occurred while unmarking attendance.");
+    } finally {
+      setIsBulkMarking(false);
+    }
+  };
+
+  const handleUnmarkAttendance = async (attendanceId: string, studentId: string) => {
+    if (!confirm("Are you sure you want to unmark this student? They will be marked as absent.")) return;
+    try {
+      const res = await fetch(`/api/admin/attendance?id=${attendanceId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        setAttendanceLogs(prev => prev.filter(log => log._id !== attendanceId));
+        setPresentStudentIds(prev => prev.filter(id => id !== studentId));
+        fetchAttendanceSummary();
+        alert("Successfully unmarked student.");
+      } else {
+        alert(data.error || "Failed to unmark student");
+      }
+    } catch (error) {
+      console.error("Unmark error:", error);
+      alert("An error occurred while unmarking attendance.");
     }
   };
 
@@ -2076,7 +2128,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       setIsShowingAllPermissions(fetchAll);
       
       const limitQuery = fetchAll ? '' : '&limit=5';
-      const response = await fetch(`/api/permissions?light=true&status=${status}${limitQuery}`, { cache: "no-store" });
+      
+      const url = new URL(`/api/permissions?light=true&status=${status}${limitQuery}`, window.location.origin);
+      
+      // ⚡ WARDEN FILTER: Automatically scope permissions to warden's assigned hostels
+      if (isWarden) {
+          if (wardenHostelName) url.searchParams.set("hostelName", wardenHostelName);
+          if (authorizedHostels && authorizedHostels.length > 0) {
+              url.searchParams.set("authorizedHostels", JSON.stringify(authorizedHostels));
+          }
+      }
+
+      const response = await fetch(url.toString(), { cache: "no-store" });
       const data = await response.json();
 
       // Handle both success and error responses
@@ -4232,8 +4295,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             >
                                               {log.studentId?.hostelName} - {log.studentId?.roomNumber}
                                               {log.faceMatchPercentage !== undefined && ` • ${log.faceMatchPercentage}% Match ${log.faceMatchStatus === 'flagged' ? '🚩' : ''}`}
-                                              {log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) && ` • Marked by DEAN`}
-                                              {log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) && ` • Marked by WARDEN`}
+                                              {log.markedBy ? ` • Marked by ${log.markedBy}` : log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? ` • Marked by DEAN` : log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? ` • Marked by WARDEN` : ''}
                                             </span>
                                           </div>
                                         </div>
@@ -4245,26 +4307,33 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <span className="inline-block px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-md font-black text-[9px] md:text-xs whitespace-nowrap">{log.istTime}</span>
                                       </td>
                                       <td className="px-1 md:px-4 py-2 md:py-3 text-center hidden md:table-cell">
-                                        {log.faceMatchPercentage !== undefined ? (
-                                          <button
-                                            onClick={() => log.faceMatchStatus === 'flagged' && setReviewingLog(log)}
-                                            disabled={log.faceMatchStatus !== 'flagged'}
-                                            className={`px-1.5 py-0.5 rounded-md text-[9px] md:text-[10px] font-black transition-all ${log.faceMatchStatus === 'flagged'
-                                              ? "bg-red-500 text-white animate-pulse cursor-pointer hover:bg-red-600 shadow-sm"
-                                              : (log.faceMatchStatus === 'manual-override'
-                                                ? "bg-amber-500 text-white"
-                                                : "bg-green-100 text-green-700")
-                                              }`}
-                                          >
-                                            {log.faceMatchPercentage}% {log.faceMatchStatus === 'flagged' && "🚩"}
+                                        <div className="flex items-center justify-center gap-2">
+                                          {log.faceMatchPercentage !== undefined ? (
+                                            <button
+                                              onClick={() => log.faceMatchStatus === 'flagged' && setReviewingLog(log)}
+                                              disabled={log.faceMatchStatus !== 'flagged'}
+                                              className={`px-1.5 py-0.5 rounded-md text-[9px] md:text-[10px] font-black transition-all ${log.faceMatchStatus === 'flagged'
+                                                ? "bg-red-500 text-white animate-pulse cursor-pointer hover:bg-red-600 shadow-sm"
+                                                : (log.faceMatchStatus === 'manual-override'
+                                                  ? "bg-amber-500 text-white"
+                                                  : "bg-green-100 text-green-700")
+                                                }`}
+                                            >
+                                              {log.faceMatchPercentage}% {log.faceMatchStatus === 'flagged' && "🚩"}
+                                            </button>
+                                          ) : log.markedBy ? (
+                                            <span className="text-[9px] text-purple-600 font-black px-1.5 py-0.5 bg-purple-50 border border-purple-200 rounded tracking-widest whitespace-nowrap">{log.markedBy.toUpperCase()}</span>
+                                          ) : (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? (
+                                            <span className="text-[9px] text-blue-600 font-black px-1.5 py-0.5 bg-blue-50 border border-blue-200 rounded tracking-widest whitespace-nowrap">DEAN</span>
+                                          ) : (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? (
+                                            <span className="text-[9px] text-purple-600 font-black px-1.5 py-0.5 bg-purple-50 border border-purple-200 rounded tracking-widest whitespace-nowrap">WARDEN</span>
+                                          ) : (
+                                            <span className="text-[9px] text-gray-300 font-black">---</span>
+                                          )}
+                                          <button onClick={() => handleUnmarkAttendance(log._id, log.studentId?._id || "")} className="w-5 h-5 flex items-center justify-center bg-red-50 text-red-500 rounded-full hover:bg-red-100 transition-colors" title="Unmark / Mark Absent">
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                           </button>
-                                        ) : (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? (
-                                          <span className="text-[9px] text-blue-600 font-black px-1.5 py-0.5 bg-blue-50 border border-blue-200 rounded tracking-widest whitespace-nowrap">DEAN</span>
-                                        ) : (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? (
-                                          <span className="text-[9px] text-purple-600 font-black px-1.5 py-0.5 bg-purple-50 border border-purple-200 rounded tracking-widest whitespace-nowrap">WARDEN</span>
-                                        ) : (
-                                          <span className="text-[9px] text-gray-300 font-black">---</span>
-                                        )}
+                                        </div>
                                       </td>
                                       <td className="px-2 md:px-4 py-3 text-right">
                                         <div className="flex flex-col items-end gap-0.5">
@@ -5456,11 +5525,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <input
                         type="checkbox"
                         className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        checked={selectedStudentIds.length > 0 && filteredStudents.filter(s => s.studentStatus !== 'out' && !presentStudentIds.includes(s.id)).every(s => selectedStudentIds.includes(s.id))}
+                        checked={selectedStudentIds.length > 0 && filteredStudents.filter(s => s.studentStatus !== 'out').every(s => selectedStudentIds.includes(s.id))}
                         onChange={(e) => {
                           if (e.target.checked) {
                             const eligible = filteredStudents
-                              .filter(s => s.studentStatus !== 'out' && !presentStudentIds.includes(s.id))
+                              .filter(s => s.studentStatus !== 'out')
                               .map(s => s.id);
                             setSelectedStudentIds(eligible);
                           } else {
@@ -5468,32 +5537,51 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           }
                         }}
                       />
-                      <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest">Select All (Eligible)</span>
+                      <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest">Select All</span>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        disabled={isBulkMarking}
-                        onClick={() => {
-                          const eligible = filteredStudents
-                            .filter(s => s.studentStatus !== 'out' && !presentStudentIds.includes(s.id))
-                            .map(s => s.id);
-                          if (eligible.length > 0) handleMarkBulkAttendance(eligible);
-                        }}
-                        className="px-4 py-1.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-sm shadow-indigo-200 disabled:opacity-50"
-                      >
-                        {isBulkMarking ? "Processing..." : "Mark All Presence"}
-                      </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {(() => {
+                        const toMark = selectedStudentIds.filter(id => !presentStudentIds.includes(id) && students.find(s => s.id === id)?.studentStatus !== 'out');
+                        const toUnmark = selectedStudentIds.filter(id => presentStudentIds.includes(id));
+                        
+                        return (
+                          <>
+                            <button
+                              disabled={isBulkMarking}
+                              onClick={() => {
+                                const eligible = filteredStudents
+                                  .filter(s => s.studentStatus !== 'out' && !presentStudentIds.includes(s.id))
+                                  .map(s => s.id);
+                                if (eligible.length > 0) handleMarkBulkAttendance(eligible);
+                              }}
+                              className="px-4 py-1.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-sm shadow-indigo-200 disabled:opacity-50"
+                            >
+                              {isBulkMarking ? "Processing..." : "Mark All Unmarked"}
+                            </button>
 
-                      {selectedStudentIds.length > 0 && (
-                        <button
-                          disabled={isBulkMarking}
-                          onClick={() => handleMarkBulkAttendance(selectedStudentIds)}
-                          className="px-4 py-1.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-all shadow-sm shadow-green-200 disabled:opacity-50"
-                        >
-                          Mark Selected ({selectedStudentIds.length})
-                        </button>
-                      )}
+                            {toMark.length > 0 && (
+                              <button
+                                disabled={isBulkMarking}
+                                onClick={() => handleMarkBulkAttendance(toMark)}
+                                className="px-4 py-1.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-all shadow-sm shadow-green-200 disabled:opacity-50"
+                              >
+                                Mark Selected ({toMark.length})
+                              </button>
+                            )}
+
+                            {toUnmark.length > 0 && (
+                              <button
+                                disabled={isBulkMarking}
+                                onClick={() => handleUnmarkBulkAttendance(toUnmark)}
+                                className="px-4 py-1.5 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-sm shadow-red-200 disabled:opacity-50"
+                              >
+                                Unmark Selected ({toUnmark.length})
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
@@ -5566,7 +5654,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           return (
                             <div key={student.id} className="flex items-center gap-2 group/card">
                               {/* ⚡ NEW: Selection Checkbox for Bulk Actions (Attendance & Campus Status) */}
-                              {enableManualAttendance && (!presentStudentIds.includes(student.id) || student.studentStatus === 'out') && (
+                              {enableManualAttendance && (
                                 <input
                                   type="checkbox"
                                   className={`w-4 h-4 rounded border-gray-300 ${student.studentStatus === 'out' ? 'text-indigo-600 focus:ring-indigo-500' : 'text-blue-600 focus:ring-blue-500'} cursor-pointer transition-all shrink-0`}

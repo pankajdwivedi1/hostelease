@@ -153,6 +153,7 @@ const mapAttendanceToCamelCase = (a: any) => {
         semester: a.semester,
         branch: a.branch,
         collegeName: a.college_name || a.collegeName,
+        markedBy: a.marked_by || a.markedBy,
         createdAt: a.created_at || a.createdAt,
         updatedAt: a.updated_at || a.updatedAt
     };
@@ -189,7 +190,8 @@ const mapAttendanceToSnakeCase = (a: any) => {
         wardenId: 'warden_id',
         collegeName: 'college_name',
         tenantId: 'tenant_id',
-        deviceId: 'device_id'
+        deviceId: 'device_id',
+        markedBy: 'marked_by'
     };
 
     Object.keys(a).forEach(key => {
@@ -1492,6 +1494,7 @@ export const db = {
                     flagged_photo_url: attendanceData.flaggedPhotoUrl,
                     needs_review: attendanceData.needsReview,
                     is_test: attendanceData.isTest,
+                    marked_by: attendanceData.markedBy,
                     tenant_id: await getTenantIdOrThrow(),
                     timestamp: attendanceData.timestamp ? new Date(attendanceData.timestamp).toISOString() : new Date().toISOString()
                 };
@@ -1566,7 +1569,7 @@ export const db = {
                 const lightStudentFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id';
 
                 // ⚡ OPTIMIZATION: Exclude large flagged_photo_url from logs list
-                const attendanceFields = '_id,student_id,firebase_uid,name,hostel_name,room_number,date,ist_time,ist_date,location,device_id,status,face_match_percentage,face_match_status,needs_review,is_test,timestamp';
+                const attendanceFields = '_id,student_id,firebase_uid,name,hostel_name,room_number,date,ist_time,ist_date,location,device_id,status,face_match_percentage,face_match_status,needs_review,is_test,timestamp,marked_by';
 
                 // Query Supabase with Join
                 // We alias the joined 'students' table as 'studentId' to match Mongo's populated structure
@@ -2735,6 +2738,13 @@ export const db = {
 
                 if (filters.studentId) query = query.eq('student_id', filters.studentId);
                 if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
+                
+                // ⚡ WARDEN FILTER
+                if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
+                    query = query.in('students.hostel_name', filters.authorizedHostels);
+                } else if (filters.hostelName) {
+                    query = query.eq('students.hostel_name', filters.hostelName);
+                }
 
                 query = query.order('created_at', { ascending: false });
 
@@ -2757,6 +2767,22 @@ export const db = {
             } else {
                 await connectDB();
                 const PermissionModel = (await import('@/models/Permission')).default;
+                
+                // ⚡ WARDEN FILTER for Mongoose
+                if (filters.hostelName || (filters.authorizedHostels && filters.authorizedHostels.length > 0)) {
+                    const StudentModel = (await import('@/models/Student')).default;
+                    const studentQuery: any = {};
+                    if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
+                        studentQuery.hostelName = { $in: filters.authorizedHostels };
+                    } else if (filters.hostelName) {
+                        studentQuery.hostelName = filters.hostelName;
+                    }
+                    const matchingStudents = await StudentModel.find(studentQuery, '_id').lean();
+                    filters.studentId = { $in: matchingStudents.map(s => s._id) };
+                    delete filters.hostelName;
+                    delete filters.authorizedHostels;
+                }
+
                 let query = PermissionModel.find(filters);
 
                 if (options.populate) {
@@ -2780,9 +2806,16 @@ export const db = {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('permissions').select('*', { count: 'exact', head: true });
-                query = query.eq('tenant_id', tenantId);
+                let query = supabase.from('permissions').select('*, students!student_id!inner(tenant_id, hostel_name)', { count: 'exact', head: true });
+                query = query.eq('students.tenant_id', tenantId);
                 if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
+
+                // ⚡ WARDEN FILTER
+                if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
+                    query = query.in('students.hostel_name', filters.authorizedHostels);
+                } else if (filters.hostelName) {
+                    query = query.eq('students.hostel_name', filters.hostelName);
+                }
                 
                 const { count, error } = await query;
                 if (error) {
@@ -2797,6 +2830,22 @@ export const db = {
             } else {
                 await connectDB();
                 const PermissionModel = (await import('@/models/Permission')).default;
+                
+                // ⚡ WARDEN FILTER for Mongoose
+                if (filters.hostelName || (filters.authorizedHostels && filters.authorizedHostels.length > 0)) {
+                    const StudentModel = (await import('@/models/Student')).default;
+                    const studentQuery: any = {};
+                    if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
+                        studentQuery.hostelName = { $in: filters.authorizedHostels };
+                    } else if (filters.hostelName) {
+                        studentQuery.hostelName = filters.hostelName;
+                    }
+                    const matchingStudents = await StudentModel.find(studentQuery, '_id').lean();
+                    filters.studentId = { $in: matchingStudents.map(s => s._id) };
+                    delete filters.hostelName;
+                    delete filters.authorizedHostels;
+                }
+
                 return await PermissionModel.countDocuments(filters);
             }
         },
