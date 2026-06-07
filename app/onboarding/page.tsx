@@ -20,6 +20,7 @@ export default function OnboardingPage() {
   const [isFaceProcessing, setIsFaceProcessing] = useState(false);
   const [faceError, setFaceError] = useState<string | null>(null);
   const [isFaceInFrame, setIsFaceInFrame] = useState(false);
+  const [blinkCount, setBlinkCount] = useState(0);
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
   const [hostelsLoading, setHostelsLoading] = useState(true);
 
@@ -359,8 +360,8 @@ export default function OnboardingPage() {
   // ⚡ LIVE FACE GUARD: Check for face continuously when camera is open
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    let lastYaw: number | null = null;
     let hasDetectedLiveness = false;
+    let blinkState = 'open'; // Track the blink transition
 
     if (isCameraOpen && videoRef.current) {
       interval = setInterval(async () => {
@@ -370,25 +371,31 @@ export default function OnboardingPage() {
           if (!res) {
             setIsFaceInFrame(false);
             hasDetectedLiveness = false;
-            lastYaw = null;
+            blinkState = 'open';
+            setBlinkCount(0);
             return;
           }
 
           const liveness = faceMatching.analyzeLiveness(res.landmarks);
           if (liveness) {
-            // 🛡️ ANTI-SPOOF: Check for Blink or Head Movement
-            const yawChange = lastYaw !== null ? Math.abs(liveness.yaw - lastYaw) : 0;
-
-            if (liveness.isBlinking || yawChange > 0.10) {
-              hasDetectedLiveness = true;
+            // 🛡️ ROBUST ANTI-SPOOF: TRUE BLINK DETECTION (REQUIRE 3 BLINKS)
+            // We use slightly more generous thresholds (0.24 and 0.27) to catch blinks 
+            // even if the user doesn't squeeze their eyes tightly shut.
+            if (liveness.ear < 0.24) {
+              blinkState = 'closed';
+            } else if (liveness.ear > 0.27 && blinkState === 'closed') {
+              blinkState = 'open'; // Reset state
+              setBlinkCount((prev) => {
+                const newCount = prev + 1;
+                if (newCount >= 3) {
+                  setIsFaceInFrame(true);
+                }
+                return newCount;
+              });
             }
-
-            lastYaw = liveness.yaw;
           }
-
-          setIsFaceInFrame(hasDetectedLiveness);
         }
-      }, 100); // Check every 100ms (Much faster to catch blinks)
+      }, 100); // Back to 100ms to ensure we don't miss the 'closed' frame during a fast blink
     }
 
     return () => clearInterval(interval);
@@ -536,14 +543,24 @@ export default function OnboardingPage() {
                           />
 
                           {/* Live Status HUD */}
-                          <div className="absolute top-4 left-0 right-0 flex justify-center">
-                            <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg transition-all ${isFaceInFrame ? 'bg-green-500 text-white' : 'bg-orange-500 text-white animate-pulse'}`}>
-                              <span className={`w-2 h-2 rounded-full ${isFaceInFrame ? 'bg-white' : 'bg-white/50 animate-ping'}`}></span>
-                              {isFaceInFrame ? 'Live Human Verified' : 'Blink Eyes to Verify'}
+                          <div className="absolute top-4 left-0 right-0 flex flex-col items-center gap-2">
+                            <div className={`px-4 py-2 rounded-full text-xs md:text-sm font-black uppercase tracking-widest flex items-center gap-2 shadow-2xl transition-all border-2 ${isFaceInFrame ? 'bg-green-500 border-green-400 text-white' : 'bg-red-600 border-red-400 text-white animate-pulse'}`}>
+                              <span className={`w-2.5 h-2.5 rounded-full ${isFaceInFrame ? 'bg-white' : 'bg-white/80 animate-ping'}`}></span>
+                              {isFaceInFrame ? 'Live Human Verified' : 'Action Required'}
                             </div>
+                            
+                            {!isFaceInFrame && (
+                              <div className="bg-black/70 backdrop-blur-md text-white px-6 py-3 rounded-2xl text-center shadow-xl border border-white/20 mt-2 mx-4 animate-bounce">
+                                <p className="text-sm md:text-base font-black uppercase tracking-wide">Please Blink 3 Times</p>
+                                <p className="text-[10px] md:text-xs font-medium text-gray-300 mt-1">Look at the camera and blink</p>
+                                <div className="mt-2 text-lg font-black text-blue-400">
+                                  Blinks: {blinkCount}/3
+                                </div>
+                              </div>
+                            )}
                           </div>
 
-                          <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
+                          <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4 z-10">
                             <button
                               type="button"
                               onClick={stopCamera}
@@ -670,14 +687,18 @@ export default function OnboardingPage() {
 
             {Object.keys(errors).length > 0 && (
               <div className="p-3 rounded-lg bg-red-50 border border-red-200">
-                <p className="text-sm text-red-800 font-bold mb-1">⚠️ Please fill all required fields:</p>
-                <div className="flex flex-wrap gap-x-2 gap-y-1">
-                  {Object.entries(errors).map(([id, msg]) => (
-                    <span key={id} className="text-[11px] bg-red-100 text-red-700 px-2 py-0.5 rounded font-black uppercase">
-                      {msg.replace(" is required", "")}
-                    </span>
-                  ))}
-                </div>
+                {errors.submit ? (
+                  <p className="text-sm text-red-800 font-bold text-center">⚠️ {errors.submit}</p>
+                ) : Object.keys(errors).some(k => k.startsWith('server_')) ? (
+                  <div className="flex flex-col gap-1 items-center text-center">
+                    <p className="text-sm text-red-800 font-bold">⚠️ Server Validation Errors:</p>
+                    {Object.entries(errors).filter(([k]) => k.startsWith('server_')).map(([id, msg]) => (
+                      <p key={id} className="text-xs text-red-700 font-medium">{msg}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-red-800 font-bold text-center">⚠️ Please fill all required fields, mentioned in red color.</p>
+                )}
               </div>
             )}
             <div className="flex gap-4 mt-6">

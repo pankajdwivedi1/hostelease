@@ -140,3 +140,18 @@ CREATE POLICY tenant_isolation_policy ON attendance
 -- 4. Initial Seed for OIST (Run this manually in Supabase SQL editor)
 -- INSERT INTO tenants (name, slug, admin_email, subscription_status)
 -- VALUES ('Oriental Institute of Science and Technology', 'oist', 'pankajdwivedi81@gmail.com', 'active');
+
+-- ERP Members Table
+CREATE TABLE IF NOT EXISTS erp_members (
+    _id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    mobile_number TEXT NOT NULL UNIQUE,
+    dashboard_name TEXT NOT NULL,
+    expiry_date TIMESTAMPTZ NOT NULL,
+    tenant_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE erp_members ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation_policy ON erp_members USING (tenant_id::text = current_setting('app.current_tenant_id', true));
+

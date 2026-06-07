@@ -227,7 +227,7 @@ export function analyzeLiveness(landmarks: any) {
     const rightEAR = calculateEAR(rightEye);
     const avgEAR = (leftEAR + rightEAR) / 2.0;
 
-    const isBlinking = avgEAR < 0.22; // ⚡ Adjusted: 0.22 is more reliable for various camera qualities
+    const isBlinking = avgEAR < 0.25; // ⚡ Adjusted: 0.25 makes it easier to catch partial blinks without false positives
 
     // Head Pose Estimation (Yaw/Tilt)
     const nose = landmarks.getNose();
