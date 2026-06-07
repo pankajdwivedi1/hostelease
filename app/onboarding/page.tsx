@@ -329,12 +329,16 @@ export default function OnboardingPage() {
       }
 
       if (!navigator?.mediaDevices?.getUserMedia) {
-        alert("Camera API is not available in this browser. Please use a modern browser like Chrome, Firefox, or Safari on a secure connection.");
+        alert("Camera API is completely missing. This usually happens if you are using a mobile phone to access a local IP address (like 192.168.x.x) without HTTPS. Please test via the live Vercel link (https://...) instead.");
         return;
       }
 
       setIsCameraOpen(true);
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      // Explicitly request front-facing camera for mobile phones
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: "user" } 
+      });
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         // ⚡ PRE-LOAD: Start loading AI models as soon as camera opens
