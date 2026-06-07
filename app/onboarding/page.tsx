@@ -363,13 +363,16 @@ export default function OnboardingPage() {
 
   // ⚡ LIVE FACE GUARD: Check for face continuously when camera is open
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let isRunning = true;
     let hasDetectedLiveness = false;
     let blinkState = 'open'; // Track the blink transition
 
-    if (isCameraOpen && videoRef.current) {
-      interval = setInterval(async () => {
-        if (videoRef.current && videoRef.current.readyState === 4) {
+    const processFrame = async () => {
+      if (!isRunning || !isCameraOpen || !videoRef.current) return;
+
+      if (videoRef.current.readyState === 4) {
+        try {
+          // ⚡ Crucial Performance Fix: Await the heavy AI task so they don't pile up
           const res = await faceMatching.detectFace(videoRef.current, false, false);
 
           if (!res) {
@@ -377,28 +380,37 @@ export default function OnboardingPage() {
             hasDetectedLiveness = false;
             blinkState = 'open';
             setBlinkCount(0);
-            return;
-          }
-
-          const liveness = faceMatching.analyzeLiveness(res.landmarks);
-          if (liveness) {
-            // 🛡️ ROBUST ANTI-SPOOF: TRUE BLINK DETECTION (REQUIRE 1 BLINK)
-            // We use slightly more generous thresholds (0.24 and 0.27) to catch blinks 
-            // even if the user doesn't squeeze their eyes tightly shut.
-            if (liveness.ear < 0.24) {
-              blinkState = 'closed';
-            } else if (liveness.ear > 0.27 && blinkState === 'closed') {
-              blinkState = 'open'; // Reset state
-              hasDetectedLiveness = true; // Fix: Actually update the interval variable so it persists
+          } else {
+            const liveness = faceMatching.analyzeLiveness(res.landmarks);
+            if (liveness) {
+              if (liveness.ear < 0.24) {
+                blinkState = 'closed';
+              } else if (liveness.ear > 0.27 && blinkState === 'closed') {
+                blinkState = 'open'; // Reset state
+                hasDetectedLiveness = true; // Unlock
+              }
             }
+            setIsFaceInFrame(hasDetectedLiveness);
           }
-
-          setIsFaceInFrame(hasDetectedLiveness);
+        } catch (error) {
+          console.error("Camera frame error:", error);
         }
-      }, 100); // Back to 100ms to ensure we don't miss the 'closed' frame during a fast blink
+      }
+
+      // Schedule next frame ONLY AFTER the current one is completely finished
+      // This prevents the '3-5 minute' freezing on older mobile phones.
+      if (isRunning) {
+        setTimeout(processFrame, 50); // 50ms pause before next inference
+      }
+    };
+
+    if (isCameraOpen) {
+      processFrame();
     }
 
-    return () => clearInterval(interval);
+    return () => {
+      isRunning = false;
+    };
   }, [isCameraOpen]);
 
   const captureImage = async () => {
