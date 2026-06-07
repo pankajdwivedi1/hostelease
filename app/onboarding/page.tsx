@@ -382,20 +382,14 @@ export default function OnboardingPage() {
 
           const liveness = faceMatching.analyzeLiveness(res.landmarks);
           if (liveness) {
-            // 🛡️ ROBUST ANTI-SPOOF: TRUE BLINK DETECTION (REQUIRE 3 BLINKS)
+            // 🛡️ ROBUST ANTI-SPOOF: TRUE BLINK DETECTION (REQUIRE 1 BLINK)
             // We use slightly more generous thresholds (0.24 and 0.27) to catch blinks 
             // even if the user doesn't squeeze their eyes tightly shut.
             if (liveness.ear < 0.24) {
               blinkState = 'closed';
             } else if (liveness.ear > 0.27 && blinkState === 'closed') {
               blinkState = 'open'; // Reset state
-              setBlinkCount((prev) => {
-                const newCount = prev + 1;
-                if (newCount >= 3) {
-                  setIsFaceInFrame(true);
-                }
-                return newCount;
-              });
+              setIsFaceInFrame(true); // Unlock immediately on first blink
             }
           }
         }
@@ -513,9 +507,9 @@ export default function OnboardingPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
 
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
               {formBuilderConfig.filter(f => f.visible).map((field) => (
-                <div key={field.id} className={field.type === 'image' || field.type === 'textarea' ? 'md:col-span-2' : ''}>
+                <div key={field.id} className={field.type === 'image' || field.type === 'textarea' ? 'col-span-2' : ''}>
                   <label htmlFor={field.id} className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 px-1">
                     {field.label} {field.required && <span className="text-red-500">*</span>}
                   </label>
@@ -554,12 +548,9 @@ export default function OnboardingPage() {
                             </div>
                             
                             {!isFaceInFrame && (
-                              <div className="bg-black/70 backdrop-blur-md text-white px-6 py-3 rounded-2xl text-center shadow-xl border border-white/20 mt-2 mx-4 animate-bounce">
-                                <p className="text-sm md:text-base font-black uppercase tracking-wide">Please Blink 3 Times</p>
-                                <p className="text-[10px] md:text-xs font-medium text-gray-300 mt-1">Look at the camera and blink</p>
-                                <div className="mt-2 text-lg font-black text-blue-400">
-                                  Blinks: {blinkCount}/3
-                                </div>
+                              <div className="bg-black/70 backdrop-blur-md text-white px-3 py-1.5 md:px-6 md:py-3 rounded-xl md:rounded-2xl text-center shadow-xl border border-white/20 mt-1 md:mt-2 mx-4 animate-bounce">
+                                <p className="text-[10px] md:text-base font-black uppercase tracking-wide">Please Blink Your Eyes</p>
+                                <p className="text-[8px] md:text-xs font-medium text-gray-300 mt-0.5">Look at the camera and blink once</p>
                               </div>
                             )}
                           </div>
