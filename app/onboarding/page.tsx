@@ -20,7 +20,6 @@ export default function OnboardingPage() {
   const [isFaceProcessing, setIsFaceProcessing] = useState(false);
   const [faceError, setFaceError] = useState<string | null>(null);
   const [isFaceInFrame, setIsFaceInFrame] = useState(false);
-  const [blinkCount, setBlinkCount] = useState(0);
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
   const [hostelsLoading, setHostelsLoading] = useState(true);
 
@@ -363,54 +362,36 @@ export default function OnboardingPage() {
 
   // ⚡ LIVE FACE GUARD: Check for face continuously when camera is open
   useEffect(() => {
-    let isRunning = true;
+    let interval: NodeJS.Timeout;
     let hasDetectedLiveness = false;
-    let blinkState = 'open'; // Track the blink transition
 
-    const processFrame = async () => {
-      if (!isRunning || !isCameraOpen || !videoRef.current) return;
-
-      if (videoRef.current.readyState === 4) {
-        try {
-          // ⚡ Crucial Performance Fix: Await the heavy AI task so they don't pile up
+    if (isCameraOpen && videoRef.current) {
+      interval = setInterval(async () => {
+        if (videoRef.current && videoRef.current.readyState === 4) {
           const res = await faceMatching.detectFace(videoRef.current, false, false);
 
           if (!res) {
             setIsFaceInFrame(false);
             hasDetectedLiveness = false;
-            blinkState = 'open';
-            setBlinkCount(0);
-          } else {
-            const liveness = faceMatching.analyzeLiveness(res.landmarks);
-            if (liveness) {
-              if (liveness.ear < 0.24) {
-                blinkState = 'closed';
-              } else if (liveness.ear > 0.27 && blinkState === 'closed') {
-                blinkState = 'open'; // Reset state
-                hasDetectedLiveness = true; // Unlock
-              }
-            }
-            setIsFaceInFrame(hasDetectedLiveness);
+            return;
           }
-        } catch (error) {
-          console.error("Camera frame error:", error);
+
+          const liveness = faceMatching.analyzeLiveness(res.landmarks);
+          if (liveness) {
+            // 🛡️ HEAD TURN DETECTION
+            // A threshold of 0.35 means the face has turned left or right significantly.
+            // This prevents photo-wobbling because a 2D photo rarely achieves 35-degree yaw without losing detection entirely.
+            if (Math.abs(liveness.yaw) > 0.35) {
+              hasDetectedLiveness = true;
+            }
+          }
+
+          setIsFaceInFrame(hasDetectedLiveness);
         }
-      }
-
-      // Schedule next frame ONLY AFTER the current one is completely finished
-      // This prevents the '3-5 minute' freezing on older mobile phones.
-      if (isRunning) {
-        setTimeout(processFrame, 50); // 50ms pause before next inference
-      }
-    };
-
-    if (isCameraOpen) {
-      processFrame();
+      }, 100); // Back to 100ms to ensure we don't miss the 'closed' frame during a fast blink
     }
 
-    return () => {
-      isRunning = false;
-    };
+    return () => clearInterval(interval);
   }, [isCameraOpen]);
 
   const captureImage = async () => {
@@ -563,8 +544,8 @@ export default function OnboardingPage() {
                             
                             {!isFaceInFrame && (
                               <div className="bg-black/70 backdrop-blur-md text-white px-3 py-1.5 md:px-6 md:py-3 rounded-xl md:rounded-2xl text-center shadow-xl border border-white/20 mt-1 md:mt-2 mx-4 animate-bounce">
-                                <p className="text-[10px] md:text-base font-black uppercase tracking-wide">Please Blink Your Eyes</p>
-                                <p className="text-[8px] md:text-xs font-medium text-gray-300 mt-0.5">Look at the camera and blink once</p>
+                                <p className="text-[10px] md:text-base font-black uppercase tracking-wide">Please Turn Your Head</p>
+                                <p className="text-[8px] md:text-xs font-medium text-gray-300 mt-0.5">Turn your head slightly Left or Right</p>
                               </div>
                             )}
                           </div>
