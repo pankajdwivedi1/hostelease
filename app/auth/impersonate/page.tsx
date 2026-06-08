@@ -14,8 +14,8 @@ function ImpersonateHandler() {
         // Simple security check: Only allow if we came from superadmin domain or have a specific bypass
         // In a real production app, we would verify the 'token' against a server-side boss key.
         if (type === "admin") {
-            console.log("Boss Mode: Impersonating Dean...");
-            localStorage.setItem("userType", "admin");
+            console.log("Boss Mode: Impersonating SuperAdmin...");
+            localStorage.setItem("userType", "superadmin");
             router.push("/");
         } else {
             router.push("/login");
