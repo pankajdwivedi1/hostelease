@@ -1565,11 +1565,13 @@ export const db = {
 
             if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
-                // ⚡ OPTIMIZATION: Use light fields for joined students to save bandwidth/egress
-                const lightStudentFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id';
+                // ⚡ OPTIMIZATION: Use lightweight fields for joined students to save bandwidth/egress
+                // We only need name and room_number as fallbacks for older attendance records
+                const lightStudentFields = '_id,name,room_number';
 
                 // ⚡ OPTIMIZATION: Exclude large flagged_photo_url from logs list
-                const attendanceFields = '_id,student_id,firebase_uid,name,hostel_name,room_number,date,ist_time,ist_date,location,device_id,status,face_match_percentage,face_match_status,needs_review,is_test,timestamp,marked_by';
+                // We must include room_number, status, device_id, etc. so the UI renders correctly
+                const attendanceFields = '_id,student_id,name,hostel_name,room_number,ist_time,face_match_percentage,face_match_status,marked_by,device_id,location,status,date';
 
                 // Query Supabase with Join
                 // We alias the joined 'students' table as 'studentId' to match Mongo's populated structure

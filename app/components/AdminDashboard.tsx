@@ -1901,7 +1901,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
     // Further filter by attendance hostel filter if not "all"
     if (currentTab === "attendance" && attendanceHostelFilter !== "all") {
-      list = list.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === attendanceHostelFilter);
+      list = list.filter(s => {
+        const hName = (getHostelCategory(s.hostelName) || s.hostelName || "").trim().toLowerCase();
+        return hName === attendanceHostelFilter.trim().toLowerCase();
+      });
     }
 
     return list;
@@ -1930,8 +1933,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const displayedAbsentees = useMemo(() => {
     if (!selectedAttendanceHostel) return absentees;
     return absentees.filter(s => {
-      const studentHostel = getHostelCategory(s.hostelName) || s.hostelName;
-      return studentHostel.toLowerCase() === selectedAttendanceHostel.toLowerCase();
+      const studentHostel = (getHostelCategory(s.hostelName) || s.hostelName || "").trim();
+      return studentHostel.toLowerCase() === selectedAttendanceHostel.trim().toLowerCase();
     });
   }, [absentees, selectedAttendanceHostel]);
 
@@ -1939,9 +1942,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const presentStudentsForSelectedHostel = useMemo(() => {
     if (!selectedAttendanceHostel) return [];
     return filteredAttendanceLogs.filter(log => {
-      if (!log.studentId || typeof log.studentId !== 'object') return false;
-      const studentHostel = getHostelCategory(log.studentId.hostelName) || log.studentId.hostelName;
-      return studentHostel.toLowerCase() === selectedAttendanceHostel.toLowerCase();
+      const studentHostel = (getHostelCategory(log.hostelName) || log.hostelName || "").trim();
+      return studentHostel.toLowerCase() === selectedAttendanceHostel.trim().toLowerCase();
     });
   }, [filteredAttendanceLogs, selectedAttendanceHostel]);
 
@@ -2896,7 +2898,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     } else {
       let filteredAbsentees = absentees;
       if (attendanceHostelFilter !== 'all') {
-        filteredAbsentees = absentees.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === attendanceHostelFilter);
+        filteredAbsentees = absentees.filter(s => {
+          const hName = (getHostelCategory(s.hostelName) || s.hostelName || "").trim().toLowerCase();
+          return hName === attendanceHostelFilter.trim().toLowerCase();
+        });
       }
 
       const data = filteredAbsentees.map(s => ({
@@ -4282,7 +4287,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     <tr key={log._id} className="hover:bg-filler/50 transition-colors">
                                       <td className="px-2 md:px-4 py-3">
                                         <div className="flex flex-col min-w-0">
-                                          <span className="font-bold text-gray-900 text-[9px] md:text-[13px] uppercase truncate tracking-tight">{log.studentId?.name || "Unknown"}</span>
+                                          <span className="font-bold text-gray-900 text-[9px] md:text-[13px] uppercase truncate tracking-tight">{log.name || log.studentId?.name || "Unknown"}</span>
                                           <div className="md:hidden flex items-center gap-1.5 mt-0.5">
                                             <span
                                               onClick={(e) => {
@@ -4293,7 +4298,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                 log.faceMatchStatus === 'manual-override' ? 'bg-amber-50 text-amber-600' : 'text-gray-400'
                                                 }`}
                                             >
-                                              {log.studentId?.hostelName} - {log.studentId?.roomNumber}
+                                              {log.hostelName} - {log.roomNumber || log.studentId?.roomNumber || "N/A"}
                                               {log.faceMatchPercentage !== undefined && ` • ${log.faceMatchPercentage}% Match ${log.faceMatchStatus === 'flagged' ? '🚩' : ''}`}
                                               {log.markedBy ? ` • Marked by ${log.markedBy}` : log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? ` • Marked by DEAN` : log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? ` • Marked by WARDEN` : ''}
                                             </span>
@@ -4301,7 +4306,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         </div>
                                       </td>
                                       <td className="px-2 md:px-4 py-3 text-secondary text-[9px] md:text-xs truncate hidden md:table-cell">
-                                        {log.studentId?.hostelName} - {log.studentId?.roomNumber}
+                                        {log.hostelName} - {log.roomNumber || log.studentId?.roomNumber || "N/A"}
                                       </td>
                                       <td className="px-1 md:px-4 py-2 md:py-3 text-center">
                                         <span className="inline-block px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-md font-black text-[9px] md:text-xs whitespace-nowrap">{log.istTime}</span>
@@ -4330,7 +4335,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           ) : (
                                             <span className="text-[9px] text-gray-300 font-black">---</span>
                                           )}
-                                          <button onClick={() => handleUnmarkAttendance(log._id, log.studentId?._id || "")} className="w-5 h-5 flex items-center justify-center bg-red-50 text-red-500 rounded-full hover:bg-red-100 transition-colors" title="Unmark / Mark Absent">
+                                          <button onClick={() => handleUnmarkAttendance(log._id, typeof log.studentId === 'string' ? log.studentId : (log.studentId?._id || log.student_id || ""))} className="w-5 h-5 flex items-center justify-center bg-red-50 text-red-500 rounded-full hover:bg-red-100 transition-colors" title="Unmark / Mark Absent">
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                           </button>
                                         </div>
@@ -4338,7 +4343,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       <td className="px-2 md:px-4 py-3 text-right">
                                         <div className="flex flex-col items-end gap-0.5">
                                           {(() => {
-                                            const hostel = hostelLocations.find(l => l.name.toLowerCase() === (getHostelCategory(log.studentId?.hostelName || "") || log.studentId?.hostelName || "").toLowerCase());
+                                            const hostel = hostelLocations.find(l => l.name.toLowerCase() === (getHostelCategory(log.hostelName || "") || log.hostelName || "").toLowerCase());
                                             if (hostel && log.location?.lat) {
                                               const dist = calculateDistance(log.location.lat, log.location.lng, hostel.lat, hostel.lng);
                                               return (
