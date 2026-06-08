@@ -20,6 +20,8 @@ export default function OnboardingPage() {
   const [isFaceProcessing, setIsFaceProcessing] = useState(false);
   const [faceError, setFaceError] = useState<string | null>(null);
   const [isFaceInFrame, setIsFaceInFrame] = useState(false);
+  const [blinkInstruction, setBlinkInstruction] = useState<'CLOSE_EYES' | 'OPEN_EYES' | 'DONE'>('CLOSE_EYES');
+  const [blinkCount, setBlinkCount] = useState(0);
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
   const [hostelsLoading, setHostelsLoading] = useState(true);
 
@@ -364,8 +366,13 @@ export default function OnboardingPage() {
   useEffect(() => {
     let interval: NodeJS.Timeout;
     let hasDetectedLiveness = false;
+    let currentInstruction = 'CLOSE_EYES';
+    let currentActionStartTime = 0;
+    let currentBlinkCount = 0;
 
     if (isCameraOpen && videoRef.current) {
+      setBlinkInstruction('CLOSE_EYES');
+      setBlinkCount(0);
       interval = setInterval(async () => {
         if (videoRef.current && videoRef.current.readyState === 4) {
           const res = await faceMatching.detectFace(videoRef.current, false, false);
@@ -373,16 +380,48 @@ export default function OnboardingPage() {
           if (!res) {
             setIsFaceInFrame(false);
             hasDetectedLiveness = false;
+            currentInstruction = 'CLOSE_EYES';
+            setBlinkInstruction('CLOSE_EYES');
+            currentActionStartTime = 0;
+            currentBlinkCount = 0;
+            setBlinkCount(0);
             return;
           }
 
           const liveness = faceMatching.analyzeLiveness(res.landmarks);
           if (liveness) {
-            // 🛡️ HEAD TURN DETECTION
-            // A threshold of 0.35 means the face has turned left or right significantly.
-            // This prevents photo-wobbling because a 2D photo rarely achieves 35-degree yaw without losing detection entirely.
-            if (Math.abs(liveness.yaw) > 0.35) {
-              hasDetectedLiveness = true;
+            // 🛡️ ACTION SEQUENCE: LONG BLINK 2 TIMES
+            // We use a 0.5-second timer (500ms) to make it extremely responsive while still blocking photos
+            if (currentInstruction === 'CLOSE_EYES') {
+                if (liveness.ear < 0.25) {
+                    if (currentActionStartTime === 0) currentActionStartTime = Date.now();
+                    else if (Date.now() - currentActionStartTime > 500) { // 0.5 second closed
+                        currentInstruction = 'OPEN_EYES';
+                        setBlinkInstruction('OPEN_EYES');
+                        currentActionStartTime = 0;
+                    }
+                } else if (liveness.ear > 0.29) {
+                    currentActionStartTime = 0; // Reset only if definitely wide open
+                }
+            } else if (currentInstruction === 'OPEN_EYES') {
+                if (liveness.ear > 0.26) {
+                    if (currentActionStartTime === 0) currentActionStartTime = Date.now();
+                    else if (Date.now() - currentActionStartTime > 500) { // 0.5 second open
+                        currentBlinkCount++;
+                        setBlinkCount(currentBlinkCount);
+                        if (currentBlinkCount >= 2) {
+                            currentInstruction = 'DONE';
+                            setBlinkInstruction('DONE');
+                            hasDetectedLiveness = true;
+                        } else {
+                            currentInstruction = 'CLOSE_EYES';
+                            setBlinkInstruction('CLOSE_EYES');
+                            currentActionStartTime = 0;
+                        }
+                    }
+                } else if (liveness.ear < 0.22) {
+                    currentActionStartTime = 0; // Reset only if definitely closed
+                }
             }
           }
 
@@ -544,8 +583,10 @@ export default function OnboardingPage() {
                             
                             {!isFaceInFrame && (
                               <div className="bg-black/70 backdrop-blur-md text-white px-3 py-1.5 md:px-6 md:py-3 rounded-xl md:rounded-2xl text-center shadow-xl border border-white/20 mt-1 md:mt-2 mx-4 animate-bounce">
-                                <p className="text-[10px] md:text-base font-black uppercase tracking-wide">Please Turn Your Head</p>
-                                <p className="text-[8px] md:text-xs font-medium text-gray-300 mt-0.5">Turn your head slightly Left or Right</p>
+                                <p className={`text-[10px] md:text-base font-black uppercase tracking-wide ${blinkInstruction === 'CLOSE_EYES' ? 'text-blue-400' : 'text-green-400'}`}>
+                                  {blinkInstruction === 'CLOSE_EYES' ? 'Hold Eyes CLOSED 🙈' : 'Keep Eyes OPEN 👁️'}
+                                </p>
+                                <p className="text-[8px] md:text-xs font-medium text-gray-300 mt-0.5">Sequence: {blinkCount}/2</p>
                               </div>
                             )}
                           </div>
