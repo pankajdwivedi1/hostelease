@@ -2510,6 +2510,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
     if (currentTab === "attendance") {
       fetchAttendanceLogs();
+      if (students.length === 0) fetchStudents();
     }
     
     if (currentTab === 'payments' && (!payments || payments.length === 0)) {
@@ -2869,8 +2870,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       "Student ID": s.registrationId || "N/A",
       Name: s.name,
       Room: s.roomNumber,
-      Email: s.email,
-      Phone: s.phoneNumber,
+      Mobile: s.phoneNumber || "N/A",
       Hostel: s.hostelName,
       College: s.collegeName,
       Branch: s.branch,
@@ -2890,7 +2890,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     setShowExportOptionsModal(false);
 
     if (option === 'present') {
-      const logsToExport = selectedAttendanceHostel ? presentStudentsForSelectedHostel : filteredAttendanceLogs;
+      let logsToExport = filteredAttendanceLogs;
+      
+      // If we're exporting a specific hostel, make sure we filter the ALL logs down to it
+      if (attendanceHostelFilter !== 'all') {
+         logsToExport = attendanceLogs.filter(log => {
+           const studentHostel = getHostelCategory(log.hostelName) || log.hostelName || "";
+           return studentHostel.toLowerCase() === attendanceHostelFilter.toLowerCase();
+         });
+      } else {
+         logsToExport = attendanceLogs;
+      }
+
       const data = logsToExport.map(log => {
         const sid = typeof log.studentId === 'string' ? log.studentId : (log.studentId?._id || log.studentId?.id);
         const st = students.find(s => s.id === sid);
@@ -2899,9 +2910,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         
         return {
           "Student ID": (isStudentIdObj ? log.studentId?.registrationId : null) || st?.registrationId || "N/A",
-          Student: log.name || st?.name || (isStudentIdObj ? log.studentId?.name : null) || "Unknown",
-          Room: log.roomNumber || st?.roomNumber || (isStudentIdObj ? log.studentId?.roomNumber : null) || "N/A",
-          Mobile: (isStudentIdObj ? log.studentId?.phoneNumber : null) || st?.phoneNumber || "N/A",
+          "Name": log.name || st?.name || (isStudentIdObj ? log.studentId?.name : null) || "Unknown",
+          "Room": log.roomNumber || st?.roomNumber || (isStudentIdObj ? log.studentId?.roomNumber : null) || "N/A",
+          "Mobile": (isStudentIdObj ? log.studentId?.phoneNumber : null) || st?.phoneNumber || "N/A",
           Hostel: log.hostelName || st?.hostelName || (isStudentIdObj ? log.studentId?.hostelName : null) || "N/A",
           Time: log.istTime,
           Accuracy: log.location?.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"
@@ -2920,15 +2931,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         });
       }
 
-      const absenteesToExport = selectedAttendanceHostel ? displayedAbsentees : filteredAbsentees;
+      const absenteesToExport = filteredAbsentees;
 
       const data = absenteesToExport.map(s => ({
         "Student ID": s.registrationId || "N/A",
-        Student: s.name,
-        Room: s.roomNumber,
-        Mobile: s.phoneNumber,
-        Hostel: s.hostelName || (s as any).hostel_name || "N/A",
-        Status: "Absent"
+        "Name": s.name || "Unknown",
+        "Mobile": s.phoneNumber || "N/A",
+        "Hostel": s.hostelName || (s as any).hostel_name || "N/A",
+        "Status": "Absent"
       }));
       setExportPreviewData(data);
       setExportType('attendance');
@@ -3178,12 +3188,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         student.semester?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.branch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.section?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.fatherName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.fatherNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.motherName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.motherNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.homeState?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.homePinCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).fatherName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).fatherNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).motherName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).motherNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).homeState?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).homePinCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.roomNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (student as any).erpInformation?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (student as any).localGuardianAddress?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -4300,20 +4310,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       <td className="px-2 md:px-4 py-3">
                                         <div className="flex flex-col min-w-0">
                                           <span className="font-bold text-gray-900 text-[9px] md:text-[13px] uppercase truncate tracking-tight">{log.name || log.studentId?.name || "Unknown"}</span>
-                                          <div className="md:hidden flex items-center gap-1.5 mt-0.5">
-                                            <span
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (log.faceMatchStatus === 'flagged') setReviewingLog(log);
-                                              }}
-                                              className={`text-[8px] font-bold uppercase truncate px-1 rounded-sm ${log.faceMatchStatus === 'flagged' ? 'bg-red-50 text-red-600 animate-pulse cursor-pointer' :
-                                                log.faceMatchStatus === 'manual-override' ? 'bg-amber-50 text-amber-600' : 'text-gray-400'
-                                                }`}
-                                            >
+                                          <div className="md:hidden flex flex-col mt-0.5">
+                                            <span className="text-[8px] font-bold uppercase truncate text-gray-400">
                                               {log.hostelName || log.studentId?.hostelName || "N/A"} - {log.roomNumber || log.studentId?.roomNumber || "N/A"}
-                                              {log.faceMatchPercentage !== undefined && ` • ${log.faceMatchPercentage}% Match ${log.faceMatchStatus === 'flagged' ? '🚩' : ''}`}
-                                              {log.markedBy ? ` • Marked by ${log.markedBy}` : log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? ` • Marked by DEAN` : log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? ` • Marked by WARDEN` : ''}
                                             </span>
+                                            {(log.faceMatchPercentage !== undefined || log.markedBy || log.deviceId) && (
+                                              <span
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  if (log.faceMatchStatus === 'flagged') setReviewingLog(log);
+                                                }}
+                                                className={`text-[8px] font-bold uppercase truncate rounded-sm mt-0.5 w-fit ${log.faceMatchStatus === 'flagged' ? 'bg-red-50 text-red-600 animate-pulse cursor-pointer px-1' :
+                                                  log.faceMatchStatus === 'manual-override' ? 'bg-amber-50 text-amber-600 px-1' : 'text-blue-500'
+                                                  }`}
+                                              >
+                                                {log.faceMatchPercentage !== undefined ? `${log.faceMatchPercentage}% Match ${log.faceMatchStatus === 'flagged' ? '🚩' : ''}` : ''}
+                                                {log.markedBy ? `${log.faceMatchPercentage !== undefined ? ' • ' : ''}Marked by ${log.markedBy}` : log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? `Marked by DEAN` : log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? `Marked by WARDEN` : ''}
+                                              </span>
+                                            )}
                                           </div>
                                         </div>
                                       </td>
@@ -6294,6 +6308,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setShowExportOptionsModal(false)}>
             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-bold text-foreground mb-4">Export Options</h3>
+              
               <div className="space-y-3">
                 <button
                   onClick={() => handleExportOption('present')}
