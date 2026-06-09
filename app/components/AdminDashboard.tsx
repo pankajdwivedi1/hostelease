@@ -1918,8 +1918,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
     return attendanceLogs.filter(log => {
       if (!log.studentId || typeof log.studentId !== 'object') return false;
-      const studentHostel = getHostelCategory(log.studentId.hostelName) || log.studentId.hostelName;
-      return authorizedHostels.some(h => h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase());
+      const rawHostel = log.studentId.hostelName || "";
+      const studentHostel = getHostelCategory(rawHostel) || rawHostel;
+      return authorizedHostels.some(h => h && studentHostel && h.toLowerCase() === studentHostel.toLowerCase());
     });
   }, [attendanceLogs, isWarden, authorizedHostels]);
 
