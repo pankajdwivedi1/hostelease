@@ -1894,15 +1894,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     // Filter by authorized hostels for wardens
     if (isWarden && authorizedHostels.length > 0) {
       list = list.filter(s => {
-        const studentHostel = getHostelCategory(s.hostelName) || s.hostelName;
-        return authorizedHostels.some(h => h === studentHostel || h.toLowerCase() === studentHostel.toLowerCase());
+        const rawName = s.hostelName || (s as any).hostel_name || "";
+        const studentHostel = getHostelCategory(rawName) || rawName;
+        return authorizedHostels.some(h => h && studentHostel && h.toLowerCase() === studentHostel.toLowerCase());
       });
     }
 
     // Further filter by attendance hostel filter if not "all"
     if (currentTab === "attendance" && attendanceHostelFilter !== "all") {
       list = list.filter(s => {
-        const hName = (getHostelCategory(s.hostelName) || s.hostelName || "").trim().toLowerCase();
+        const rawName = s.hostelName || (s as any).hostel_name || "";
+        const hName = (getHostelCategory(rawName) || rawName).trim().toLowerCase();
         return hName === attendanceHostelFilter.trim().toLowerCase();
       });
     }
@@ -1917,8 +1919,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
 
     return attendanceLogs.filter(log => {
-      if (!log.studentId || typeof log.studentId !== 'object') return false;
-      const rawHostel = log.studentId.hostelName || "";
+      const rawHostel = log.hostelName || (typeof log.studentId === 'object' ? log.studentId?.hostelName : null) || "";
       const studentHostel = getHostelCategory(rawHostel) || rawHostel;
       return authorizedHostels.some(h => h && studentHostel && h.toLowerCase() === studentHostel.toLowerCase());
     });
@@ -1934,7 +1935,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const displayedAbsentees = useMemo(() => {
     if (!selectedAttendanceHostel) return absentees;
     return absentees.filter(s => {
-      const studentHostel = (getHostelCategory(s.hostelName) || s.hostelName || "").trim();
+      const rawName = s.hostelName || (s as any).hostel_name || "";
+      const studentHostel = (getHostelCategory(rawName) || rawName).trim();
       return studentHostel.toLowerCase() === selectedAttendanceHostel.trim().toLowerCase();
     });
   }, [absentees, selectedAttendanceHostel]);
@@ -1943,7 +1945,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const presentStudentsForSelectedHostel = useMemo(() => {
     if (!selectedAttendanceHostel) return [];
     return filteredAttendanceLogs.filter(log => {
-      const studentHostel = (getHostelCategory(log.hostelName) || log.hostelName || "").trim();
+      const rawHostel = log.hostelName || (typeof log.studentId === 'object' ? log.studentId?.hostelName : null) || "";
+      const studentHostel = (getHostelCategory(rawHostel) || rawHostel).trim();
       return studentHostel.toLowerCase() === selectedAttendanceHostel.trim().toLowerCase();
     });
   }, [filteredAttendanceLogs, selectedAttendanceHostel]);
@@ -2056,7 +2059,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           const parsed = JSON.parse(cached);
           const age = Date.now() - parseInt(timestamp);
           const needsUpgrade = parsed.length > 0 && parsed[0].floorNumber === undefined;
-          if (!needsUpgrade && age < CACHE_DURATION) {
+          // ⚡ FIX: Temporarily force a cache refresh by bypassing age check (or setting a very low duration)
+          // to ensure local students array has correct hostelName matching the DB.
+          const FORCE_REFRESH_DURATION = 5 * 60 * 1000; // 5 mins
+          if (!needsUpgrade && age < FORCE_REFRESH_DURATION && parsed.length > 0) {
             setStudents(parsed);
             setStudentsLoading(false);
             return;
@@ -2884,15 +2890,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     setShowExportOptionsModal(false);
 
     if (option === 'present') {
-      const data = filteredAttendanceLogs.map(log => ({
-        "Student ID": log.studentId?.registrationId || "N/A",
-        Student: log.studentId?.name || "Unknown",
-        Room: log.studentId?.roomNumber || "N/A",
-        Email: log.studentId?.email || "N/A",
-        Hostel: log.studentId?.hostelName || "N/A",
-        Time: log.istTime,
-        Accuracy: log.location?.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"
-      }));
+      const logsToExport = selectedAttendanceHostel ? presentStudentsForSelectedHostel : filteredAttendanceLogs;
+      const data = logsToExport.map(log => {
+        const sid = typeof log.studentId === 'string' ? log.studentId : (log.studentId?._id || log.studentId?.id);
+        const st = students.find(s => s.id === sid);
+        
+        const isStudentIdObj = typeof log.studentId === 'object' && log.studentId !== null;
+        
+        return {
+          "Student ID": (isStudentIdObj ? log.studentId?.registrationId : null) || st?.registrationId || "N/A",
+          Student: log.name || st?.name || (isStudentIdObj ? log.studentId?.name : null) || "Unknown",
+          Room: log.roomNumber || st?.roomNumber || (isStudentIdObj ? log.studentId?.roomNumber : null) || "N/A",
+          Mobile: (isStudentIdObj ? log.studentId?.phoneNumber : null) || st?.phoneNumber || "N/A",
+          Hostel: log.hostelName || st?.hostelName || (isStudentIdObj ? log.studentId?.hostelName : null) || "N/A",
+          Time: log.istTime,
+          Accuracy: log.location?.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"
+        };
+      });
       setExportPreviewData(data);
       setExportType('attendance');
       setShowExportPreview(true);
@@ -2900,18 +2914,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       let filteredAbsentees = absentees;
       if (attendanceHostelFilter !== 'all') {
         filteredAbsentees = absentees.filter(s => {
-          const hName = (getHostelCategory(s.hostelName) || s.hostelName || "").trim().toLowerCase();
+          const rawName = s.hostelName || (s as any).hostel_name || "";
+          const hName = (getHostelCategory(rawName) || rawName).trim().toLowerCase();
           return hName === attendanceHostelFilter.trim().toLowerCase();
         });
       }
 
-      const data = filteredAbsentees.map(s => ({
+      const absenteesToExport = selectedAttendanceHostel ? displayedAbsentees : filteredAbsentees;
+
+      const data = absenteesToExport.map(s => ({
         "Student ID": s.registrationId || "N/A",
         Student: s.name,
         Room: s.roomNumber,
-        Email: s.email,
-        Hostel: s.hostelName,
-        Phone: s.phoneNumber,
+        Mobile: s.phoneNumber,
+        Hostel: s.hostelName || (s as any).hostel_name || "N/A",
         Status: "Absent"
       }));
       setExportPreviewData(data);
@@ -3169,9 +3185,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         student.homeState?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.homePinCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.roomNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.erpInformation?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.localGuardianAddress?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.localGuardianPhoneNumber?.toLowerCase().includes(searchQuery.toLowerCase());
+        (student as any).erpInformation?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).localGuardianAddress?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (student as any).localGuardianPhoneNumber?.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesCollege = collegeFilter === "all" || student.collegeName === collegeFilter;
       const matchesSemester = semesterFilter === "all" || student.semester?.toUpperCase() === semesterFilter.toUpperCase();
@@ -4053,15 +4069,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 const normalized = val === 'all' ? 'all' : (getHostelCategory(val) || val);
                                 setAttendanceHostelFilter(normalized);
                               }}
-                              disabled={isWarden}
-                              className={`w-full appearance-none bg-blue-50 border-0 text-blue-900 px-4 py-2.5 rounded-xl font-bold text-sm focus:ring-0 focus:outline-none ${isWarden ? 'opacity-70 cursor-not-allowed' : ''}`}
+                              disabled={isWarden && authorizedHostels.length <= 1}
+                              className={`w-full bg-blue-50 border-0 text-blue-900 px-4 py-2.5 rounded-xl font-bold text-sm focus:ring-0 focus:outline-none ${isWarden && authorizedHostels.length <= 1 ? 'opacity-70 cursor-not-allowed' : ''}`}
                             >
                               <option value="all">All Hostels</option>
-                              {hostels.map((h) => {
+                              {Object.keys(hostelStats).map((hostelName) => {
                                 // Normalize the display name and value
-                                const normalizedName = getHostelCategory(h.name) || h.name;
+                                const normalizedName = getHostelCategory(hostelName) || hostelName;
                                 return (
-                                  <option key={h._id || h.name} value={normalizedName}>{normalizedName}</option>
+                                  <option key={hostelName} value={normalizedName}>{normalizedName}</option>
                                 );
                               })}
                             </select>
@@ -4143,11 +4159,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             })()}%
                           </p>
                         </div>
-
-                      </div>
-
-                      <div className="bg-blue-50/50 p-2 rounded-lg text-center mb-2 border border-blue-100">
-                        <p className="text-[10px] text-blue-600 font-bold">💡 Tip: If you see old hostel names, logout once to refresh your system cache.</p>
                       </div>
 
                       {/* Hostel Breakdown */}
@@ -4299,7 +4310,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                 log.faceMatchStatus === 'manual-override' ? 'bg-amber-50 text-amber-600' : 'text-gray-400'
                                                 }`}
                                             >
-                                              {log.hostelName} - {log.roomNumber || log.studentId?.roomNumber || "N/A"}
+                                              {log.hostelName || log.studentId?.hostelName || "N/A"} - {log.roomNumber || log.studentId?.roomNumber || "N/A"}
                                               {log.faceMatchPercentage !== undefined && ` • ${log.faceMatchPercentage}% Match ${log.faceMatchStatus === 'flagged' ? '🚩' : ''}`}
                                               {log.markedBy ? ` • Marked by ${log.markedBy}` : log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? ` • Marked by DEAN` : log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? ` • Marked by WARDEN` : ''}
                                             </span>
@@ -4307,7 +4318,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         </div>
                                       </td>
                                       <td className="px-2 md:px-4 py-3 text-secondary text-[9px] md:text-xs truncate hidden md:table-cell">
-                                        {log.hostelName} - {log.roomNumber || log.studentId?.roomNumber || "N/A"}
+                                        {log.hostelName || log.studentId?.hostelName || "N/A"} - {log.roomNumber || log.studentId?.roomNumber || "N/A"}
                                       </td>
                                       <td className="px-1 md:px-4 py-2 md:py-3 text-center">
                                         <span className="inline-block px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-md font-black text-[9px] md:text-xs whitespace-nowrap">{log.istTime}</span>
@@ -4344,7 +4355,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       <td className="px-2 md:px-4 py-3 text-right">
                                         <div className="flex flex-col items-end gap-0.5">
                                           {(() => {
-                                            const hostel = hostelLocations.find(l => l.name.toLowerCase() === (getHostelCategory(log.hostelName || "") || log.hostelName || "").toLowerCase());
+                                            const rawName = log.hostelName || log.studentId?.hostelName || "";
+                                            const hostel = hostelLocations.find(l => l.name.toLowerCase() === (getHostelCategory(rawName) || rawName).toLowerCase());
                                             if (hostel && log.location?.lat) {
                                               const dist = calculateDistance(log.location.lat, log.location.lng, hostel.lat, hostel.lng);
                                               return (

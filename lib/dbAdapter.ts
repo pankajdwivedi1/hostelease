@@ -1567,7 +1567,7 @@ export const db = {
                 const tenantId = await getTenantIdOrThrow();
                 // ⚡ OPTIMIZATION: Use lightweight fields for joined students to save bandwidth/egress
                 // We only need name and room_number as fallbacks for older attendance records
-                const lightStudentFields = '_id,name,room_number';
+                const lightStudentFields = '_id,name,room_number,phone_number,registration_id,hostel_name';
 
                 // ⚡ OPTIMIZATION: Exclude large flagged_photo_url from logs list
                 // We must include room_number, status, device_id, etc. so the UI renders correctly
