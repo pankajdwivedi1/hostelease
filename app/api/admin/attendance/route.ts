@@ -41,7 +41,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { studentIds, markedBy } = body;
+        const { studentIds, markedBy, action, date } = body;
 
         if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
             return NextResponse.json({ error: "Student IDs are required" }, { status: 400 });
@@ -51,6 +51,16 @@ export async function POST(request: Request) {
         const istDate = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric" }).split('/').join('-');
         const istTime = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
         const today = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
+
+        if (action === 'unmarkBulk') {
+            const result = await db.attendance.unmarkBulk(studentIds, date || today);
+            return NextResponse.json({ success: true, count: result.count });
+        }
+
+        if (action === 'markBulkDirect' && body.attendanceRecords) {
+            const result = await db.attendance.markBulk(body.attendanceRecords);
+            return NextResponse.json({ success: true, count: result.count });
+        }
 
         const cookieStore = await cookies();
         const userType = cookieStore.get('userType')?.value || 'admin';
@@ -95,15 +105,7 @@ export async function POST(request: Request) {
 
         if (attendanceRecords.length > 0) {
             // ⚡ BULK INSERT: Send all records to DB in one single trip
-            const source = await db.getDbSource();
-            if (source === 'SUPABASE') {
-                const { error } = await db.supabase.from('attendance').insert(attendanceRecords.map(db.mapAttendanceToSnakeCase));
-                if (error) throw error;
-            } else {
-                for (const rec of attendanceRecords) {
-                    await db.attendance.mark(rec);
-                }
-            }
+            await db.attendance.markBulk(attendanceRecords);
         }
 
         return NextResponse.json({ success: true, count: attendanceRecords.length });

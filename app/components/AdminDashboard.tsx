@@ -688,10 +688,38 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     setIsBulkMarking(true);
     try {
       const storedUserName = typeof window !== 'undefined' ? (localStorage.getItem("userName") || localStorage.getItem("wardenUsername") || localStorage.getItem("userType") || "Admin") : "Admin";
+      
+      const now = new Date();
+      const istDate = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric" }).split('/').join('-');
+      const istTime = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
+      const today = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
+
+      const attendanceRecords = studentIds.map(sId => {
+        const student = students.find(s => s.id === sId);
+        return {
+            studentId: sId,
+            firebaseUID: student?.firebaseUID || "",
+            name: student?.name || "",
+            hostelName: student?.hostelName || "",
+            roomNumber: student?.roomNumber || "",
+            date: today,
+            istTime: istTime,
+            istDate: istDate,
+            location: { lat: 0, lng: 0, accuracy: 0 },
+            status: "present",
+            faceMatchStatus: "manual-override",
+            needsReview: false,
+            isTest: false,
+            timestamp: now.toISOString(),
+            deviceId: `marked-by-${storedUserName}`,
+            markedBy: storedUserName || `Admin`
+        };
+      });
+
       const res = await fetch("/api/admin/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentIds, markedBy: storedUserName }),
+        body: JSON.stringify({ studentIds, action: "markBulkDirect", attendanceRecords }),
       });
 
       const data = await res.json();
@@ -718,23 +746,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     if (!confirm(`Are you sure you want to unmark ${studentIds.length} students? They will be marked as absent.`)) return;
 
     setIsBulkMarking(true);
-    let successCount = 0;
     try {
-      for (const sId of studentIds) {
-        const log = attendanceLogs.find(l => l.studentId?._id === sId || (l.studentId as any) === sId);
-        if (log) {
-          const res = await fetch(`/api/admin/attendance?id=${log._id}`, { method: "DELETE" });
-          const data = await res.json();
-          if (data.success) {
-            successCount++;
-            setAttendanceLogs(prev => prev.filter(l => l._id !== log._id));
-            setPresentStudentIds(prev => prev.filter(id => id !== sId));
-          }
-        }
+      const res = await fetch("/api/admin/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentIds, action: "unmarkBulk", date: selectedDate }),
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        setAttendanceLogs(prev => prev.filter(l => !studentIds.includes(l.studentId?._id || (l.studentId as any))));
+        setPresentStudentIds(prev => prev.filter(id => !studentIds.includes(id)));
+        fetchAttendanceSummary();
+        setSelectedStudentIds([]);
+        alert(`Successfully unmarked ${data.count || studentIds.length} students.`);
+      } else {
+        alert(data.error || "Failed to unmark attendance");
       }
-      fetchAttendanceSummary();
-      setSelectedStudentIds([]);
-      if (successCount > 0) alert(`Successfully unmarked ${successCount} students.`);
     } catch (error) {
       console.error("Bulk unmark error:", error);
       alert("An error occurred while unmarking attendance.");
@@ -2131,9 +2159,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const fetchPermissions = async (statusArg?: string, forceRefresh = false, fetchAll = false) => {
+  const fetchPermissions = async (statusArg?: string, forceRefresh = false, fetchAll = false, targetHostel?: string) => {
     try {
       const status = statusArg || filter;
+      const activeHostelFilter = targetHostel !== undefined ? targetHostel : hostelFilter;
       setIsShowingAllPermissions(fetchAll);
       
       const limitQuery = fetchAll ? '' : '&limit=5';
@@ -2146,6 +2175,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           if (authorizedHostels && authorizedHostels.length > 0) {
               url.searchParams.set("authorizedHostels", JSON.stringify(authorizedHostels));
           }
+      } else if (activeHostelFilter !== "all") {
+          // If Dean selects a specific hostel, fetch permissions for that hostel
+          url.searchParams.set("hostelName", activeHostelFilter);
       }
 
       const response = await fetch(url.toString(), { cache: "no-store" });
@@ -3779,7 +3811,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <div className="flex items-center gap-2 flex-1 max-w-sm md:max-w-md w-full">
                       <select
                         value={hostelFilter}
-                        onChange={(e) => setHostelFilter(e.target.value)}
+                        onChange={(e) => {
+                          setHostelFilter(e.target.value);
+                          fetchPermissions(filter, false, isShowingAllPermissions, e.target.value);
+                        }}
                         disabled={isWarden}
                         className={`h-9 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground min-w-[100px] md:min-w-[120px] ${isWarden ? 'opacity-70 cursor-not-allowed' : ''}`}
                       >
@@ -4010,7 +4045,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               {/* Right Side: Reason Message */}
                               <div className="flex-1 min-w-0 flex flex-col justify-center">
                                 <div className="bg-white/40 p-2 md:p-3 rounded-lg border border-gray-100 h-full">
-                                  <p className="text-[10px] md:text-xs text-foreground/90 font-medium leading-relaxed italic">
+                                  <p className="text-[10px] md:text-xs text-foreground/90 font-medium leading-relaxed italic text-justify">
                                     "{permission.reason}"
                                   </p>
                                 </div>
@@ -5309,8 +5344,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     className="w-full pl-10 pr-4 py-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground placeholder:text-secondary focus:outline-none focus:border-foreground"
                   />
                 </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
                   <div>
                     <label className="block text-xs font-medium text-secondary mb-1.5">College Name</label>
                     <select

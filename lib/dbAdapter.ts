@@ -1516,6 +1516,102 @@ export const db = {
             }
         },
 
+        markBulk: async (attendanceRecords: any[]) => {
+            if (!attendanceRecords || attendanceRecords.length === 0) return { count: 0 };
+            const source = await getDbSource();
+            const sids = attendanceRecords.map(r => r.studentId);
+            
+            try {
+                if (source === 'SUPABASE') {
+                    const tenantId = await getTenantIdOrThrow();
+                    // 1. Update Student Table
+                    await supabase.from('students').update({ student_status: 'in' }).in('_id', sids).eq('tenant_id', tenantId);
+                    // 2. Close stale gate passes
+                    await supabase.from('gate_passes').update({ status: 'in', check_in_ist_time: attendanceRecords[0].istTime, qr_token_used_in: 'ATTENDANCE_OVERRIDE' }).in('student_id', sids).eq('status', 'out').eq('tenant_id', tenantId);
+                } else {
+                    await connectDB();
+                    const [StudentModel, GatePassModel] = await Promise.all([
+                        import('@/models/Student').then(m => m.default),
+                        import('@/models/GatePass').then(m => m.default)
+                    ]);
+                    await StudentModel.updateMany({ _id: { $in: sids } }, { studentStatus: 'in' });
+                    await GatePassModel.updateMany({ studentId: { $in: sids }, status: 'out' }, { status: 'in' });
+                }
+            } catch (err) {
+                console.warn("⚠️ Post-attendance bulk sync update failed:", err);
+            }
+
+            if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
+                const supabaseData = attendanceRecords.map(a => ({
+                    _id: crypto.randomUUID(), // Explicitly generate for Supabase
+                    student_id: a.studentId,
+                    firebase_uid: a.firebaseUID,
+                    name: a.name,
+                    hostel_name: a.hostelName,
+                    room_number: a.roomNumber,
+                    date: a.date,
+                    ist_time: a.istTime,
+                    ist_date: a.istDate,
+                    location: a.location,
+                    device_id: a.deviceId,
+                    status: a.status,
+                    face_match_percentage: a.faceMatchPercentage,
+                    face_match_status: a.faceMatchStatus,
+                    flagged_photo_url: a.flaggedPhotoUrl,
+                    needs_review: a.needsReview,
+                    is_test: a.isTest,
+                    marked_by: a.markedBy,
+                    tenant_id: tenantId,
+                    timestamp: a.timestamp ? new Date(a.timestamp).toISOString() : new Date().toISOString()
+                }));
+
+                const { error } = await supabase
+                    .from('attendance')
+                    .insert(supabaseData);
+                if (error) {
+                    console.error("Supabase Bulk Insert Error:", error);
+                    throw error;
+                }
+                return { count: supabaseData.length };
+            } else {
+                await connectDB();
+                const AttendanceModel = (await import('@/models/Attendance')).default;
+                const result = await AttendanceModel.insertMany(attendanceRecords);
+                return { count: result.length };
+            }
+        },
+
+        unmarkBulk: async (studentIds: string[], date: string) => {
+            if (!studentIds || studentIds.length === 0) return { count: 0 };
+            const source = await getDbSource();
+            
+            if (source === 'SUPABASE') {
+                const tenantId = await getTenantIdOrThrow();
+                const { error, data } = await supabase
+                    .from('attendance')
+                    .delete()
+                    .in('student_id', studentIds)
+                    .eq('date', date)
+                    .eq('tenant_id', tenantId)
+                    .select('_id');
+                
+                if (error) {
+                    console.error("Supabase Bulk Unmark Error:", error);
+                    throw error;
+                }
+                return { count: data?.length || 0 };
+            } else {
+                await connectDB();
+                const AttendanceModel = (await import('@/models/Attendance')).default;
+                const result = await AttendanceModel.deleteMany({
+                    studentId: { $in: studentIds },
+                    date: date
+                });
+                return { count: result.deletedCount };
+            }
+        },
+
         // Check if student has already marked attendance today
         checkToday: async (studentId: string, date: string) => {
             const source = await getDbSource();
@@ -1561,7 +1657,7 @@ export const db = {
         // Get list of attendance records (Admin Dashboard)
         list: async (filters: any = {}, options: { limit?: number } = {}) => {
             const source = await getDbSource();
-            const limit = options.limit || 500;
+            const limit = options.limit || 2000;
 
             if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
