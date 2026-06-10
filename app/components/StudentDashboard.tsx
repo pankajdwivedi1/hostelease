@@ -79,6 +79,9 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
     const [showRequestForm, setShowRequestForm] = useState(false);
     const [showProfile, setShowProfile] = useState(false);
     const [showPermissionsHistory, setShowPermissionsHistory] = useState(false);
+    const [showAttendanceHistory, setShowAttendanceHistory] = useState(false);
+    const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
+    const [isLoadingAttendanceHistory, setIsLoadingAttendanceHistory] = useState(false);
     const [showFeeDetailsModal, setShowFeeDetailsModal] = useState(false);
     const [showDeviceRegistration, setShowDeviceRegistration] = useState(false);
     const [fromDateTime, setFromDateTime] = useState("");
@@ -132,6 +135,44 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
     const [isAttendanceMarked, setIsAttendanceMarked] = useState(false);
     const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
     const [attendanceWindow, setAttendanceWindow] = useState({ start: "21:00", end: "23:00" });
+
+    const fetchAttendanceHistory = async () => {
+        if (!studentProfile) return;
+        setIsLoadingAttendanceHistory(true);
+        try {
+            const res = await fetch(`/api/students/attendance/history?studentId=${studentProfile._id}${getTenantParam(false)}`);
+            if (res.ok) {
+                const data = await res.json();
+                setAttendanceHistory(data.history || []);
+            }
+        } catch (error) {
+            console.error("Failed to fetch attendance history", error);
+        } finally {
+            setIsLoadingAttendanceHistory(false);
+        }
+    };
+
+    useEffect(() => {
+        if (showPermissionsHistory && attendanceHistory.length === 0) {
+            fetchAttendanceHistory();
+        }
+    }, [showPermissionsHistory, studentProfile]);
+
+    const getAttendanceDisplay = () => {
+        if (isAttendanceMarked) {
+            return { text: "✅ Present", textColor: "text-green-600", iconBg: "bg-green-100 text-green-600", iconPath: "M5 13l4 4L19 7" };
+        }
+        const now = new Date();
+        const istTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false });
+        const istTime = istTimeStr.substring(0, 5);
+        const isPastWindow = (istTime > attendanceWindow.end) || (now.getHours() >= 0 && now.getHours() < 6);
+        
+        if (isPastWindow) {
+            return { text: "❌ Absent", textColor: "text-red-600", iconBg: "bg-red-50 text-red-600 border border-red-100", iconPath: "M6 18L18 6M6 6l12 12" };
+        }
+        return { text: `🕒 Pending ${attendanceWindow.start} - ${attendanceWindow.end}`, textColor: "text-gray-700", iconBg: "bg-yellow-50 text-yellow-600 border border-yellow-100", iconPath: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" };
+    };
+    const attendanceDisplay = getAttendanceDisplay();
     const [attendanceError, setAttendanceError] = useState<string | null>(null);
     const [notifications, setNotifications] = useState<DBNotification[]>([]);
     const [currentNotification, setCurrentNotification] = useState<DBNotification | null>(null);
@@ -2015,7 +2056,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
 
         if (istTime < attendanceWindow.start || istTime > attendanceWindow.end) {
             console.log(`🕒 Attendance refused: Outside window (${istTime} vs ${attendanceWindow.start}-${attendanceWindow.end})`);
-            showToast(`Daily attendance will be allowed between ${attendanceWindow.start} to ${attendanceWindow.end}`, "info");
+            showToast("Attendance will be marked only during the mentioned time.", "success");
             return;
         }
         console.log(`🕒 Attendance window check passed: ${istTime}`);
@@ -2292,40 +2333,33 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                 <div className="bg-white p-2 md:p-2.5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between gap-1">
                                     <div className="flex-1">
                                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Daily Attendance</p>
-                                        <p className="text-[12px] font-bold text-gray-700">
+                                        <p className={`text-[12px] font-bold ${isParentView ? attendanceDisplay.textColor : 'text-gray-700'}`}>
                                             {isParentView ? (
-                                                isAttendanceMarked ? '✅ Saved' : '🕒 Pending'
+                                                attendanceDisplay.text
                                             ) : (
                                                 isAttendanceMarked ? '✅ Saved' : `🕒 ${attendanceWindow.start} - ${attendanceWindow.end}`
                                             )}
                                         </p>
                                     </div>
                                     {isParentView ? (
-                                        isAttendanceMarked ? (
-                                            <div className="p-2 bg-green-100 text-green-600 rounded-lg">
+                                        <div className={`p-2 rounded-lg ${attendanceDisplay.iconBg}`} title={attendanceDisplay.text}>
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={attendanceDisplay.iconPath} />
+                                            </svg>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            onClick={() => handleMarkAttendance(0)}
+                                            disabled={isAttendanceMarked}
+                                            className={`p-2 rounded-lg transition-colors ${
+                                                isAttendanceMarked 
+                                                ? 'bg-green-100 text-green-600' 
+                                                : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:bg-indigo-200'
+                                            }`}
+                                        >
+                                            {isAttendanceMarked ? (
                                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                </svg>
-                                            </div>
-                                        ) : (
-                                            <div className="p-2 bg-yellow-50 text-yellow-600 rounded-lg border border-yellow-100" title="Pending Student Verification">
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                            </div>
-                                        )
-                                    ) : !isAttendanceMarked ? (
-                                        <button
-                                            onClick={() => handleMarkAttendance()}
-                                            disabled={isMarkingAttendance}
-                                            className={`p-2 rounded-lg transition-all ${isMarkingAttendance ? 'bg-gray-100 text-gray-400' : studentProfile.studentStatus === 'out' ? 'bg-red-50 text-red-500 border border-red-100' : isAtHostel ? 'bg-orange-100 text-orange-600 hover:bg-orange-200 shadow-sm shadow-orange-100' : 'bg-orange-50/50 text-orange-400 hover:bg-orange-100'}`}
-                                            title={studentProfile.studentStatus === 'out' ? "Entry Scan Required" : `Mark Attendance (${attendanceWindow.start} - ${attendanceWindow.end})`}
-                                        >
-                                            {isMarkingAttendance ? (
-                                                <div className="w-5 h-5 border-2 border-orange-600/30 border-t-orange-600 rounded-full animate-spin" />
-                                            ) : studentProfile.studentStatus === 'out' ? (
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                                 </svg>
                                             ) : (
                                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2333,12 +2367,6 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                 </svg>
                                             )}
                                         </button>
-                                    ) : (
-                                        <div className="p-2 bg-green-100 text-green-600 rounded-lg">
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        </div>
                                     )}
                                 </div>
 
@@ -2504,12 +2532,12 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                     onClick={() => setShowPermissionsHistory(true)}
                                     className="w-full h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5"
                                 >
-                                    <span>🕙</span> <span className="truncate">View Outing History</span>
+                                    <span>🚪</span> <span className="truncate">Outing & Attendance</span>
                                 </button>
                                 {bankSettings?.isPaymentEnabled && (
                                     <button
                                         onClick={() => setShowFeeDetailsModal(true)}
-                                        className="w-full h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5 text-center leading-tight"
+                                        className="w-full h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5 text-center leading-tight col-span-2 md:col-span-1"
                                     >
                                         <span>💳</span> <span className="truncate">View Fee Details</span>
                                     </button>
@@ -2524,33 +2552,33 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                         </h3>
                                     </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 gap-2 md:gap-4">
                                         <div>
-                                            <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
+                                            <label className="block text-[9px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
                                                 From Date & Time
                                             </label>
                                             <input
                                                 type="datetime-local"
                                                 value={fromDateTime}
                                                 onChange={(e) => setFromDateTime(e.target.value)}
-                                                className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-white text-gray-800 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none"
+                                                className="w-full h-12 px-2 md:px-4 rounded-xl border border-gray-200 bg-white text-[10px] md:text-sm text-gray-800 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none tracking-tighter sm:tracking-normal"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
+                                            <label className="block text-[9px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
                                                 To Date & Time
                                             </label>
                                             <input
                                                 type="datetime-local"
                                                 value={toDateTime}
                                                 onChange={(e) => setToDateTime(e.target.value)}
-                                                className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-white text-gray-800 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none"
+                                                className="w-full h-12 px-2 md:px-4 rounded-xl border border-gray-200 bg-white text-[10px] md:text-sm text-gray-800 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none tracking-tighter sm:tracking-normal"
                                             />
                                         </div>
                                     </div>
 
                                     <div>
-                                        <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
+                                        <label className="block text-[9px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
                                             Reason for {requestType === 'leave' ? 'Home Leave' : 'Short Outing'}
                                         </label>
                                         <textarea
@@ -2564,16 +2592,16 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                             }}
                                             placeholder={requestType === 'leave' ? "Mention if going to home, village, etc." : "Local market, hospital, etc."}
                                             rows={3}
-                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-800 font-bold placeholder:text-gray-300 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none resize-none"
+                                            className="w-full px-2 md:px-4 py-3 rounded-xl border border-gray-200 bg-white text-[10px] md:text-sm text-gray-800 font-bold placeholder:text-gray-300 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none resize-none tracking-tighter sm:tracking-normal"
                                         />
                                         <p className="text-right text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tighter">{(reason.trim() === '' ? 0 : reason.trim().split(/\s+/).length)}/100 WORDS</p>
                                     </div>
 
-                                    <div className="flex gap-3 pt-2">
+                                    <div className="flex gap-2 md:gap-3 pt-2">
                                         <button
                                             onClick={handleRequestPermission}
                                             disabled={submitting}
-                                            className="flex-1 h-14 rounded-2xl bg-blue-600 text-white font-black text-sm uppercase tracking-widest shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50"
+                                            className="flex-1 h-12 rounded-xl bg-blue-600 text-white font-black text-[10px] md:text-sm uppercase tracking-widest shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50"
                                         >
                                             {submitting ? "Processing..." : `Request ${requestType === 'leave' ? 'Leave' : 'Outing'}`}
                                         </button>
@@ -2584,7 +2612,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                 setToDateTime("");
                                                 setReason("");
                                             }}
-                                            className="px-6 h-14 rounded-2xl border border-gray-200 bg-white text-gray-500 font-black text-sm uppercase tracking-widest hover:bg-gray-50 active:scale-[0.98] transition-all"
+                                            className="px-5 md:px-6 h-12 rounded-xl border border-gray-200 bg-white text-gray-500 font-black text-[10px] md:text-sm uppercase tracking-widest hover:bg-gray-50 active:scale-[0.98] transition-all"
                                         >
                                             ✕
                                         </button>
@@ -2922,7 +2950,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
                                     <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden shadow-2xl flex flex-col">
                                         <div className="p-4 border-b flex items-center justify-between bg-gray-50">
-                                            <h2 className="text-lg font-bold text-gray-900">Outing & Permission History</h2>
+                                            <h2 className="text-lg font-bold text-gray-900">Outing & Permission History & Hostel Attendance</h2>
                                             <button
                                                 onClick={() => setShowPermissionsHistory(false)}
                                                 className="p-2 hover:bg-gray-200 rounded-full transition-colors"
@@ -3055,15 +3083,25 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                         colorClasses = "bg-emerald-500 text-white font-black hover:bg-emerald-600 shadow-md shadow-emerald-500/20";
                                                                     }
 
+                                                                    const dateStr = cell.date.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
+                                                                    const attendanceRecord = attendanceHistory.find((r: any) => r.date === dateStr);
+                                                                    const isBeforeLaunch = cell.date < new Date('2026-06-10');
+                                                                    const attendanceStatus = attendanceRecord ? 'Present' : (isBeforeLaunch || isFuture ? 'No Record' : 'Absent');
+
                                                                     return (
                                                                         <button
                                                                             key={idx}
                                                                             onClick={() => setSelectedCalendarDay(cell.date)}
                                                                             className={`aspect-square flex flex-col items-center justify-center rounded-xl text-xs transition-all relative ${colorClasses} ${isSelected ? 'ring-4 ring-blue-600 ring-offset-2 scale-105 z-10' : 'hover:scale-[1.03] active:scale-[0.97]'}`}
                                                                         >
-                                                                            <span className="leading-none">{cell.date.getDate()}</span>
+                                                                            <span className="leading-none mt-1">{cell.date.getDate()}</span>
+                                                                            {/* Attendance Indicator Dot */}
+                                                                            <div className="absolute bottom-1.5 flex justify-center w-full">
+                                                                                {attendanceStatus === 'Present' && <span className="w-1.5 h-1.5 rounded-full bg-green-300 ring-1 ring-green-600/30" title="Present" />}
+                                                                                {attendanceStatus === 'Absent' && <span className="w-1.5 h-1.5 rounded-full bg-red-300 ring-1 ring-red-600/30" title="Absent" />}
+                                                                            </div>
                                                                             {isToday && (
-                                                                                <span className={`w-1 h-1 rounded-full absolute bottom-1.5 ${status ? 'bg-white' : 'bg-blue-600'}`} />
+                                                                                <span className={`w-1 h-1 rounded-full absolute top-1.5 right-1.5 ${status ? 'bg-white' : 'bg-blue-600'}`} />
                                                                             )}
                                                                         </button>
                                                                     );
@@ -3074,37 +3112,56 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                             {selectedCalendarDay && (
                                                                 <div className="px-6 pb-6 pt-4 border-t border-gray-100 bg-gray-50/50">
                                                                     <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                                                                        <span>📋</span> Outing Details • {selectedCalendarDay.toLocaleDateString("en-IN", { dateStyle: "long" })}
+                                                                        <span>📋</span> Details • {selectedCalendarDay.toLocaleDateString("en-IN", { dateStyle: "long" })}
                                                                     </h4>
                                                                     {(() => {
                                                                         const today = new Date();
                                                                         today.setHours(23, 59, 59, 999);
                                                                         const isFuture = selectedCalendarDay.getTime() > today.getTime();
+                                                                        
+                                                                        const dateStr = selectedCalendarDay.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
+                                                                        const attendanceRecord = attendanceHistory.find((r: any) => r.date === dateStr);
+                                                                        const isBeforeLaunch = selectedCalendarDay < new Date('2026-06-10');
+                                                                        const attendanceStatus = attendanceRecord ? 'Present' : (isBeforeLaunch || isFuture ? 'No Record' : 'Absent');
 
                                                                         if (isFuture) {
                                                                             return (
                                                                                 <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 text-center">
                                                                                     <p className="text-gray-500 text-xs font-bold flex items-center justify-center gap-1.5">
-                                                                                        <span>⏳</span> Outing logs not available for future dates.
+                                                                                        <span>⏳</span> Logs not available for future dates.
                                                                                     </p>
                                                                                 </div>
                                                                             );
                                                                         }
 
                                                                         const dayPasses = getOverlappingGatePasses(selectedCalendarDay);
-                                                                        if (dayPasses.length === 0) {
-                                                                            return (
-                                                                                <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 text-center">
-                                                                                    <p className="text-emerald-700 text-xs font-bold flex items-center justify-center gap-1.5">
-                                                                                        <span>✅</span> Stayed inside campus for the whole day.
-                                                                                    </p>
-                                                                                </div>
-                                                                            );
-                                                                        }
                                                                         return (
                                                                             <div className="space-y-3">
-                                                                                {dayPasses.map((pass: any) => (
-                                                                                    <div key={pass._id} className="bg-white rounded-xl border border-gray-200/60 p-4 shadow-sm space-y-3">
+                                                                                {/* Attendance Details */}
+                                                                                <div className="bg-white rounded-xl border border-gray-200/60 p-3 shadow-sm flex items-center justify-between">
+                                                                                    <span className="text-[10px] md:text-xs font-black uppercase tracking-widest text-gray-500 flex items-center gap-1.5">
+                                                                                        <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+                                                                                        Night Attendance
+                                                                                    </span>
+                                                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                                                                                        attendanceStatus === 'Present' ? 'bg-green-50 text-green-700 border-green-200' :
+                                                                                        attendanceStatus === 'Absent' ? 'bg-red-50 text-red-700 border-red-200' :
+                                                                                        'bg-gray-100 text-gray-500 border-gray-200'
+                                                                                    }`}>
+                                                                                        {attendanceStatus === 'Present' ? `✅ Present (${attendanceRecord?.time})` : attendanceStatus === 'Absent' ? '❌ Absent' : '➖ No Record'}
+                                                                                    </span>
+                                                                                </div>
+
+                                                                                {dayPasses.length === 0 ? (
+                                                                                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 text-center">
+                                                                                        <p className="text-emerald-700 text-xs font-bold flex items-center justify-center gap-1.5">
+                                                                                            <span>✅</span> Stayed inside campus for the whole day.
+                                                                                        </p>
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <>
+                                                                                        {dayPasses.map((pass: any) => (
+                                                                                            <div key={pass._id} className="bg-white rounded-xl border border-gray-200/60 p-4 shadow-sm space-y-3">
                                                                                         <div className="flex justify-between items-center">
                                                                                             <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${pass.type === 'leave' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
                                                                                                 {pass.type === 'leave' ? '🏠 Home Leave' : '🚶 Short Outing'}
@@ -3145,7 +3202,9 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                                         )}
                                                                                     </div>
                                                                                 ))}
-                                                                            </div>
+                                                                                </>
+                                                                            )}
+                                                                        </div>
                                                                         );
                                                                     })()}
                                                                 </div>
@@ -3176,7 +3235,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                     <div className="w-full md:w-[45%] lg:w-[40%] shrink-0 flex flex-row md:flex-col gap-2">
                                                                         <div className="flex flex-col gap-2 w-1/2 md:w-full">
                                                                             <p className="text-[10px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest leading-none">Schedule Details</p>
-                                                                            <div className="flex flex-col gap-1.5 bg-gray-50/80 p-2.5 rounded-lg border border-gray-100">
+                                                                            <div className="flex flex-col gap-1.5 bg-gray-50/80 p-2 md:p-2.5 rounded-lg border border-gray-100">
                                                                                 <div className="flex items-center gap-2">
                                                                                     <div className="w-5 h-5 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
                                                                                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
@@ -3199,10 +3258,10 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                         </div>
                                                                         
                                                                         {/* Permissions Block */}
-                                                                        <div className="w-1/2 md:w-full">
-                                                                            <div className="flex flex-col items-start gap-1 border border-gray-100 rounded-md p-2 bg-gray-50/50 w-full h-full">
+                                                                        <div className="w-1/2 md:w-full mt-auto">
+                                                                            <div className="flex flex-col gap-0.5 md:gap-1 border border-gray-100 rounded-md p-1 md:p-2 bg-gray-50/50 w-full">
                                                                                 
-                                                                                <div className="flex items-center justify-between w-full mt-1">
+                                                                                <div className="flex items-center justify-between w-full">
                                                                                     <div className="flex items-center gap-0.5 md:gap-1.5">
                                                                                         <span className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Parent</span>
                                                                                         {permission.parentStatus === "rejected" && (
@@ -3254,7 +3313,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                                     </div>
                                                                                 </div>
 
-                                                                                <div className="flex items-center justify-between w-full mt-1">
+                                                                                <div className="flex items-center justify-between w-full">
                                                                                     <div className="flex items-center gap-0.5 md:gap-1.5">
                                                                                         <span className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Warden</span>
                                                                                         {permission.wardenStatus === "rejected" && (
@@ -3285,7 +3344,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                                     </div>
                                                                                 </div>
 
-                                                                                <div className="flex items-center justify-between w-full mt-1">
+                                                                                <div className="flex items-center justify-between w-full">
                                                                                     <div className="flex items-center gap-0.5 md:gap-1.5">
                                                                                         <span className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Dean</span>
                                                                                         {permission.deanStatus === "rejected" && (
