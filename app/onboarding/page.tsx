@@ -13,6 +13,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
   const [isCapturingDescriptor, setIsCapturingDescriptor] = useState(false);
@@ -20,7 +21,7 @@ export default function OnboardingPage() {
   const [isFaceProcessing, setIsFaceProcessing] = useState(false);
   const [faceError, setFaceError] = useState<string | null>(null);
   const [isFaceInFrame, setIsFaceInFrame] = useState(false);
-  const [blinkInstruction, setBlinkInstruction] = useState<'CLOSE_EYES' | 'OPEN_EYES' | 'DONE'>('CLOSE_EYES');
+  const [blinkInstruction, setBlinkInstruction] = useState<string>('');
   const [blinkCount, setBlinkCount] = useState(0);
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
   const [hostelsLoading, setHostelsLoading] = useState(true);
@@ -371,7 +372,9 @@ export default function OnboardingPage() {
     let currentBlinkCount = 0;
 
     if (isCameraOpen && videoRef.current) {
-      setBlinkInstruction('CLOSE_EYES');
+      const initialDirection = Math.random() > 0.5 ? 'TURN_LEFT' : 'TURN_RIGHT';
+      setBlinkInstruction(initialDirection);
+      currentInstruction = initialDirection;
       setBlinkCount(0);
       interval = setInterval(async () => {
         if (videoRef.current && videoRef.current.readyState === 4) {
@@ -380,54 +383,71 @@ export default function OnboardingPage() {
           if (!res) {
             setIsFaceInFrame(false);
             hasDetectedLiveness = false;
-            currentInstruction = 'CLOSE_EYES';
-            setBlinkInstruction('CLOSE_EYES');
+            currentInstruction = initialDirection;
+            setBlinkInstruction(initialDirection);
             currentActionStartTime = 0;
             currentBlinkCount = 0;
             setBlinkCount(0);
+            // Clear canvas
+            if (overlayCanvasRef.current) {
+                const ctx = overlayCanvasRef.current.getContext('2d');
+                if (ctx) ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
+            }
             return;
+          }
+
+          // ⚡ DRAW DYNAMIC GREEN FACE FRAME
+          if (overlayCanvasRef.current && videoRef.current) {
+              const video = videoRef.current;
+              const canvas = overlayCanvasRef.current;
+              if (video.videoWidth > 0) {
+                  const displaySize = { width: video.videoWidth, height: video.videoHeight };
+                  const fa = await faceMatching.getFaceApi();
+                  fa.matchDimensions(canvas, displaySize);
+                  const resizedDetection = fa.resizeResults(res.detection, displaySize);
+                  const ctx = canvas.getContext('2d');
+                  if (ctx) {
+                      ctx.clearRect(0, 0, canvas.width, canvas.height);
+                      const drawBox = new fa.draw.DrawBox(resizedDetection.box, { 
+                          lineWidth: 1, 
+                          boxColor: '#00FF00' 
+                      });
+                      drawBox.draw(canvas);
+                  }
+              }
           }
 
           const liveness = faceMatching.analyzeLiveness(res.landmarks);
           if (liveness) {
-            // 🛡️ ACTION SEQUENCE: LONG BLINK 2 TIMES
-            // We use a 0.5-second timer (500ms) to make it extremely responsive while still blocking photos
-            if (currentInstruction === 'CLOSE_EYES') {
-                if (liveness.ear < 0.25) {
+            // 🛡️ ACTION SEQUENCE: RANDOM HEAD TURN (LEVEL 2 LIVENESS)
+            if (currentInstruction === 'TURN_LEFT') {
+                if (liveness.yaw < -0.18) { // Turned Left
                     if (currentActionStartTime === 0) currentActionStartTime = Date.now();
-                    else if (Date.now() - currentActionStartTime > 500) { // 0.5 second closed
-                        currentInstruction = 'OPEN_EYES';
-                        setBlinkInstruction('OPEN_EYES');
-                        currentActionStartTime = 0;
+                    else if (Date.now() - currentActionStartTime > 300) { // 0.3 second hold
+                        currentInstruction = 'DONE';
+                        setBlinkInstruction('DONE');
+                        hasDetectedLiveness = true;
                     }
-                } else if (liveness.ear > 0.29) {
-                    currentActionStartTime = 0; // Reset only if definitely wide open
+                } else {
+                    currentActionStartTime = 0; // Reset
                 }
-            } else if (currentInstruction === 'OPEN_EYES') {
-                if (liveness.ear > 0.26) {
+            } else if (currentInstruction === 'TURN_RIGHT') {
+                if (liveness.yaw > 0.18) { // Turned Right
                     if (currentActionStartTime === 0) currentActionStartTime = Date.now();
-                    else if (Date.now() - currentActionStartTime > 500) { // 0.5 second open
-                        currentBlinkCount++;
-                        setBlinkCount(currentBlinkCount);
-                        if (currentBlinkCount >= 2) {
-                            currentInstruction = 'DONE';
-                            setBlinkInstruction('DONE');
-                            hasDetectedLiveness = true;
-                        } else {
-                            currentInstruction = 'CLOSE_EYES';
-                            setBlinkInstruction('CLOSE_EYES');
-                            currentActionStartTime = 0;
-                        }
+                    else if (Date.now() - currentActionStartTime > 300) { // 0.3 second hold
+                        currentInstruction = 'DONE';
+                        setBlinkInstruction('DONE');
+                        hasDetectedLiveness = true;
                     }
-                } else if (liveness.ear < 0.22) {
-                    currentActionStartTime = 0; // Reset only if definitely closed
+                } else {
+                    currentActionStartTime = 0; // Reset
                 }
             }
           }
 
           setIsFaceInFrame(hasDetectedLiveness);
         }
-      }, 100); // Back to 100ms to ensure we don't miss the 'closed' frame during a fast blink
+      }, 100); 
     }
 
     return () => clearInterval(interval);
@@ -472,6 +492,16 @@ export default function OnboardingPage() {
 
       // Ensure models are loaded
       await faceMatching.loadFaceApiModels();
+
+      // ⚡ SECURITY: Reject if multiple faces are in the frame
+      const fa = await faceMatching.getFaceApi();
+      const allFaces = await fa.detectAllFaces(canvas, new fa.TinyFaceDetectorOptions());
+      if (allFaces.length > 1) {
+        setFaceError("Multiple faces detected! Please ensure ONLY YOU are in the frame.");
+        setCapturedImage(null); // Force retake
+        return;
+      }
+
       const descriptor = await faceMatching.detectFace(canvas);
 
       if (!descriptor) {
@@ -566,16 +596,9 @@ export default function OnboardingPage() {
                       )}
 
                       {isCameraOpen && (
-                        <div className="relative rounded-2xl overflow-hidden bg-black aspect-[4/3] shadow-2xl">
-                          <video
-                            ref={videoRef}
-                            autoPlay
-                            playsInline
-                            className="w-full h-full object-cover"
-                          />
-
+                        <div className="fixed inset-0 z-[100] flex flex-col bg-black overflow-hidden">
                           {/* Live Status HUD */}
-                          <div className="absolute top-4 left-0 right-0 flex flex-col items-center gap-2">
+                          <div className="absolute top-8 left-0 right-0 flex flex-col items-center gap-2 z-10">
                             <div className={`px-4 py-2 rounded-full text-xs md:text-sm font-black uppercase tracking-widest flex items-center gap-2 shadow-2xl transition-all border-2 ${isFaceInFrame ? 'bg-green-500 border-green-400 text-white' : 'bg-red-600 border-red-400 text-white animate-pulse'}`}>
                               <span className={`w-2.5 h-2.5 rounded-full ${isFaceInFrame ? 'bg-white' : 'bg-white/80 animate-ping'}`}></span>
                               {isFaceInFrame ? 'Live Human Verified' : 'Action Required'}
@@ -583,19 +606,31 @@ export default function OnboardingPage() {
                             
                             {!isFaceInFrame && (
                               <div className="bg-black/70 backdrop-blur-md text-white px-3 py-1.5 md:px-6 md:py-3 rounded-xl md:rounded-2xl text-center shadow-xl border border-white/20 mt-1 md:mt-2 mx-4 animate-bounce">
-                                <p className={`text-[10px] md:text-base font-black uppercase tracking-wide ${blinkInstruction === 'CLOSE_EYES' ? 'text-blue-400' : 'text-green-400'}`}>
-                                  {blinkInstruction === 'CLOSE_EYES' ? 'Hold Eyes CLOSED 🙈' : 'Keep Eyes OPEN 👁️'}
+                                <p className={`text-[10px] md:text-base font-black uppercase tracking-wide text-blue-400`}>
+                                  {blinkInstruction === 'TURN_LEFT' ? 'Turn Head LEFT ⬅️' : blinkInstruction === 'TURN_RIGHT' ? 'Turn Head RIGHT ➡️' : 'Looking Good!'}
                                 </p>
-                                <p className="text-[8px] md:text-xs font-medium text-gray-300 mt-0.5">Sequence: {blinkCount}/2</p>
+                                <p className="text-[8px] md:text-xs font-medium text-gray-300 mt-0.5">Anti-Spoofing Check</p>
                               </div>
                             )}
                           </div>
 
-                          <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4 z-10">
+                          <video
+                            ref={videoRef}
+                            autoPlay
+                            playsInline
+                            className="w-full h-full object-cover"
+                          />
+                          <canvas 
+                            ref={overlayCanvasRef} 
+                            className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[15]" 
+                          />
+
+                          {/* Full Screen Controls */}
+                          <div className="absolute bottom-10 left-0 right-0 flex flex-row items-center justify-center gap-4 md:gap-8 z-10 px-4">
                             <button
                               type="button"
                               onClick={stopCamera}
-                              className="px-6 py-2 rounded-full bg-red-600 text-white text-xs font-bold shadow-lg"
+                              className="px-6 py-4 md:px-10 md:py-5 rounded-full bg-red-600 text-white text-xs md:text-sm font-black uppercase tracking-widest shadow-2xl transition-all hover:bg-red-700 hover:scale-105 active:scale-95"
                             >
                               Cancel
                             </button>
@@ -603,7 +638,7 @@ export default function OnboardingPage() {
                               type="button"
                               onClick={captureImage}
                               disabled={!isFaceInFrame}
-                              className={`px-6 py-2 rounded-full text-xs font-bold shadow-lg transition-all ${isFaceInFrame ? 'bg-white text-black scale-110' : 'bg-gray-400 text-gray-200 opacity-50 cursor-not-allowed'}`}
+                              className={`px-8 py-4 md:px-12 md:py-5 rounded-full text-xs md:text-sm font-black uppercase tracking-widest shadow-2xl transition-all ${isFaceInFrame ? 'bg-white text-black scale-105 md:scale-110 shadow-white/30 hover:scale-[1.15] active:scale-95' : 'bg-gray-800 text-gray-400 opacity-60 cursor-not-allowed'}`}
                             >
                               Capture Photo
                             </button>
