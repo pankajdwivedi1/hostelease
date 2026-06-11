@@ -76,6 +76,21 @@ export default function SuperAdminDashboard() {
     const [broadcastType, setBroadcastType] = useState<"info"|"warning"|"alert">("info");
     const [isBroadcasting, setIsBroadcasting] = useState(false);
 
+    const [showPaymentSettingsModal, setShowPaymentSettingsModal] = useState(false);
+    const [isSavingPaymentSettings, setIsSavingPaymentSettings] = useState(false);
+    const [paymentSettings, setPaymentSettings] = useState({
+        bankName: "PNB Bank",
+        accountName: "DR. PANKAJ DWIVEDI",
+        accountNumber: "06102413001048",
+        ifsc: "PUNB0061010",
+        upiId: "pankaj86.dwivedi-1@okicici",
+        enableRazorpay: false,
+        razorpayKeyId: "",
+        razorpayKeySecret: "",
+        pricePerStudentPerMonth: 30,
+        customQrCodeUrl: ""
+    });
+
     const [newTenant, setNewTenant] = useState({
         name: "",
         slug: "",
@@ -121,8 +136,53 @@ export default function SuperAdminDashboard() {
         }
     };
 
+    const fetchPaymentSettings = async () => {
+        try {
+            const res = await fetch('/api/super-admin/settings');
+            const data = await res.json();
+            if (data.success) {
+                setPaymentSettings(prev => ({
+                    ...prev,
+                    ...data.settings,
+                    razorpayKeyId: data.settings.razorpayKeyId || "",
+                    razorpayKeySecret: data.settings.razorpayKeySecret || "",
+                    pricePerStudentPerMonth: data.settings.pricePerStudentPerMonth || 30,
+                    customQrCodeUrl: data.settings.customQrCodeUrl || ""
+                }));
+            }
+        } catch (error) {
+            console.error("Failed to fetch settings", error);
+        }
+    };
+
+    const savePaymentSettings = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSavingPaymentSettings(true);
+        try {
+            const res = await fetch('/api/super-admin/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(paymentSettings)
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert("Payment Settings updated successfully!");
+                setShowPaymentSettingsModal(false);
+            } else {
+                alert("Failed to save settings: " + data.error);
+            }
+        } catch (error) {
+            alert("Error saving settings");
+        } finally {
+            setIsSavingPaymentSettings(false);
+        }
+    };
+
     useEffect(() => {
-        if (isAuthorized && isMounted) fetchTenants();
+        if (isAuthorized && isMounted) {
+            fetchTenants();
+            fetchPaymentSettings();
+        }
         
         // Auto-refresh stats every 30 seconds for live traffic
         const interval = setInterval(() => {
@@ -471,6 +531,14 @@ export default function SuperAdminDashboard() {
                     </div>
 
                     <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl sm:rounded-2xl border border-gray-200 w-full sm:w-auto overflow-hidden">
+                        <button 
+                            onClick={() => setShowPaymentSettingsModal(true)}
+                            className="flex-1 sm:flex-none px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-2"
+                        >
+                            <CreditCard className="w-3.5 h-3.5" />
+                            Payment Config
+                        </button>
+                        <div className="w-px h-6 bg-gray-300 mx-1"></div>
                         <button 
                             onClick={() => setViewMode('active')}
                             className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'active' ? 'bg-white text-blue-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
@@ -1211,6 +1279,210 @@ export default function SuperAdminDashboard() {
                                 {isBroadcasting ? "Transmitting..." : "Send Broadcast"}
                             </button>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Boss Payment Settings Modal */}
+            {showPaymentSettingsModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
+                    <div className="bg-white rounded-[32px] w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col font-sans">
+                        <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                            <div>
+                                <h3 className="text-xl font-black text-gray-900 tracking-tighter uppercase">Payment Configuration</h3>
+                                <p className="text-xs text-gray-500 font-medium">Control what colleges see when they renew subscriptions</p>
+                            </div>
+                            <button onClick={() => setShowPaymentSettingsModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors bg-white shadow-sm border border-gray-100">
+                                <X className="w-5 h-5 text-gray-500" />
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto p-6 sm:p-8 flex-1 custom-scrollbar">
+                            <form id="payment-settings-form" onSubmit={savePaymentSettings} className="space-y-8">
+                                {/* Razorpay Toggle Section */}
+                                <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-6 relative overflow-hidden">
+                                    <div className="flex items-center justify-between relative z-10">
+                                        <div>
+                                            <h4 className="font-black text-indigo-900 text-sm uppercase tracking-wider mb-1 flex items-center gap-2">
+                                                <CreditCard className="w-4 h-4" /> Razorpay Integration
+                                            </h4>
+                                            <p className="text-xs text-indigo-700/70 font-medium">Enable to allow colleges to pay instantly via Razorpay.</p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                className="sr-only peer"
+                                                checked={paymentSettings.enableRazorpay}
+                                                onChange={e => setPaymentSettings({...paymentSettings, enableRazorpay: e.target.checked})}
+                                            />
+                                            <div className="w-14 h-7 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-indigo-600 shadow-inner"></div>
+                                        </label>
+                                    </div>
+                                    
+                                    {paymentSettings.enableRazorpay && (
+                                        <div className="mt-4 pt-4 border-t border-indigo-100/50 animate-in slide-in-from-top-2 relative z-10 space-y-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-xs font-black text-indigo-900 uppercase tracking-widest mb-2">Razorpay Key ID</label>
+                                                    <input
+                                                        type="text"
+                                                        required
+                                                        value={paymentSettings.razorpayKeyId || ""}
+                                                        onChange={e => setPaymentSettings({...paymentSettings, razorpayKeyId: e.target.value})}
+                                                        className="w-full border-2 border-indigo-100 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-mono font-bold bg-white text-indigo-900"
+                                                        placeholder="rzp_test_..."
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-black text-indigo-900 uppercase tracking-widest mb-2">Razorpay Key Secret</label>
+                                                    <input
+                                                        type="password"
+                                                        required
+                                                        value={paymentSettings.razorpayKeySecret || ""}
+                                                        onChange={e => setPaymentSettings({...paymentSettings, razorpayKeySecret: e.target.value})}
+                                                        className="w-full border-2 border-indigo-100 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-mono font-bold bg-white text-indigo-900"
+                                                        placeholder="••••••••••••••••••••••••"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-black text-indigo-900 uppercase tracking-widest mb-2">Subscription Price per Student per Month (INR)</label>
+                                                <div className="relative">
+                                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                        <span className="text-indigo-500 font-bold">₹</span>
+                                                    </div>
+                                                    <input
+                                                        type="number"
+                                                        required
+                                                        min="1"
+                                                        value={paymentSettings.pricePerStudentPerMonth || 30}
+                                                        onChange={e => setPaymentSettings({...paymentSettings, pricePerStudentPerMonth: Number(e.target.value)})}
+                                                        className="w-full border-2 border-indigo-100 rounded-xl pl-9 pr-4 py-3 text-sm focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-black bg-white text-indigo-900"
+                                                        placeholder="30"
+                                                    />
+                                                </div>
+                                                <p className="text-[10px] text-indigo-600 mt-2 font-medium">This will be multiplied by the college's student count and automatically billed via Razorpay Orders.</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Direct Bank Transfer Section */}
+                                <div>
+                                    <h4 className="font-black text-gray-900 text-sm uppercase tracking-wider mb-4 border-b border-gray-100 pb-2">Direct Bank Transfer Details</h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Bank Name</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={paymentSettings.bankName}
+                                                onChange={e => setPaymentSettings({...paymentSettings, bankName: e.target.value})}
+                                                className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold"
+                                                placeholder="e.g. PNB Bank"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Account Name</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={paymentSettings.accountName}
+                                                onChange={e => setPaymentSettings({...paymentSettings, accountName: e.target.value})}
+                                                className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold"
+                                                placeholder="e.g. DR. PANKAJ DWIVEDI"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Account Number</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={paymentSettings.accountNumber}
+                                                onChange={e => setPaymentSettings({...paymentSettings, accountNumber: e.target.value})}
+                                                className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold font-mono tracking-wider"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">IFSC Code</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={paymentSettings.ifsc}
+                                                onChange={e => setPaymentSettings({...paymentSettings, ifsc: e.target.value})}
+                                                className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold uppercase font-mono tracking-wider"
+                                            />
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">UPI ID</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={paymentSettings.upiId}
+                                                onChange={e => setPaymentSettings({...paymentSettings, upiId: e.target.value})}
+                                                className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold text-blue-600"
+                                                placeholder="username@bank"
+                                            />
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Custom QR Code Image (Optional)</label>
+                                            <div className="flex items-center gap-4">
+                                                {paymentSettings.customQrCodeUrl && paymentSettings.customQrCodeUrl.startsWith('data:image') && (
+                                                    <div className="w-16 h-16 rounded-xl border-2 border-gray-100 overflow-hidden shrink-0 shadow-sm">
+                                                        <img src={paymentSettings.customQrCodeUrl} alt="QR Preview" className="w-full h-full object-cover" />
+                                                    </div>
+                                                )}
+                                                <div className="flex-1">
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files?.[0];
+                                                            if (file) {
+                                                                const reader = new FileReader();
+                                                                reader.onloadend = () => {
+                                                                    setPaymentSettings({ ...paymentSettings, customQrCodeUrl: reader.result as string });
+                                                                };
+                                                                reader.readAsDataURL(file);
+                                                            }
+                                                        }}
+                                                        className="w-full border-2 border-gray-100 rounded-xl px-2 py-1.5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all file:mr-4 file:py-1.5 file:px-4 file:rounded-lg file:border-0 file:text-[10px] file:uppercase file:tracking-wider file:font-black file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                                                    />
+                                                    <p className="text-[10px] text-gray-400 mt-2 font-medium leading-relaxed">Upload a QR code image directly from your gallery or computer. If provided, this will override the auto-generated UPI QR code.</p>
+                                                </div>
+                                                {paymentSettings.customQrCodeUrl && (
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => setPaymentSettings({ ...paymentSettings, customQrCodeUrl: "" })}
+                                                        className="text-[10px] text-red-600 hover:text-red-700 font-black uppercase tracking-widest px-4 py-3 border-2 border-red-100 hover:border-red-200 bg-red-50 hover:bg-red-100 rounded-xl transition-all"
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+
+                        <div className="p-4 sm:p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setShowPaymentSettingsModal(false)}
+                                className="px-6 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-black text-xs uppercase tracking-widest hover:bg-gray-100 transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                form="payment-settings-form"
+                                disabled={isSavingPaymentSettings}
+                                className="px-8 py-3 rounded-xl bg-blue-600 text-white font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
+                            >
+                                {isSavingPaymentSettings ? 'Saving...' : 'Save Configuration'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

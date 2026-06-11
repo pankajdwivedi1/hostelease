@@ -35,7 +35,7 @@ function QRCodeCanvas({ data, size = 120 }: { data: string; size?: number }) {
     );
 }
 
-function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, error, setError, successMsg, isResubmitting, setIsResubmitting, handleRenewalSubmit }: any) {
+function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, error, setError, successMsg, isResubmitting, setIsResubmitting, handleRenewalSubmit, handleRazorpayPayment }: any) {
     const [view, setView] = useState<"suspended" | "history" | "renew">("suspended");
 
     if (view === "suspended") {
@@ -244,48 +244,78 @@ function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, err
                                 </p>
                             </div>
 
-                            {/* Bank Details & QR code */}
-                            <div className="flex flex-col md:flex-row gap-6 bg-white/5 border border-white/5 p-5 rounded-2xl">
-                                {/* Bank details */}
-                                <div className="flex-1 space-y-4 text-xs">
-                                    <h3 className="font-black text-gray-400 uppercase tracking-widest text-[10px]">Developer Account</h3>
+                            {/* Razorpay Option */}
+                            {status?.paymentSettings?.enableRazorpay ? (
+                                <div className="bg-white/5 border border-white/5 p-6 rounded-2xl text-center space-y-4">
+                                    <div className="w-16 h-16 bg-indigo-500/10 border border-indigo-500/20 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/5 mb-2">
+                                        <CreditCard className="w-8 h-8 text-indigo-400" />
+                                    </div>
+                                    <h3 className="font-black text-white text-lg uppercase tracking-tight">Instant Renewal</h3>
+                                    <p className="text-gray-400 text-xs max-w-sm mx-auto">
+                                        Pay via Razorpay for immediate automated subscription reactivation.
+                                    </p>
+                                    <button
+                                        onClick={handleRazorpayPayment}
+                                        disabled={submitting}
+                                        className="inline-block mt-4 w-full sm:w-auto px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl transition-all shadow-xl shadow-indigo-500/20 active:scale-95 text-xs uppercase tracking-widest disabled:opacity-50"
+                                    >
+                                        {submitting ? "Processing..." : "Pay with Razorpay"}
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col md:flex-row gap-6 bg-white/5 border border-white/5 p-5 rounded-2xl">
+                                    {/* Bank details */}
+                                    <div className="flex-1 space-y-4 text-xs">
+                                        <h3 className="font-black text-gray-400 uppercase tracking-widest text-[10px]">Developer Account</h3>
 
-                                    <div className="space-y-3">
-                                        <div>
-                                            <p className="text-gray-500 font-medium">Bank Name</p>
-                                            <p className="text-white font-black tracking-tight text-sm">PNB Bank</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-500 font-medium">Account Name</p>
-                                            <p className="text-white font-black tracking-tight text-sm">DR. PANKAJ DWIVEDI</p>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2">
+                                        <div className="space-y-3">
                                             <div>
-                                                <p className="text-gray-500 font-medium">Account Number</p>
-                                                <p className="text-white font-black tracking-tight text-sm select-all">06102413001048</p>
+                                                <p className="text-gray-500 font-medium">Bank Name</p>
+                                                <p className="text-white font-black tracking-tight text-sm">{status?.paymentSettings?.bankName || "PNB Bank"}</p>
                                             </div>
                                             <div>
-                                                <p className="text-gray-500 font-medium">IFSC Code</p>
-                                                <p className="text-white font-black tracking-tight text-sm select-all">PUNB0061010</p>
+                                                <p className="text-gray-500 font-medium">Account Name</p>
+                                                <p className="text-white font-black tracking-tight text-sm">{status?.paymentSettings?.accountName || "DR. PANKAJ DWIVEDI"}</p>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <p className="text-gray-500 font-medium">Account Number</p>
+                                                    <p className="text-white font-black tracking-tight text-sm select-all">{status?.paymentSettings?.accountNumber || "06102413001048"}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-gray-500 font-medium">IFSC Code</p>
+                                                    <p className="text-white font-black tracking-tight text-sm select-all">{status?.paymentSettings?.ifsc || "PUNB0061010"}</p>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <p className="text-gray-500 font-medium">UPI ID</p>
+                                                <p className="text-[#00ff88] font-black tracking-tight text-sm select-all">{status?.paymentSettings?.upiId || "pankaj86.dwivedi-1@okicici"}</p>
                                             </div>
                                         </div>
-                                        <div>
-                                            <p className="text-gray-500 font-medium">UPI ID</p>
-                                            <p className="text-[#00ff88] font-black tracking-tight text-sm select-all">pankaj86.dwivedi-1@okicici</p>
-                                        </div>
                                     </div>
-                                </div>
 
-                                {/* QR Code Column */}
-                                <div className="flex flex-col items-center justify-center gap-2 shrink-0 border-t md:border-t-0 md:border-l border-white/5 pt-4 md:pt-0 md:pl-6">
-                                    <div className="bg-white p-2 rounded-2xl shadow-xl">
-                                        <QRCodeCanvas data="upi://pay?pa=pankaj86.dwivedi-1@okicici&pn=DR.%20PANKAJ%20DWIVEDI&cu=INR" size={120} />
+                                    {/* QR Code Column */}
+                                    <div className="flex flex-col items-center justify-center gap-2 shrink-0 border-t md:border-t-0 md:border-l border-white/5 pt-4 md:pt-0 md:pl-6">
+                                        <div className="bg-white p-2 rounded-2xl shadow-xl flex items-center justify-center overflow-hidden" style={{ width: 136, height: 136 }}>
+                                            {status?.paymentSettings?.customQrCodeUrl ? (
+                                                <img 
+                                                    src={status.paymentSettings.customQrCodeUrl} 
+                                                    alt="Payment QR Code" 
+                                                    className="w-full h-full object-cover rounded-[10px]"
+                                                />
+                                            ) : (
+                                                <QRCodeCanvas 
+                                                    data={`upi://pay?pa=${status?.paymentSettings?.upiId || "pankaj86.dwivedi-1@okicici"}&pn=${encodeURIComponent(status?.paymentSettings?.accountName || "DR. PANKAJ DWIVEDI")}&cu=INR`} 
+                                                    size={120} 
+                                                />
+                                            )}
+                                        </div>
+                                        <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest flex items-center gap-1.5 mt-1">
+                                            <QrCode className="w-3.5 h-3.5" /> Scan QR to Pay
+                                        </span>
                                     </div>
-                                    <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest flex items-center gap-1.5 mt-1">
-                                        <QrCode className="w-3.5 h-3.5" /> Scan QR to Pay
-                                    </span>
                                 </div>
-                            </div>
+                            )}
 
                             {/* UTR Form */}
                             <form onSubmit={handleRenewalSubmit} className="space-y-4 pt-2">
@@ -364,6 +394,24 @@ function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, err
     );
 }
 
+function loadRazorpayScript() {
+    return new Promise((resolve) => {
+        if (typeof window !== 'undefined' && (window as any).Razorpay) {
+            resolve(true);
+            return;
+        }
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.onload = () => {
+            resolve(true);
+        };
+        script.onerror = () => {
+            resolve(false);
+        };
+        document.body.appendChild(script);
+    });
+}
+
 export default function TenantGuard({ children }: { children: React.ReactNode }) {
     const [status, setStatus] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -414,6 +462,90 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
         } catch (err) {
             setError("Network error. Please try again.");
         } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleRazorpayPayment = async () => {
+        try {
+            setSubmitting(true);
+            setError("");
+
+            // 1. Load Razorpay Script
+            const res = await loadRazorpayScript();
+            if (!res) {
+                setError("Razorpay SDK failed to load. Please check your internet connection.");
+                setSubmitting(false);
+                return;
+            }
+
+            // 2. Create Order
+            const orderRes = await fetch("/api/admin/create-razorpay-order", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ tenantId: status.tenantId })
+            });
+            const orderData = await orderRes.json();
+
+            if (!orderData.success) {
+                setError(orderData.error || "Failed to initiate payment. Please contact support.");
+                setSubmitting(false);
+                return;
+            }
+
+            // 3. Open Razorpay Checkout
+            const options = {
+                key: orderData.keyId,
+                amount: orderData.amount,
+                currency: orderData.currency,
+                name: orderData.collegeName,
+                description: "Software Subscription Renewal (1 Year)",
+                order_id: orderData.orderId,
+                handler: async function (response: any) {
+                    try {
+                        setSubmitting(true);
+                        // 4. Verify Payment on our backend
+                        const verifyRes = await fetch("/api/admin/verify-razorpay-payment", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_signature: response.razorpay_signature,
+                                tenantId: status.tenantId
+                            })
+                        });
+                        
+                        const verifyData = await verifyRes.json();
+                        if (verifyData.success) {
+                            // Instantly grant access by reloading the page
+                            window.location.reload();
+                        } else {
+                            setError(verifyData.error || "Payment verification failed. Please contact support.");
+                            setSubmitting(false);
+                        }
+                    } catch (err) {
+                        setError("An error occurred during verification.");
+                        setSubmitting(false);
+                    }
+                },
+                prefill: {
+                    name: "College Administrator"
+                },
+                theme: {
+                    color: "#4f46e5"
+                }
+            };
+
+            const paymentObject = new (window as any).Razorpay(options);
+            paymentObject.on('payment.failed', function (response: any) {
+                setError(`Payment failed: ${response.error.description}`);
+                setSubmitting(false);
+            });
+            paymentObject.open();
+
+        } catch (err) {
+            setError("Network error initializing payment.");
             setSubmitting(false);
         }
     };
@@ -535,6 +667,7 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
                 isResubmitting={isResubmitting} 
                 setIsResubmitting={setIsResubmitting} 
                 handleRenewalSubmit={handleRenewalSubmit} 
+                handleRazorpayPayment={handleRazorpayPayment}
             />
         );
     }

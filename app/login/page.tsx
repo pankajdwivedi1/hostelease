@@ -126,6 +126,31 @@ function LoginForm() {
     }
   };
   
+  // ⚡ Web OTP API: Automatically read SMS on Android Chrome
+  useEffect(() => {
+    if (!otpSent) return;
+
+    if ('OTPCredential' in window) {
+      const ac = new AbortController();
+      (navigator.credentials as any).get({
+        otp: { transport: ['sms'] },
+        signal: ac.signal
+      }).then((otp: any) => {
+        if (otp && otp.code) {
+          setOtp(otp.code);
+          handleVerifyOtp(otp.code); // Instantly verify when received!
+        }
+      }).catch((err: any) => {
+        console.warn('Web OTP API Error (or aborted):', err);
+      });
+
+      return () => {
+        ac.abort(); // Cancel listener if user types manually or leaves page
+      };
+    }
+  }, [otpSent]);
+
+
   const handleSendOtp = async () => {
     if (!parentPhone || parentPhone.length !== 10) {
       setError("Please enter a valid 10-digit mobile number");

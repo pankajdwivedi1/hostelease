@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 
 import { useRef } from "react";
 import * as faceMatching from "@/lib/faceMatching";
+import * as objectDetection from "@/lib/objectDetection";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -21,6 +22,7 @@ export default function OnboardingPage() {
   const [isFaceProcessing, setIsFaceProcessing] = useState(false);
   const [faceError, setFaceError] = useState<string | null>(null);
   const [isFaceInFrame, setIsFaceInFrame] = useState(false);
+  const [isSpoofingDetected, setIsSpoofingDetected] = useState(false);
   const [blinkInstruction, setBlinkInstruction] = useState<string>('');
   const [blinkCount, setBlinkCount] = useState(0);
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
@@ -335,17 +337,22 @@ export default function OnboardingPage() {
         return;
       }
 
-      setIsCameraOpen(true);
-      // Explicitly request front-facing camera for mobile phones
+      // 1. Get camera permission and stream FIRST (while showing loading state on button)
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "user" } 
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
       });
       
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        // ⚡ PRE-LOAD: Start loading AI models as soon as camera opens
-        faceMatching.loadFaceApiModels();
-      }
+      // 2. Now that camera is ready, open the UI
+      setIsCameraOpen(true);
+      
+      // 3. Attach stream to the newly rendered video tag
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          // ⚡ PRE-LOAD: Start loading AI models
+          faceMatching.loadFaceApiModels();
+        }
+      }, 50);
     } catch (err) {
       console.error("Error accessing camera:", err);
       alert("Could not access camera. Please allow camera permissions and ensure you're using HTTPS.");
@@ -372,19 +379,34 @@ export default function OnboardingPage() {
     let currentBlinkCount = 0;
 
     if (isCameraOpen && videoRef.current) {
-      const initialDirection = Math.random() > 0.5 ? 'TURN_LEFT' : 'TURN_RIGHT';
-      setBlinkInstruction(initialDirection);
-      currentInstruction = initialDirection;
+      objectDetection.loadPhoneDetector(); // Silently load AI model in background
+      setBlinkInstruction('TURN_LEFT');
+      currentInstruction = 'TURN_LEFT';
       setBlinkCount(0);
       interval = setInterval(async () => {
         if (videoRef.current && videoRef.current.readyState === 4) {
+          // ⚡ LEVEL 3 ANTI-SPOOFING: Mobile Phone Detection
+          const isPhoneDetected = await objectDetection.detectMobilePhone(videoRef.current);
+          if (isPhoneDetected) {
+            setIsSpoofingDetected(true);
+            setIsFaceInFrame(false);
+            hasDetectedLiveness = false;
+            if (overlayCanvasRef.current) {
+                const ctx = overlayCanvasRef.current.getContext('2d');
+                if (ctx) ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
+            }
+            return; // Block processing
+          } else {
+            setIsSpoofingDetected(false);
+          }
+
           const res = await faceMatching.detectFace(videoRef.current, false, false);
 
           if (!res) {
             setIsFaceInFrame(false);
             hasDetectedLiveness = false;
-            currentInstruction = initialDirection;
-            setBlinkInstruction(initialDirection);
+            currentInstruction = 'TURN_LEFT';
+            setBlinkInstruction('TURN_LEFT');
             currentActionStartTime = 0;
             currentBlinkCount = 0;
             setBlinkCount(0);
@@ -419,28 +441,18 @@ export default function OnboardingPage() {
 
           const liveness = faceMatching.analyzeLiveness(res.landmarks);
           if (liveness) {
-            // 🛡️ ACTION SEQUENCE: RANDOM HEAD TURN (LEVEL 2 LIVENESS)
+            // 🛡️ ACTION SEQUENCE: TWO-STEP HEAD TURN (LEVEL 2 LIVENESS)
             if (currentInstruction === 'TURN_LEFT') {
-                if (liveness.yaw < -0.18) { // Turned Left
-                    if (currentActionStartTime === 0) currentActionStartTime = Date.now();
-                    else if (Date.now() - currentActionStartTime > 300) { // 0.3 second hold
-                        currentInstruction = 'DONE';
-                        setBlinkInstruction('DONE');
-                        hasDetectedLiveness = true;
-                    }
-                } else {
-                    currentActionStartTime = 0; // Reset
+                // ⚡ Make it highly sensitive (0.12) and INSTANT (no timer required)
+                if (liveness.yaw < -0.12) { 
+                    currentInstruction = 'TURN_RIGHT'; // Move to next step instantly
+                    setBlinkInstruction('TURN_RIGHT');
                 }
             } else if (currentInstruction === 'TURN_RIGHT') {
-                if (liveness.yaw > 0.18) { // Turned Right
-                    if (currentActionStartTime === 0) currentActionStartTime = Date.now();
-                    else if (Date.now() - currentActionStartTime > 300) { // 0.3 second hold
-                        currentInstruction = 'DONE';
-                        setBlinkInstruction('DONE');
-                        hasDetectedLiveness = true;
-                    }
-                } else {
-                    currentActionStartTime = 0; // Reset
+                if (liveness.yaw > 0.12) { 
+                    currentInstruction = 'DONE';
+                    setBlinkInstruction('DONE');
+                    hasDetectedLiveness = true;
                 }
             }
           }
@@ -466,14 +478,9 @@ export default function OnboardingPage() {
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         // 1. INSTANT FEEDBACK: Generate dataUrl and close camera immediately
-        let quality = 0.9;
-        let dataUrl = canvas.toDataURL("image/jpeg", quality);
-
-        // Compress to under 100KB
-        while (dataUrl.length > 137000 && quality > 0.1) {
-          quality -= 0.1;
-          dataUrl = canvas.toDataURL("image/jpeg", quality);
-        }
+        // Removed the slow while loop. We just use a lower quality (0.6) for instant speed
+        // 0.6 is still perfectly clear for face recognition but reduces file size instantly.
+        let dataUrl = canvas.toDataURL("image/jpeg", 0.6);
 
         setCapturedImage(dataUrl);
         setFaceError(null);
@@ -599,15 +606,15 @@ export default function OnboardingPage() {
                         <div className="fixed inset-0 z-[100] flex flex-col bg-black overflow-hidden">
                           {/* Live Status HUD */}
                           <div className="absolute top-8 left-0 right-0 flex flex-col items-center gap-2 z-10">
-                            <div className={`px-4 py-2 rounded-full text-xs md:text-sm font-black uppercase tracking-widest flex items-center gap-2 shadow-2xl transition-all border-2 ${isFaceInFrame ? 'bg-green-500 border-green-400 text-white' : 'bg-red-600 border-red-400 text-white animate-pulse'}`}>
+                            <div className={`px-4 py-2 rounded-full text-xs md:text-sm font-black uppercase tracking-widest flex items-center gap-2 shadow-2xl transition-all border-2 ${isFaceInFrame ? 'bg-green-500 border-green-400 text-white' : isSpoofingDetected ? 'bg-red-700 border-red-500 text-white animate-pulse' : 'bg-red-600 border-red-400 text-white animate-pulse'}`}>
                               <span className={`w-2.5 h-2.5 rounded-full ${isFaceInFrame ? 'bg-white' : 'bg-white/80 animate-ping'}`}></span>
-                              {isFaceInFrame ? 'Live Human Verified' : 'Action Required'}
+                              {isSpoofingDetected ? 'SPOOF DETECTED: PHONE' : isFaceInFrame ? 'Live Human Verified' : 'Action Required'}
                             </div>
                             
                             {!isFaceInFrame && (
                               <div className="bg-black/70 backdrop-blur-md text-white px-3 py-1.5 md:px-6 md:py-3 rounded-xl md:rounded-2xl text-center shadow-xl border border-white/20 mt-1 md:mt-2 mx-4 animate-bounce">
-                                <p className={`text-[10px] md:text-base font-black uppercase tracking-wide text-blue-400`}>
-                                  {blinkInstruction === 'TURN_LEFT' ? 'Turn Head LEFT ⬅️' : blinkInstruction === 'TURN_RIGHT' ? 'Turn Head RIGHT ➡️' : 'Looking Good!'}
+                                <p className={`text-[10px] md:text-base font-black uppercase tracking-wide ${isSpoofingDetected ? 'text-red-500' : 'text-blue-400'}`}>
+                                  {isSpoofingDetected ? 'REMOVE MOBILE PHONE 📵' : blinkInstruction === 'TURN_LEFT' ? 'Turn Head LEFT ⬅️' : blinkInstruction === 'TURN_RIGHT' ? 'Turn Head RIGHT ➡️' : 'Looking Good!'}
                                 </p>
                                 <p className="text-[8px] md:text-xs font-medium text-gray-300 mt-0.5">Anti-Spoofing Check</p>
                               </div>

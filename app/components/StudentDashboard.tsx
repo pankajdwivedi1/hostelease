@@ -3095,10 +3095,10 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                             className={`aspect-square flex flex-col items-center justify-center rounded-xl text-xs transition-all relative ${colorClasses} ${isSelected ? 'ring-4 ring-blue-600 ring-offset-2 scale-105 z-10' : 'hover:scale-[1.03] active:scale-[0.97]'}`}
                                                                         >
                                                                             <span className="leading-none mt-1">{cell.date.getDate()}</span>
-                                                                            {/* Attendance Indicator Dot */}
-                                                                            <div className="absolute bottom-1.5 flex justify-center w-full">
-                                                                                {attendanceStatus === 'Present' && <span className="w-1.5 h-1.5 rounded-full bg-green-300 ring-1 ring-green-600/30" title="Present" />}
-                                                                                {attendanceStatus === 'Absent' && <span className="w-1.5 h-1.5 rounded-full bg-red-300 ring-1 ring-red-600/30" title="Absent" />}
+                                                                            {/* Attendance Indicator Bar & Dot */}
+                                                                            <div className="absolute bottom-0 w-full h-[30%] bg-white rounded-b-xl flex items-center justify-center border-t border-black/5 shadow-inner">
+                                                                                {attendanceStatus === 'Present' && <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm" title="Present" />}
+                                                                                {attendanceStatus === 'Absent' && <span className="w-2 h-2 rounded-full bg-rose-500 shadow-sm animate-pulse" title="Absent" />}
                                                                             </div>
                                                                             {isToday && (
                                                                                 <span className={`w-1 h-1 rounded-full absolute top-1.5 right-1.5 ${status ? 'bg-white' : 'bg-blue-600'}`} />
