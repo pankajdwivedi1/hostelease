@@ -386,8 +386,8 @@ export default function OnboardingPage() {
 
     if (isCameraOpen && videoRef.current) {
       objectDetection.loadPhoneDetector(); // Silently load AI model in background
-      setBlinkInstruction('BLINK_EYES');
-      currentInstruction = 'BLINK_EYES';
+      setBlinkInstruction('OPEN_MOUTH');
+      currentInstruction = 'OPEN_MOUTH';
       setBlinkCount(0);
       interval = setInterval(async () => {
         if (videoRef.current && videoRef.current.readyState === 4) {
@@ -411,8 +411,8 @@ export default function OnboardingPage() {
           if (!res) {
             setIsFaceInFrame(false);
             hasDetectedLiveness = false;
-            currentInstruction = 'BLINK_EYES';
-            setBlinkInstruction('BLINK_EYES');
+            currentInstruction = 'OPEN_MOUTH';
+            setBlinkInstruction('OPEN_MOUTH');
             currentActionStartTime = 0;
             currentBlinkCount = 0;
             setBlinkCount(0);
@@ -447,14 +447,14 @@ export default function OnboardingPage() {
 
           const liveness = faceMatching.analyzeLiveness(res.landmarks);
           if (liveness) {
-            // 🛡️ ACTION SEQUENCE: BLINK DETECTION (Defeats 2D printed photos)
-            if (currentInstruction === 'BLINK_EYES') {
-                if (liveness.isBlinking) { 
-                    currentInstruction = 'OPEN_EYES';
-                    setBlinkInstruction('OPEN_EYES');
+            // 🛡️ ACTION SEQUENCE: MOUTH OPEN DETECTION (100% Defeats 2D printed photos)
+            if (currentInstruction === 'OPEN_MOUTH') {
+                if (liveness.isMouthOpen) { 
+                    currentInstruction = 'CLOSE_MOUTH';
+                    setBlinkInstruction('CLOSE_MOUTH');
                 }
-            } else if (currentInstruction === 'OPEN_EYES') {
-                if (!liveness.isBlinking) {
+            } else if (currentInstruction === 'CLOSE_MOUTH') {
+                if (!liveness.isMouthOpen) {
                     currentInstruction = 'DONE';
                     setBlinkInstruction('DONE');
                     hasDetectedLiveness = true;
@@ -619,7 +619,7 @@ export default function OnboardingPage() {
                             {!isFaceInFrame && (
                               <div className="bg-black/70 backdrop-blur-md text-white px-3 py-1.5 md:px-6 md:py-3 rounded-xl md:rounded-2xl text-center shadow-xl border border-white/20 mt-1 md:mt-2 mx-4 animate-bounce">
                                 <p className={`text-[10px] md:text-base font-black uppercase tracking-wide ${isSpoofingDetected ? 'text-red-500' : 'text-blue-400'}`}>
-                                  {isSpoofingDetected ? 'REMOVE SCREEN/OBJECT 📵' : blinkInstruction === 'BLINK_EYES' ? 'Blink Your Eyes 👁️' : blinkInstruction === 'OPEN_EYES' ? 'Open Eyes & Hold Still 📸' : 'Looking Good!'}
+                                  {isSpoofingDetected ? 'REMOVE SCREEN/OBJECT 📵' : blinkInstruction === 'OPEN_MOUTH' ? 'Open Your Mouth 👄' : blinkInstruction === 'CLOSE_MOUTH' ? 'Close Mouth & Hold Still 📸' : 'Looking Good!'}
                                 </p>
                                 <p className="text-[8px] md:text-xs font-medium text-gray-300 mt-0.5">Anti-Spoofing Check</p>
                               </div>

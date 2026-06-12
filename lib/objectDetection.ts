@@ -24,7 +24,14 @@ export async function loadPhoneDetector() {
         await tf.ready();
         // Load the model
         cocoModel = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
-        console.log("✅ Phone Detector Loaded Successfully");
+        
+        // ⚡ WARMUP: Run dummy detection to compile WebGL shaders in the background
+        const dummyCanvas = document.createElement('canvas');
+        dummyCanvas.width = 224;
+        dummyCanvas.height = 224;
+        await cocoModel.detect(dummyCanvas);
+
+        console.log("✅ Phone Detector Loaded & Warmed Up Successfully");
         return true;
     } catch (error) {
         console.error("❌ Failed to load Phone Detector:", error);

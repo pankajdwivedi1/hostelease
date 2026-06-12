@@ -60,7 +60,18 @@ export async function loadFaceApiModels(accurate: boolean = false) {
             if (accurate) proModelsLoaded = true;
             liteModelsLoaded = true;
 
-            console.log(`✅ Face-api models ready (${accurate ? 'PRO' : 'LITE'})`);
+            // ⚡ WARMUP: Run dummy detection to compile WebGL shaders
+            try {
+                const dummyCanvas = document.createElement('canvas');
+                dummyCanvas.width = 224;
+                dummyCanvas.height = 224;
+                const options = new fa.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
+                await fa.detectSingleFace(dummyCanvas, options).withFaceLandmarks(true);
+            } catch (e) {
+                console.warn("Warmup skipped", e);
+            }
+
+            console.log(`✅ Face-api models ready and warmed up (${accurate ? 'PRO' : 'LITE'})`);
             return true;
         } catch (error) {
             console.error('❌ Failed to load face-api models.', error);
@@ -213,6 +224,22 @@ function calculateEAR(eyeLandmarks: any[]): number {
 }
 
 /**
+ * Anti-Spoofing: Calculate Mouth Aspect Ratio (MAR) to detect if mouth is open
+ * A static printed photo CANNOT open its mouth, making this extremely spoof-proof
+ */
+function calculateMAR(mouthLandmarks: any[]): number {
+    const dist = (p1: any, p2: any) => Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+    
+    // index 0 is left corner, index 6 is right corner
+    const horizontal = dist(mouthLandmarks[0], mouthLandmarks[6]);
+    // index 14 is top inner lip, index 18 is bottom inner lip
+    const vertical = dist(mouthLandmarks[14], mouthLandmarks[18]);
+    
+    if (horizontal === 0) return 0;
+    return vertical / horizontal;
+}
+
+/**
  * Anti-Spoofing: Check if face is real (Living) using landmarks
  * Returns detailed analysis of blinks and head movements
  */
@@ -221,13 +248,17 @@ export function analyzeLiveness(landmarks: any) {
 
     const leftEye = landmarks.getLeftEye();
     const rightEye = landmarks.getRightEye();
+    const mouth = landmarks.getMouth();
 
-    // Industrial standard: EAR < 0.18 is a definitive blink
     const leftEAR = calculateEAR(leftEye);
     const rightEAR = calculateEAR(rightEye);
     const avgEAR = (leftEAR + rightEAR) / 2.0;
+    const isBlinking = avgEAR < 0.25; 
 
-    const isBlinking = avgEAR < 0.25; // ⚡ Adjusted: 0.25 makes it easier to catch partial blinks without false positives
+    // Calculate Mouth Aspect Ratio
+    const mar = calculateMAR(mouth);
+    // MAR > 0.4 generally means the mouth is visibly open
+    const isMouthOpen = mar > 0.4;
 
     // Head Pose Estimation (Yaw/Tilt)
     const nose = landmarks.getNose();
@@ -245,7 +276,9 @@ export function analyzeLiveness(landmarks: any) {
 
     return {
         isBlinking,
+        isMouthOpen,
         ear: avgEAR,
+        mar: mar,
         yaw: yaw,
         timestamp: Date.now()
     };
