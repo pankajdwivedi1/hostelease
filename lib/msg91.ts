@@ -136,7 +136,14 @@ export async function sendMSG91_WidgetOTP(phoneNumber: string) {
             body: JSON.stringify(payload)
         };
 
-        const response = await fetch('https://api.msg91.com/api/v5/widget/sendOtp', options);
+        let response;
+        try {
+            response = await fetch('https://control.msg91.com/api/v5/widget/sendOtp', options);
+        } catch (e) {
+            console.warn("control.msg91.com failed, falling back to api.msg91.com...");
+            response = await fetch('https://api.msg91.com/api/v5/widget/sendOtp', options);
+        }
+
         const data = await response.json();
 
         if (data.type === "success") {
@@ -184,7 +191,14 @@ export async function verifyMSG91_WidgetOTP(phoneNumber: string, reqId: string, 
             body: JSON.stringify(payload)
         };
 
-        const response = await fetch('https://api.msg91.com/api/v5/widget/verifyOtp', options);
+        let response;
+        try {
+            response = await fetch('https://control.msg91.com/api/v5/widget/verifyOtp', options);
+        } catch (e) {
+            console.warn("control.msg91.com failed, falling back to api.msg91.com...");
+            response = await fetch('https://api.msg91.com/api/v5/widget/verifyOtp', options);
+        }
+
         const data = await response.json();
 
         if (data.type === "success") {

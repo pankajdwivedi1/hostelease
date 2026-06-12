@@ -576,7 +576,7 @@ function LoginForm() {
                       <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
                         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                           <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
-                            👨‍👩‍👧 Parent OTP Portal
+                            👨‍👩‍👧 Parent Login Portal
                           </h3>
                           <button
                             type="button"
@@ -626,8 +626,8 @@ function LoginForm() {
                         ) : (
                           <div className="space-y-3">
                             <div className="flex justify-between items-center">
-                              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                Enter 6-digit OTP code
+                              <label className="block text-[10px] font-bold uppercase tracking-wider text-green-600">
+                                OTP SENT TO YOUR REGISTERED MOBILE NUMBER {parentPhone.slice(0, 4)}XXXX{parentPhone.slice(8)}
                               </label>
                               <button
                                 type="button"
