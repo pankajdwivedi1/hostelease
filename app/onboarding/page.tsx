@@ -441,15 +441,10 @@ export default function OnboardingPage() {
 
           const liveness = faceMatching.analyzeLiveness(res.landmarks);
           if (liveness) {
-            // 🛡️ ACTION SEQUENCE: TWO-STEP HEAD TURN (LEVEL 2 LIVENESS)
+            // 🛡️ ACTION SEQUENCE: SINGLE HEAD TURN
             if (currentInstruction === 'TURN_LEFT') {
-                // ⚡ Make it highly sensitive (0.12) and INSTANT (no timer required)
-                if (liveness.yaw < -0.12) { 
-                    currentInstruction = 'TURN_RIGHT'; // Move to next step instantly
-                    setBlinkInstruction('TURN_RIGHT');
-                }
-            } else if (currentInstruction === 'TURN_RIGHT') {
-                if (liveness.yaw > 0.12) { 
+                // Check if head is turned left OR right
+                if (Math.abs(liveness.yaw) > 0.15) { 
                     currentInstruction = 'DONE';
                     setBlinkInstruction('DONE');
                     hasDetectedLiveness = true;
@@ -614,7 +609,7 @@ export default function OnboardingPage() {
                             {!isFaceInFrame && (
                               <div className="bg-black/70 backdrop-blur-md text-white px-3 py-1.5 md:px-6 md:py-3 rounded-xl md:rounded-2xl text-center shadow-xl border border-white/20 mt-1 md:mt-2 mx-4 animate-bounce">
                                 <p className={`text-[10px] md:text-base font-black uppercase tracking-wide ${isSpoofingDetected ? 'text-red-500' : 'text-blue-400'}`}>
-                                  {isSpoofingDetected ? 'REMOVE MOBILE PHONE 📵' : blinkInstruction === 'TURN_LEFT' ? 'Turn Head LEFT ⬅️' : blinkInstruction === 'TURN_RIGHT' ? 'Turn Head RIGHT ➡️' : 'Looking Good!'}
+                                  {isSpoofingDetected ? 'REMOVE MOBILE PHONE 📵' : blinkInstruction === 'TURN_LEFT' ? 'Turn Head Slightly ↔️' : 'Looking Good!'}
                                 </p>
                                 <p className="text-[8px] md:text-xs font-medium text-gray-300 mt-0.5">Anti-Spoofing Check</p>
                               </div>
