@@ -37,6 +37,12 @@ export default function OnboardingPage() {
   const [formConfig, setFormConfig] = useState<Record<string, any>>({});
   const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
 
+  useEffect(() => {
+    // ⚡ Preload AI models immediately on page load in the background so camera activates instantly
+    faceMatching.loadFaceApiModels(false);
+    objectDetection.loadPhoneDetector();
+  }, []);
+
   // Fetch hostels from API
   useEffect(() => {
     const fetchHostels = async () => {
@@ -380,8 +386,8 @@ export default function OnboardingPage() {
 
     if (isCameraOpen && videoRef.current) {
       objectDetection.loadPhoneDetector(); // Silently load AI model in background
-      setBlinkInstruction('TURN_LEFT');
-      currentInstruction = 'TURN_LEFT';
+      setBlinkInstruction('BLINK_EYES');
+      currentInstruction = 'BLINK_EYES';
       setBlinkCount(0);
       interval = setInterval(async () => {
         if (videoRef.current && videoRef.current.readyState === 4) {
@@ -405,8 +411,8 @@ export default function OnboardingPage() {
           if (!res) {
             setIsFaceInFrame(false);
             hasDetectedLiveness = false;
-            currentInstruction = 'TURN_LEFT';
-            setBlinkInstruction('TURN_LEFT');
+            currentInstruction = 'BLINK_EYES';
+            setBlinkInstruction('BLINK_EYES');
             currentActionStartTime = 0;
             currentBlinkCount = 0;
             setBlinkCount(0);
@@ -441,10 +447,14 @@ export default function OnboardingPage() {
 
           const liveness = faceMatching.analyzeLiveness(res.landmarks);
           if (liveness) {
-            // 🛡️ ACTION SEQUENCE: SINGLE HEAD TURN
-            if (currentInstruction === 'TURN_LEFT') {
-                // Check if head is turned left OR right
-                if (Math.abs(liveness.yaw) > 0.15) { 
+            // 🛡️ ACTION SEQUENCE: BLINK DETECTION (Defeats 2D printed photos)
+            if (currentInstruction === 'BLINK_EYES') {
+                if (liveness.isBlinking) { 
+                    currentInstruction = 'OPEN_EYES';
+                    setBlinkInstruction('OPEN_EYES');
+                }
+            } else if (currentInstruction === 'OPEN_EYES') {
+                if (!liveness.isBlinking) {
                     currentInstruction = 'DONE';
                     setBlinkInstruction('DONE');
                     hasDetectedLiveness = true;
@@ -609,7 +619,7 @@ export default function OnboardingPage() {
                             {!isFaceInFrame && (
                               <div className="bg-black/70 backdrop-blur-md text-white px-3 py-1.5 md:px-6 md:py-3 rounded-xl md:rounded-2xl text-center shadow-xl border border-white/20 mt-1 md:mt-2 mx-4 animate-bounce">
                                 <p className={`text-[10px] md:text-base font-black uppercase tracking-wide ${isSpoofingDetected ? 'text-red-500' : 'text-blue-400'}`}>
-                                  {isSpoofingDetected ? 'REMOVE MOBILE PHONE 📵' : blinkInstruction === 'TURN_LEFT' ? 'Turn Head Slightly ↔️' : 'Looking Good!'}
+                                  {isSpoofingDetected ? 'REMOVE SCREEN/OBJECT 📵' : blinkInstruction === 'BLINK_EYES' ? 'Blink Your Eyes 👁️' : blinkInstruction === 'OPEN_EYES' ? 'Open Eyes & Hold Still 📸' : 'Looking Good!'}
                                 </p>
                                 <p className="text-[8px] md:text-xs font-medium text-gray-300 mt-0.5">Anti-Spoofing Check</p>
                               </div>

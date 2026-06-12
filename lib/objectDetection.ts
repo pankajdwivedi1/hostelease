@@ -49,14 +49,15 @@ export async function detectMobilePhone(imageElement: HTMLVideoElement | HTMLCan
         // Run detection
         const predictions = await cocoModel.detect(imageElement);
         
-        // Check for 'cell phone' class
+        // Check for spoofing objects
+        const spoofClasses = ['cell phone', 'book', 'laptop', 'tv', 'monitor', 'tablet', 'paper'];
         for (const prediction of predictions) {
-            if (prediction.class === 'cell phone' && prediction.score > 0.4) {
+            if (spoofClasses.includes(prediction.class) && prediction.score > 0.4) {
                 console.warn(`🛑 SPOOF ATTEMPT DETECTED! Found a ${prediction.class} (${Math.round(prediction.score * 100)}% confidence)`);
-                return true; // Phone found!
+                return true; // Spoof object found!
             }
         }
-        return false; // No phone found
+        return false; // No spoof object found
     } catch (error) {
         console.error("❌ Error running phone detection:", error);
         return false;
