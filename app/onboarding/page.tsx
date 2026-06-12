@@ -35,13 +35,35 @@ export default function OnboardingPage() {
   const [isExistingStudent, setIsExistingStudent] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [formConfig, setFormConfig] = useState<Record<string, any>>({});
-  const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
+  const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([
+    { id: "name", label: "Full Name", type: "text", required: true, width: "half", visible: true },
+    { id: "phone", label: "Phone Number", type: "text", required: true, width: "half", visible: true },
+    { id: "dob", label: "Date of Birth", type: "date", required: true, width: "half", visible: true },
+    { id: "socialCategory", label: "Social Category", type: "select", options: ["General", "OBC", "SC", "ST", "Other"], required: true, width: "half", visible: true },
+    { id: "hostel", label: "Select Hostel", type: "select", options: [], required: true, width: "full", visible: true },
+  ]);
+  const [loadingProgress, setLoadingProgress] = useState(100);
 
   useEffect(() => {
     // ⚡ Preload AI models immediately on page load in the background so camera activates instantly
     faceMatching.loadFaceApiModels(false);
     objectDetection.loadPhoneDetector();
   }, []);
+
+  // Simulate progress bar loading
+  useEffect(() => {
+    if (formBuilderConfig.length === 0) {
+      const interval = setInterval(() => {
+        setLoadingProgress((prev) => {
+          if (prev >= 95) return prev; // Hold at 95% until actually loaded
+          return prev + Math.floor(Math.random() * 10) + 1;
+        });
+      }, 150);
+      return () => clearInterval(interval);
+    } else {
+      setLoadingProgress(100);
+    }
+  }, [formBuilderConfig.length]);
 
   // Fetch hostels from API
   useEffect(() => {
@@ -80,7 +102,9 @@ export default function OnboardingPage() {
         const data = await response.json();
         if (data.success) {
           setFormConfig(data.registrationFieldsConfig || {});
-          setFormBuilderConfig(data.formBuilderConfig || []);
+          if (data.formBuilderConfig && data.formBuilderConfig.length > 0) {
+            setFormBuilderConfig(data.formBuilderConfig);
+          }
         }
       } catch (error) {
         console.error("Error fetching form config:", error);
@@ -755,10 +779,21 @@ export default function OnboardingPage() {
               ))}
             </div>
 
-            {/* If formBuilderConfig is empty, show a fallback message */}
+            {/* If formBuilderConfig is empty, show a dynamic progress bar */}
             {formBuilderConfig.length === 0 && (
-              <div className="py-8 text-center text-secondary">
-                <p className="text-sm font-medium">Form configuration is loading...</p>
+              <div className="py-12 w-full max-w-md mx-auto px-4 flex flex-col items-center justify-center animate-in fade-in duration-500">
+                <div className="w-full flex justify-between items-end mb-2">
+                  <p className="text-xs font-black text-indigo-900 uppercase tracking-widest animate-pulse">Form configuration is loading...</p>
+                  <span className="text-sm font-black text-blue-600 tabular-nums">{loadingProgress}%</span>
+                </div>
+                <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden shadow-inner border border-gray-200">
+                  <div 
+                    className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-600 rounded-full transition-all duration-300 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)] relative overflow-hidden"
+                    style={{ width: `${loadingProgress}%` }}
+                  >
+                    <div className="absolute inset-0 bg-white/20 w-full h-full animate-[shimmer_2s_infinite] -skew-x-12 translate-x-[-100%]"></div>
+                  </div>
+                </div>
               </div>
             )}
 

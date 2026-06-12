@@ -2,40 +2,41 @@
 
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
 
 export default function AuthCallback() {
-  const router = useRouter();
-
   useEffect(() => {
-    const handleCallback = async () => {
-      // Supabase handles the session exchange automatically on the client
-      // when it sees the auth code in the URL fragments/params.
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
-      if (error) {
-        console.error("Auth callback error:", error);
-      }
-
-      // Redirect to the dashboard while preserving tenant
-      // We read from localStorage because Supabase strict redirect matching drops query params
+    const doRedirect = () => {
       const tenant = typeof window !== 'undefined' ? localStorage.getItem('lastTenantSlug') : null;
-      
+      // Using window.location.replace completely bypasses Next.js client-side routing delays (especially dev mode compilation hangs)
+      // It also cleanly wipes the #access_token from the URL history.
       if (tenant) {
-          router.push(`/?tenant=${tenant}`);
+          window.location.replace(`/?tenant=${tenant}`);
       } else {
-          router.push("/");
+          window.location.replace("/");
       }
     };
 
-    handleCallback();
-  }, [router]);
+    // 1. If session is instantly available, redirect immediately.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) doRedirect();
+    });
+
+    // 2. Otherwise, listen for the exact moment Supabase finishes parsing the URL hash.
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" || event === "PASSWORD_RECOVERY") {
+        if (session) doRedirect();
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
 
   return (
-    <div className="min-h-screen bg-[#050510] flex flex-col items-center justify-center text-white">
-      <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-6"></div>
-      <h2 className="text-xl font-black uppercase tracking-tight">Authenticating</h2>
-      <p className="text-gray-400 text-xs mt-2 uppercase tracking-[0.2em]">Finalizing your secure session...</p>
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center">
+      <div className="w-10 h-10 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin"></div>
+      <p className="mt-4 text-xs font-black tracking-widest text-indigo-900 uppercase">Verifying</p>
     </div>
   );
 }

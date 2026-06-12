@@ -592,22 +592,10 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
         checkStatus();
     }, [pathname]);
 
-    if (loading) {
-        return (
-            <div className="fixed inset-0 z-[9999] bg-[#050510] flex items-center justify-center p-4 text-white">
-                <div className="flex flex-col items-center justify-center gap-4 animate-in fade-in zoom-in duration-500">
-                    <div className="w-16 h-16 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/5">
-                        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                    </div>
-                    <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest animate-pulse">
-                        Authenticating Node...
-                    </p>
-                </div>
-            </div>
-        );
-    }
-
-    // If expired or deactivated, show the RENEWAL PORTAL for the entire college
+    // We removed the 'loading' blocking screen. 
+    // The page will now load INSTANTLY. 
+    // If the tenant is expired, the Guard check will silently finish in the background 
+    // and overlay the Suspended screen dynamically without making the user wait for the API!
     if (status?.isExpired) {
         // Only allow staff/admin/superadmin roles to see the payment renewal portal
         const canSeeRenewal = userType && ["admin", "dean", "gatepass", "warden", "campus", "superadmin"].includes(userType.toLowerCase());
