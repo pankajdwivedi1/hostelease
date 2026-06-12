@@ -35,14 +35,25 @@ export default function OnboardingPage() {
   const [isExistingStudent, setIsExistingStudent] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [formConfig, setFormConfig] = useState<Record<string, any>>({});
-  const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([
-    { id: "name", label: "Full Name", type: "text", required: true, width: "half", visible: true },
-    { id: "phone", label: "Phone Number", type: "text", required: true, width: "half", visible: true },
-    { id: "dob", label: "Date of Birth", type: "date", required: true, width: "half", visible: true },
-    { id: "socialCategory", label: "Social Category", type: "select", options: ["General", "OBC", "SC", "ST", "Other"], required: true, width: "half", visible: true },
-    { id: "hostel", label: "Select Hostel", type: "select", options: [], required: true, width: "full", visible: true },
-  ]);
-  const [loadingProgress, setLoadingProgress] = useState(100);
+  const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
+  const [tempConfig, setTempConfig] = useState<any[]>([]);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+
+  useEffect(() => {
+    // ⚡ Safe LocalStorage Hydration
+    const cached = localStorage.getItem('cachedFormBuilderConfig');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.length > 0) {
+          setFormBuilderConfig(parsed);
+          setLoadingProgress(100);
+        }
+      } catch (e) {
+        console.error("Cache read error", e);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     // ⚡ Preload AI models immediately on page load in the background so camera activates instantly
@@ -50,20 +61,39 @@ export default function OnboardingPage() {
     objectDetection.loadPhoneDetector();
   }, []);
 
-  // Simulate progress bar loading
+  // Smooth progress bar animation
   useEffect(() => {
-    if (formBuilderConfig.length === 0) {
+    // If form is already showing, do nothing
+    if (formBuilderConfig.length > 0) return;
+
+    if (tempConfig.length > 0) {
+      // Data loaded, accelerate to 100%
       const interval = setInterval(() => {
         setLoadingProgress((prev) => {
-          if (prev >= 95) return prev; // Hold at 95% until actually loaded
-          return prev + Math.floor(Math.random() * 10) + 1;
+          const next = prev + 8;
+          if (next >= 100) {
+            clearInterval(interval);
+            // Wait for CSS transition to finish before showing the form
+            setTimeout(() => {
+              setFormBuilderConfig(tempConfig);
+            }, 400);
+            return 100;
+          }
+          return next;
+        });
+      }, 30);
+      return () => clearInterval(interval);
+    } else {
+      // Data not loaded yet, simulate loading up to 95%
+      const interval = setInterval(() => {
+        setLoadingProgress((prev) => {
+          if (prev >= 95) return prev; // Hold at 95%
+          return prev + Math.floor(Math.random() * 8) + 1;
         });
       }, 150);
       return () => clearInterval(interval);
-    } else {
-      setLoadingProgress(100);
     }
-  }, [formBuilderConfig.length]);
+  }, [tempConfig, formBuilderConfig.length]);
 
   // Fetch hostels from API
   useEffect(() => {
@@ -103,7 +133,10 @@ export default function OnboardingPage() {
         if (data.success) {
           setFormConfig(data.registrationFieldsConfig || {});
           if (data.formBuilderConfig && data.formBuilderConfig.length > 0) {
-            setFormBuilderConfig(data.formBuilderConfig);
+            setTempConfig(data.formBuilderConfig);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('cachedFormBuilderConfig', JSON.stringify(data.formBuilderConfig));
+            }
           }
         }
       } catch (error) {
@@ -413,80 +446,89 @@ export default function OnboardingPage() {
       setBlinkInstruction('OPEN_MOUTH');
       currentInstruction = 'OPEN_MOUTH';
       setBlinkCount(0);
+
+      let isDetecting = false; // Prevent overlapping heavy AI inferences
+
       interval = setInterval(async () => {
+        if (isDetecting) return; // Wait for current AI detection to finish before starting a new one
         if (videoRef.current && videoRef.current.readyState === 4) {
-          // ⚡ LEVEL 3 ANTI-SPOOFING: Mobile Phone Detection
-          const isPhoneDetected = await objectDetection.detectMobilePhone(videoRef.current);
-          if (isPhoneDetected) {
-            setIsSpoofingDetected(true);
-            setIsFaceInFrame(false);
-            hasDetectedLiveness = false;
-            if (overlayCanvasRef.current) {
-                const ctx = overlayCanvasRef.current.getContext('2d');
-                if (ctx) ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
+          isDetecting = true;
+          try {
+            // ⚡ LEVEL 3 ANTI-SPOOFING: Mobile Phone Detection
+            const isPhoneDetected = await objectDetection.detectMobilePhone(videoRef.current);
+            if (isPhoneDetected) {
+              setIsSpoofingDetected(true);
+              setIsFaceInFrame(false);
+              hasDetectedLiveness = false;
+              if (overlayCanvasRef.current) {
+                  const ctx = overlayCanvasRef.current.getContext('2d');
+                  if (ctx) ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
+              }
+              return; // Block processing
+            } else {
+              setIsSpoofingDetected(false);
             }
-            return; // Block processing
-          } else {
-            setIsSpoofingDetected(false);
-          }
 
-          const res = await faceMatching.detectFace(videoRef.current, false, false);
+            const res = await faceMatching.detectFace(videoRef.current, false, false);
 
-          if (!res) {
-            setIsFaceInFrame(false);
-            hasDetectedLiveness = false;
-            currentInstruction = 'OPEN_MOUTH';
-            setBlinkInstruction('OPEN_MOUTH');
-            currentActionStartTime = 0;
-            currentBlinkCount = 0;
-            setBlinkCount(0);
-            // Clear canvas
-            if (overlayCanvasRef.current) {
-                const ctx = overlayCanvasRef.current.getContext('2d');
-                if (ctx) ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
+            if (!res) {
+              setIsFaceInFrame(false);
+              hasDetectedLiveness = false;
+              currentInstruction = 'OPEN_MOUTH';
+              setBlinkInstruction('OPEN_MOUTH');
+              currentActionStartTime = 0;
+              currentBlinkCount = 0;
+              setBlinkCount(0);
+              // Clear canvas
+              if (overlayCanvasRef.current) {
+                  const ctx = overlayCanvasRef.current.getContext('2d');
+                  if (ctx) ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
+              }
+              return;
             }
-            return;
-          }
 
-          // ⚡ DRAW DYNAMIC GREEN FACE FRAME
-          if (overlayCanvasRef.current && videoRef.current) {
-              const video = videoRef.current;
-              const canvas = overlayCanvasRef.current;
-              if (video.videoWidth > 0) {
-                  const displaySize = { width: video.videoWidth, height: video.videoHeight };
-                  const fa = await faceMatching.getFaceApi();
-                  fa.matchDimensions(canvas, displaySize);
-                  const resizedDetection = fa.resizeResults(res.detection, displaySize);
-                  const ctx = canvas.getContext('2d');
-                  if (ctx) {
-                      ctx.clearRect(0, 0, canvas.width, canvas.height);
-                      const drawBox = new fa.draw.DrawBox(resizedDetection.box, { 
-                          lineWidth: 1, 
-                          boxColor: '#00FF00' 
-                      });
-                      drawBox.draw(canvas);
+            // ⚡ DRAW DYNAMIC GREEN FACE FRAME
+            if (overlayCanvasRef.current && videoRef.current) {
+                const video = videoRef.current;
+                const canvas = overlayCanvasRef.current;
+                if (video.videoWidth > 0) {
+                    const displaySize = { width: video.videoWidth, height: video.videoHeight };
+                    const fa = await faceMatching.getFaceApi();
+                    fa.matchDimensions(canvas, displaySize);
+                    const resizedDetection = fa.resizeResults(res.detection, displaySize);
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        const drawBox = new fa.draw.DrawBox(resizedDetection.box, { 
+                            lineWidth: 1, 
+                            boxColor: '#00FF00' 
+                        });
+                        drawBox.draw(canvas);
+                    }
+                }
+            }
+
+            const liveness = faceMatching.analyzeLiveness(res.landmarks);
+            if (liveness) {
+              // 🛡️ ACTION SEQUENCE: MOUTH OPEN DETECTION (100% Defeats 2D printed photos)
+              if (currentInstruction === 'OPEN_MOUTH') {
+                  if (liveness.isMouthOpen) { 
+                      currentInstruction = 'CLOSE_MOUTH';
+                      setBlinkInstruction('CLOSE_MOUTH');
+                  }
+              } else if (currentInstruction === 'CLOSE_MOUTH') {
+                  if (!liveness.isMouthOpen) {
+                      currentInstruction = 'DONE';
+                      setBlinkInstruction('DONE');
+                      hasDetectedLiveness = true;
                   }
               }
-          }
-
-          const liveness = faceMatching.analyzeLiveness(res.landmarks);
-          if (liveness) {
-            // 🛡️ ACTION SEQUENCE: MOUTH OPEN DETECTION (100% Defeats 2D printed photos)
-            if (currentInstruction === 'OPEN_MOUTH') {
-                if (liveness.isMouthOpen) { 
-                    currentInstruction = 'CLOSE_MOUTH';
-                    setBlinkInstruction('CLOSE_MOUTH');
-                }
-            } else if (currentInstruction === 'CLOSE_MOUTH') {
-                if (!liveness.isMouthOpen) {
-                    currentInstruction = 'DONE';
-                    setBlinkInstruction('DONE');
-                    hasDetectedLiveness = true;
-                }
             }
-          }
 
-          setIsFaceInFrame(hasDetectedLiveness);
+            setIsFaceInFrame(hasDetectedLiveness);
+          } finally {
+            isDetecting = false; // Release lock
+          }
         }
       }, 100); 
     }
@@ -814,24 +856,26 @@ export default function OnboardingPage() {
                 )}
               </div>
             )}
-            <div className="flex gap-4 mt-6">
-              <button
-                type="button"
-                onClick={handleBack}
-                className="flex-1 h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
-              >
-                Cancel
-              </button>
-              {!isProfileLocked && (
+            {formBuilderConfig.length > 0 && (
+              <div className="flex gap-4 mt-6">
                 <button
-                  type="submit"
-                  disabled={loading || isFaceProcessing}
-                  className="flex-[2] h-12 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="button"
+                  onClick={handleBack}
+                  className="flex-1 h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
                 >
-                  {loading ? "Saving..." : isFaceProcessing ? "Scanning Face..." : "Save your details"}
+                  Cancel
                 </button>
-              )}
-            </div>
+                {!isProfileLocked && (
+                  <button
+                    type="submit"
+                    disabled={loading || isFaceProcessing}
+                    className="flex-[2] h-12 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? "Saving..." : isFaceProcessing ? "Scanning Face..." : "Save your details"}
+                  </button>
+                )}
+              </div>
+            )}
           </form>
         </div>
       </main>
