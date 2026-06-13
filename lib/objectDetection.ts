@@ -1,30 +1,44 @@
 import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 
+import * as handpose from '@tensorflow-models/handpose';
+
 let cocoModel: cocoSsd.ObjectDetection | null = null;
+let handposeModel: handpose.HandPose | null = null;
 let isLoading = false;
 
 /**
- * Load the Mobile Phone Detector (coco-ssd) model
+ * Load the Mobile Phone Detector and Hand Detector models
  */
 export async function loadPhoneDetector() {
-    if (cocoModel) return true;
+    if (cocoModel && handposeModel) return true;
     if (isLoading) {
+        // Wait for it to finish loading
         while (isLoading) {
             await new Promise(resolve => setTimeout(resolve, 100));
         }
-        return !!cocoModel;
+        return !!cocoModel && !!handposeModel;
     }
 
     isLoading = true;
     try {
-        console.log("📱 Loading AI Mobile Phone Detector...");
+        console.log("📱 Loading AI Object Detectors (Phone & Hand)...");
+        // Ensure TF backend is ready
         await tf.ready();
-        cocoModel = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
-        console.log("✅ Phone Detector Loaded Successfully");
+        
+        // Load the models in parallel
+        const [coco, hand] = await Promise.all([
+            cocoSsd.load({ base: 'lite_mobilenet_v2' }),
+            handpose.load()
+        ]);
+        
+        cocoModel = coco;
+        handposeModel = hand;
+
+        console.log("✅ Phone & Hand Detectors Loaded Successfully");
         return true;
     } catch (error) {
-        console.error("❌ Failed to load Phone Detector:", error);
+        console.error("❌ Failed to load Object Detectors:", error);
         return false;
     } finally {
         isLoading = false;
@@ -32,19 +46,33 @@ export async function loadPhoneDetector() {
 }
 
 /**
- * Scan the camera feed for cell phones
+ * Scan the camera feed for cell phones and HANDS!
  * @param imageElement The video or canvas element
- * @returns true if a cell phone is detected, false otherwise
+ * @returns true if a cell phone or hand is detected, false otherwise
  */
 export async function detectMobilePhone(imageElement: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement): Promise<{isSpoofing: boolean, message: string}> {
-    if (!cocoModel) {
-        console.warn("⚠️ Phone Detector not loaded yet");
+    if (!cocoModel || !handposeModel) {
+        console.warn("⚠️ Detectors not loaded yet");
         return { isSpoofing: false, message: "" };
     }
 
     try {
-        const predictions = await cocoModel.detect(imageElement);
+        // Run detection in parallel
+        const [predictions, hands] = await Promise.all([
+            cocoModel.detect(imageElement),
+            handposeModel.estimateHands(imageElement)
+        ]);
         
+        // 1. Check for Hand Spoofing (holding a photo)
+        if (hands && hands.length > 0) {
+            const handConfidence = hands[0].handInViewConfidence;
+            if (handConfidence > 0.8) {
+                console.warn(`🛑 SPOOF ATTEMPT DETECTED! Found a Hand (${Math.round(handConfidence * 100)}%)`);
+                return { isSpoofing: true, message: "HAND DETECTED! DROP PHOTO" };
+            }
+        }
+
+        // 2. Check for Phone/Device Spoofing
         const spoofClasses = ['cell phone', 'book', 'laptop', 'tv', 'monitor', 'tablet', 'paper'];
         for (const prediction of predictions) {
             if (spoofClasses.includes(prediction.class) && prediction.score > 0.4) {
@@ -53,7 +81,7 @@ export async function detectMobilePhone(imageElement: HTMLVideoElement | HTMLCan
             }
         }
         
-        return { isSpoofing: false, message: "" };
+        return { isSpoofing: false, message: "" }; // No spoof object found
     } catch (error) {
         console.error("❌ Error running phone detection:", error);
         return { isSpoofing: false, message: "" };
