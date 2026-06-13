@@ -16,10 +16,18 @@ export default function OnboardingPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
+  const [faceDescriptor, setFaceDescriptor] = useState<Float32Array | null>(null);
   const [isCapturingDescriptor, setIsCapturingDescriptor] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isFaceProcessing, setIsFaceProcessing] = useState(false);
+
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState("");
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [isSavingDB, setIsSavingDB] = useState(false);
+
   const [faceError, setFaceError] = useState<string | null>(null);
   const [isFaceInFrame, setIsFaceInFrame] = useState(false);
   const [isSpoofingDetected, setIsSpoofingDetected] = useState(false);
@@ -273,41 +281,73 @@ export default function OnboardingPage() {
 
     try {
       setLoading(true);
-      // Device Registration Logic
-      const getStoredDeviceId = () => {
-        try {
-          const stored = localStorage.getItem("device_id_token");
-          if (!stored) return null;
-          return atob(stored);
-        } catch (e) {
-          return null;
-        }
-      };
+      setErrors({});
 
-      const storeDeviceId = (id: string) => {
-        localStorage.setItem("device_id_token", btoa(id));
-      };
+      // 1. Send OTP
+      const response = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: formData.phoneNumber }),
+      });
 
-      // ⚡ DISABLED: Device binding is no longer required
-      /*
-      let currentDeviceId = getStoredDeviceId();
-      let deviceJustRegistered = false;
+      const data = await response.json();
 
-      if (!currentDeviceId) {
-        const generateUUID = () => {
-          if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-          });
-        };
-        currentDeviceId = generateUUID();
-        storeDeviceId(currentDeviceId);
-        deviceJustRegistered = true;
+      if (!response.ok) {
+        setErrors({ submit: data.error || "Failed to send OTP. Please check your number." });
+        setLoading(false);
+        return;
       }
-      */
-      const currentDeviceId = "no-binding"; // Dummy value for legacy field
+
+      // Show OTP Modal
+      setShowOtpModal(true);
+      setLoading(false);
+    } catch (error: any) {
+      console.error("Error sending OTP:", error);
+      setErrors({ submit: "Failed to connect to server. Please try again." });
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otp) {
+      setOtpError("Please enter the OTP");
+      return;
+    }
+
+    try {
+      setOtpLoading(true);
+      setOtpError("");
+
+      const verifyRes = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: formData.phoneNumber, otp }),
+      });
+
+      const verifyData = await verifyRes.json();
+
+      if (!verifyRes.ok) {
+        setOtpError(verifyData.error || "Invalid OTP");
+        setOtpLoading(false);
+        return;
+      }
+
+      // OTP Verified! Now save to DB.
+      setShowOtpModal(false);
+      await saveToDatabase();
+
+    } catch (error: any) {
+      console.error("Error verifying OTP:", error);
+      setOtpError("Failed to verify OTP. Please try again.");
+      setOtpLoading(false);
+    }
+  };
+
+  const saveToDatabase = async () => {
+    try {
+      setIsSavingDB(true);
+      const currentDeviceId = "no-binding";
 
       const response = await fetch("/api/students", {
         method: "POST",
@@ -315,16 +355,16 @@ export default function OnboardingPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          firebaseUID: user.uid,
-          supabase_id: user.source === 'supabase' ? user.uid : undefined,
+          firebaseUID: user?.uid,
+          supabase_id: user?.source === 'supabase' ? user.uid : undefined,
           name: formData.name,
-          email: user.email || "",
+          email: user?.email || "",
           phoneNumber: formData.phoneNumber,
           erpInformation: formData.erpInformation,
           hostelName: formData.hostelName,
           joiningDate: formData.joiningDate,
           roomNumber: formData.roomNumber,
-          profilePicture: capturedImage || user.photoURL || "",
+          profilePicture: capturedImage || user?.photoURL || "",
           fatherName: formData.fatherName,
           fatherNumber: formData.fatherNumber,
           motherName: formData.motherName,
@@ -336,14 +376,14 @@ export default function OnboardingPage() {
           year: formData.year,
           semester: formData.semester,
           section: formData.section,
-          floorNumber: formData.floorNumber, // NEW
+          floorNumber: formData.floorNumber,
           localGuardianAddress: formData.localGuardianAddress,
           localGuardianPhoneNumber: formData.localGuardianPhoneNumber,
           dob: formData.dob,
           category: formData.category,
-          deviceId: currentDeviceId, // Include deviceId in the payload
-          faceDescriptor: faceDescriptor || undefined, // NEW: Include face bio
-          dynamicFields: formData, // Save all form data into dynamicFields for flexibility
+          deviceId: currentDeviceId,
+          faceDescriptor: faceDescriptor || undefined,
+          dynamicFields: formData,
         }),
       });
 
@@ -351,22 +391,20 @@ export default function OnboardingPage() {
 
       if (!response.ok) {
         const error: any = new Error(data.error || "Failed to save data");
-        error.details = data.details; // Attach server-side validation errors
+        error.details = data.details;
         throw error;
       }
 
-      /*
-      if (deviceJustRegistered) {
-        alert("Device registered successfully! You can now use all features.");
-      }
-      */
+      // Premium Success Transition
+      setIsSuccess(true);
+      setTimeout(() => {
+        localStorage.setItem("userType", "student");
+        window.location.href = "/"; // Force hard redirect
+      }, 1500);
 
-      localStorage.setItem("userType", "student");
-      router.push("/");
     } catch (error: any) {
       console.error("Error saving student data:", error);
 
-      // If the server returned validation details, use them
       if (error.details && Array.isArray(error.details)) {
         const newErrors: Record<string, string> = {};
         error.details.forEach((detail: string, index: number) => {
@@ -376,8 +414,7 @@ export default function OnboardingPage() {
       } else {
         setErrors({ submit: error.message || "Failed to save data. Please try again." });
       }
-    } finally {
-      setLoading(false);
+      setIsSavingDB(false);
     }
   };
 
@@ -712,7 +749,7 @@ export default function OnboardingPage() {
                               type="button"
                               onClick={captureImage}
                               disabled={!isFaceInFrame}
-                              className={`px-8 py-4 md:px-12 md:py-5 rounded-full text-xs md:text-sm font-black uppercase tracking-widest shadow-2xl transition-all ${isFaceInFrame ? 'bg-white text-black scale-105 md:scale-110 shadow-white/30 hover:scale-[1.15] active:scale-95' : 'bg-gray-800 text-gray-400 opacity-60 cursor-not-allowed'}`}
+                              className={`px-8 py-4 md:px-12 md:py-5 rounded-full text-xs md:text-sm font-black uppercase tracking-widest shadow-2xl transition-all ${isFaceInFrame ? 'bg-green-600 text-white scale-105 md:scale-110 shadow-green-600/30 hover:scale-[1.15] active:scale-95' : 'bg-gray-800 text-gray-400 opacity-60 cursor-not-allowed'}`}
                             >
                               Capture Photo
                             </button>
@@ -864,10 +901,10 @@ export default function OnboardingPage() {
                 {!isProfileLocked && (
                   <button
                     type="submit"
-                    disabled={loading || isFaceProcessing}
-                    className="flex-[2] h-12 rounded-lg bg-blue-600 text-background font-medium transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={loading || isSavingDB || isFaceProcessing || isSuccess}
+                    className={`flex-[2] h-12 rounded-lg font-medium transition-colors ${isSuccess ? 'bg-green-600 text-white' : 'bg-blue-600 text-background hover:bg-blue-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
-                    {loading ? "Saving..." : isFaceProcessing ? "Scanning Face..." : "Save your details"}
+                    {isSuccess ? "Thank you, your profile is created" : isSavingDB ? "Verifying..." : loading ? "Sending OTP..." : isFaceProcessing ? "Scanning Face..." : "Save your details"}
                   </button>
                 )}
               </div>
@@ -875,6 +912,54 @@ export default function OnboardingPage() {
           </form>
         </div>
       </main>
+
+      {/* OTP Verification Modal */}
+      {showOtpModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+            <div className="bg-blue-600 p-6 text-center">
+              <h2 className="text-2xl font-black text-white tracking-widest uppercase">Verify Mobile</h2>
+              <p className="text-blue-100 text-sm mt-2 font-medium">OTP sent to {formData.phoneNumber}</p>
+            </div>
+            
+            <form onSubmit={handleVerifyOtp} className="p-6 md:p-8 space-y-6">
+              <div>
+                <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2 text-center">
+                  Enter OTP
+                </label>
+                <input
+                  type="text"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="------"
+                  className="w-full text-center text-3xl font-bold tracking-[0.5em] py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all placeholder:tracking-normal text-gray-800"
+                  autoFocus
+                />
+                {otpError && (
+                  <p className="text-sm text-red-500 font-bold mt-3 text-center animate-pulse">{otpError}</p>
+                )}
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setShowOtpModal(false)}
+                  className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="submit"
+                  disabled={otpLoading || otp.length < 4}
+                  className="flex-[2] py-3 px-4 rounded-xl font-black uppercase tracking-widest text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-all shadow-xl shadow-blue-600/20"
+                >
+                  {otpLoading ? "VERIFYING..." : "VERIFY OTP"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
