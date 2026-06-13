@@ -12,43 +12,51 @@ import * as objectDetection from "@/lib/objectDetection";
 
 // Global flag to track if warmup is done so we don't do it twice
 let globalIsAIWarmedUp = false;
+let warmupPromise: Promise<void> | null = null;
 
 const preloadAndWarmupAI = async () => {
     if (globalIsAIWarmedUp) return;
-    try {
-      console.log("⚡ [AI WARMUP] Starting background load...");
-      // Download models
-      await faceMatching.loadFaceApiModels();
-      await new Promise(resolve => setTimeout(resolve, 100)); 
-      await objectDetection.loadPhoneDetector();
-      await new Promise(resolve => setTimeout(resolve, 100)); 
-      
-      console.log("⚡ [AI WARMUP] Models loaded, compiling shaders...");
-      const dummyCanvas = document.createElement('canvas');
-      dummyCanvas.width = 64;
-      dummyCanvas.height = 64;
-      const ctx = dummyCanvas.getContext('2d');
-      if (ctx) {
-          ctx.fillStyle = '#000000';
-          ctx.fillRect(0, 0, 64, 64);
-          
-          // Let React render UI before freezing the thread
-          await new Promise(resolve => requestAnimationFrame(resolve));
-          await new Promise(resolve => setTimeout(resolve, 50)); 
+    if (warmupPromise) return warmupPromise;
 
-          // Run fake inferences to force WebGL to compile shaders now
-          await faceMatching.detectFace(dummyCanvas, false, false);
-          
-          await new Promise(resolve => requestAnimationFrame(resolve));
-          await new Promise(resolve => setTimeout(resolve, 50)); 
-          
-          await objectDetection.detectMobilePhone(dummyCanvas);
+    warmupPromise = (async () => {
+      try {
+        console.log("⚡ [AI WARMUP] Starting background load...");
+        // Download models
+        await faceMatching.loadFaceApiModels();
+        await new Promise(resolve => setTimeout(resolve, 100)); 
+        await objectDetection.loadPhoneDetector();
+        await new Promise(resolve => setTimeout(resolve, 100)); 
+        
+        console.log("⚡ [AI WARMUP] Models loaded, compiling shaders...");
+        const dummyCanvas = document.createElement('canvas');
+        dummyCanvas.width = 64;
+        dummyCanvas.height = 64;
+        const ctx = dummyCanvas.getContext('2d');
+        if (ctx) {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, 64, 64);
+            
+            // Let React render UI before freezing the thread
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            await new Promise(resolve => setTimeout(resolve, 50)); 
+
+            // Run fake inferences to force WebGL to compile shaders now
+            await faceMatching.detectFace(dummyCanvas, false, false);
+            
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            await new Promise(resolve => setTimeout(resolve, 50)); 
+            
+            await objectDetection.detectMobilePhone(dummyCanvas);
+        }
+        globalIsAIWarmedUp = true;
+        console.log("⚡ [AI WARMUP] Background load & shader compilation finished!");
+      } catch (e) {
+        console.error("⚡ [AI WARMUP] Failed:", e);
+      } finally {
+        warmupPromise = null;
       }
-      globalIsAIWarmedUp = true;
-      console.log("⚡ [AI WARMUP] Background load & shader compilation finished!");
-    } catch (e) {
-      console.error("⚡ [AI WARMUP] Failed:", e);
-    }
+    })();
+    return warmupPromise;
 };
 
 export default function OnboardingPage() {
