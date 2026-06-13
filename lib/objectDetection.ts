@@ -10,7 +10,6 @@ let isLoading = false;
 export async function loadPhoneDetector() {
     if (cocoModel) return true;
     if (isLoading) {
-        // Wait for it to finish loading
         while (isLoading) {
             await new Promise(resolve => setTimeout(resolve, 100));
         }
@@ -20,14 +19,9 @@ export async function loadPhoneDetector() {
     isLoading = true;
     try {
         console.log("📱 Loading AI Mobile Phone Detector...");
-        // Ensure TF backend is ready
         await tf.ready();
-        // Load the model
         cocoModel = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
-        
-        // Removed WARMUP to prevent synchronous WebGL blocking of the main thread
-
-        console.log("✅ Phone Detector Loaded & Warmed Up Successfully");
+        console.log("✅ Phone Detector Loaded Successfully");
         return true;
     } catch (error) {
         console.error("❌ Failed to load Phone Detector:", error);
@@ -42,27 +36,26 @@ export async function loadPhoneDetector() {
  * @param imageElement The video or canvas element
  * @returns true if a cell phone is detected, false otherwise
  */
-export async function detectMobilePhone(imageElement: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement): Promise<boolean> {
+export async function detectMobilePhone(imageElement: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement): Promise<{isSpoofing: boolean, message: string}> {
     if (!cocoModel) {
         console.warn("⚠️ Phone Detector not loaded yet");
-        return false;
+        return { isSpoofing: false, message: "" };
     }
 
     try {
-        // Run detection
         const predictions = await cocoModel.detect(imageElement);
         
-        // Check for spoofing objects
         const spoofClasses = ['cell phone', 'book', 'laptop', 'tv', 'monitor', 'tablet', 'paper'];
         for (const prediction of predictions) {
             if (spoofClasses.includes(prediction.class) && prediction.score > 0.4) {
                 console.warn(`🛑 SPOOF ATTEMPT DETECTED! Found a ${prediction.class} (${Math.round(prediction.score * 100)}% confidence)`);
-                return true; // Spoof object found!
+                return { isSpoofing: true, message: "PHONE/SCREEN DETECTED!" }; 
             }
         }
-        return false; // No spoof object found
+        
+        return { isSpoofing: false, message: "" };
     } catch (error) {
         console.error("❌ Error running phone detection:", error);
-        return false;
+        return { isSpoofing: false, message: "" };
     }
 }

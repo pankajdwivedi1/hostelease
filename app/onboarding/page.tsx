@@ -10,6 +10,47 @@ import { useRef } from "react";
 import * as faceMatching from "@/lib/faceMatching";
 import * as objectDetection from "@/lib/objectDetection";
 
+// Global flag to track if warmup is done so we don't do it twice
+let globalIsAIWarmedUp = false;
+
+const preloadAndWarmupAI = async () => {
+    if (globalIsAIWarmedUp) return;
+    try {
+      console.log("⚡ [AI WARMUP] Starting background load...");
+      // Download models
+      await faceMatching.loadFaceApiModels();
+      await new Promise(resolve => setTimeout(resolve, 100)); 
+      await objectDetection.loadPhoneDetector();
+      await new Promise(resolve => setTimeout(resolve, 100)); 
+      
+      console.log("⚡ [AI WARMUP] Models loaded, compiling shaders...");
+      const dummyCanvas = document.createElement('canvas');
+      dummyCanvas.width = 64;
+      dummyCanvas.height = 64;
+      const ctx = dummyCanvas.getContext('2d');
+      if (ctx) {
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, 64, 64);
+          
+          // Let React render UI before freezing the thread
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          await new Promise(resolve => setTimeout(resolve, 50)); 
+
+          // Run fake inferences to force WebGL to compile shaders now
+          await faceMatching.detectFace(dummyCanvas, false, false);
+          
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          await new Promise(resolve => setTimeout(resolve, 50)); 
+          
+          await objectDetection.detectMobilePhone(dummyCanvas);
+      }
+      globalIsAIWarmedUp = true;
+      console.log("⚡ [AI WARMUP] Background load & shader compilation finished!");
+    } catch (e) {
+      console.error("⚡ [AI WARMUP] Failed:", e);
+    }
+};
+
 export default function OnboardingPage() {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -32,7 +73,8 @@ export default function OnboardingPage() {
   const [faceError, setFaceError] = useState<string | null>(null);
   const [isFaceInFrame, setIsFaceInFrame] = useState(false);
   const [isSpoofingDetected, setIsSpoofingDetected] = useState(false);
-  const [blinkInstruction, setBlinkInstruction] = useState<'CLOSE_EYES' | 'OPEN_EYES' | 'DONE' | null>('CLOSE_EYES');
+  const [spoofMessage, setSpoofMessage] = useState<string>('');
+  const [turnInstruction, setTurnInstruction] = useState<'TURN_HEAD' | 'LOOK_STRAIGHT' | 'DONE' | null>('TURN_HEAD');
   const [blinkCount, setBlinkCount] = useState(0);
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
   const [hostelsLoading, setHostelsLoading] = useState(true);
@@ -176,6 +218,9 @@ export default function OnboardingPage() {
             });
             if (data.student.profilePicture) setCapturedImage(data.student.profilePicture);
             if (data.student.isProfileLocked) setIsProfileLocked(true);
+          } else {
+            // ⚡ BACKGROUND PRELOAD: Silently download heavy AI models and compile WebGL shaders!
+            preloadAndWarmupAI();
           }
         } catch (error) {
           console.error("Error fetching Supabase student data:", error);
@@ -201,6 +246,9 @@ export default function OnboardingPage() {
               });
               if (data.student.profilePicture) setCapturedImage(data.student.profilePicture);
               if (data.student.isProfileLocked) setIsProfileLocked(true);
+            } else {
+              // ⚡ BACKGROUND PRELOAD: Silently download heavy AI models and compile WebGL shaders!
+              preloadAndWarmupAI();
             }
           } catch (error) {
             console.error("Error fetching Firebase student data:", error);
@@ -446,33 +494,9 @@ export default function OnboardingPage() {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
       });
-      
-      // ⚡ PRE-LOAD: Await loading AI models
-      await faceMatching.loadFaceApiModels();
-      await new Promise(resolve => setTimeout(resolve, 100)); // Yield to prevent freeze
 
-      await objectDetection.loadPhoneDetector();
-      await new Promise(resolve => setTimeout(resolve, 100)); // Yield
-
-      // ⚡ WARMUP SHADERS: Compile WebGL shaders using a tiny dummy canvas
-      // This forces the synchronous compilation to happen NOW rather than freezing the live camera feed
-      try {
-          const dummyCanvas = document.createElement('canvas');
-          dummyCanvas.width = 64;
-          dummyCanvas.height = 64;
-          const ctx = dummyCanvas.getContext('2d');
-          if (ctx) {
-              ctx.fillStyle = '#000000';
-              ctx.fillRect(0, 0, 64, 64);
-              // Run fake inference to trigger shader compilation
-              await faceMatching.detectFace(dummyCanvas, false, false);
-              await new Promise(resolve => setTimeout(resolve, 100)); // Yield
-              await objectDetection.detectMobilePhone(dummyCanvas);
-              await new Promise(resolve => setTimeout(resolve, 100)); // Yield
-          }
-      } catch (warmupError) {
-          console.warn("Warmup skipped or failed:", warmupError);
-      }
+      // ⚡ PRE-LOAD: Await loading AI models just in case background warmup hasn't finished yet
+      await preloadAndWarmupAI();
 
       // 2. Now that camera, AI models, and WebGL shaders are ready, open the UI
       setIsCameraOpen(true);
@@ -511,8 +535,8 @@ export default function OnboardingPage() {
     let currentBlinkCount = 0;
 
     if (isCameraOpen && videoRef.current) {
-      setBlinkInstruction('CLOSE_EYES');
-      currentInstruction = 'CLOSE_EYES';
+      setTurnInstruction('TURN_HEAD');
+      currentInstruction = 'TURN_HEAD';
       setBlinkCount(0);
 
       let isDetecting = false; // Prevent overlapping heavy AI inferences
@@ -522,10 +546,11 @@ export default function OnboardingPage() {
         if (videoRef.current && videoRef.current.readyState === 4) {
           isDetecting = true;
           try {
-            // ⚡ LEVEL 3 ANTI-SPOOFING: Mobile Phone Detection
-            const isPhoneDetected = await objectDetection.detectMobilePhone(videoRef.current);
-            if (isPhoneDetected) {
+            // ⚡ LEVEL 3 ANTI-SPOOFING: Mobile Phone & Hand Detection
+            const spoofResult = await objectDetection.detectMobilePhone(videoRef.current);
+            if (spoofResult.isSpoofing) {
               setIsSpoofingDetected(true);
+              setSpoofMessage(spoofResult.message);
               setIsFaceInFrame(false);
               hasDetectedLiveness = false;
               if (overlayCanvasRef.current) {
@@ -535,6 +560,7 @@ export default function OnboardingPage() {
               return; // Block processing
             } else {
               setIsSpoofingDetected(false);
+              setSpoofMessage('');
             }
 
             const res = await faceMatching.detectFace(videoRef.current, false, false);
@@ -542,8 +568,8 @@ export default function OnboardingPage() {
             if (!res) {
               setIsFaceInFrame(false);
               hasDetectedLiveness = false;
-              currentInstruction = 'CLOSE_EYES';
-              setBlinkInstruction('CLOSE_EYES');
+              currentInstruction = 'TURN_HEAD';
+              setTurnInstruction('TURN_HEAD');
               currentActionStartTime = 0;
               currentBlinkCount = 0;
               setBlinkCount(0);
@@ -578,16 +604,17 @@ export default function OnboardingPage() {
 
             const liveness = faceMatching.analyzeLiveness(res.landmarks);
             if (liveness) {
-              // 🛡️ ACTION SEQUENCE: EYE BLINK DETECTION (100% Defeats 2D printed photos)
-              if (currentInstruction === 'CLOSE_EYES') {
-                  if (liveness.isBlinking) { 
-                      currentInstruction = 'OPEN_EYES';
-                      setBlinkInstruction('OPEN_EYES');
+              // 🛡️ ACTION SEQUENCE: HEAD TURN DETECTION (100% Defeats 2D printed photos mathematically)
+              // A printed photo has a fixed nose-to-jaw ratio (yaw), so it can NEVER pass this test!
+              if (currentInstruction === 'TURN_HEAD') {
+                  if (Math.abs(liveness.yaw) > 0.20) { 
+                      currentInstruction = 'LOOK_STRAIGHT';
+                      setTurnInstruction('LOOK_STRAIGHT');
                   }
-              } else if (currentInstruction === 'OPEN_EYES') {
-                  if (!liveness.isBlinking) {
+              } else if (currentInstruction === 'LOOK_STRAIGHT') {
+                  if (Math.abs(liveness.yaw) < 0.08) {
                       currentInstruction = 'DONE';
-                      setBlinkInstruction('DONE');
+                      setTurnInstruction('DONE');
                       hasDetectedLiveness = true;
                   }
               }
@@ -736,7 +763,7 @@ export default function OnboardingPage() {
                           {isCameraStarting ? (
                             <>
                               <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                              <span className="font-bold">Starting AI Camera...</span>
+                              <span className="font-bold">Opening Camera...</span>
                             </>
                           ) : (
                             <>
@@ -756,13 +783,13 @@ export default function OnboardingPage() {
                           <div className="absolute top-8 left-0 right-0 flex flex-col items-center gap-2 z-10">
                             <div className={`px-4 py-2 rounded-full text-xs md:text-sm font-black uppercase tracking-widest flex items-center gap-2 shadow-2xl transition-all border-2 ${isFaceInFrame ? 'bg-green-500 border-green-400 text-white' : isSpoofingDetected ? 'bg-red-700 border-red-500 text-white animate-pulse' : 'bg-red-600 border-red-400 text-white animate-pulse'}`}>
                               <span className={`w-2.5 h-2.5 rounded-full ${isFaceInFrame ? 'bg-white' : 'bg-white/80 animate-ping'}`}></span>
-                              {isSpoofingDetected ? 'SPOOF DETECTED: PHONE' : isFaceInFrame ? 'Live Human Verified' : 'Action Required'}
+                              {isSpoofingDetected ? 'SPOOF DETECTED' : isFaceInFrame ? 'Live Human Verified' : 'Action Required'}
                             </div>
                             
                             {!isFaceInFrame && (
                               <div className="bg-black/70 backdrop-blur-md text-white px-3 py-1.5 md:px-6 md:py-3 rounded-xl md:rounded-2xl text-center shadow-xl border border-white/20 mt-1 md:mt-2 mx-4 animate-bounce">
                                 <p className={`text-[10px] md:text-base font-black uppercase tracking-wide ${isSpoofingDetected ? 'text-red-500' : 'text-blue-400'}`}>
-                                  {isSpoofingDetected ? 'REMOVE SCREEN/OBJECT 📵' : blinkInstruction === 'CLOSE_EYES' ? 'Blink Your Eyes 👀' : blinkInstruction === 'OPEN_EYES' ? 'Open Eyes & Hold Still 📸' : 'Looking Good!'}
+                                  {isSpoofingDetected ? spoofMessage : !isFaceInFrame ? (turnInstruction === 'TURN_HEAD' ? 'Turn Head Left or Right 👤' : turnInstruction === 'LOOK_STRAIGHT' ? 'Look Straight & Hold Still 📸' : 'Position Face in Frame') : 'Looking Good!'}
                                 </p>
                                 <p className="text-[8px] md:text-xs font-medium text-gray-300 mt-0.5">Anti-Spoofing Check</p>
                               </div>
