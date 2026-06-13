@@ -97,6 +97,14 @@ export default function OnboardingPage() {
   const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
   const [tempConfig, setTempConfig] = useState<any[]>([]);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [isAIWarmedUpState, setIsAIWarmedUpState] = useState(false);
+
+  useEffect(() => {
+    // ⚡ Start AI warmup immediately when page loads
+    preloadAndWarmupAI().then(() => {
+      setIsAIWarmedUpState(true);
+    }).catch(console.error);
+  }, []);
 
   useEffect(() => {
     // ⚡ Safe LocalStorage Hydration
@@ -121,8 +129,8 @@ export default function OnboardingPage() {
     // If form is already showing, do nothing
     if (formBuilderConfig.length > 0) return;
 
-    if (tempConfig.length > 0) {
-      // Data loaded, accelerate to 100%
+    if (tempConfig.length > 0 && isAIWarmedUpState) {
+      // Data loaded and AI is warmed up, accelerate to 100%
       const interval = setInterval(() => {
         setLoadingProgress((prev) => {
           const next = prev + 8;
@@ -148,7 +156,7 @@ export default function OnboardingPage() {
       }, 150);
       return () => clearInterval(interval);
     }
-  }, [tempConfig, formBuilderConfig.length]);
+  }, [tempConfig, formBuilderConfig.length, isAIWarmedUpState]);
 
   // Fetch hostels from API
   useEffect(() => {

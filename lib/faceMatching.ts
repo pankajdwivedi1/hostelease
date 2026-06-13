@@ -115,7 +115,13 @@ export async function detectFace(
         if (!ready) return null;
 
         // ⚡ CRITICAL: Validate input dimensions
-        if (!(imageElement instanceof HTMLVideoElement)) {
+        if (!imageElement) return null;
+        
+        if (imageElement instanceof HTMLVideoElement) {
+            if (!imageElement.videoWidth || !imageElement.videoHeight || imageElement.videoWidth === 0 || imageElement.videoHeight === 0) {
+                return null;
+            }
+        } else {
             if (!imageElement.width || !imageElement.height || imageElement.width === 0 || imageElement.height === 0) {
                 return null;
             }

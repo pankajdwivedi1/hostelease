@@ -50,18 +50,31 @@ export async function loadPhoneDetector() {
  * @param imageElement The video or canvas element
  * @returns true if a cell phone or hand is detected, false otherwise
  */
-export async function detectMobilePhone(imageElement: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement): Promise<{isSpoofing: boolean, message: string}> {
+export async function detectMobilePhone(imageElement: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement | null): Promise<{isSpoofing: boolean, message: string}> {
     if (!cocoModel || !handposeModel) {
         console.warn("⚠️ Detectors not loaded yet");
         return { isSpoofing: false, message: "" };
     }
+    
+    if (!imageElement) return { isSpoofing: false, message: "" };
+    
+    if (imageElement instanceof HTMLVideoElement) {
+        if (!imageElement.videoWidth || !imageElement.videoHeight || imageElement.videoWidth === 0 || imageElement.videoHeight === 0) {
+            return { isSpoofing: false, message: "" };
+        }
+    } else {
+        if (!imageElement.width || !imageElement.height || imageElement.width === 0 || imageElement.height === 0) {
+            return { isSpoofing: false, message: "" };
+        }
+    }
 
     try {
-        // Run detection in parallel
-        const [predictions, hands] = await Promise.all([
-            cocoModel.detect(imageElement),
-            handposeModel.estimateHands(imageElement)
-        ]);
+        // Run detection sequentially to prevent blocking the main thread for too long
+        const predictions = await cocoModel.detect(imageElement);
+        // Yield to event loop to prevent "Page Unresponsive" popup
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        const hands = await handposeModel.estimateHands(imageElement);
         
         // 1. Check for Hand Spoofing (holding a photo)
         if (hands && hands.length > 0) {
