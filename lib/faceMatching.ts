@@ -60,16 +60,7 @@ export async function loadFaceApiModels(accurate: boolean = false) {
             if (accurate) proModelsLoaded = true;
             liteModelsLoaded = true;
 
-            // ⚡ WARMUP: Run dummy detection to compile WebGL shaders
-            try {
-                const dummyCanvas = document.createElement('canvas');
-                dummyCanvas.width = 224;
-                dummyCanvas.height = 224;
-                const options = new fa.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
-                await fa.detectSingleFace(dummyCanvas, options).withFaceLandmarks(true);
-            } catch (e) {
-                console.warn("Warmup skipped", e);
-            }
+            // Removed WARMUP to prevent synchronous WebGL blocking of the main thread
 
             console.log(`✅ Face-api models ready and warmed up (${accurate ? 'PRO' : 'LITE'})`);
             return true;

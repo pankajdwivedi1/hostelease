@@ -25,11 +25,7 @@ export async function loadPhoneDetector() {
         // Load the model
         cocoModel = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
         
-        // ⚡ WARMUP: Run dummy detection to compile WebGL shaders in the background
-        const dummyCanvas = document.createElement('canvas');
-        dummyCanvas.width = 224;
-        dummyCanvas.height = 224;
-        await cocoModel.detect(dummyCanvas);
+        // Removed WARMUP to prevent synchronous WebGL blocking of the main thread
 
         console.log("✅ Phone Detector Loaded & Warmed Up Successfully");
         return true;
