@@ -106,7 +106,8 @@ const mapStudentToSnakeCase = (data: any) => {
         studentStatus: 'student_status',
         dynamicFields: 'dynamic_fields',
         supabaseId: 'supabase_id',
-        authProvider: 'auth_provider'
+        authProvider: 'auth_provider',
+        tenantId: 'tenant_id'
     };
     const forbidden = [
         'id', '_id', 'firebaseuid', 'firebase_uid', 'createdat', 'updatedat',
@@ -951,6 +952,7 @@ export const db = {
                         .eq('tenant_id', tenantId)
                         .select()
                         .single();
+                    if (result.error) throw new Error(result.error.message);
                     return result.data;
                 } else {
                     const newId = crypto.randomUUID();
@@ -959,6 +961,7 @@ export const db = {
                         .insert({ ...supabaseData, _id: newId, firebase_uid: firebaseUID, tenant_id: tenantId })
                         .select()
                         .single();
+                    if (result.error) throw new Error(result.error.message);
                     return result.data;
                 }
             } else {
@@ -1008,7 +1011,7 @@ export const db = {
         // ⚡ DATABASE-AWARE LIST WITH FILTERS
         list: async (filters: any = {}, options: { light?: boolean; select?: string; limit?: number } = {}) => {
             const source = await getDbSource();
-            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id,father_name,father_number,mother_name,mother_number,permanent_address,home_state,local_guardian_address,local_guardian_phone_number,erp_id,floor_number,dob,category,year,joining_date';
+            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,college_name,branch,semester,section,registration_id,father_name,father_number,mother_name,mother_number,permanent_address,home_state,local_guardian_address,local_guardian_phone_number,erp_id,floor_number,dob,category,year,joining_date,is_profile_locked,attendance_mode,device_id,device_reset_count,web_authn_credentials,device_history';
             const selection = options.select || (options.light ? lightFields : '*');
 
             if (source === 'SUPABASE') {

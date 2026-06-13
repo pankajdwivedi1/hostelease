@@ -3071,10 +3071,16 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                         return cell.date.getTime() > today.getTime();
                                                                     })();
 
-                                                                    const status = isFuture ? null : getDayOutingStatus(cell.date);
+                                                                    const joiningDateObj = studentProfile?.joiningDate ? new Date(studentProfile.joiningDate) : null;
+                                                                    const isBeforeJoining = joiningDateObj && cell.date < new Date(new Date(joiningDateObj).setHours(0,0,0,0));
+                                                                    const isJoiningDate = joiningDateObj && cell.date.getTime() === new Date(new Date(joiningDateObj).setHours(0,0,0,0)).getTime();
+
+                                                                    const status = (isFuture || isBeforeJoining) ? null : getDayOutingStatus(cell.date);
                                                                     let colorClasses = "";
-                                                                    if (isFuture) {
-                                                                        colorClasses = "bg-white text-gray-800 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm";
+                                                                    if (isJoiningDate) {
+                                                                        colorClasses = "bg-blue-50 text-blue-800 border-2 border-blue-500 shadow-md shadow-blue-500/20";
+                                                                    } else if (isFuture || isBeforeJoining) {
+                                                                        colorClasses = "bg-white text-gray-800 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm opacity-60";
                                                                     } else if (status === 'red') {
                                                                         colorClasses = "bg-rose-500 text-white font-black hover:bg-rose-600 shadow-md shadow-rose-500/20";
                                                                     } else if (status === 'orange') {
@@ -3085,8 +3091,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
 
                                                                     const dateStr = cell.date.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
                                                                     const attendanceRecord = attendanceHistory.find((r: any) => r.date === dateStr);
-                                                                    const isBeforeLaunch = cell.date < new Date('2026-06-10');
-                                                                    const attendanceStatus = attendanceRecord ? 'Present' : (isBeforeLaunch || isFuture ? 'No Record' : 'Absent');
+                                                                    const attendanceStatus = attendanceRecord ? 'Present' : (isBeforeJoining || isFuture ? 'No Record' : 'Absent');
 
                                                                     return (
                                                                         <button
@@ -3095,8 +3100,9 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                             className={`aspect-square flex flex-col items-center justify-center rounded-xl text-xs transition-all relative ${colorClasses} ${isSelected ? 'ring-4 ring-blue-600 ring-offset-2 scale-105 z-10' : 'hover:scale-[1.03] active:scale-[0.97]'}`}
                                                                         >
                                                                             <span className="leading-none mt-1">{cell.date.getDate()}</span>
+                                                                            {isJoiningDate && <span className="text-[7px] text-blue-600 font-black mt-0.5 tracking-tighter uppercase">Joined</span>}
                                                                             {/* Attendance Indicator Bar & Dot */}
-                                                                            <div className="absolute bottom-0 w-full h-[30%] bg-white rounded-b-xl flex items-center justify-center border-t border-black/5 shadow-inner">
+                                                                            <div className="absolute bottom-0 w-full h-[30%] bg-white/90 backdrop-blur-sm rounded-b-xl flex items-center justify-center border-t border-black/5 shadow-inner">
                                                                                 {attendanceStatus === 'Present' && <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm" title="Present" />}
                                                                                 {attendanceStatus === 'Absent' && <span className="w-2 h-2 rounded-full bg-rose-500 shadow-sm animate-pulse" title="Absent" />}
                                                                             </div>
@@ -3119,16 +3125,28 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                         today.setHours(23, 59, 59, 999);
                                                                         const isFuture = selectedCalendarDay.getTime() > today.getTime();
                                                                         
+                                                                        const joiningDateObj = studentProfile?.joiningDate ? new Date(studentProfile.joiningDate) : null;
+                                                                        const isBeforeJoining = joiningDateObj && selectedCalendarDay < new Date(new Date(joiningDateObj).setHours(0,0,0,0));
+                                                                        const isJoiningDate = joiningDateObj && selectedCalendarDay.getTime() === new Date(new Date(joiningDateObj).setHours(0,0,0,0)).getTime();
+
                                                                         const dateStr = selectedCalendarDay.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
                                                                         const attendanceRecord = attendanceHistory.find((r: any) => r.date === dateStr);
-                                                                        const isBeforeLaunch = selectedCalendarDay < new Date('2026-06-10');
-                                                                        const attendanceStatus = attendanceRecord ? 'Present' : (isBeforeLaunch || isFuture ? 'No Record' : 'Absent');
+                                                                        const attendanceStatus = attendanceRecord ? 'Present' : (isBeforeJoining || isFuture ? 'No Record' : 'Absent');
 
                                                                         if (isFuture) {
                                                                             return (
                                                                                 <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 text-center">
                                                                                     <p className="text-gray-500 text-xs font-bold flex items-center justify-center gap-1.5">
                                                                                         <span>⏳</span> Logs not available for future dates.
+                                                                                    </p>
+                                                                                </div>
+                                                                            );
+                                                                        }
+                                                                        if (isBeforeJoining) {
+                                                                            return (
+                                                                                <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 text-center">
+                                                                                    <p className="text-gray-500 text-xs font-bold flex items-center justify-center gap-1.5">
+                                                                                        <span>🛇</span> Not joined hostel yet.
                                                                                     </p>
                                                                                 </div>
                                                                             );

@@ -19,6 +19,7 @@ export default function OnboardingPage() {
   const [faceDescriptor, setFaceDescriptor] = useState<Float32Array | null>(null);
   const [isCapturingDescriptor, setIsCapturingDescriptor] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isCameraStarting, setIsCameraStarting] = useState(false);
   const [isFaceProcessing, setIsFaceProcessing] = useState(false);
 
   const [showOtpModal, setShowOtpModal] = useState(false);
@@ -31,7 +32,7 @@ export default function OnboardingPage() {
   const [faceError, setFaceError] = useState<string | null>(null);
   const [isFaceInFrame, setIsFaceInFrame] = useState(false);
   const [isSpoofingDetected, setIsSpoofingDetected] = useState(false);
-  const [blinkInstruction, setBlinkInstruction] = useState<string>('');
+  const [blinkInstruction, setBlinkInstruction] = useState<'CLOSE_EYES' | 'OPEN_EYES' | 'DONE' | null>('CLOSE_EYES');
   const [blinkCount, setBlinkCount] = useState(0);
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
   const [hostelsLoading, setHostelsLoading] = useState(true);
@@ -287,7 +288,10 @@ export default function OnboardingPage() {
       const response = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: formData.phoneNumber }),
+        body: JSON.stringify({ 
+          phoneNumber: formData.phoneNumber,
+          firebaseUID: user?.uid 
+        }),
       });
 
       const data = await response.json();
@@ -382,7 +386,7 @@ export default function OnboardingPage() {
           dob: formData.dob,
           category: formData.category,
           deviceId: currentDeviceId,
-          faceDescriptor: faceDescriptor || undefined,
+          faceDescriptor: faceDescriptor ? Array.from(faceDescriptor) : undefined,
           dynamicFields: formData,
         }),
       });
@@ -433,26 +437,58 @@ export default function OnboardingPage() {
         return;
       }
 
-      // 1. Get camera permission and stream FIRST (while showing loading state on button)
+      setIsCameraStarting(true);
+
+      // Yield to let React render the "Starting AI Camera..." spinner
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // 1. Get camera permission and stream FIRST
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
       });
       
-      // 2. Now that camera is ready, open the UI
+      // ⚡ PRE-LOAD: Await loading AI models
+      await faceMatching.loadFaceApiModels();
+      await new Promise(resolve => setTimeout(resolve, 100)); // Yield to prevent freeze
+
+      await objectDetection.loadPhoneDetector();
+      await new Promise(resolve => setTimeout(resolve, 100)); // Yield
+
+      // ⚡ WARMUP SHADERS: Compile WebGL shaders using a tiny dummy canvas
+      // This forces the synchronous compilation to happen NOW rather than freezing the live camera feed
+      try {
+          const dummyCanvas = document.createElement('canvas');
+          dummyCanvas.width = 64;
+          dummyCanvas.height = 64;
+          const ctx = dummyCanvas.getContext('2d');
+          if (ctx) {
+              ctx.fillStyle = '#000000';
+              ctx.fillRect(0, 0, 64, 64);
+              // Run fake inference to trigger shader compilation
+              await faceMatching.detectFace(dummyCanvas, false, false);
+              await new Promise(resolve => setTimeout(resolve, 100)); // Yield
+              await objectDetection.detectMobilePhone(dummyCanvas);
+              await new Promise(resolve => setTimeout(resolve, 100)); // Yield
+          }
+      } catch (warmupError) {
+          console.warn("Warmup skipped or failed:", warmupError);
+      }
+
+      // 2. Now that camera, AI models, and WebGL shaders are ready, open the UI
       setIsCameraOpen(true);
+      setIsCameraStarting(false);
       
       // 3. Attach stream to the newly rendered video tag
       setTimeout(() => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          // ⚡ PRE-LOAD: Start loading AI models
-          faceMatching.loadFaceApiModels();
         }
       }, 50);
     } catch (err) {
       console.error("Error accessing camera:", err);
       alert("Could not access camera. Please allow camera permissions and ensure you're using HTTPS.");
       setIsCameraOpen(false);
+      setIsCameraStarting(false);
     }
   };
 
@@ -475,9 +511,8 @@ export default function OnboardingPage() {
     let currentBlinkCount = 0;
 
     if (isCameraOpen && videoRef.current) {
-      objectDetection.loadPhoneDetector(); // Silently load AI model in background
-      setBlinkInstruction('OPEN_MOUTH');
-      currentInstruction = 'OPEN_MOUTH';
+      setBlinkInstruction('CLOSE_EYES');
+      currentInstruction = 'CLOSE_EYES';
       setBlinkCount(0);
 
       let isDetecting = false; // Prevent overlapping heavy AI inferences
@@ -507,8 +542,8 @@ export default function OnboardingPage() {
             if (!res) {
               setIsFaceInFrame(false);
               hasDetectedLiveness = false;
-              currentInstruction = 'OPEN_MOUTH';
-              setBlinkInstruction('OPEN_MOUTH');
+              currentInstruction = 'CLOSE_EYES';
+              setBlinkInstruction('CLOSE_EYES');
               currentActionStartTime = 0;
               currentBlinkCount = 0;
               setBlinkCount(0);
@@ -543,14 +578,14 @@ export default function OnboardingPage() {
 
             const liveness = faceMatching.analyzeLiveness(res.landmarks);
             if (liveness) {
-              // 🛡️ ACTION SEQUENCE: MOUTH OPEN DETECTION (100% Defeats 2D printed photos)
-              if (currentInstruction === 'OPEN_MOUTH') {
-                  if (liveness.isMouthOpen) { 
-                      currentInstruction = 'CLOSE_MOUTH';
-                      setBlinkInstruction('CLOSE_MOUTH');
+              // 🛡️ ACTION SEQUENCE: EYE BLINK DETECTION (100% Defeats 2D printed photos)
+              if (currentInstruction === 'CLOSE_EYES') {
+                  if (liveness.isBlinking) { 
+                      currentInstruction = 'OPEN_EYES';
+                      setBlinkInstruction('OPEN_EYES');
                   }
-              } else if (currentInstruction === 'CLOSE_MOUTH') {
-                  if (!liveness.isMouthOpen) {
+              } else if (currentInstruction === 'OPEN_EYES') {
+                  if (!liveness.isBlinking) {
                       currentInstruction = 'DONE';
                       setBlinkInstruction('DONE');
                       hasDetectedLiveness = true;
@@ -695,14 +730,23 @@ export default function OnboardingPage() {
                         <button
                           type="button"
                           onClick={startCamera}
-                          disabled={isProfileLocked}
+                          disabled={isProfileLocked || isCameraStarting}
                           className="w-full py-4 rounded-xl border-2 border-dashed border-gray-200 text-gray-400 hover:border-blue-500 hover:text-blue-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                         >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          Capture Profile Photo
+                          {isCameraStarting ? (
+                            <>
+                              <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                              <span className="font-bold">Starting AI Camera...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              Capture Profile Photo
+                            </>
+                          )}
                         </button>
                       )}
 
@@ -718,7 +762,7 @@ export default function OnboardingPage() {
                             {!isFaceInFrame && (
                               <div className="bg-black/70 backdrop-blur-md text-white px-3 py-1.5 md:px-6 md:py-3 rounded-xl md:rounded-2xl text-center shadow-xl border border-white/20 mt-1 md:mt-2 mx-4 animate-bounce">
                                 <p className={`text-[10px] md:text-base font-black uppercase tracking-wide ${isSpoofingDetected ? 'text-red-500' : 'text-blue-400'}`}>
-                                  {isSpoofingDetected ? 'REMOVE SCREEN/OBJECT 📵' : blinkInstruction === 'OPEN_MOUTH' ? 'Open Your Mouth 👄' : blinkInstruction === 'CLOSE_MOUTH' ? 'Close Mouth & Hold Still 📸' : 'Looking Good!'}
+                                  {isSpoofingDetected ? 'REMOVE SCREEN/OBJECT 📵' : blinkInstruction === 'CLOSE_EYES' ? 'Blink Your Eyes 👀' : blinkInstruction === 'OPEN_EYES' ? 'Open Eyes & Hold Still 📸' : 'Looking Good!'}
                                 </p>
                                 <p className="text-[8px] md:text-xs font-medium text-gray-300 mt-0.5">Anti-Spoofing Check</p>
                               </div>
@@ -859,12 +903,12 @@ export default function OnboardingPage() {
               <div className="py-12 w-full max-w-md mx-auto px-4 flex flex-col items-center justify-center animate-in fade-in duration-500">
                 <div className="w-full flex justify-between items-end mb-2">
                   <p className="text-xs font-black text-indigo-900 uppercase tracking-widest animate-pulse">Form configuration is loading...</p>
-                  <span className="text-sm font-black text-blue-600 tabular-nums">{loadingProgress}%</span>
+                  <span className="text-sm font-black text-blue-600 tabular-nums">{Math.min(100, loadingProgress)}%</span>
                 </div>
                 <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden shadow-inner border border-gray-200">
                   <div 
                     className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-600 rounded-full transition-all duration-300 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)] relative overflow-hidden"
-                    style={{ width: `${loadingProgress}%` }}
+                    style={{ width: `${Math.min(100, loadingProgress)}%` }}
                   >
                     <div className="absolute inset-0 bg-white/20 w-full h-full animate-[shimmer_2s_infinite] -skew-x-12 translate-x-[-100%]"></div>
                   </div>
