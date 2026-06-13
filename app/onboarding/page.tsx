@@ -55,21 +55,7 @@ export default function OnboardingPage() {
     }
   }, []);
 
-  useEffect(() => {
-    // ⚡ Delay preloading AI models so it doesn't freeze the initial page render
-    const timer = setTimeout(() => {
-      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        (window as any).requestIdleCallback(() => {
-          faceMatching.loadFaceApiModels(false);
-          objectDetection.loadPhoneDetector();
-        });
-      } else {
-        faceMatching.loadFaceApiModels(false);
-        objectDetection.loadPhoneDetector();
-      }
-    }, 2500);
-    return () => clearTimeout(timer);
-  }, []);
+
 
   // Smooth progress bar animation
   useEffect(() => {
