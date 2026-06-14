@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
                 slug: tenant.slug,
                 adminEmail: tenant.admin_email,
                 defaultAdminPass: "pankajdwivedi81", // The system's global default auth
-                defaultDevPass: "pankaj852"
+                defaultDevPass: "Pankaj852963"
             }
         });
     } catch (error: any) {

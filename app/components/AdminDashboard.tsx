@@ -576,8 +576,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     secondaryColor: "#1e40af"
   });
   const [isUpdatingTenant, setIsUpdatingTenant] = useState(false);
-  const [developerPassword, setDeveloperPassword] = useState("pankaj852");
-  const [newDeveloperPassword, setNewDeveloperPassword] = useState("pankaj852"); // ⚡ NEW: Default value
+  const [developerPassword, setDeveloperPassword] = useState("Pankaj852963");
+  const [newDeveloperPassword, setNewDeveloperPassword] = useState("Pankaj852963"); // ⚡ NEW: Default value
   const [globalWardenPassword, setGlobalWardenPassword] = useState("warden456");
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
   const [overlapRadius, setOverlapRadius] = useState(false); // ⚡ NEW

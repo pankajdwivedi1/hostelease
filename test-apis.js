@@ -86,7 +86,7 @@ async function runTests() {
         'Developer Authentication (Valid)',
         'POST',
         '/api/developer/auth',
-        { password: 'pankaj852' }
+        { password: 'Pankaj852963' }
     );
     devAuth.success ? passed++ : failed++;
 

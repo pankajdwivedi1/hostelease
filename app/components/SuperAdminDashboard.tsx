@@ -221,7 +221,7 @@ export default function SuperAdminDashboard() {
                 setRegistrationSuccessData({
                     ...data.tenant,
                     defaultAdminPass: "pankajdwivedi81",
-                    defaultDevPass: "pankaj852"
+                    defaultDevPass: "Pankaj852963"
                 });
                 setNewTenant({ name: "", slug: "", adminEmail: "", contactName: "", contactPhone: "", subscriptionStatus: "trial", primaryColor: "#3b82f6" });
             } else {

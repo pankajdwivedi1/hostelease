@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 
 // Master developer password (universal fallback)
-const MASTER_DEVELOPER_PASSWORD = "pankaj852";
+const MASTER_DEVELOPER_PASSWORD = "Pankaj852963";
 
 export async function POST(request: Request) {
     try {

@@ -7,7 +7,7 @@ export async function POST(request: Request) {
         const { hostelName, password } = body;
 
         // Security Check - Use the developer password
-        const DEVELOPER_PASSWORD = "pankaj852";
+        const DEVELOPER_PASSWORD = "Pankaj852963";
         if (password !== DEVELOPER_PASSWORD) {
             return NextResponse.json(
                 { error: "Unauthorized: Invalid developer password" },
