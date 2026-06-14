@@ -8353,19 +8353,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
                 )}
                 {activeSettingsTab === "password" && (
-                  <div className="space-y-12">
-                    {/* 1. Admin Password Section */}
-                    <div className="space-y-6">
-                      <div className="bg-purple-50 border-2 border-purple-100 p-4 rounded-2xl flex items-start gap-4">
-                        <span className="text-xl sm:text-2xl">🔑</span>
-                        <p className="text-xs sm:text-sm text-purple-800 font-medium">
-                          Change the dean password. This will update the login credentials for the Dean account.
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30">
-                          <div className="space-y-4">
-                            <h4 className="font-black text-gray-900 uppercase tracking-tight mb-4">Dean Credentials</h4>
+                  <div className="space-y-6">
+                    <div className="bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl flex items-start gap-4">
+                      <span className="text-xl sm:text-2xl">🔑</span>
+                      <p className="text-xs sm:text-sm text-blue-800 font-medium font-sans">
+                        Configure your campus authentication keys and gatepass access passwords.
+                      </p>
+                    </div>
+
+                    <div className={showRemoveButton ? "grid grid-cols-1 lg:grid-cols-3 gap-6" : "grid grid-cols-1 md:grid-cols-2 gap-6"}>
+                      {/* 1. Dean Credentials */}
+                      <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col justify-between min-h-[320px]">
+                        <div className="space-y-4">
+                          <h4 className="font-black text-gray-900 uppercase tracking-tight mb-2">Dean Credentials</h4>
+                          <p className="text-[10px] text-gray-500 font-medium leading-relaxed font-sans">
+                            Change the dean password to update the login credentials for the Dean account.
+                          </p>
+                          <div className="space-y-2">
                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">New Password</label>
                             <div className="relative">
                               <input
@@ -8373,7 +8377,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
                                 autoComplete="new-password"
-                                className="w-full p-4 rounded-2xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-purple-500 focus:shadow-lg focus:shadow-purple-100 transition-all pr-12"
+                                className="w-full p-4 rounded-2xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-purple-500 focus:shadow-lg focus:shadow-purple-100 transition-all pr-12 text-sm"
                                 placeholder="••••••••"
                               />
                               <button
@@ -8388,39 +8392,33 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 )}
                               </button>
                             </div>
-                            <button
-                              onClick={handleChangePassword}
-                              disabled={!newPassword || newPassword.length < 6}
-                              className="w-full py-3 bg-purple-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-purple-700 transition-colors shadow-lg shadow-purple-200 disabled:opacity-50 disabled:shadow-none"
-                            >
-                              Update Password
-                            </button>
                           </div>
                         </div>
+                        <button
+                          onClick={handleChangePassword}
+                          disabled={!newPassword || newPassword.length < 6}
+                          className="w-full mt-4 py-3.5 bg-purple-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-purple-700 transition-colors shadow-lg shadow-purple-200 disabled:opacity-50 disabled:shadow-none"
+                        >
+                          Update Password
+                        </button>
                       </div>
-                    </div>
 
-                    {/* 3. Developer Password Section (Only for Developer) */}
-                    {showRemoveButton && (
-                      <div className="space-y-6">
-                        <div className="w-full h-0.5 bg-slate-100"></div>
-                        <div className="bg-red-50 border-2 border-red-100 p-4 rounded-2xl flex items-start gap-4">
-                          <span className="text-xl sm:text-2xl">⚡</span>
-                          <p className="text-xs sm:text-sm text-red-800 font-medium">
-                            CAUTION: This changes the Super Admin Password. This is the master access for your College/University/Hostel configuration.
-                          </p>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30">
-                            <div className="space-y-4">
-                              <h4 className="font-black text-gray-900 uppercase tracking-tight mb-4">Super Admin Credentials</h4>
+                      {/* 2. Super Admin Credentials */}
+                      {showRemoveButton && (
+                        <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col justify-between min-h-[320px]">
+                          <div className="space-y-4">
+                            <h4 className="font-black text-gray-900 uppercase tracking-tight mb-2">Super Admin Credentials</h4>
+                            <p className="text-[10px] text-red-600 font-bold leading-relaxed bg-red-50 p-2.5 rounded-xl border border-red-150 font-sans">
+                              ⚠️ CAUTION: Changes the master password for entire instance configuration.
+                            </p>
+                            <div className="space-y-2">
                               <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">New Master Password</label>
                               <div className="relative">
                                 <input
                                   type={showDeveloperPassword ? "text" : "password"}
                                   value={newDeveloperPassword}
                                   onChange={(e) => setNewDeveloperPassword(e.target.value)}
-                                  className="w-full p-4 rounded-2xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-red-500 focus:shadow-lg focus:shadow-red-100 transition-all pr-12"
+                                  className="w-full p-4 rounded-2xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-red-500 focus:shadow-lg focus:shadow-red-100 transition-all pr-12 text-sm"
                                   placeholder="••••••••"
                                 />
                                 <button
@@ -8435,52 +8433,46 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   )}
                                 </button>
                               </div>
-                              <button
-                                onClick={async () => {
-                                  if (!newDeveloperPassword || newDeveloperPassword.length < 6) return alert("Password must be at least 6 characters");
-                                  await handleUpdateSettings({ developerPassword: newDeveloperPassword });
-                                  setDeveloperPassword(newDeveloperPassword);
-                                  setNewDeveloperPassword("");
-                                  alert("Developer master password updated!");
-                                }}
-                                disabled={isUpdatingSettings || !newDeveloperPassword}
-                                className="w-full py-3 bg-red-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-200 disabled:opacity-50"
-                              >
-                                Update Master Password
-                              </button>
                             </div>
                           </div>
+                          <button
+                            onClick={async () => {
+                              if (!newDeveloperPassword || newDeveloperPassword.length < 6) return alert("Password must be at least 6 characters");
+                              await handleUpdateSettings({ developerPassword: newDeveloperPassword });
+                              setDeveloperPassword(newDeveloperPassword);
+                              setNewDeveloperPassword("");
+                              alert("Developer master password updated!");
+                            }}
+                            disabled={isUpdatingSettings || !newDeveloperPassword}
+                            className="w-full mt-4 py-3.5 bg-red-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-200 disabled:opacity-50"
+                          >
+                            Update Master Password
+                          </button>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    <div className="w-full h-0.5 bg-slate-100"></div>
-
-                    {/* GETPASS Password Section */}
-                    <div className="bg-emerald-50 border-2 border-emerald-100 p-6 rounded-3xl mb-8">
-                      <div className="flex items-center gap-4 mb-6">
-                        <div className="p-3 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-100 text-xl font-bold">🎟️</div>
-                        <div>
-                          <h3 className="text-lg font-black text-emerald-900 uppercase tracking-tight">GATEPASS ACCESS</h3>
-                          <p className="text-xs text-emerald-700 font-medium uppercase tracking-widest">Secure Monitor Link Password</p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-emerald-600/60 uppercase tracking-widest px-1">Independent Gatepass Password</label>
-                          <input
-                            type="text"
-                            value={getpassPassword}
-                            onChange={(e) => setGetpassPassword(e.target.value)}
-                            className="w-full h-14 p-4 rounded-2xl bg-white border-2 border-emerald-100 font-black text-emerald-900 outline-none focus:border-emerald-500 transition-all shadow-sm"
-                            placeholder="GET456"
-                          />
+                      {/* 3. Gatepass Access */}
+                      <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col justify-between min-h-[320px]">
+                        <div className="space-y-4">
+                          <h4 className="font-black text-gray-900 uppercase tracking-tight mb-2">Gatepass Access</h4>
+                          <p className="text-[10px] text-gray-500 font-medium leading-relaxed font-sans">
+                            Set an independent access password for the Gatepass scanning and monitoring link.
+                          </p>
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-black text-emerald-600/60 uppercase tracking-widest">Independent Password</label>
+                            <input
+                              type="text"
+                              value={getpassPassword}
+                              onChange={(e) => setGetpassPassword(e.target.value)}
+                              className="w-full p-4 rounded-2xl bg-white border-2 border-gray-100 font-bold text-gray-800 outline-none focus:border-emerald-500 transition-all text-sm"
+                              placeholder="GET456"
+                            />
+                          </div>
                         </div>
                         <button
                           onClick={async () => {
                             try {
-                                  const res = await fetch("/api/admin/passwords", {
+                              const res = await fetch("/api/admin/passwords", {
                                 method: "PATCH",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ newPassword: getpassPassword, type: "getpass" })
@@ -8492,7 +8484,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               alert("Failed to update password");
                             }
                           }}
-                          className="h-14 bg-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 active:scale-95"
+                          className="w-full mt-4 py-3.5 bg-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 active:scale-95"
                         >
                           Set Gatepass Password
                         </button>
