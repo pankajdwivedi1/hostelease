@@ -86,6 +86,22 @@ export async function PATCH(
       }
     }
 
+    // ✅ NEW: Upload base64 profile picture to Supabase storage to save database egress/bandwidth
+    if (body.profilePicture && body.profilePicture.startsWith("data:image/")) {
+      try {
+        const student = await db.students.getById(studentId);
+        const firebaseUID = student?.firebaseUID || studentId;
+        const tenantId = student?.tenantId || "default";
+        
+        const { uploadProfilePictureToSupabase } = await import("@/lib/supabaseServer");
+        const publicUrl = await uploadProfilePictureToSupabase(body.profilePicture, tenantId, firebaseUID);
+        body.profilePicture = publicUrl;
+        console.log(`[Storage] Successfully uploaded updated profile picture to Supabase bucket. URL: ${publicUrl}`);
+      } catch (err: any) {
+        console.error("❌ Failed to upload profile picture to storage, saving as base64 fallback:", err.message);
+      }
+    }
+
     // Use the Database Adapter for a database-aware update (Mongo/Supabase)
     const updatedStudent = await db.students.update(studentId, body);
 

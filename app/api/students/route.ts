@@ -80,6 +80,18 @@ export async function POST(request: NextRequest) {
       registrationId = `${prefix}${String(nextNumber).padStart(3, '0')}`;
     }
 
+    // ✅ NEW: Upload base64 profile photo to Supabase storage to save database egress/bandwidth
+    let finalProfilePicture = profilePicture;
+    if (profilePicture && profilePicture.startsWith("data:image/")) {
+      try {
+        const { uploadProfilePictureToSupabase } = await import("@/lib/supabaseServer");
+        finalProfilePicture = await uploadProfilePictureToSupabase(profilePicture, tenantId, firebaseUID);
+        console.log(`[Storage] Successfully uploaded base64 profile picture to Supabase bucket. URL: ${finalProfilePicture}`);
+      } catch (err: any) {
+        console.error("❌ Failed to upload profile picture to storage, saving as base64 fallback:", err.message);
+      }
+    }
+
     // ✅ NEW: Sanitize inputs before storing
     const updateData: any = {
       firebaseUID: firebaseUID.trim(),
@@ -92,7 +104,7 @@ export async function POST(request: NextRequest) {
       tenantId,
       // ✅ OPTIONAL FIELDS: Only include if provided
       ...(name && { name: validators.sanitizeInput(name) }),
-      ...(profilePicture && { profilePicture }),
+      ...(finalProfilePicture && { profilePicture: finalProfilePicture }),
       ...(fatherName && { fatherName: validators.sanitizeInput(fatherName) }),
       ...(fatherNumber && { fatherNumber: validators.sanitizePhoneNumber(fatherNumber) }),
       ...(motherName && { motherName: validators.sanitizeInput(motherName) }),
