@@ -581,12 +581,13 @@ export default function OnboardingPage() {
         stopCamera();
 
         // 2. BACKGROUND THINKING: Process descriptor without blocking the UI
-        processFaceInBackground(canvas);
+        // We pass the static dataUrl string to avoid mobile Safari/Chrome resetting the DOM canvas
+        processFaceInBackground(dataUrl);
       }
     }
   };
 
-  const processFaceInBackground = async (canvas: HTMLCanvasElement) => {
+  const processFaceInBackground = async (dataUrl: string) => {
     try {
       setIsFaceProcessing(true);
       setFaceDescriptor(null); // Clear previous
@@ -594,13 +595,29 @@ export default function OnboardingPage() {
       // 1. Yield to let React render the "Scanning..." state
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // 2. Downscale the image to 320x240 to reduce AI computation workload by 4x
+      // 2. Load the static image into memory to bypass DOM canvas lifecycle limitations on mobile
+      const img = await faceMatching.loadImage(dataUrl);
+
+      // 3. Downscale the image while preserving the exact aspect ratio
+      const maxDim = 320;
+      let aiWidth = img.width;
+      let aiHeight = img.height;
+      if (aiWidth > maxDim || aiHeight > maxDim) {
+        if (aiWidth > aiHeight) {
+          aiHeight = Math.round((aiHeight / aiWidth) * maxDim);
+          aiWidth = maxDim;
+        } else {
+          aiWidth = Math.round((aiWidth / aiHeight) * maxDim);
+          aiHeight = maxDim;
+        }
+      }
+
       const aiCanvas = document.createElement("canvas");
-      aiCanvas.width = 320;
-      aiCanvas.height = 240;
+      aiCanvas.width = aiWidth;
+      aiCanvas.height = aiHeight;
       const ctx = aiCanvas.getContext("2d");
       if (ctx) {
-        ctx.drawImage(canvas, 0, 0, 320, 240);
+        ctx.drawImage(img, 0, 0, aiWidth, aiHeight);
       } else {
         throw new Error("Could not downscale photo for verification");
       }
@@ -609,7 +626,7 @@ export default function OnboardingPage() {
       await loadAIModels();
       await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
 
-      // 3. Run face descriptor generation on downscaled canvas
+      // 4. Run face descriptor generation on downscaled canvas
       const descriptor = await faceMatching.detectFace(aiCanvas);
       await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
 
