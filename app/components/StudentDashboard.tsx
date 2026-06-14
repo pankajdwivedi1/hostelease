@@ -3058,7 +3058,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                         return (
                                                                             <div
                                                                                 key={idx}
-                                                                                className="aspect-square flex items-center justify-center rounded-xl bg-gray-50/50 text-gray-300 text-xs font-bold select-none cursor-not-allowed opacity-40"
+                                                                                className="aspect-square flex items-center justify-center rounded-none bg-gray-50/50 text-gray-300 text-xs font-bold select-none cursor-not-allowed opacity-40"
                                                                             >
                                                                                 {cell.date.getDate()}
                                                                             </div>
@@ -3097,19 +3097,19 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                         <button
                                                                             key={idx}
                                                                             onClick={() => setSelectedCalendarDay(cell.date)}
-                                                                            className={`aspect-square flex flex-col items-center justify-center rounded-xl text-xs transition-all relative ${colorClasses} ${isSelected ? 'ring-4 ring-blue-600 ring-offset-2 scale-105 z-10' : 'hover:scale-[1.03] active:scale-[0.97]'}`}
+                                                                            className={`aspect-square flex flex-col items-center justify-center rounded-none text-xs transition-all relative ${colorClasses} ${isSelected ? 'ring-4 ring-blue-600 ring-offset-2 scale-105 z-10' : 'hover:scale-[1.03] active:scale-[0.97]'}`}
                                                                         >
                                                                             {/* Date in the top right corner */}
                                                                             <span className="absolute top-1.5 right-1.5 text-[9px] font-black leading-none">{cell.date.getDate()}</span>
                                                                             
                                                                             {isJoiningDate && (
-                                                                                <span className="text-[7px] text-white font-black leading-tight tracking-tighter uppercase text-center mt-[-8px]">
+                                                                                <span className="absolute top-1.5 left-1.5 text-[6px] text-white font-black leading-tight tracking-tighter uppercase text-left">
                                                                                     Hostel<br/>Joined
                                                                                 </span>
                                                                             )}
                                                                             
                                                                             {/* Attendance Indicator Bar & Dot */}
-                                                                            <div className="absolute bottom-0 w-full h-[30%] bg-white/95 backdrop-blur-sm rounded-b-xl flex items-center justify-center border-t border-black/5 shadow-inner">
+                                                                            <div className="absolute bottom-0 w-full h-[50%] bg-white/95 backdrop-blur-sm rounded-none flex items-center justify-center border-t border-black/5 shadow-inner">
                                                                                 {attendanceStatus === 'Present' && <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm" title="Present" />}
                                                                                 {attendanceStatus === 'Absent' && <span className="w-2 h-2 rounded-full bg-rose-500 shadow-sm animate-pulse" title="Absent" />}
                                                                             </div>
