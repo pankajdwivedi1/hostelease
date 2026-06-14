@@ -1,10 +1,5 @@
-import * as tf from '@tensorflow/tfjs';
-import * as cocoSsd from '@tensorflow-models/coco-ssd';
-
-import * as handpose from '@tensorflow-models/handpose';
-
-let cocoModel: cocoSsd.ObjectDetection | null = null;
-let handposeModel: handpose.HandPose | null = null;
+let cocoModel: any = null;
+let handposeModel: any = null;
 let isLoading = false;
 
 /**
@@ -22,15 +17,18 @@ export async function loadPhoneDetector() {
 
     isLoading = true;
     try {
-        console.log("📱 Loading AI Object Detectors (Phone & Hand)...");
-        // Ensure TF backend is ready
+        console.log("📱 Dynamically importing TFJS & Object Detectors (Phone & Hand)...");
+        const tf = await import('@tensorflow/tfjs');
         await tf.ready();
-        
-        // Load the models in parallel
-        const [coco, hand] = await Promise.all([
-            cocoSsd.load({ base: 'lite_mobilenet_v2' }),
-            handpose.load()
-        ]);
+        await new Promise(resolve => setTimeout(resolve, 50)); // Yield to event loop
+
+        const cocoSsd = await import('@tensorflow-models/coco-ssd');
+        const coco = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+        await new Promise(resolve => setTimeout(resolve, 50)); // Yield to event loop
+
+        const handpose = await import('@tensorflow-models/handpose');
+        const hand = await handpose.load();
+        await new Promise(resolve => setTimeout(resolve, 50)); // Yield to event loop
         
         cocoModel = coco;
         handposeModel = hand;

@@ -44,21 +44,23 @@ export async function loadFaceApiModels(accurate: boolean = false) {
 
             // Always ensure basic models are there
             if (!liteModelsLoaded) {
-                promises.push(fa.nets.tinyFaceDetector.loadFromUri(MODEL_URL));
-                promises.push(fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL));
-                promises.push(fa.nets.faceRecognitionNet.loadFromUri(MODEL_URL));
+                await fa.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+                await new Promise(resolve => setTimeout(resolve, 50));
+                await fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
+                await new Promise(resolve => setTimeout(resolve, 50));
+                await fa.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+                await new Promise(resolve => setTimeout(resolve, 50));
+                liteModelsLoaded = true;
             }
 
             if (accurate && !proModelsLoaded) {
                 console.log('💎 Loading High-Accuracy (Pro) Models...');
-                promises.push(fa.nets.ssdMobilenetv1.loadFromUri(MODEL_URL));
-                promises.push(fa.nets.faceLandmark68Net.loadFromUri(MODEL_URL));
+                await fa.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+                await new Promise(resolve => setTimeout(resolve, 50));
+                await fa.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+                await new Promise(resolve => setTimeout(resolve, 50));
+                proModelsLoaded = true;
             }
-
-            await Promise.all(promises);
-
-            if (accurate) proModelsLoaded = true;
-            liteModelsLoaded = true;
 
             // Removed WARMUP to prevent synchronous WebGL blocking of the main thread
 
