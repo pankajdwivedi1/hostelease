@@ -8,7 +8,6 @@ import { supabase } from "@/lib/supabase";
 
 import { useRef } from "react";
 import * as faceMatching from "@/lib/faceMatching";
-import * as objectDetection from "@/lib/objectDetection";
 
 // Global flag to track if warmup is done so we don't do it twice
 let globalIsAIWarmedUp = false;
@@ -21,10 +20,8 @@ const loadAIModels = async () => {
     warmupPromise = (async () => {
       try {
         console.log("⚡ [AI LOADING] Starting model load...");
-        // Download models
+        // Download face-api models
         await faceMatching.loadFaceApiModels();
-        await new Promise(resolve => setTimeout(resolve, 50)); 
-        await objectDetection.loadPhoneDetector();
         
         globalIsAIWarmedUp = true;
         console.log("⚡ [AI LOADING] Models loaded successfully!");
@@ -42,9 +39,6 @@ export default function OnboardingPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
-  const eyeStateRef = useRef<'open' | 'closed'>('open');
-  const blinkCountRef = useRef<number>(0);
-  const [isLivenessVerified, setIsLivenessVerified] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [faceDescriptor, setFaceDescriptor] = useState<Float32Array | null>(null);
   const [isCapturingDescriptor, setIsCapturingDescriptor] = useState(false);
@@ -61,8 +55,6 @@ export default function OnboardingPage() {
 
   const [faceError, setFaceError] = useState<string | null>(null);
   const [isFaceInFrame, setIsFaceInFrame] = useState(false);
-  const [isSpoofingDetected, setIsSpoofingDetected] = useState(false);
-  const [spoofMessage, setSpoofMessage] = useState<string>('');
   const [hostels, setHostels] = useState<Array<{ _id: string; name: string }>>([]);
   const [hostelsLoading, setHostelsLoading] = useState(true);
 
@@ -471,11 +463,6 @@ export default function OnboardingPage() {
 
       setIsCameraStarting(true);
 
-      // Reset liveness tracking variables
-      eyeStateRef.current = 'open';
-      blinkCountRef.current = 0;
-      setIsLivenessVerified(false);
-
       // Yield to let React render the "Starting AI Camera..." spinner
       await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -513,9 +500,6 @@ export default function OnboardingPage() {
     }
     setIsCameraOpen(false);
     setIsFaceInFrame(false);
-    setIsLivenessVerified(false);
-    blinkCountRef.current = 0;
-    eyeStateRef.current = 'open';
   };
 
   // ⚡ LIVE FACE GUARD: Check for face continuously when camera is open
@@ -540,36 +524,6 @@ export default function OnboardingPage() {
                   if (ctx) ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
               }
               return;
-            }
-
-            // ⚡ CHECK FOR MULTIPLE FACES (Common when holding up a printed photo of someone else)
-            if ((res as any).multipleFacesDetected) {
-                console.warn("🛑 SPOOF ATTEMPT: Multiple faces detected. User is holding up a photo.");
-                setIsSpoofingDetected(true);
-                setSpoofMessage("MULTIPLE FACES! CLEAR BACKGROUND");
-                setIsFaceInFrame(false);
-                return;
-            } else {
-                setIsSpoofingDetected(false);
-                setSpoofMessage('');
-            }
-
-            // ⚡ ACTIVE LIVENESS CHECK: Blink Detection state machine
-            if (res.landmarks) {
-              const liveness = faceMatching.analyzeLiveness(res.landmarks);
-              if (liveness) {
-                const ear = liveness.ear;
-                if (eyeStateRef.current === 'open' && ear < 0.22) {
-                  eyeStateRef.current = 'closed';
-                } else if (eyeStateRef.current === 'closed' && ear > 0.25) {
-                  eyeStateRef.current = 'open';
-                  blinkCountRef.current += 1;
-                  console.log("👁️ Blink detected! Count:", blinkCountRef.current);
-                  if (blinkCountRef.current >= 1) {
-                    setIsLivenessVerified(true);
-                  }
-                }
-              }
             }
 
             // ⚡ DRAW DYNAMIC GREEN FACE FRAME
@@ -655,17 +609,7 @@ export default function OnboardingPage() {
       await loadAIModels();
       await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
 
-      // 3. Run Mobile Phone & Hand Detection on downscaled canvas
-      const spoofResult = await objectDetection.detectMobilePhone(aiCanvas);
-      await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
-
-      if (spoofResult.isSpoofing) {
-        setFaceError(spoofResult.message || "Spoofing detected! Please take a real physical photo.");
-        setCapturedImage(null); // Force retake
-        return;
-      }
-
-      // 4. Run face descriptor generation on downscaled canvas
+      // 3. Run face descriptor generation on downscaled canvas
       const descriptor = await faceMatching.detectFace(aiCanvas);
       await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
 
@@ -779,17 +723,16 @@ export default function OnboardingPage() {
                         <div className="relative w-full max-w-sm mx-auto aspect-[4/5] rounded-[32px] overflow-hidden shadow-2xl bg-black border border-gray-200">
                           {/* Live Status HUD */}
                           <div className="absolute top-4 left-0 right-0 flex flex-col items-center gap-2 z-20">
-                            <div className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest flex items-center gap-2 shadow-2xl transition-all border-2 ${isFaceInFrame && isLivenessVerified ? 'bg-green-500 border-green-400 text-white' : isSpoofingDetected ? 'bg-red-700 border-red-500 text-white animate-pulse' : 'bg-red-600 border-red-400 text-white animate-pulse'}`}>
-                              <span className={`w-2 h-2 rounded-full ${isFaceInFrame && isLivenessVerified ? 'bg-white' : 'bg-white/80 animate-ping'}`}></span>
-                              {isSpoofingDetected ? 'SPOOF DETECTED' : isFaceInFrame && isLivenessVerified ? 'Live Human Verified' : 'Action Required'}
+                            <div className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest flex items-center gap-2 shadow-2xl transition-all border-2 ${isFaceInFrame ? 'bg-green-500 border-green-400 text-white' : 'bg-red-600 border-red-400 text-white animate-pulse'}`}>
+                              <span className={`w-2 h-2 rounded-full ${isFaceInFrame ? 'bg-white' : 'bg-white/80 animate-ping'}`}></span>
+                              {isFaceInFrame ? 'Face Detected' : 'Action Required'}
                             </div>
                             
-                            {(!isFaceInFrame || !isLivenessVerified) && (
+                            {!isFaceInFrame && (
                               <div className="bg-black/70 backdrop-blur-md text-white px-3 py-1.5 md:px-6 md:py-3 rounded-xl md:rounded-2xl text-center shadow-xl border border-white/20 mt-1 md:mt-2 mx-4 animate-bounce">
-                                <p className={`text-[10px] md:text-base font-black uppercase tracking-wide ${isSpoofingDetected ? 'text-red-500' : 'text-blue-400'}`}>
-                                  {isSpoofingDetected ? spoofMessage : !isFaceInFrame ? 'Position Face in Frame 👤' : 'Blink your eyes to capture 👁️'}
+                                <p className="text-[10px] md:text-base font-black uppercase tracking-wide text-blue-400">
+                                  Position Face in Frame 👤
                                 </p>
-                                <p className="text-[8px] md:text-xs font-medium text-gray-300 mt-0.5">Anti-Spoofing Check</p>
                               </div>
                             )}
                           </div>
@@ -817,8 +760,8 @@ export default function OnboardingPage() {
                             <button
                               type="button"
                               onClick={captureImage}
-                              disabled={!isFaceInFrame || !isLivenessVerified}
-                              className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl transition-all ${(isFaceInFrame && isLivenessVerified) ? 'bg-white text-blue-600 shadow-white/30 hover:scale-105 active:scale-95' : 'bg-gray-800 text-gray-500 opacity-80 cursor-not-allowed'}`}
+                              disabled={!isFaceInFrame}
+                              className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl transition-all ${isFaceInFrame ? 'bg-white text-blue-600 shadow-white/30 hover:scale-105 active:scale-95' : 'bg-gray-800 text-gray-500 opacity-80 cursor-not-allowed'}`}
                             >
                               Capture
                             </button>
