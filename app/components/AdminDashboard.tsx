@@ -8363,9 +8363,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                     <div className={showRemoveButton ? "grid grid-cols-1 lg:grid-cols-3 gap-6" : "grid grid-cols-1 md:grid-cols-2 gap-6"}>
                       {/* 1. Dean Credentials */}
-                      <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col justify-between min-h-[320px]">
+                      <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col space-y-4">
                         <div className="space-y-4">
-                          <h4 className="font-black text-gray-900 uppercase tracking-tight mb-2">Dean Credentials</h4>
+                          <h4 className="font-black text-gray-900 uppercase tracking-tighter text-[10px] sm:text-xs whitespace-nowrap mb-2">Dean Credentials</h4>
                           <p className="text-[10px] text-gray-500 font-medium leading-relaxed font-sans">
                             Change the dean password to update the login credentials for the Dean account.
                           </p>
@@ -8405,11 +8405,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                       {/* 2. Super Admin Credentials */}
                       {showRemoveButton && (
-                        <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col justify-between min-h-[320px]">
+                        <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col space-y-4">
                           <div className="space-y-4">
-                            <h4 className="font-black text-gray-900 uppercase tracking-tight mb-2">Super Admin Credentials</h4>
-                            <p className="text-[10px] text-red-600 font-bold leading-relaxed bg-red-50 p-2.5 rounded-xl border border-red-150 font-sans">
-                              ⚠️ CAUTION: Changes the master password for entire instance configuration.
+                            <h4 className="font-black text-gray-900 uppercase tracking-tighter text-[10px] sm:text-xs whitespace-nowrap mb-2">Super Admin Credentials</h4>
+                            <p className="text-[10px] text-gray-500 font-medium leading-relaxed font-sans">
+                              Change the master password to update the Super Admin login credentials.
                             </p>
                             <div className="space-y-2">
                               <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">New Master Password</label>
@@ -8446,15 +8446,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             disabled={isUpdatingSettings || !newDeveloperPassword}
                             className="w-full mt-4 py-3.5 bg-red-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-200 disabled:opacity-50"
                           >
-                            Update Master Password
+                            Update Password
                           </button>
                         </div>
                       )}
 
-                      {/* 3. Gatepass Access */}
-                      <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col justify-between min-h-[320px]">
+                      {/* 3. Gatepass Credentials */}
+                      <div className="p-6 rounded-3xl border-2 border-gray-100 bg-gray-50/30 flex flex-col space-y-4">
                         <div className="space-y-4">
-                          <h4 className="font-black text-gray-900 uppercase tracking-tight mb-2">Gatepass Access</h4>
+                          <h4 className="font-black text-gray-900 uppercase tracking-tighter text-[10px] sm:text-xs whitespace-nowrap mb-2">Gatepass Credentials</h4>
                           <p className="text-[10px] text-gray-500 font-medium leading-relaxed font-sans">
                             Set an independent access password for the Gatepass scanning and monitoring link.
                           </p>
@@ -8486,7 +8486,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           }}
                           className="w-full mt-4 py-3.5 bg-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 active:scale-95"
                         >
-                          Set Gatepass Password
+                          Update Password
                         </button>
                       </div>
                     </div>
