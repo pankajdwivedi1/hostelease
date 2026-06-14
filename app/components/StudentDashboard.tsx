@@ -3074,40 +3074,47 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                     const joiningDateObj = studentProfile?.joiningDate ? new Date(studentProfile.joiningDate) : null;
                                                                     const isBeforeJoining = joiningDateObj && cell.date < new Date(new Date(joiningDateObj).setHours(0,0,0,0));
                                                                     const isJoiningDate = joiningDateObj && cell.date.getTime() === new Date(new Date(joiningDateObj).setHours(0,0,0,0)).getTime();
-
+ 
                                                                     const status = (isFuture || isBeforeJoining) ? null : getDayOutingStatus(cell.date);
                                                                     let colorClasses = "";
                                                                     if (isJoiningDate) {
-                                                                        colorClasses = "bg-blue-50 text-blue-800 border-2 border-blue-500 shadow-md shadow-blue-500/20";
+                                                                        colorClasses = "bg-gradient-to-br from-blue-400 to-indigo-600 text-white shadow-lg shadow-blue-500/20 border-0";
                                                                     } else if (isFuture || isBeforeJoining) {
-                                                                        colorClasses = "bg-white text-gray-800 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm opacity-60";
+                                                                        colorClasses = "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-400 border border-gray-200/50 shadow-sm opacity-60";
                                                                     } else if (status === 'red') {
-                                                                        colorClasses = "bg-rose-500 text-white font-black hover:bg-rose-600 shadow-md shadow-rose-500/20";
+                                                                        colorClasses = "bg-gradient-to-br from-rose-400 to-red-600 text-white shadow-lg shadow-red-500/20";
                                                                     } else if (status === 'orange') {
-                                                                        colorClasses = "bg-amber-500 text-white font-black hover:bg-amber-600 shadow-md shadow-amber-500/20";
+                                                                        colorClasses = "bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-orange-500/20";
                                                                     } else {
-                                                                        colorClasses = "bg-emerald-500 text-white font-black hover:bg-emerald-600 shadow-md shadow-emerald-500/20";
+                                                                        colorClasses = "bg-gradient-to-br from-emerald-400 to-teal-600 text-white shadow-lg shadow-emerald-500/20";
                                                                     }
-
+ 
                                                                     const dateStr = cell.date.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
                                                                     const attendanceRecord = attendanceHistory.find((r: any) => r.date === dateStr);
                                                                     const attendanceStatus = attendanceRecord ? 'Present' : (isBeforeJoining || isFuture ? 'No Record' : 'Absent');
-
+ 
                                                                     return (
                                                                         <button
                                                                             key={idx}
                                                                             onClick={() => setSelectedCalendarDay(cell.date)}
                                                                             className={`aspect-square flex flex-col items-center justify-center rounded-xl text-xs transition-all relative ${colorClasses} ${isSelected ? 'ring-4 ring-blue-600 ring-offset-2 scale-105 z-10' : 'hover:scale-[1.03] active:scale-[0.97]'}`}
                                                                         >
-                                                                            <span className="leading-none mt-1">{cell.date.getDate()}</span>
-                                                                            {isJoiningDate && <span className="text-[7px] text-blue-600 font-black mt-0.5 tracking-tighter uppercase">Joined</span>}
+                                                                            {/* Date in the top right corner */}
+                                                                            <span className="absolute top-1.5 right-1.5 text-[9px] font-black leading-none">{cell.date.getDate()}</span>
+                                                                            
+                                                                            {isJoiningDate && (
+                                                                                <span className="text-[7px] text-white font-black leading-tight tracking-tighter uppercase text-center mt-[-8px]">
+                                                                                    Hostel<br/>Joined
+                                                                                </span>
+                                                                            )}
+                                                                            
                                                                             {/* Attendance Indicator Bar & Dot */}
-                                                                            <div className="absolute bottom-0 w-full h-[30%] bg-white/90 backdrop-blur-sm rounded-b-xl flex items-center justify-center border-t border-black/5 shadow-inner">
+                                                                            <div className="absolute bottom-0 w-full h-[30%] bg-white/95 backdrop-blur-sm rounded-b-xl flex items-center justify-center border-t border-black/5 shadow-inner">
                                                                                 {attendanceStatus === 'Present' && <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm" title="Present" />}
                                                                                 {attendanceStatus === 'Absent' && <span className="w-2 h-2 rounded-full bg-rose-500 shadow-sm animate-pulse" title="Absent" />}
                                                                             </div>
                                                                             {isToday && (
-                                                                                <span className={`w-1 h-1 rounded-full absolute top-1.5 right-1.5 ${status ? 'bg-white' : 'bg-blue-600'}`} />
+                                                                                <span className={`w-1 h-1 rounded-full absolute top-1.5 left-1.5 ${status || isJoiningDate ? 'bg-white' : 'bg-blue-600'}`} />
                                                                             )}
                                                                         </button>
                                                                     );
