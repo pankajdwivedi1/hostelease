@@ -39,13 +39,13 @@ const preloadAndWarmupAI = async () => {
             
             // Let React render UI before freezing the thread
             await new Promise(resolve => requestAnimationFrame(resolve));
-            await new Promise(resolve => setTimeout(resolve, 50)); 
+            await new Promise(resolve => setTimeout(resolve, 500)); 
 
             // Run fake inferences to force WebGL to compile shaders now
             await faceMatching.detectFace(dummyCanvas, false, false);
             
             await new Promise(resolve => requestAnimationFrame(resolve));
-            await new Promise(resolve => setTimeout(resolve, 50)); 
+            await new Promise(resolve => setTimeout(resolve, 1000)); 
             
             await objectDetection.detectMobilePhone(dummyCanvas);
         }
@@ -98,6 +98,14 @@ export default function OnboardingPage() {
   const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
   const [tempConfig, setTempConfig] = useState<any[]>([]);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [isAIWarmedUpState, setIsAIWarmedUpState] = useState(false);
+
+  useEffect(() => {
+    // ⚡ Start AI warmup immediately when page loads
+    preloadAndWarmupAI().then(() => {
+      setIsAIWarmedUpState(true);
+    }).catch(console.error);
+  }, []);
 
   useEffect(() => {
     // ⚡ Safe LocalStorage Hydration
@@ -123,16 +131,22 @@ export default function OnboardingPage() {
     if (formBuilderConfig.length > 0) return;
 
     if (tempConfig.length > 0) {
-      // Data loaded, accelerate to 100%
+      // Data loaded, accelerate to 100% ONLY if AI is warmed up
       const interval = setInterval(() => {
         setLoadingProgress((prev) => {
-          const next = prev + 8;
+          let next = prev + 8;
+          
+          // ⚡ HOLD AT 95% IF AI IS STILL WARMING UP IN BACKGROUND
+          if (!isAIWarmedUpState && next > 95) {
+            next = 95;
+          }
+          
           if (next >= 100) {
-            clearInterval(interval);
             // Wait for CSS transition to finish before showing the form
             setTimeout(() => {
               setFormBuilderConfig(tempConfig);
             }, 400);
+            clearInterval(interval);
             return 100;
           }
           return next;
@@ -588,6 +602,15 @@ export default function OnboardingPage() {
                   if (ctx) ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
               }
               return;
+            }
+
+            // ⚡ CHECK FOR MULTIPLE FACES (Common when holding up a printed photo of someone else)
+            if ((res as any).multipleFacesDetected) {
+                console.warn("🛑 SPOOF ATTEMPT: Multiple faces detected. User is holding up a photo.");
+                setIsSpoofingDetected(true);
+                setSpoofMessage("MULTIPLE FACES! CLEAR BACKGROUND");
+                setIsFaceInFrame(false);
+                return;
             }
 
             // ⚡ DRAW DYNAMIC GREEN FACE FRAME

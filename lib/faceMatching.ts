@@ -129,30 +129,33 @@ export async function detectFace(
 
         let task: any;
         if (accurate) {
-            task = fa.detectSingleFace(imageElement, new fa.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+            task = fa.detectAllFaces(imageElement, new fa.SsdMobilenetv1Options({ minConfidence: 0.5 }))
                 .withFaceLandmarks(true);
         } else {
             const options = new fa.TinyFaceDetectorOptions({
                 inputSize: 320, // Optimized size for speed
                 scoreThreshold: 0.5
             });
-            task = fa.detectSingleFace(imageElement, options)
+            task = fa.detectAllFaces(imageElement, options)
                 .withFaceLandmarks(true);
         }
 
         if (withDescriptor) {
-            task = task.withFaceDescriptor();
+            task = task.withFaceDescriptors();
         }
 
-        const detection = await task;
+        const detections = await task;
 
-        if (!detection) return null;
+        if (!detections || detections.length === 0) return null;
+
+        const mainFace = detections[0];
 
         return {
-            descriptor: withDescriptor ? detection.descriptor : null,
-            detection: detection.detection,
-            landmarks: detection.landmarks,
-            accurate: accurate
+            descriptor: withDescriptor ? mainFace.descriptor : null,
+            detection: mainFace.detection,
+            landmarks: mainFace.landmarks,
+            accurate: accurate,
+            multipleFacesDetected: detections.length > 1
         };
     } catch (error) {
         console.error('❌ Face detection failed:', error);

@@ -90,15 +90,16 @@ export async function detectMobilePhone(imageElement: HTMLVideoElement | HTMLCan
         
         // 1. Check for Hand Spoofing (holding a photo)
         if (hands && hands.length > 0) {
-            const handConfidence = hands[0].handInViewConfidence;
-            if (handConfidence > 0.8) {
+            // Some models return handInViewConfidence, some return score
+            const handConfidence = hands[0].handInViewConfidence || (hands[0] as any).score || 0.8;
+            if (handConfidence > 0.4) {
                 console.warn(`🛑 SPOOF ATTEMPT DETECTED! Found a Hand (${Math.round(handConfidence * 100)}%)`);
                 return { isSpoofing: true, message: "HAND DETECTED! DROP PHOTO" };
             }
         }
 
         // 2. Check for Phone/Device Spoofing
-        const spoofClasses = ['cell phone', 'book', 'laptop', 'tv', 'monitor', 'tablet', 'paper'];
+        const spoofClasses = ['cell phone', 'book', 'laptop', 'tv', 'monitor', 'tablet', 'paper', 'keyboard', 'mouse'];
         for (const prediction of predictions) {
             if (spoofClasses.includes(prediction.class) && prediction.score > 0.4) {
                 console.warn(`🛑 SPOOF ATTEMPT DETECTED! Found a ${prediction.class} (${Math.round(prediction.score * 100)}% confidence)`);
