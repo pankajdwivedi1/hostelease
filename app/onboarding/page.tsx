@@ -29,12 +29,13 @@ const preloadAndWarmupAI = async () => {
         
         console.log("⚡ [AI WARMUP] Models loaded, compiling shaders...");
         const dummyCanvas = document.createElement('canvas');
-        dummyCanvas.width = 64;
-        dummyCanvas.height = 64;
+        // MUST MATCH CAMERA EXACTLY (640x480) OR WEBGL WILL RECOMPILE
+        dummyCanvas.width = 640;
+        dummyCanvas.height = 480;
         const ctx = dummyCanvas.getContext('2d');
         if (ctx) {
             ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, 64, 64);
+            ctx.fillRect(0, 0, 640, 480);
             
             // Let React render UI before freezing the thread
             await new Promise(resolve => requestAnimationFrame(resolve));
@@ -97,14 +98,6 @@ export default function OnboardingPage() {
   const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
   const [tempConfig, setTempConfig] = useState<any[]>([]);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [isAIWarmedUpState, setIsAIWarmedUpState] = useState(false);
-
-  useEffect(() => {
-    // ⚡ Start AI warmup immediately when page loads
-    preloadAndWarmupAI().then(() => {
-      setIsAIWarmedUpState(true);
-    }).catch(console.error);
-  }, []);
 
   useEffect(() => {
     // ⚡ Safe LocalStorage Hydration
@@ -129,8 +122,8 @@ export default function OnboardingPage() {
     // If form is already showing, do nothing
     if (formBuilderConfig.length > 0) return;
 
-    if (tempConfig.length > 0 && isAIWarmedUpState) {
-      // Data loaded and AI is warmed up, accelerate to 100%
+    if (tempConfig.length > 0) {
+      // Data loaded, accelerate to 100%
       const interval = setInterval(() => {
         setLoadingProgress((prev) => {
           const next = prev + 8;
@@ -156,7 +149,7 @@ export default function OnboardingPage() {
       }, 150);
       return () => clearInterval(interval);
     }
-  }, [tempConfig, formBuilderConfig.length, isAIWarmedUpState]);
+  }, [tempConfig, formBuilderConfig.length]);
 
   // Fetch hostels from API
   useEffect(() => {
@@ -794,11 +787,11 @@ export default function OnboardingPage() {
                       )}
 
                       {isCameraOpen && (
-                        <div className="fixed inset-0 z-[100] flex flex-col bg-black overflow-hidden">
+                        <div className="relative w-full max-w-sm mx-auto aspect-[4/5] rounded-[32px] overflow-hidden shadow-2xl bg-black border border-gray-200">
                           {/* Live Status HUD */}
-                          <div className="absolute top-8 left-0 right-0 flex flex-col items-center gap-2 z-10">
-                            <div className={`px-4 py-2 rounded-full text-xs md:text-sm font-black uppercase tracking-widest flex items-center gap-2 shadow-2xl transition-all border-2 ${isFaceInFrame ? 'bg-green-500 border-green-400 text-white' : isSpoofingDetected ? 'bg-red-700 border-red-500 text-white animate-pulse' : 'bg-red-600 border-red-400 text-white animate-pulse'}`}>
-                              <span className={`w-2.5 h-2.5 rounded-full ${isFaceInFrame ? 'bg-white' : 'bg-white/80 animate-ping'}`}></span>
+                          <div className="absolute top-4 left-0 right-0 flex flex-col items-center gap-2 z-20">
+                            <div className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest flex items-center gap-2 shadow-2xl transition-all border-2 ${isFaceInFrame ? 'bg-green-500 border-green-400 text-white' : isSpoofingDetected ? 'bg-red-700 border-red-500 text-white animate-pulse' : 'bg-red-600 border-red-400 text-white animate-pulse'}`}>
+                              <span className={`w-2 h-2 rounded-full ${isFaceInFrame ? 'bg-white' : 'bg-white/80 animate-ping'}`}></span>
                               {isSpoofingDetected ? 'SPOOF DETECTED' : isFaceInFrame ? 'Live Human Verified' : 'Action Required'}
                             </div>
                             
@@ -824,11 +817,11 @@ export default function OnboardingPage() {
                           />
 
                           {/* Full Screen Controls */}
-                          <div className="absolute bottom-10 left-0 right-0 flex flex-row items-center justify-center gap-4 md:gap-8 z-10 px-4">
+                          <div className="absolute bottom-6 left-0 right-0 flex flex-row items-center justify-center gap-3 z-20 px-4">
                             <button
                               type="button"
                               onClick={stopCamera}
-                              className="px-6 py-4 md:px-10 md:py-5 rounded-full bg-red-600 text-white text-xs md:text-sm font-black uppercase tracking-widest shadow-2xl transition-all hover:bg-red-700 hover:scale-105 active:scale-95"
+                              className="px-6 py-3 rounded-2xl bg-white/10 backdrop-blur-md text-white border border-white/20 text-[10px] font-black uppercase tracking-widest shadow-2xl transition-all hover:bg-white/20 active:scale-95"
                             >
                               Cancel
                             </button>
@@ -836,9 +829,9 @@ export default function OnboardingPage() {
                               type="button"
                               onClick={captureImage}
                               disabled={!isFaceInFrame}
-                              className={`px-8 py-4 md:px-12 md:py-5 rounded-full text-xs md:text-sm font-black uppercase tracking-widest shadow-2xl transition-all ${isFaceInFrame ? 'bg-green-600 text-white scale-105 md:scale-110 shadow-green-600/30 hover:scale-[1.15] active:scale-95' : 'bg-gray-800 text-gray-400 opacity-60 cursor-not-allowed'}`}
+                              className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl transition-all ${isFaceInFrame ? 'bg-white text-blue-600 shadow-white/30 hover:scale-105 active:scale-95' : 'bg-gray-800 text-gray-500 opacity-80 cursor-not-allowed'}`}
                             >
-                              Capture Photo
+                              Capture
                             </button>
                           </div>
                         </div>

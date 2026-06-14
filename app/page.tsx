@@ -39,6 +39,22 @@ export default function Dashboard() {
       if (storedUserType === "superadmin") { setUserType("superadmin"); setLoading(false); return; }
       if (storedUserType === "getpass") { router.push("/getpass"); setLoading(false); return; }
 
+      // ⚡ FAST PATH FOR STUDENTS: Instant load from cache
+      if (storedUserType === "student") {
+        const cachedStudent = localStorage.getItem("cachedStudentData");
+        if (cachedStudent) {
+          try {
+            setStudentData(JSON.parse(cachedStudent));
+            setUserType("student");
+            setLoading(false);
+            // We intentionally DO NOT return here! We let the rest of the function run in the background
+            // to silently verify the session with the server. If it fails, it will redirect them out.
+          } catch (e) {
+            console.error("Cache parsing error", e);
+          }
+        }
+      }
+
       // 1. ⚡ REGARDLESS of domain, Check Supabase Session First
       const { data: { session: sbSession } } = await supabase.auth.getSession();
       
@@ -60,6 +76,8 @@ export default function Dashboard() {
                 window.location.href = `/?tenant=${data.tenantSlug}`;
                 return;
               }
+              // ⚡ Cache student data for instant load next time
+              localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
               setStudentData(data.student);
               setUserType("student");
               localStorage.setItem("userType", "student");
@@ -103,6 +121,7 @@ export default function Dashboard() {
                     window.location.href = `/?tenant=${data.tenantSlug}`;
                     return;
                   }
+                  localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
                   setStudentData(data.student);
                   setUserType("student");
                   setLoading(false);

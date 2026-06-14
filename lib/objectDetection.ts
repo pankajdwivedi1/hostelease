@@ -74,6 +74,18 @@ export async function detectMobilePhone(imageElement: HTMLVideoElement | HTMLCan
         // Yield to event loop to prevent "Page Unresponsive" popup
         await new Promise(resolve => setTimeout(resolve, 50));
         
+        // ⚡ CRITICAL FIX: The component may have unmounted or camera stopped during the async pause.
+        // We MUST re-validate the dimensions before hitting WebGL again.
+        if (imageElement instanceof HTMLVideoElement) {
+            if (!imageElement.videoWidth || !imageElement.videoHeight || imageElement.videoWidth === 0 || imageElement.videoHeight === 0) {
+                return { isSpoofing: false, message: "" };
+            }
+        } else {
+            if (!imageElement.width || !imageElement.height || imageElement.width === 0 || imageElement.height === 0) {
+                return { isSpoofing: false, message: "" };
+            }
+        }
+
         const hands = await handposeModel.estimateHands(imageElement);
         
         // 1. Check for Hand Spoofing (holding a photo)
