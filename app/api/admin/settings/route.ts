@@ -74,7 +74,14 @@ export async function POST(request: NextRequest) {
         if (endTime) updateData.attendanceEndTime = endTime;
         if (registrationFieldsConfig) updateData.registrationFieldsConfig = registrationFieldsConfig;
         if (formBuilderConfig) updateData.formBuilderConfig = formBuilderConfig;
-        if (universityBankDetails) updateData.universityBankDetails = universityBankDetails;
+        if (universityBankDetails) {
+            const existingSettings = await db.settings.get();
+            const existingBankDetails = existingSettings?.universityBankDetails || {};
+            updateData.universityBankDetails = {
+                ...existingBankDetails,
+                ...universityBankDetails
+            };
+        }
         if (hostelFeeAmount !== undefined) updateData.hostelFeeAmount = hostelFeeAmount;
         if (paymentInstructions !== undefined) updateData.paymentInstructions = paymentInstructions;
         if (isPaymentEnabled !== undefined) updateData.isPaymentEnabled = isPaymentEnabled;

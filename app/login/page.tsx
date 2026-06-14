@@ -35,6 +35,12 @@ function LoginForm() {
   const [otpSent, setOtpSent] = useState(false);
   const [parentLoading, setParentLoading] = useState(false);
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const [superAdminResetStep, setSuperAdminResetStep] = useState<"none" | "phone" | "otp" | "reset">("none");
+  const [superAdminResetPhone, setSuperAdminResetPhone] = useState("");
+  const [superAdminResetOtp, setSuperAdminResetOtp] = useState("");
+  const [superAdminNewPassword, setSuperAdminNewPassword] = useState("");
+  const [superAdminConfirmPassword, setSuperAdminConfirmPassword] = useState("");
+  const [superAdminResetLoading, setSuperAdminResetLoading] = useState(false);
 
   // ⚡ INSTANT BRANDING SYNC: Initialize from URL or Local Storage to prevent flickering
   const [tenantName, setTenantName] = useState("Hostelease");
@@ -435,6 +441,88 @@ function LoginForm() {
     }
   };
 
+  const handleSuperAdminRequestOtp = async () => {
+    if (!superAdminResetPhone || superAdminResetPhone.length !== 10) {
+      setError("Please enter a valid 10-digit mobile number");
+      return;
+    }
+
+    try {
+      setSuperAdminResetLoading(true);
+      setError("");
+
+      const response = await fetch("/api/developer/reset-password/request-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: superAdminResetPhone }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to request OTP");
+      }
+
+      setSuperAdminResetStep("otp");
+    } catch (err: any) {
+      console.error("Super Admin Reset OTP Request error:", err);
+      setError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setSuperAdminResetLoading(false);
+    }
+  };
+
+  const handleSuperAdminVerifyOtp = async () => {
+    if (!superAdminResetOtp || superAdminResetOtp.length !== 6) {
+      setError("Please enter a 6-digit OTP code");
+      return;
+    }
+
+    if (!superAdminNewPassword || superAdminNewPassword.length < 6) {
+      setError("Password must be at least 6 characters long");
+      return;
+    }
+
+    if (superAdminNewPassword !== superAdminConfirmPassword) {
+      setError("New password and confirm password do not match");
+      return;
+    }
+
+    try {
+      setSuperAdminResetLoading(true);
+      setError("");
+
+      const response = await fetch("/api/developer/reset-password/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          otp: superAdminResetOtp,
+          newPassword: superAdminNewPassword
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Verification failed");
+      }
+
+      // Reset successful!
+      alert("Super Admin password has been reset successfully. You can now login with your new password.");
+      setSuperAdminResetStep("none");
+      setSuperAdminResetPhone("");
+      setSuperAdminResetOtp("");
+      setSuperAdminNewPassword("");
+      setSuperAdminConfirmPassword("");
+      setDeveloperPassword(""); // Clear entered password
+    } catch (err: any) {
+      console.error("Super Admin Reset Verify error:", err);
+      setError(err.message || "Invalid OTP code. Please try again.");
+    } finally {
+      setSuperAdminResetLoading(false);
+    }
+  };
+
   return (
     <div className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-x-hidden overflow-y-auto no-scrollbar bg-[#fafafa] font-sans selection:bg-blue-100 p-4 sm:p-6 lg:p-8">
       {loading && (
@@ -800,88 +888,232 @@ function LoginForm() {
                     {(showAdminPassword || showWardenPassword || showDeveloperPassword) && (
                       <div className="mt-4 sm:mt-8 animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-500">
                         <div className="rounded-2xl border border-slate-100 bg-white p-4 sm:p-6 shadow-[0_12px_24px_-8px_rgba(0,0,0,0.08)]">
-                          <label className="mb-2 sm:mb-3 block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
-                            {showAdminPassword ? "Dean Authentication Key" : 
-                             showWardenPassword ? "Campus Authentication Key" : 
-                             !isDeveloperSetup ? "CREATE YOUR PASSWORD" : "Super Admin Authentication"}
-                          </label>
-                          {!isDeveloperSetup && showDeveloperPassword && (
-                            <p className="mb-4 text-[10px] text-blue-600 font-bold bg-blue-50 p-2 rounded-lg border border-blue-100 flex items-center gap-2">
-                              <span className="text-sm">🔑</span>
-                              Please create a secure developer password for your university.
-                            </p>
-                          )}
+                          {showDeveloperPassword && superAdminResetStep !== "none" ? (
+                            <div className="space-y-4 animate-in fade-in duration-300">
+                              <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest text-center">
+                                🔑 Super Admin Password Recovery
+                              </h3>
 
-                          {showWardenPassword && (
-                            <div className="mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                              <select
-                                value={selectedHostelId}
-                                onChange={(e) => {
-                                  setSelectedHostelId(e.target.value);
-                                  setError("");
-                                }}
-                                className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:py-4 text-sm sm:text-base text-slate-900 appearance-none focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-medium"
-                              >
-                                <option value="" disabled>Select Your Hostel</option>
-                                <option value="getpass" className="font-bold text-blue-600">🎟️ GATEPASS MONITOR</option>
-                                {hostels.map(hostel => (
-                                  <option key={hostel._id} value={hostel._id}>
-                                    {hostel.name}
-                                  </option>
-                                ))}
-                              </select>
-                              <div className="mt-1.5 px-1 flex items-center gap-1.5">
-                                <div className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                                <span className="text-[10px] font-bold text-indigo-600/70 uppercase tracking-wider">Select hostel to proceed</span>
-                              </div>
+                              {superAdminResetStep === "phone" ? (
+                                <div className="space-y-3">
+                                  <label className="block text-[10px] font-black uppercase tracking-wider text-blue-600 text-center">
+                                    Enter Registered Mobile Number
+                                  </label>
+                                  <div className="relative">
+                                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 text-sm font-semibold pointer-events-none">
+                                      +91
+                                    </span>
+                                    <input
+                                      type="tel"
+                                      maxLength={10}
+                                      value={superAdminResetPhone}
+                                      onChange={(e) => {
+                                        setSuperAdminResetPhone(e.target.value.replace(/\D/g, ""));
+                                        setError("");
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") handleSuperAdminRequestOtp();
+                                      }}
+                                      className="w-full rounded-xl border border-slate-200 bg-white pl-12 pr-4 py-3 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                      placeholder="9876543210"
+                                    />
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSuperAdminResetStep("none");
+                                        setError("");
+                                      }}
+                                      className="w-1/3 py-3 rounded-xl border border-slate-200 font-bold text-xs uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleSuperAdminRequestOtp}
+                                      disabled={superAdminResetLoading}
+                                      className="w-2/3 py-3 rounded-xl bg-blue-600 font-bold text-xs uppercase tracking-widest text-white shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50"
+                                    >
+                                      {superAdminResetLoading ? "Sending..." : "Get OTP"}
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="space-y-4">
+                                  <div className="space-y-2">
+                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-green-600 text-center">
+                                      Enter 6-Digit OTP
+                                    </label>
+                                    <input
+                                      type="text"
+                                      maxLength={6}
+                                      value={superAdminResetOtp}
+                                      onChange={(e) => {
+                                        setSuperAdminResetOtp(e.target.value.replace(/\D/g, ""));
+                                        setError("");
+                                      }}
+                                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-center text-lg font-black tracking-[0.5em] text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:font-medium"
+                                      placeholder="······"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                      New Master Password
+                                    </label>
+                                    <input
+                                      type="password"
+                                      value={superAdminNewPassword}
+                                      onChange={(e) => {
+                                        setSuperAdminNewPassword(e.target.value);
+                                        setError("");
+                                      }}
+                                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                      placeholder="At least 6 characters"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                      Confirm New Password
+                                    </label>
+                                    <input
+                                      type="password"
+                                      value={superAdminConfirmPassword}
+                                      onChange={(e) => {
+                                        setSuperAdminConfirmPassword(e.target.value);
+                                        setError("");
+                                      }}
+                                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                      placeholder="Repeat new password"
+                                    />
+                                  </div>
+
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSuperAdminResetStep("none");
+                                        setError("");
+                                      }}
+                                      className="w-1/3 py-3.5 rounded-xl border border-slate-200 font-bold text-xs uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleSuperAdminVerifyOtp}
+                                      disabled={superAdminResetLoading}
+                                      className="w-2/3 py-3.5 rounded-xl bg-slate-900 font-bold text-xs uppercase tracking-widest text-white shadow-lg hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-50"
+                                    >
+                                      {superAdminResetLoading ? "Verifying..." : "Reset & Save"}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                          )}
+                          ) : (
+                            <>
+                              <label className="mb-2 sm:mb-3 block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                {showAdminPassword ? "Dean Authentication Key" : 
+                                 showWardenPassword ? "Campus Authentication Key" : 
+                                 !isDeveloperSetup ? "CREATE YOUR PASSWORD" : "Super Admin Authentication"}
+                              </label>
+                              {!isDeveloperSetup && showDeveloperPassword && (
+                                <p className="mb-4 text-[10px] text-blue-600 font-bold bg-blue-50 p-2 rounded-lg border border-blue-100 flex items-center gap-2">
+                                  <span className="text-sm">🔑</span>
+                                  Please create a secure developer password for your university.
+                                </p>
+                              )}
 
-                          <div className="relative group">
-                            <input
-                              type="password"
-                              autoFocus
-                              value={showAdminPassword ? adminPassword : showWardenPassword ? wardenPassword : developerPassword}
-                              onChange={(e) => {
-                                if (showAdminPassword) setAdminPassword(e.target.value);
-                                else if (showWardenPassword) setWardenPassword(e.target.value);
-                                else setDeveloperPassword(e.target.value);
-                                setError("");
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  if (showAdminPassword) handleAdminLogin();
-                                  else if (showWardenPassword) handleWardenLogin();
-                                  else handleDeveloperLogin();
-                                }
-                              }}
-                              className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:py-4 text-center text-sm sm:text-lg font-black tracking-[0.4em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-300 placeholder:font-medium placeholder:tracking-normal"
-                              placeholder={showAdminPassword ? "············" : showWardenPassword ? "············" : !isDeveloperSetup ? "Create password" : "Enter Super Admin key"}
-                            />
-                            <button
-                                type="button"
-                                onClick={() => {
-                                  if (showAdminPassword) setShowAdminPassword(false);
-                                  if (showWardenPassword) setShowWardenPassword(false);
-                                  if (showDeveloperPassword) setShowDeveloperPassword(false);
-                                  setError("");
-                                }}
-                                className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors mt-2"
-                              >
-                                Cancel
-                              </button>
-                          </div>
-                          <div className="mt-6 flex gap-3">
-                            <button
-                              onClick={showAdminPassword ? handleAdminLogin : showWardenPassword ? handleWardenLogin : handleDeveloperLogin}
-                              disabled={adminLoading || wardenLoading || developerLoading}
-                              className={`w-full py-3.5 sm:py-4.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-widest text-white shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 ${showAdminPassword ? 'bg-blue-600 shadow-blue-200' : showWardenPassword ? 'bg-indigo-600 shadow-indigo-200' : 'bg-slate-900 shadow-slate-200'}`}
-                            >
-                              {adminLoading || wardenLoading || developerLoading ? "Processing..." : 
-                               showAdminPassword || showWardenPassword ? "Confirm Identity" : 
-                               !isDeveloperSetup ? "REGISTER PASSWORD" : "Unlock Portal"}
-                            </button>
-                          </div>
+                              {showWardenPassword && (
+                                <div className="mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                  <select
+                                    value={selectedHostelId}
+                                    onChange={(e) => {
+                                      setSelectedHostelId(e.target.value);
+                                      setError("");
+                                    }}
+                                    className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:py-4 text-sm sm:text-base text-slate-900 appearance-none focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-medium"
+                                  >
+                                    <option value="" disabled>Select Your Hostel</option>
+                                    <option value="getpass" className="font-bold text-blue-600">🎟️ GATEPASS MONITOR</option>
+                                    {hostels.map(hostel => (
+                                      <option key={hostel._id} value={hostel._id}>
+                                        {hostel.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <div className="mt-1.5 px-1 flex items-center gap-1.5">
+                                    <div className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                                    <span className="text-[10px] font-bold text-indigo-600/70 uppercase tracking-wider">Select hostel to proceed</span>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="relative group">
+                                <input
+                                  type="password"
+                                  autoFocus
+                                  value={showAdminPassword ? adminPassword : showWardenPassword ? wardenPassword : developerPassword}
+                                  onChange={(e) => {
+                                    if (showAdminPassword) setAdminPassword(e.target.value);
+                                    else if (showWardenPassword) setWardenPassword(e.target.value);
+                                    else setDeveloperPassword(e.target.value);
+                                    setError("");
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      if (showAdminPassword) handleAdminLogin();
+                                      else if (showWardenPassword) handleWardenLogin();
+                                      else handleDeveloperLogin();
+                                    }
+                                  }}
+                                  className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:py-4 text-center text-sm sm:text-lg font-black tracking-[0.4em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-300 placeholder:font-medium placeholder:tracking-normal"
+                                  placeholder={showAdminPassword ? "············" : showWardenPassword ? "············" : !isDeveloperSetup ? "Create password" : "Enter Super Admin key"}
+                                />
+                                <div className="flex justify-between items-center mt-2.5 px-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (showAdminPassword) setShowAdminPassword(false);
+                                      if (showWardenPassword) setShowWardenPassword(false);
+                                      if (showDeveloperPassword) setShowDeveloperPassword(false);
+                                      setError("");
+                                    }}
+                                    className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                  {showDeveloperPassword && isDeveloperSetup && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSuperAdminResetStep("phone");
+                                        setSuperAdminResetPhone("");
+                                        setError("");
+                                      }}
+                                      className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 hover:underline transition-colors"
+                                    >
+                                      Forgot Password?
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="mt-6 flex gap-3">
+                                <button
+                                  onClick={showAdminPassword ? handleAdminLogin : showWardenPassword ? handleWardenLogin : handleDeveloperLogin}
+                                  disabled={adminLoading || wardenLoading || developerLoading}
+                                  className={`w-full py-3.5 sm:py-4.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-widest text-white shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 ${showAdminPassword ? 'bg-blue-600 shadow-blue-200' : showWardenPassword ? 'bg-indigo-600 shadow-indigo-200' : 'bg-slate-900 shadow-slate-200'}`}
+                                >
+                                  {adminLoading || wardenLoading || developerLoading ? "Processing..." : 
+                                   showAdminPassword || showWardenPassword ? "Confirm Identity" : 
+                                   !isDeveloperSetup ? "REGISTER PASSWORD" : "Unlock Portal"}
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     )}
