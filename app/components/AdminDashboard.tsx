@@ -398,6 +398,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [selectedStudent, setSelectedStudent] = useState<StudentDetails | null>(null);
   const [showAllStudents, setShowAllStudents] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showMarkBulkConfirm, setShowMarkBulkConfirm] = useState(false);
+  const [bulkMarkStudentIds, setBulkMarkStudentIds] = useState<string[]>([]);
+  const [showUnmarkConfirm, setShowUnmarkConfirm] = useState(false);
+  const [unmarkTarget, setUnmarkTarget] = useState<{ studentIds: string[]; attendanceId?: string; studentId?: string } | null>(null);
   const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [hostelFilter, setHostelFilter] = useState<string>("all");
@@ -680,11 +684,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]); // ⚡ NEW: Manual Selection
   const [isBulkMarking, setIsBulkMarking] = useState(false); // ⚡ NEW: Loading State
 
-  const handleMarkBulkAttendance = async (studentIds: string[]) => {
+  const handleMarkBulkAttendance = (studentIds: string[]) => {
     if (!studentIds || studentIds.length === 0) return;
+    setBulkMarkStudentIds(studentIds);
+    setShowMarkBulkConfirm(true);
+  };
 
-    if (!confirm(`Are you sure you want to mark attendance for ${studentIds.length} students?`)) return;
-
+  const executeMarkBulkAttendance = async (studentIds: string[]) => {
     setIsBulkMarking(true);
     try {
       const storedUserName = typeof window !== 'undefined' ? (localStorage.getItem("userName") || localStorage.getItem("wardenUsername") || localStorage.getItem("userType") || "Admin") : "Admin";
@@ -741,10 +747,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const handleUnmarkBulkAttendance = async (studentIds: string[]) => {
+  const handleUnmarkBulkAttendance = (studentIds: string[]) => {
     if (!studentIds || studentIds.length === 0) return;
-    if (!confirm(`Are you sure you want to unmark ${studentIds.length} students? They will be marked as absent.`)) return;
+    setUnmarkTarget({ studentIds });
+    setShowUnmarkConfirm(true);
+  };
 
+  const executeUnmarkBulkAttendance = async (studentIds: string[]) => {
     setIsBulkMarking(true);
     try {
       const res = await fetch("/api/admin/attendance", {
@@ -771,8 +780,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const handleUnmarkAttendance = async (attendanceId: string, studentId: string) => {
-    if (!confirm("Are you sure you want to unmark this student? They will be marked as absent.")) return;
+  const handleUnmarkAttendance = (attendanceId: string, studentId: string) => {
+    setUnmarkTarget({ studentIds: [studentId], attendanceId, studentId });
+    setShowUnmarkConfirm(true);
+  };
+
+  const executeUnmarkAttendance = async (attendanceId: string, studentId: string) => {
     try {
       const res = await fetch(`/api/admin/attendance?id=${attendanceId}`, { method: "DELETE" });
       const data = await res.json();
@@ -3410,11 +3423,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <h1 className="text-lg md:text-xl font-bold text-foreground leading-tight tracking-tight">
                       {dashboardTitle.includes("Dashboard") ? (
                         <>
-                          <span className="block">{dashboardTitle.replace(" Dashboard", "")}</span>
-                          <span className="block text-slate-800">Dashboard</span>
+                          <span>{dashboardTitle.replace(" Dashboard", "")} </span>
+                          <span className="text-slate-800">Dashboard</span>
                         </>
                       ) : (
-                        <span className="block">{dashboardTitle}</span>
+                        <span>{dashboardTitle}</span>
                       )}
                     </h1>
                     <div className="flex items-center gap-2 mt-1">
@@ -3435,31 +3448,33 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     </div>
                   </div>
 
-                  {title === "Super Admin Dashboard" && (
+                  <div className="flex flex-col gap-1.5 items-end md:hidden">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowSetupWizard(!showSetupWizard);
-                        if (!guideDismissed) {
-                          localStorage.setItem("hostelease_setup_dismissed", "true");
-                          setGuideDismissed(true);
-                        }
-                      }}
-                      className={`md:hidden px-4 py-2 rounded-xl border border-solid ${!guideDismissed ? 'border-blue-400 bg-blue-100 animate-pulse shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'border-blue-100 bg-blue-50'} text-blue-700 text-[10px] font-black uppercase tracking-tight active:scale-95 transition-all flex items-center gap-2`}
+                      onClick={handleLogout}
+                      className="px-2 py-1 w-[76px] rounded-lg border border-solid border-gray-100 bg-white text-foreground text-[9px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1.5"
                     >
-                      GUIDE
-                      <span className="text-xs">📋</span>
+                      LOGOUT
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
                     </button>
-                  )}
-                  <button
-                    onClick={handleLogout}
-                    className="md:hidden px-4 py-2 rounded-xl border border-solid border-gray-100 bg-white text-foreground text-[10px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all flex items-center gap-2"
-                  >
-                    LOGOUT
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                  </button>
+                    {title === "Super Admin Dashboard" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowSetupWizard(!showSetupWizard);
+                          if (!guideDismissed) {
+                            localStorage.setItem("hostelease_setup_dismissed", "true");
+                            setGuideDismissed(true);
+                          }
+                        }}
+                        className={`px-2 py-1 w-[76px] rounded-lg border border-solid ${!guideDismissed ? 'border-blue-400 bg-blue-100 animate-pulse shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'border-blue-100 bg-blue-50'} text-blue-700 text-[9px] font-black uppercase tracking-tight active:scale-95 transition-all flex items-center justify-center gap-1.5`}
+                      >
+                        GUIDE
+                        <span className="text-[10px]">📋</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
@@ -5350,7 +5365,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <select
                       value={collegeFilter}
                       onChange={(e) => setCollegeFilter(e.target.value)}
-                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground"
+                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-xs focus:outline-none focus:border-foreground"
                     >
                       <option value="all">All Colleges</option>
                       <option value="OIST">OIST</option>
@@ -5366,7 +5381,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <select
                       value={semesterFilter}
                       onChange={(e) => setSemesterFilter(e.target.value)}
-                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground"
+                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-xs focus:outline-none focus:border-foreground"
                     >
                       <option value="all">All Semesters</option>
                       <option value="1ST SEM">1ST SEM</option>
@@ -5385,7 +5400,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <select
                       value={branchFilter}
                       onChange={(e) => setBranchFilter(e.target.value)}
-                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground"
+                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-xs focus:outline-none focus:border-foreground"
                     >
                       <option value="all">All Branches</option>
                       <option value="CS">CS</option>
@@ -5412,7 +5427,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <select
                       value={sectionFilter}
                       onChange={(e) => setSectionFilter(e.target.value)}
-                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground"
+                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-xs focus:outline-none focus:border-foreground"
                     >
                       <option value="all">All Sections</option>
                       <option value="A">A</option>
@@ -5425,14 +5440,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-secondary mb-1.5">Select Floor</label>
+                    <label className="block text-xs font-medium text-secondary mb-1.5">Floor</label>
                     <select
                       value={floorFilter}
                       onChange={(e) => {
                         setFloorFilter(e.target.value);
                         setRoomFilter("all");
                       }}
-                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground"
+                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-xs focus:outline-none focus:border-foreground"
                     >
                       <option value="all">All Floors</option>
                       {availableFloors.map((floor) => (
@@ -5442,11 +5457,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-secondary mb-1.5">Select Room number</label>
+                    <label className="block text-xs font-medium text-secondary mb-1.5">Room Number</label>
                     <select
                       value={roomFilter}
                       onChange={(e) => setRoomFilter(e.target.value)}
-                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-sm focus:outline-none focus:border-foreground"
+                      className="w-full h-10 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-xs focus:outline-none focus:border-foreground"
                     >
                       <option value="all">All Rooms</option>
                       {availableRooms.map((room) => (
@@ -6332,6 +6347,129 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 >
                   {deletingStudentId === selectedStudent.id ? "Removing..." : "Remove Student"}
                 </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
+      {
+        showMarkBulkConfirm && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200" onClick={() => { setShowMarkBulkConfirm(false); setBulkMarkStudentIds([]); }}>
+            <div 
+              className="w-full max-w-md bg-[#0f2d1f] border-[1.5px] border-[rgba(0,255,136,0.35)] rounded-2xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.6),_0_0_0_1px_rgba(255,255,255,0.04)] backdrop-blur-md relative overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Top decorative line/accent bar */}
+              <div className="absolute top-0 left-0 right-0 h-1 bg-[#00ff88]" />
+              
+              <div className="flex gap-4 items-start">
+                {/* Green Icon Container */}
+                <div className="w-12 h-12 rounded-full bg-[#143d2a] border border-[rgba(0,255,136,0.25)] flex items-center justify-center text-[#00ff88] shrink-0 shadow-[0_0_15px_rgba(0,255,136,0.2)]">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <polyline points="22 4 12 14.01 9 11.01" />
+                  </svg>
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-bold text-[#e8fff5] mb-2 font-sans tracking-wide">
+                    Confirm Attendance
+                  </h3>
+                  <p className="text-sm text-[#a3d5be] leading-relaxed font-medium mb-6">
+                    Are you sure you want to mark attendance for <span className="font-extrabold text-[#00ff88] underline underline-offset-4">{bulkMarkStudentIds.length}</span> {bulkMarkStudentIds.length === 1 ? 'student' : 'students'}?
+                  </p>
+                  
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      onClick={() => {
+                        setShowMarkBulkConfirm(false);
+                        setBulkMarkStudentIds([]);
+                      }}
+                      className="px-4 py-2 rounded-xl border border-[rgba(0,255,136,0.25)] bg-[#143d2a] text-[#a3d5be] font-bold text-xs uppercase tracking-wider transition-all hover:bg-[#1a4f37] hover:text-[#e8fff5] active:scale-95"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setShowMarkBulkConfirm(false);
+                        const ids = [...bulkMarkStudentIds];
+                        setBulkMarkStudentIds([]);
+                        await executeMarkBulkAttendance(ids);
+                      }}
+                      className="px-5 py-2 rounded-xl bg-[#00ff88] text-[#0f2d1f] font-bold text-xs uppercase tracking-wider transition-all hover:bg-[#2eff9e] hover:shadow-[0_0_20px_rgba(0,255,136,0.4)] active:scale-95 flex items-center gap-1.5"
+                    >
+                      Confirm & Mark
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+      {
+        showUnmarkConfirm && unmarkTarget && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200" onClick={() => { setShowUnmarkConfirm(false); setUnmarkTarget(null); }}>
+            <div 
+              className="w-full max-w-md bg-[#2d0f0f] border-[1.5px] border-[rgba(255,80,80,0.35)] rounded-2xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.6),_0_0_0_1px_rgba(255,255,255,0.04)] backdrop-blur-md relative overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Top decorative line/accent bar */}
+              <div className="absolute top-0 left-0 right-0 h-1 bg-[#ff5050]" />
+              
+              <div className="flex gap-4 items-start">
+                {/* Red/Rose Warning Icon Container */}
+                <div className="w-12 h-12 rounded-full bg-[#401515] border border-[rgba(255,80,80,0.25)] flex items-center justify-center text-[#ff5050] shrink-0 shadow-[0_0_15px_rgba(255,80,80,0.2)]">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-bold text-[#fff0f0] mb-2 font-sans tracking-wide">
+                    Confirm Unmark Attendance
+                  </h3>
+                  <p className="text-sm text-[#f5c2c2] leading-relaxed font-medium mb-6 font-sans">
+                    {unmarkTarget.attendanceId ? (
+                      <>
+                        Are you sure you want to unmark this student? They will be marked as <span className="font-extrabold text-[#ff5050]">absent</span>.
+                      </>
+                    ) : (
+                      <>
+                        Are you sure you want to unmark <span className="font-extrabold text-[#ff5050] underline underline-offset-4">{unmarkTarget.studentIds.length}</span> {unmarkTarget.studentIds.length === 1 ? 'student' : 'students'}? They will be marked as <span className="font-extrabold text-[#ff5050]">absent</span>.
+                      </>
+                    )}
+                  </p>
+                  
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      onClick={() => {
+                        setShowUnmarkConfirm(false);
+                        setUnmarkTarget(null);
+                      }}
+                      className="px-4 py-2 rounded-xl border border-[rgba(255,80,80,0.25)] bg-[#3d1414] text-[#f5c2c2] font-bold text-xs uppercase tracking-wider transition-all hover:bg-[#4f1a1a] hover:text-[#fff0f0] active:scale-95"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setShowUnmarkConfirm(false);
+                        const target = { ...unmarkTarget };
+                        setUnmarkTarget(null);
+                        if (target.attendanceId && target.studentId) {
+                          await executeUnmarkAttendance(target.attendanceId, target.studentId);
+                        } else {
+                          await executeUnmarkBulkAttendance(target.studentIds);
+                        }
+                      }}
+                      className="px-5 py-2 rounded-xl bg-[#ff5050] text-white font-bold text-xs uppercase tracking-wider transition-all hover:bg-[#ff7373] hover:shadow-[0_0_20px_rgba(255,80,80,0.4)] active:scale-95 flex items-center gap-1.5"
+                    >
+                      Confirm & Unmark
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
