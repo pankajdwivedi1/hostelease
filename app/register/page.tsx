@@ -143,7 +143,7 @@ export default function RegisterPage() {
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1 flex items-center gap-2"><Globe className="w-3 h-3" /> Subdomain Slug</label>
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1 flex items-center gap-2"><Globe className="w-3 h-3" /> Campus Tenant Slug</label>
                                         <div className="relative">
                                             <input
                                                 required
@@ -152,7 +152,7 @@ export default function RegisterPage() {
                                                 placeholder="oxford"
                                                 className="w-full bg-white/5 border border-white/10 p-3 sm:p-4 pr-32 rounded-xl sm:rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/40 outline-none placeholder:text-gray-700 lowercase"
                                             />
-                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] sm:text-[10px] font-black text-gray-600 uppercase pointer-events-none">.hosteleaze.com</div>
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] sm:text-[10px] font-black text-gray-600 uppercase pointer-events-none">?tenant=...</div>
                                         </div>
                                     </div>
 
@@ -281,7 +281,7 @@ export default function RegisterPage() {
                                     <a href={`/login?tenant=${successData.slug}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 font-bold break-all hover:underline block">
                                         {typeof window !== 'undefined' ? window.location.origin : ''}/login?tenant={successData.slug}
                                     </a>
-                                    <p className="text-[10px] text-gray-500 mt-1">Note: In production this will be {successData.slug}.hosteleaze.com</p>
+                                    <p className="text-[10px] text-gray-500 mt-1">Note: In production this will be www.hosteleaze.com?tenant={successData.slug}</p>
                                 </div>
                                 <div className="pt-4 border-t border-white/5">
                                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Global Admin Login</label>

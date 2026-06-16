@@ -28,7 +28,7 @@ export function middleware(request: NextRequest) {
     }
 
     // Clean up
-    if (tenantSlug === 'www' || tenantSlug === 'localhost' || tenantSlug.includes(':') || tenantSlug === 'hosteleaze-silk') {
+    if (tenantSlug === 'www' || tenantSlug === 'localhost' || tenantSlug.includes(':') || tenantSlug === 'hosteleaze-silk' || tenantSlug === 'hostelease-silk') {
         tenantSlug = 'default';
     }
 

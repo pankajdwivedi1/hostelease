@@ -110,14 +110,26 @@ export default function SuperAdminDashboard() {
     }, []);
 
     const getTenantDisplayUrl = (slug: string) => {
-        if (!isMounted) return `${slug}.hosteleaze.com`;
+        if (!isMounted) return `www.hosteleaze.com?tenant=${slug}`;
         const hostname = window.location.hostname;
         if (hostname === "localhost") {
-            return `${slug}.localhost:3000`;
+            return `localhost:3000?tenant=${slug}`;
         } else if (hostname.includes("hosteleaze.com")) {
-            return `${slug}.hosteleaze.com`;
+            return `www.hosteleaze.com?tenant=${slug}`;
         } else {
             return `${window.location.host}/?tenant=${slug}`;
+        }
+    };
+
+    const getTenantUrl = (slug: string) => {
+        if (!isMounted) return `https://www.hosteleaze.com?tenant=${slug}`;
+        const hostname = window.location.hostname;
+        if (hostname === "localhost") {
+            return `http://localhost:3000?tenant=${slug}`;
+        } else if (hostname.includes("hosteleaze.com")) {
+            return `https://www.hosteleaze.com?tenant=${slug}`;
+        } else {
+            return `${window.location.protocol}//${window.location.host}/?tenant=${slug}`;
         }
     };
 
@@ -327,9 +339,9 @@ export default function SuperAdminDashboard() {
         let impersonateUrl = "";
         
         if (hostname === "localhost") {
-            impersonateUrl = `http://${slug}.localhost:3000/auth/impersonate?type=admin&token=BOSS_PROXY_${Date.now()}`;
+            impersonateUrl = `http://localhost:3000/auth/impersonate?type=admin&token=BOSS_PROXY_${Date.now()}&tenant=${slug}`;
         } else if (hostname.includes("hosteleaze.com")) {
-            impersonateUrl = `https://${slug}.hosteleaze.com/auth/impersonate?type=admin&token=BOSS_PROXY_${Date.now()}`;
+            impersonateUrl = `https://www.hosteleaze.com/auth/impersonate?type=admin&token=BOSS_PROXY_${Date.now()}&tenant=${slug}`;
         } else {
             // For vercel.app domains, codespaces, IPs, etc. -> Use query param which middleware will convert to cookie
             impersonateUrl = `${window.location.protocol}//${window.location.host}/auth/impersonate?type=admin&token=BOSS_PROXY_${Date.now()}&tenant=${slug}`;
@@ -695,7 +707,14 @@ export default function SuperAdminDashboard() {
 
                                         <div className="flex items-center gap-2 bg-slate-900 text-white p-2 rounded-xl">
                                             <Globe className="w-3 h-3 text-blue-400 shrink-0" />
-                                            <span className="text-[10px] font-bold tracking-tight truncate flex-1">{getTenantDisplayUrl(tenant.slug)}</span>
+                                            <a 
+                                                href={getTenantUrl(tenant.slug)} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer" 
+                                                className="text-[10px] font-bold tracking-tight truncate flex-1 hover:text-blue-400 hover:underline transition-colors"
+                                            >
+                                                {getTenantDisplayUrl(tenant.slug)}
+                                            </a>
                                             <div className="flex items-center gap-1.5 shrink-0">
                                                 <button 
                                                     onClick={() => handleCalculateStorage(tenant._id)}
@@ -1125,9 +1144,25 @@ export default function SuperAdminDashboard() {
                                 </div>
                                 <div className="flex-1">
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Live Endpoint</p>
-                                    <p className="text-2xl font-black text-slate-900 tracking-tight lowercase">{registrationSuccessData.slug}.hosteleaze.com</p>
+                                    <p className="text-2xl font-black text-slate-900 tracking-tight lowercase">
+                                        {window.location.hostname.includes("hosteleaze.com") 
+                                            ? `www.hosteleaze.com?tenant=${registrationSuccessData.slug}` 
+                                            : `${window.location.host}?tenant=${registrationSuccessData.slug}`}
+                                    </p>
                                 </div>
-                                <button onClick={() => window.open(`${window.location.protocol}//${registrationSuccessData.slug}.${window.location.host}/login`, '_blank')} className="p-4 bg-white rounded-2xl shadow-sm border border-slate-200 hover:bg-slate-900 hover:text-white transition-all">
+                                <button 
+                                    onClick={() => {
+                                        const hostname = window.location.hostname;
+                                        let url = "";
+                                        if (hostname.includes("hosteleaze.com")) {
+                                            url = `https://www.hosteleaze.com?tenant=${registrationSuccessData.slug}`;
+                                        } else {
+                                            url = `${window.location.protocol}//${window.location.host}/?tenant=${registrationSuccessData.slug}`;
+                                        }
+                                        window.open(url, '_blank');
+                                    }} 
+                                    className="p-4 bg-white rounded-2xl shadow-sm border border-slate-200 hover:bg-slate-900 hover:text-white transition-all"
+                                >
                                     <ArrowUpRight className="w-6 h-6" />
                                 </button>
                             </div>

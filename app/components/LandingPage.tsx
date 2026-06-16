@@ -195,7 +195,7 @@ export default function LandingPage() {
                                         <div className="w-2 h-2 sm:w-3 sm:h-3 bg-yellow-500 rounded-full"></div>
                                         <div className="w-2 h-2 sm:w-3 sm:h-3 bg-green-500 rounded-full"></div>
                                     </div>
-                                    <div className="bg-white/10 px-2 sm:px-3 py-1 rounded text-[8px] sm:text-[10px] text-gray-500">oist.hosteleaze.com</div>
+                                    <div className="bg-white/10 px-2 sm:px-3 py-1 rounded text-[8px] sm:text-[10px] text-gray-500">hosteleaze.com?tenant=oist</div>
                                 </div>
                                 <div className="h-4 w-[60%] bg-white/10 rounded"></div>
                                 <div className="grid grid-cols-2 gap-4">

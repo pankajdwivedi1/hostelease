@@ -722,7 +722,7 @@ const SOURCE_CACHE_TTL = 30000; // 30 seconds (Reduce load on Mongo)
 const getTenantIdOrThrow = async () => {
     const tid = await getCurrentTenantId();
     if (!tid) {
-        throw new Error("Multi-Tenant Context Missing: Please access through a university subdomain (e.g., college.hosteleaze.com)");
+        throw new Error("Multi-Tenant Context Missing: Please access through your college portal link (e.g., hosteleaze.com?tenant=college)");
     }
     return tid;
 };
