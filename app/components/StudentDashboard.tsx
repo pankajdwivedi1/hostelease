@@ -1965,7 +1965,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
             const result: any = await navigator.credentials.create({
                 publicKey: {
                     challenge,
-                    rp: { name: "Hostelease Attendance", id: window.location.hostname },
+                    rp: { name: "Hosteleaze Attendance", id: window.location.hostname },
                     user: {
                         id: Uint8Array.from(studentProfile?._id || "0000000000000000", c => c.charCodeAt(0)),
                         name: studentProfile?.email || "Student",
@@ -2254,7 +2254,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                         </button>
                                     </div>
                                     <p className="text-[11px] md:text-sm text-gray-500 font-medium">
-                                        {isParentView ? "Monitoring Child's Campus Activities" : "Welcome back to Hostelease Dashboard"}
+                                        {isParentView ? "Monitoring Child's Campus Activities" : "Welcome back to Hosteleaze Dashboard"}
                                     </p>
                                 </div>
 
@@ -4390,7 +4390,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
             <footer className="mt-2 py-6 border-t border-gray-100/50">
                 <div className="flex flex-col items-center gap-1.5 text-center px-4">
                     <p className="text-[9px] sm:text-[11px] font-bold tracking-widest text-gray-400/80 uppercase">
-                        &copy; 2026 HOSTELEASE. All Rights Reserved.
+                        &copy; 2026 HOSTELEAZE. All Rights Reserved.
                     </p>
                     <p className="text-[8px] sm:text-[9px] font-medium text-gray-300 uppercase tracking-[0.15em] opacity-60">
                         Unauthorized copying, modification, or distribution is strictly prohibited

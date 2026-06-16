@@ -256,7 +256,7 @@ export default function StudentScannerPage() {
         // Verify it's a GATEPASS QR code
         try {
             const parsed = JSON.parse(qrData);
-            if (parsed.app !== "hostelease-getpass") {
+            if (parsed.app !== "hosteleaze-getpass") {
                 return; // Not our QR code, keep scanning
             }
         } catch {

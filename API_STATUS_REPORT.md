@@ -1,10 +1,10 @@
-# Hostelease API Status Report
+# Hosteleaze API Status Report
 
 Generated on: 2026-01-13
 
 ## 📋 API Overview
 
-Your hostelease application has **8 API endpoints** organized into the following categories:
+Your hosteleaze application has **8 API endpoints** organized into the following categories:
 
 ### 🔐 Authentication APIs (3)
 

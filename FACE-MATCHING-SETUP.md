@@ -29,7 +29,7 @@ The face matching needs AI models to work. Don't worry, they're FREE and small!
 
 2. **Place in your project**:
    ```
-   hostelease/
+   hosteleaze/
    └── public/
        └── models/
            ├── tiny_face_detector_model-weights_manifest.json
@@ -73,7 +73,7 @@ The face matching needs AI models to work. Don't worry, they're FREE and small!
    - Scroll to "Upload presets"
    - Click "Add upload preset"
    - Set:
-     - **Preset name**: `hostelease_flagged_photos`
+     - **Preset name**: `hosteleaze_flagged_photos`
      - **Signing mode**: Unsigned (important!)
      - **Folder**: `attendance/flagged`
      - **Format**: WebP
@@ -85,7 +85,7 @@ The face matching needs AI models to work. Don't worry, they're FREE and small!
    - Replace `your_cloud_name_here` with your actual Cloud Name:
      ```
      NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=dxxxxxxx
-     NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET=hostelease_flagged_photos
+     NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET=hosteleaze_flagged_photos
      ```
    - Save file
 

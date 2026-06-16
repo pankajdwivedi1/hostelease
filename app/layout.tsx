@@ -13,13 +13,13 @@ const lora = Lora({
 });
 
 export const metadata: Metadata = {
-  title: "Hostelease - Hostel Management",
+  title: "Hosteleaze - Hostel Management",
   description: "Hostel Management System Reimagined - Manage permissions, students, and hostel operations seamlessly",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Hostelease",
+    title: "Hosteleaze",
   },
   icons: {
     icon: [

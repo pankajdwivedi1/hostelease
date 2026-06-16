@@ -682,7 +682,7 @@ export default function OnboardingPage() {
               <span>Back</span>
             </button>
             <div className="text-center pt-8 sm:pt-0">
-              <h1 className="text-base font-semibold text-foreground">Welcome to Hostelease</h1>
+              <h1 className="text-base font-semibold text-foreground">Welcome to Hosteleaze</h1>
               <p className="mt-2 text-sm text-secondary">Please fill in your details to get started</p>
               {isProfileLocked && (
                 <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3">

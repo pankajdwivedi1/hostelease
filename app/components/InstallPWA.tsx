@@ -65,7 +65,7 @@ export default function InstallPWA() {
 
                     <div className="flex-1">
                         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                            Install HostelEase
+                            Install HostelEaze
                         </h3>
                         <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 leading-relaxed">
                             {isIOS

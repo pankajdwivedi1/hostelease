@@ -43,7 +43,7 @@ function LoginForm() {
   const [superAdminResetLoading, setSuperAdminResetLoading] = useState(false);
 
   // ⚡ INSTANT BRANDING SYNC: Initialize from URL or Local Storage to prevent flickering
-  const [tenantName, setTenantName] = useState("Hostelease");
+  const [tenantName, setTenantName] = useState("Hosteleaze");
   const [tenantLogo, setTenantLogo] = useState("");
 
   useEffect(() => {
@@ -58,7 +58,7 @@ function LoginForm() {
             setTenantName(localStorage.getItem("lastTenantName") || tenantParam.toUpperCase());
         }
       } else {
-        setTenantName(localStorage.getItem("lastTenantName") || "Hostelease");
+        setTenantName(localStorage.getItem("lastTenantName") || "Hosteleaze");
         setTenantLogo(localStorage.getItem("lastTenantLogo") || "");
       }
     }
@@ -606,7 +606,7 @@ function LoginForm() {
               <div className="space-y-1 sm:space-y-2">
                 <h1 className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "text-2xl sm:text-4xl" : "text-3xl sm:text-5xl"} font-black tracking-tight text-slate-900 transition-all duration-500`}>
                   {tenantName}
-                  {tenantName !== "Hostelease" && <span className="block text-[8px] sm:text-[10px] text-slate-400 font-bold tracking-widest mt-1">POWERED BY HOSTELEASE</span>}
+                  {tenantName !== "Hosteleaze" && <span className="block text-[8px] sm:text-[10px] text-slate-400 font-bold tracking-widest mt-1">POWERED BY HOSTELEAZE</span>}
                 </h1>
                 <div className="flex flex-col items-center space-y-2 sm:space-y-3">
                   {showLogoutToast && (
@@ -628,7 +628,7 @@ function LoginForm() {
                   <p className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "hidden sm:block opacity-0 sm:opacity-100 max-h-0 sm:max-h-20" : "max-h-20 opacity-100"} max-w-[260px] sm:max-w-[280px] text-[11px] sm:text-sm font-medium text-slate-500 leading-tight sm:leading-relaxed transition-all duration-500 overflow-hidden`}>
                     The smart, all-in-one ecosystem for modern hostel administration and student living.
                   </p>
-                  {tenantName === "Hostelease" && !showAdminPassword && !showWardenPassword && (
+                  {tenantName === "Hosteleaze" && !showAdminPassword && !showWardenPassword && (
                     <button 
                       onClick={() => {
                         const slug = prompt("Enter your Campus Slug (e.g. oist):");
@@ -1128,7 +1128,7 @@ function LoginForm() {
                 <div className="space-y-1.5 sm:space-y-3">
                   <div className="flex flex-col items-center gap-1">
                     <p className="text-[8px] sm:text-[10px] font-bold tracking-[0.1em] text-slate-400 uppercase">
-                      &copy; 2026 HOSTELEASE. All Rights Reserved.
+                      &copy; 2026 HOSTELEAZE. All Rights Reserved.
                     </p>
                     <p className="text-[7px] sm:text-[9px] font-medium text-slate-300 uppercase tracking-wider">
                       Unauthorized copying, modification, or distribution is strictly prohibited

@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
             return new NextResponse(JSON.stringify(allData, null, 2), {
                 headers: {
                     "Content-Type": "application/json",
-                    "Content-Disposition": `attachment; filename="hostelease_db_dump_${new Date().toISOString().split('T')[0]}.json"`
+                    "Content-Disposition": `attachment; filename="hosteleaze_db_dump_${new Date().toISOString().split('T')[0]}.json"`
                 }
             });
         }
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
             return new NextResponse(buffer, {
                 headers: {
                     "Content-Type": contentType,
-                    "Content-Disposition": `attachment; filename="hostelease_db_dump_${new Date().toISOString().split('T')[0]}.${extension}"`
+                    "Content-Disposition": `attachment; filename="hosteleaze_db_dump_${new Date().toISOString().split('T')[0]}.${extension}"`
                 }
             });
         } else {

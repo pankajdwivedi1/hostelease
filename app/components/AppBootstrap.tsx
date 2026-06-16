@@ -13,7 +13,7 @@ import { installToastSystem, showToast } from "@/lib/toast";
  * ============================================================
  */
 
-const PERMISSIONS_ASKED_KEY = "hostelease_v2_perms_ok";
+const PERMISSIONS_ASKED_KEY = "hosteleaze_v2_perms_ok";
 
 export default function AppBootstrap() {
   const [showOverlay, setShowOverlay] = useState(false);
@@ -89,7 +89,7 @@ export default function AppBootstrap() {
 
         <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">Setup Access</h1>
         <p className="text-blue-100/60 text-sm mb-8 leading-relaxed">
-          To provide secure attendance and QR scanning, Hostelease requires Location and Camera permissions.
+          To provide secure attendance and QR scanning, Hosteleaze requires Location and Camera permissions.
         </p>
 
         {/* Feature List */}

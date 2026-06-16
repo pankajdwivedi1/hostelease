@@ -173,7 +173,7 @@ export default function TenantSettingsView() {
                           </div>
                           
                           <p className="text-[9px] sm:text-xs font-semibold text-slate-500 mb-3 leading-relaxed max-w-2xl relative z-10">
-                            Share this exact link with your <strong>Deans, Wardens, and Students</strong>. They can bookmark it to instantly access your university's dedicated Hostelease portal and start working smoothly without any extra setup.
+                            Share this exact link with your <strong>Deans, Wardens, and Students</strong>. They can bookmark it to instantly access your university's dedicated Hosteleaze portal and start working smoothly without any extra setup.
                           </p>
                           
                           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-50 border border-slate-200 p-2 sm:p-3 rounded-lg sm:rounded-xl relative z-10">

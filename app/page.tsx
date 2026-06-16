@@ -27,7 +27,7 @@ export default function Dashboard() {
       const tenantCookie = cookies.split('; ').find(row => row.startsWith('tenant-slug='))?.split('=')[1];
       const activeTenant = tenantParam || tenantCookie;
 
-      const mainDomains = ['hostelease.com', 'localhost', 'hostelease.vercel.app', 'hostelease-silk.vercel.app'];
+      const mainDomains = ['hosteleaze.com', 'localhost', 'hosteleaze.vercel.app', 'hosteleaze-silk.vercel.app'];
       const parts = hostname.split('.');
       const isRoot = (parts.length === 1 || (parts.length === 2 && (parts[0] === 'www' || parts[1] === 'localhost'))) && !activeTenant;
       const isMainBase = mainDomains.includes(hostname) && !activeTenant;

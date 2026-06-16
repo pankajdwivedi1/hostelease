@@ -14,10 +14,10 @@ export function middleware(request: NextRequest) {
     // 2. Secondary: Hostname-based detection
     else if (hostname.includes('.localhost')) {
         tenantSlug = hostname.split('.localhost')[0];
-    } else if (hostname.includes('.hostelease.com')) {
-        tenantSlug = hostname.split('.hostelease.com')[0];
-    } else if (hostname.includes('.hostelease.vercel.app')) {
-        tenantSlug = hostname.split('.hostelease.vercel.app')[0];
+    } else if (hostname.includes('.hosteleaze.com')) {
+        tenantSlug = hostname.split('.hosteleaze.com')[0];
+    } else if (hostname.includes('.hosteleaze.vercel.app')) {
+        tenantSlug = hostname.split('.hosteleaze.vercel.app')[0];
     }
     // 3. Tertiary: Cookie-based persistence
     else {
@@ -28,7 +28,7 @@ export function middleware(request: NextRequest) {
     }
 
     // Clean up
-    if (tenantSlug === 'www' || tenantSlug === 'localhost' || tenantSlug.includes(':') || tenantSlug === 'hostelease-silk') {
+    if (tenantSlug === 'www' || tenantSlug === 'localhost' || tenantSlug.includes(':') || tenantSlug === 'hosteleaze-silk') {
         tenantSlug = 'default';
     }
 

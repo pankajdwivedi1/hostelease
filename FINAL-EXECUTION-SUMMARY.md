@@ -11,7 +11,7 @@
 
 ## 📊 Executive Overview
 
-Your hostelease application has been comprehensively audited and fixed. All **critical security, stability, and performance issues** have been resolved.
+Your hosteleaze application has been comprehensively audited and fixed. All **critical security, stability, and performance issues** have been resolved.
 
 ### Before vs After
 | Metric | Before | After | Change |

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "GATEPASS - Campus Gate Monitor | HostelEase",
+  title: "GATEPASS - Campus Gate Monitor | HostelEaze",
   description: "Campus outing management system - QR-based student tracking at the gate",
 };
 

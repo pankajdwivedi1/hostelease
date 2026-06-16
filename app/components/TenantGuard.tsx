@@ -202,7 +202,7 @@ function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, err
                             <div className="space-y-2">
                                 <h3 className="text-xl font-bold text-amber-400 uppercase tracking-tight">Payment Verification Pending</h3>
                                 <p className="text-gray-400 text-xs leading-relaxed max-w-md mx-auto">
-                                    Your transaction reference is currently undergoing manual reconciliation by the Hostelease Finance Department. The portal will reactivate immediately upon confirmation.
+                                    Your transaction reference is currently undergoing manual reconciliation by the Hosteleaze Finance Department. The portal will reactivate immediately upon confirmation.
                                 </p>
                             </div>
 
@@ -373,7 +373,7 @@ function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, err
 
                     <div className="pt-4 border-t border-white/5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-center sm:text-left">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-center sm:justify-start gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider leading-relaxed">
-                            <span>Need urgent activation? Contact support at <a href="mailto:support@hostelease.com" className="text-blue-400 hover:underline">support@hostelease.com</a></span>
+                            <span>Need urgent activation? Contact support at <a href="mailto:support@hosteleaze.com" className="text-blue-400 hover:underline">support@hosteleaze.com</a></span>
                             <span className="hidden sm:inline text-gray-600">•</span>
                             <a 
                                 href="https://wa.me/918269418956" 

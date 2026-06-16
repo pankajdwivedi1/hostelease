@@ -236,7 +236,7 @@ export default function PublicStudentProfile() {
                 {/* Footer */}
                 <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-b-3xl shadow-xl p-6 text-center">
                     <p className="text-gray-400 text-xs font-medium mb-1">Powered by</p>
-                    <p className="text-white text-lg font-black">Hostelease Management System</p>
+                    <p className="text-white text-lg font-black">Hosteleaze Management System</p>
                     <p className="text-gray-500 text-xs mt-2">© {new Date().getFullYear()} All Rights Reserved</p>
                 </div>
             </div>

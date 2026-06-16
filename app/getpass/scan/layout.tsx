@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-    title: "Scan GATEPASS QR | HostelEase",
+    title: "Scan GATEPASS QR | HostelEaze",
     description: "Scan the QR code at the campus gate to check in or out",
 };
 

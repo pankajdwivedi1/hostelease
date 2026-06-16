@@ -1,6 +1,6 @@
 /**
  * Quick API Health Check Script
- * Tests all hostelease API endpoints
+ * Tests all hosteleaze API endpoints
  */
 
 const BASE_URL = 'http://localhost:3000';
@@ -48,7 +48,7 @@ async function testAPI(name, method, endpoint, body = null, expectedStatus = 200
 
 async function runTests() {
     console.log(`\n${colors.cyan}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}`);
-    console.log(`${colors.cyan}🧪 HOSTELEASE API HEALTH CHECK${colors.reset}`);
+    console.log(`${colors.cyan}🧪 HOSTELEAZE API HEALTH CHECK${colors.reset}`);
     console.log(`${colors.cyan}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}\n`);
 
     let passed = 0;

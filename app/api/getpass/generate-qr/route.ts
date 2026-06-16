@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
         const timestamp = now.getTime();
 
         // Use a secret key to sign the token (In production, use process.env.GATEPASS_SECRET)
-        const secret = "hostelease_secure_gate_key_2026";
+        const secret = "hosteleaze_secure_gate_key_2026";
 
         // Create a signature that includes gate name and timestamp
         const dataToSign = `${gateName}:${timestamp}`;
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
             t: signedToken, // signed token
             g: gateName,    // gate name
             ts: timestamp,  // timestamp
-            app: "hostelease-getpass",
+            app: "hosteleaze-getpass",
         });
 
         return NextResponse.json({

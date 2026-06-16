@@ -379,9 +379,9 @@ interface StudentDetails {
 
 // Cache constants
 const CACHE_KEYS = {
-  STUDENTS: 'hostelease_students_cache',
-  HOSTELS: 'hostelease_hostels_cache',
-  TIMESTAMP: 'hostelease_cache_timestamp'
+  STUDENTS: 'hosteleaze_students_cache',
+  HOSTELS: 'hosteleaze_hostels_cache',
+  TIMESTAMP: 'hosteleaze_cache_timestamp'
 };
 const CACHE_DURATION = 1800000; // ⚡ CACHE ENABLED: 30-minute TTL to save bandwidth across tab switches
 
@@ -465,7 +465,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setGuideDismissed(!!localStorage.getItem("hostelease_setup_dismissed"));
+      setGuideDismissed(!!localStorage.getItem("hosteleaze_setup_dismissed"));
     }
   }, []);
   
@@ -1388,7 +1388,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       // So filename extension matters.
       // Let's rely on Content-Disposition header if possible, but manual download attribute is safer.
       const extension = format === 'json' ? 'json' : (format === 'csv' ? 'csv' : 'xlsx');
-      a.download = `hostelease_db_dump_${new Date().toISOString().split('T')[0]}.${extension}`;
+      a.download = `hosteleaze_db_dump_${new Date().toISOString().split('T')[0]}.${extension}`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -2733,7 +2733,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       localStorage.removeItem(CACHE_KEYS.STUDENTS);
       localStorage.removeItem(CACHE_KEYS.HOSTELS);
       localStorage.removeItem(CACHE_KEYS.TIMESTAMP);
-      sessionStorage.removeItem('hostelease_permissions_cache');
+      sessionStorage.removeItem('hosteleaze_permissions_cache');
 
       router.push("/login?logout=success");
     } catch (error) {
@@ -3318,7 +3318,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </p>
                 <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest mt-0.5">
                   {subscriptionStatus.isExpired
-                    ? "Your access has been restricted. Please contact Hostelease HQ."
+                    ? "Your access has been restricted. Please contact Hosteleaze HQ."
                     : `Only ${subscriptionStatus.daysRemaining} days remaining in your ${subscriptionStatus.status} period.`}
                 </p>
               </div>
@@ -3347,7 +3347,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     🚀
                   </div>
                   <div>
-                    <h2 className="text-xl font-black tracking-tight">Hostelease System Guide</h2>
+                    <h2 className="text-xl font-black tracking-tight">Hosteleaze System Guide</h2>
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       <button
                         onClick={() => setActiveGuideTab('admin')}
@@ -3379,7 +3379,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <button 
                   onClick={() => {
                     setShowSetupWizard(false);
-                    localStorage.setItem("hostelease_setup_dismissed", "true");
+                    localStorage.setItem("hosteleaze_setup_dismissed", "true");
                     setGuideDismissed(true);
                   }}
                   className="p-1 hover:bg-white/10 rounded-full transition-colors self-end sm:self-start"
@@ -3592,7 +3592,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           e.stopPropagation();
                           setShowSetupWizard(!showSetupWizard);
                           if (!guideDismissed) {
-                            localStorage.setItem("hostelease_setup_dismissed", "true");
+                            localStorage.setItem("hosteleaze_setup_dismissed", "true");
                             setGuideDismissed(true);
                           }
                         }}
@@ -3679,7 +3679,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <button
                       onClick={() => {
                         // ⚡ FORCE REFRESH: Manually bypass all caches
-                        sessionStorage.removeItem('hostelease_permissions_cache');
+                        sessionStorage.removeItem('hosteleaze_permissions_cache');
                         fetchPermissions(undefined, true);
                         fetchHostels(true);
                         fetchAttendanceSummary();
@@ -3705,7 +3705,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         e.stopPropagation();
                         setShowSetupWizard(!showSetupWizard);
                         if (!guideDismissed) {
-                          localStorage.setItem("hostelease_setup_dismissed", "true");
+                          localStorage.setItem("hosteleaze_setup_dismissed", "true");
                           setGuideDismissed(true);
                         }
                       }}
@@ -9280,7 +9280,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       <footer className="mt-8 py-6 border-t border-gray-100/50">
         <div className="flex flex-col items-center gap-1.5 text-center">
           <p className="text-[9px] sm:text-[11px] font-bold tracking-widest text-gray-400/80 uppercase">
-            &copy; 2026 HOSTELEASE. All Rights Reserved.
+            &copy; 2026 HOSTELEAZE. All Rights Reserved.
           </p>
           <p className="text-[8px] sm:text-[9px] font-medium text-gray-300 uppercase tracking-[0.15em] opacity-60">
             Unauthorized copying, modification, or distribution is strictly prohibited

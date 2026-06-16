@@ -110,12 +110,12 @@ export default function SuperAdminDashboard() {
     }, []);
 
     const getTenantDisplayUrl = (slug: string) => {
-        if (!isMounted) return `${slug}.hostelease.com`;
+        if (!isMounted) return `${slug}.hosteleaze.com`;
         const hostname = window.location.hostname;
         if (hostname === "localhost") {
             return `${slug}.localhost:3000`;
-        } else if (hostname.includes("hostelease.com")) {
-            return `${slug}.hostelease.com`;
+        } else if (hostname.includes("hosteleaze.com")) {
+            return `${slug}.hosteleaze.com`;
         } else {
             return `${window.location.host}/?tenant=${slug}`;
         }
@@ -328,8 +328,8 @@ export default function SuperAdminDashboard() {
         
         if (hostname === "localhost") {
             impersonateUrl = `http://${slug}.localhost:3000/auth/impersonate?type=admin&token=BOSS_PROXY_${Date.now()}`;
-        } else if (hostname.includes("hostelease.com")) {
-            impersonateUrl = `https://${slug}.hostelease.com/auth/impersonate?type=admin&token=BOSS_PROXY_${Date.now()}`;
+        } else if (hostname.includes("hosteleaze.com")) {
+            impersonateUrl = `https://${slug}.hosteleaze.com/auth/impersonate?type=admin&token=BOSS_PROXY_${Date.now()}`;
         } else {
             // For vercel.app domains, codespaces, IPs, etc. -> Use query param which middleware will convert to cookie
             impersonateUrl = `${window.location.protocol}//${window.location.host}/auth/impersonate?type=admin&token=BOSS_PROXY_${Date.now()}&tenant=${slug}`;
@@ -425,7 +425,7 @@ export default function SuperAdminDashboard() {
                     </div>
 
                     <div>
-                        <h1 className="text-3xl font-black text-white tracking-tighter uppercase mb-2">Hostelease HQ</h1>
+                        <h1 className="text-3xl font-black text-white tracking-tighter uppercase mb-2">Hosteleaze HQ</h1>
                         <p className="text-gray-400 text-sm font-bold tracking-widest uppercase">Global Multi-Tenant Hub</p>
                     </div>
 
@@ -1125,7 +1125,7 @@ export default function SuperAdminDashboard() {
                                 </div>
                                 <div className="flex-1">
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Live Endpoint</p>
-                                    <p className="text-2xl font-black text-slate-900 tracking-tight lowercase">{registrationSuccessData.slug}.hostelease.com</p>
+                                    <p className="text-2xl font-black text-slate-900 tracking-tight lowercase">{registrationSuccessData.slug}.hosteleaze.com</p>
                                 </div>
                                 <button onClick={() => window.open(`${window.location.protocol}//${registrationSuccessData.slug}.${window.location.host}/login`, '_blank')} className="p-4 bg-white rounded-2xl shadow-sm border border-slate-200 hover:bg-slate-900 hover:text-white transition-all">
                                     <ArrowUpRight className="w-6 h-6" />

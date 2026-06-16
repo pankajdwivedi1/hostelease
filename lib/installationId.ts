@@ -17,8 +17,8 @@
  * ============================================================
  */
 
-const STORAGE_KEY = "hostelease_installation_id";
-const DB_NAME = "hostelease_device_db";
+const STORAGE_KEY = "hosteleaze_installation_id";
+const DB_NAME = "hosteleaze_device_db";
 const DB_STORE = "device_store";
 const DB_VERSION = 1;
 

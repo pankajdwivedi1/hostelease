@@ -26,10 +26,10 @@ interface ToastOptions {
 
 // ─── Toast Container ─────────────────────────────────────────────────────────
 function getOrCreateContainer(): HTMLElement {
-  let container = document.getElementById("hostelease-toast-container");
+  let container = document.getElementById("hosteleaze-toast-container");
   if (!container) {
     container = document.createElement("div");
-    container.id = "hostelease-toast-container";
+    container.id = "hosteleaze-toast-container";
     container.style.cssText = `
       position: fixed;
       top: 0;
@@ -48,9 +48,9 @@ function getOrCreateContainer(): HTMLElement {
     document.body.appendChild(container);
 
     // Inject CSS for animations
-    if (!document.getElementById("hostelease-toast-styles")) {
+    if (!document.getElementById("hosteleaze-toast-styles")) {
       const style = document.createElement("style");
-      style.id = "hostelease-toast-styles";
+      style.id = "hosteleaze-toast-styles";
       style.textContent = `
         @keyframes hl-toast-in {
           from { opacity: 0; transform: translateY(-20px) scale(0.95); }
@@ -210,9 +210,9 @@ export function showToast(message: string, type: ToastType = "info", options: To
  */
 export function installToastSystem(): void {
   if (typeof window === "undefined") return;
-  if ((window as any).__hostelease_toast_installed) return;
+  if ((window as any).__hosteleaze_toast_installed) return;
 
-  (window as any).__hostelease_toast_installed = true;
+  (window as any).__hosteleaze_toast_installed = true;
 
   // Override window.alert
   const originalAlert = window.alert.bind(window);
@@ -231,5 +231,5 @@ export function installToastSystem(): void {
     showToast(msg, type);
   };
 
-  console.log("✅ [Hostelease] Native toast system installed — window.alert() is now beautiful!");
+  console.log("✅ [Hosteleaze] Native toast system installed — window.alert() is now beautiful!");
 }

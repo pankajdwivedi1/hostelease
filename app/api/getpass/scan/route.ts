@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Verify it's a GETPASS QR code
-        if (parsedQR.app !== "hostelease-getpass") {
+        if (parsedQR.app !== "hosteleaze-getpass") {
             return NextResponse.json(
                 { error: "This is not a valid GATEPASS QR code" },
                 { status: 400 }
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
         try {
             const [timestampStr, signature] = token.split('.');
             const timestamp = parseInt(timestampStr);
-            const secret = "hostelease_secure_gate_key_2026";
+            const secret = "hosteleaze_secure_gate_key_2026";
 
             // Re-create the signature to compare
             const crypto = await import('crypto');

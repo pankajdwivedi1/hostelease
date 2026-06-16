@@ -80,7 +80,7 @@ export default function LandingPage() {
                     <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 overflow-hidden shrink-0">
                         <img src="/uvw_logo.jpg" alt="UVW Logo" className="w-full h-full object-cover" />
                     </div>
-                    <span className="text-lg sm:text-xl font-black tracking-tighter uppercase block">Hostelease</span>
+                    <span className="text-lg sm:text-xl font-black tracking-tighter uppercase block">Hosteleaze</span>
                 </div>
                 <div className="hidden lg:flex items-center gap-8">
                     <a href="#features" className="text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-white transition-colors">Features</a>
@@ -122,7 +122,7 @@ export default function LandingPage() {
                     </h1>
 
                     <p className="max-w-2xl mx-auto text-gray-400 font-medium text-base sm:text-lg md:text-xl leading-relaxed">
-                        Hostelease is a decentralized, multi-tenant hostel management system built for high-security environments. Link thousands of colleges under one global infrastructure.
+                        Hosteleaze is a decentralized, multi-tenant hostel management system built for high-security environments. Link thousands of colleges under one global infrastructure.
                     </p>
 
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
@@ -176,7 +176,7 @@ export default function LandingPage() {
                             One Software. <br />Infinite Universities.
                         </h2>
                         <p className="text-gray-400 font-medium text-sm sm:text-base">
-                            Hostelease uses advanced multi-tenant subdomains. Each university gets their own isolated digital campus with custom branding, settings, and student databases.
+                            Hosteleaze uses advanced multi-tenant subdomains. Each university gets their own isolated digital campus with custom branding, settings, and student databases.
                         </p>
                         <ul className="space-y-4">
                             {["Custom Subdomains", "University Branding", "Isolated Data Walls", "Independent Settings"].map((t, i) => (
@@ -195,7 +195,7 @@ export default function LandingPage() {
                                         <div className="w-2 h-2 sm:w-3 sm:h-3 bg-yellow-500 rounded-full"></div>
                                         <div className="w-2 h-2 sm:w-3 sm:h-3 bg-green-500 rounded-full"></div>
                                     </div>
-                                    <div className="bg-white/10 px-2 sm:px-3 py-1 rounded text-[8px] sm:text-[10px] text-gray-500">oist.hostelease.com</div>
+                                    <div className="bg-white/10 px-2 sm:px-3 py-1 rounded text-[8px] sm:text-[10px] text-gray-500">oist.hosteleaze.com</div>
                                 </div>
                                 <div className="h-4 w-[60%] bg-white/10 rounded"></div>
                                 <div className="grid grid-cols-2 gap-4">
@@ -240,7 +240,7 @@ export default function LandingPage() {
             <footer className="border-t border-white/5 px-4 sm:px-8 py-24 text-center">
                 <div className="max-w-xl mx-auto space-y-8">
                     <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-tighter">Ready to digitize your campus?</h3>
-                    <p className="text-gray-500 text-xs sm:text-sm font-medium">Join forward-thinking universities around the globe. Get started with Hostelease today.</p>
+                    <p className="text-gray-500 text-xs sm:text-sm font-medium">Join forward-thinking universities around the globe. Get started with Hosteleaze today.</p>
                     <button
                         onClick={() => router.push("/register")}
                         className="bg-blue-600 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-105 transition-all"
@@ -249,12 +249,12 @@ export default function LandingPage() {
                     </button>
                     <div className="pt-12 flex flex-col sm:flex-row items-center justify-center gap-2 opacity-20">
                         <div className="w-1.5 h-1.5 bg-white rounded-full hidden sm:block"></div>
-                        <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.5em]">Powered by Hostelease Global Infrastructure</p>
+                        <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.5em]">Powered by Hosteleaze Global Infrastructure</p>
                     </div>
 
                     <div className="pt-8 space-y-4 border-t border-white/5 mt-8">
                         <div className="space-y-1">
-                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">© 2026 HOSTELEASE. All Rights Reserved.</p>
+                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">© 2026 HOSTELEAZE. All Rights Reserved.</p>
                             <p className="text-[8px] font-medium text-gray-600 uppercase tracking-tight">Unauthorized copying, modification, or distribution is strictly prohibited</p>
                         </div>
                         
