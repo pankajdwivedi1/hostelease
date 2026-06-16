@@ -7,17 +7,9 @@ export async function GET(request: NextRequest) {
     try {
         const settings = await db.settings.get();
 
-        const defaultLocations = [
-            { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
-            { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
-            { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
-        ];
-
         return NextResponse.json({
             success: true,
-            locations: settings?.hostelLocations && settings.hostelLocations.length > 0
-                ? settings.hostelLocations
-                : defaultLocations,
+            locations: settings?.hostelLocations || [],
             startTime: settings?.attendanceStartTime || "21:00",
             endTime: settings?.attendanceEndTime || "22:30",
             registrationFieldsConfig: settings?.registrationFieldsConfig || {},

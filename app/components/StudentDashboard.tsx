@@ -626,21 +626,11 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
             if (data.success && data.locations) {
                 setHostelLocations(data.locations);
             } else {
-                // Fallback to defaults if database is empty
-                setHostelLocations([
-                    { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
-                    { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
-                    { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
-                ]);
+                setHostelLocations([]);
             }
         } catch (error) {
             console.error("Error fetching locations:", error);
-            // Set fallback on error to ensure app doesn't break
-            setHostelLocations([
-                { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
-                { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
-                { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
-            ]);
+            setHostelLocations([]);
         } finally {
             setIsLocationsLoading(false);
         }
@@ -1474,11 +1464,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
             let closestInfo = { distance: Infinity, radius: 0, name: "" };
             let assignedHostelInfo: any = null; // ⚡ NEW: Track specifically assigned hostel
 
-            const locationsToTest = hostelLocations.length > 0 ? hostelLocations : [
-                { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
-                { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
-                { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
-            ];
+            const locationsToTest = hostelLocations;
 
             const results = locationsToTest.map((loc: any) => {
                 const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);

@@ -534,6 +534,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const absenteesRef = useRef<HTMLDivElement>(null);
 
   const [hostelLocations, setHostelLocations] = useState<any[]>([]);
+  const [expandedLocations, setExpandedLocations] = useState<Record<number, boolean>>({});
+  const [activeGuideTab, setActiveGuideTab] = useState<'admin' | 'warden' | 'student' | 'parent'>('admin');
   const [isLocationsLoading, setIsLocationsLoading] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [showExportOptionsModal, setShowExportOptionsModal] = useState(false);
@@ -952,21 +954,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (data.success && data.locations) {
         setHostelLocations(data.locations);
       } else {
-        // Fallback to strict defaults if no locations exist
-        setHostelLocations([
-          { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
-          { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
-          { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
-        ]);
+        setHostelLocations([]);
       }
     } catch (error) {
       console.error("Error fetching locations:", error);
-      // Set fallback on error
-      setHostelLocations([
-        { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
-        { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
-        { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
-      ]);
+      setHostelLocations([]);
     } finally {
       setIsLocationsLoading(false);
     }
@@ -2659,11 +2651,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
 
       // Proximity Test Mode
-      const locationsToTest = hostelLocations.length > 0 ? hostelLocations : [
-        { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
-        { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
-        { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
-      ];
+      const locationsToTest = hostelLocations;
 
       const results = locationsToTest.map(loc => {
         const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
@@ -3353,14 +3341,39 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-400/20 rounded-full -ml-12 -mb-12 blur-xl" />
             
             <div className="relative z-10">
-              <div className="flex justify-between items-start mb-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-2xl shadow-inner">
                     🚀
                   </div>
                   <div>
-                    <h2 className="text-xl font-black tracking-tight">System Setup Guide</h2>
-                    <p className="text-[10px] font-bold text-blue-100 uppercase tracking-[0.2em]">Super Admin Initialization</p>
+                    <h2 className="text-xl font-black tracking-tight">Hostelease System Guide</h2>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      <button
+                        onClick={() => setActiveGuideTab('admin')}
+                        className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider transition-all ${activeGuideTab === 'admin' ? 'bg-white text-blue-700 shadow-sm' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                      >
+                        Super Admin
+                      </button>
+                      <button
+                        onClick={() => setActiveGuideTab('warden')}
+                        className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider transition-all ${activeGuideTab === 'warden' ? 'bg-white text-blue-700 shadow-sm' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                      >
+                        Warden
+                      </button>
+                      <button
+                        onClick={() => setActiveGuideTab('student')}
+                        className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider transition-all ${activeGuideTab === 'student' ? 'bg-white text-blue-700 shadow-sm' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                      >
+                        Student
+                      </button>
+                      <button
+                        onClick={() => setActiveGuideTab('parent')}
+                        className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider transition-all ${activeGuideTab === 'parent' ? 'bg-white text-blue-700 shadow-sm' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                      >
+                        Parent
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <button 
@@ -3369,42 +3382,157 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     localStorage.setItem("hostelease_setup_dismissed", "true");
                     setGuideDismissed(true);
                   }}
-                  className="p-1 hover:bg-white/10 rounded-full transition-colors"
+                  className="p-1 hover:bg-white/10 rounded-full transition-colors self-end sm:self-start"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
-                  <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">1</div>
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-wider mb-1">Security First</p>
-                    <p className="text-[11px] text-blue-50 font-medium leading-normal">Go to <span className="underline decoration-blue-300 font-bold">System Settings &rarr; Pass &rarr; Super Admin Power Settings</span> to change your default master key.</p>
+              {activeGuideTab === 'admin' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300">
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">1</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Security First</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">Go to <span className="underline decoration-blue-300 font-bold">System Settings &rarr; Pass &rarr; Super Admin Power Settings</span> to change your default master key.</p>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">2</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Dean Credentials</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">Go to <span className="underline decoration-blue-300 font-bold">System Settings &rarr; Pass &rarr; Admin Pass</span> to set a secure custom Dean account key.</p>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">3</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Infrastructure</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">Go to <span className="underline decoration-blue-300 font-bold">System Settings &rarr; Locations</span> to register your first Building or Hostel coordinates.</p>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">4</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Warden Setup</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">Go to <span className="underline decoration-blue-300 font-bold">Manage Hostels</span> to create Warden accounts and assign them to respective hostels.</p>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">5</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">WiFi Whitelist</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">Go to <span className="underline decoration-blue-300 font-bold">System Settings &rarr; WiFi</span> to whitelist router IP/BSSID as backup validation.</p>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">6</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Time Syncing</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">Go to <span className="underline decoration-blue-300 font-bold">Set Attendance Time</span> to define the night check-in window (e.g., 21:00 to 22:30).</p>
+                    </div>
                   </div>
                 </div>
-                <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
-                  <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">2</div>
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-wider mb-1">Staff Access</p>
-                    <p className="text-[11px] text-blue-50 font-medium leading-normal">Inform the University Head of their <span className="underline decoration-blue-300 font-bold">Dean Account Key</span> (Default: <code className="bg-blue-800/40 px-1 rounded">pankajdwivedi81</code>).</p>
+              )}
+
+              {activeGuideTab === 'warden' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300">
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">1</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Hostel Allocation</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">Log in using warden credentials and select your assigned hostel block dashboard.</p>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">2</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Student Approval</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">Review pending student registrations. Verify profile info and tap approve to unlock access.</p>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">3</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Manual Override</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">If a student has a legitimate device/GPS issue, use the dashboard override to mark them present.</p>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">4</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Gatepass Review</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">Review incoming Out-Pass or overnight Leave requests from hostel residents to approve/reject them.</p>
+                    </div>
                   </div>
                 </div>
-                <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
-                  <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">3</div>
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-wider mb-1">Infrastructure</p>
-                    <p className="text-[11px] text-blue-50 font-medium leading-normal">Go to <span className="underline decoration-blue-300 font-bold">System Settings &rarr; Locations</span> to register your first Building or Hostel.</p>
+              )}
+
+              {activeGuideTab === 'student' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300">
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">1</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Account Creation</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">Go to registration page, fill in registration details, and submit for warden verification.</p>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">2</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Device Activation</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">The first mobile device used to log in will be locked to your account to prevent proxy attendance.</p>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">3</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Verify Presence</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">During check-in hours, open the app, ensure GPS and WiFi are active, and tap "Verify Presence".</p>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">4</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Leave Requests</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">Request Out-Pass or Leave permissions directly. Alerts will be sent to parents and wardens for review.</p>
+                    </div>
                   </div>
                 </div>
-                <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
-                  <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">4</div>
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-wider mb-1">Branding</p>
-                    <p className="text-[11px] text-blue-50 font-medium leading-normal">Update the University Name and Logo under <span className="underline decoration-blue-300 font-bold">System Settings &rarr; General</span>.</p>
+              )}
+
+              {activeGuideTab === 'parent' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300">
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">1</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Passwordless Access</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">Log in instantly by entering your registered mobile number and submitting the received OTP.</p>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">2</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Track Activity</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">View child's daily presence status, gatepass approvals, and general campus logs in real-time.</p>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">3</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Pass Approvals</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">Get notified and tap to approve overnight leave or gatepass requests requested by your child.</p>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-start gap-3 group hover:bg-white/15 transition-all">
+                    <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-black text-sm shrink-0 shadow-lg">4</div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider mb-1">Notification Center</p>
+                      <p className="text-[11px] text-blue-50 font-medium leading-normal">Receive immediate automated alerts if your child is marked absent or goes outside geofenced zones.</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               <div className="mt-6 flex items-center gap-3 text-[9px] font-black uppercase tracking-[0.2em] text-blue-200">
                 <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.5)]"></span>
@@ -3645,39 +3773,58 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     )}
                   </div>
 
-                  <div className="bg-white p-4 md:p-6 rounded-2xl border border-dashed border-gray-300 font-mono text-[11px] md:text-xs shadow-sm">
+                  <div className="bg-white p-3 md:p-6 rounded-2xl border border-dashed border-gray-300 font-mono text-[9.5px] sm:text-[11px] md:text-xs shadow-sm">
                     <div className="text-center space-y-1 mb-6">
                       <h3 className="font-bold text-gray-900 tracking-widest uppercase text-xs md:text-sm">INFORMATION</h3>
-                      <p className="font-bold text-gray-500 tracking-wider uppercase text-[10px] md:text-xs">YOU HAVE ADDED {(hostelLocations.length > 0 ? hostelLocations.length : 3)} LOCATION</p>
+                      <p className="font-bold text-gray-500 tracking-wider uppercase text-[10px] md:text-xs">YOU HAVE ADDED {hostelLocations.length} LOCATION{hostelLocations.length !== 1 ? "S" : ""}</p>
                     </div>
 
-                    <div className="space-y-2 mb-3 text-gray-600">
-                      {(hostelLocations.length > 0 ? hostelLocations : [
-                        { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" },
-                        { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" },
-                        { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }
-                      ]).map((loc, index) => (
-                        <div key={index} className="flex items-center group relative gap-2 p-2 rounded hover:bg-gray-50 transition-colors">
-                          <span className="flex-1 break-all leading-tight">
-                            <span className="font-bold text-gray-800 mr-1">{index + 1}.</span>
-                            Lat:{loc.lat}, Lng:{loc.lng},Radius:{loc.radius},Location name: &quot;{loc.name}&quot;
-                          </span>
-                          <div className="flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
-                            <button
-                              onClick={() => handleEditLocation(index)}
-                              className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                            </button>
-                            <button
-                              onClick={() => handleDeleteLocation(index)}
-                              className="p-1.5 text-red-600 hover:bg-red-100 rounded-md transition-colors"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                            </button>
-                          </div>
+                    <div className="space-y-0.5 mb-3 text-gray-600">
+                      {hostelLocations.length > 0 ? (
+                        hostelLocations.map((loc, index) => {
+                          const isExpanded = !!expandedLocations[index];
+                          return (
+                            <div key={index} className="flex flex-col group relative gap-1 py-0.5 px-1 md:py-1 md:px-2 rounded hover:bg-gray-50 transition-colors">
+                              <div className="flex items-center justify-between gap-1.5 flex-nowrap w-full">
+                                <span className="truncate text-gray-700 leading-tight flex-1">
+                                  <span className="font-bold text-gray-800 mr-1">{index + 1}.</span>
+                                  Location name:{" "}
+                                  <span
+                                    onClick={() => setExpandedLocations(prev => ({ ...prev, [index]: !prev[index] }))}
+                                    className="cursor-pointer text-blue-600 hover:text-blue-800 font-semibold transition-colors"
+                                  >
+                                    {loc.name}
+                                  </span>
+                                  , Radius:{loc.radius}
+                                </span>
+                                <div className="flex gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                  <button
+                                    onClick={() => handleEditLocation(index)}
+                                    className="p-1 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteLocation(index)}
+                                    className="p-1 text-red-600 hover:bg-red-100 rounded-md transition-colors"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                  </button>
+                                </div>
+                              </div>
+                              {isExpanded && (
+                                <div className="pl-5 text-gray-500 text-[10px] md:text-xs">
+                                  Lat:{loc.lat}, Lng:{loc.lng}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="text-center py-4 text-gray-400 italic">
+                          No locations configured. Click "Set New Location" to add one.
                         </div>
-                      ))}
+                      )}
                     </div>
 
                     {locationVerificationResults.length > 0 ? (
@@ -3686,10 +3833,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <p className="font-bold text-gray-900 tracking-wider uppercase text-xs">CURRENTLY YOU ARE ON</p>
                         </div>
 
-                        <div className="space-y-1 md:space-y-3">
+                        <div className="space-y-0.5 md:space-y-1.5">
                           {locationVerificationResults.map((result, index) => (
-                            <div key={index} className="flex flex-col gap-1 group relative p-1.5 md:p-2 rounded bg-gray-50/50">
-                              <div className="flex items-center gap-2 mb-1">
+                            <div key={index} className="flex flex-col gap-0.5 group relative p-1 md:p-1.5 rounded bg-gray-50/50">
+                              <div className="flex items-center gap-2">
                                 <span className="font-bold text-gray-500">{index + 1}.</span>
                                 {result.isVerified ? (
                                   <span className="text-green-600 font-bold flex items-center gap-1">
@@ -3703,7 +3850,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </span>
                                 )}
                               </div>
-                              <p className="text-gray-700 text-justify leading-relaxed w-full">
+                              <p className="text-gray-700 leading-relaxed w-full">
                                 You are <strong className="text-gray-900">{Math.round(result.distance)} meters</strong> away from <strong className="text-gray-900">{result.name}</strong>
                                 {lastCheckAccuracy && (
                                   <span className="inline-flex flex-wrap gap-1 ml-1 align-baseline">

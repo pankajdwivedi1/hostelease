@@ -240,16 +240,7 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Use provided coordinates with their specific radii
-        const defaultLocations = [
-            { lat: 23.2475529, lng: 77.5035134, radius: 200, name: "Central Library" }, // Loc 1
-            { lat: 23.2483348, lng: 77.5026058, radius: 100, name: "Gangotri hostel" }, // Original Location
-            { lat: 23.2461544, lng: 77.5030323, radius: 100, name: "Boys hostel" }       // Loc 2
-        ];
-
-        const hostelLocations = (adminSettings?.hostelLocations && adminSettings.hostelLocations.length > 0)
-            ? adminSettings.hostelLocations
-            : defaultLocations;
+        const hostelLocations = adminSettings?.hostelLocations || [];
 
         // ✅ FIX: Improved GPS Accuracy Handling
         const bodyAccuracy = Math.round(body.accuracy || 0);
