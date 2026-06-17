@@ -63,7 +63,13 @@ const LiveDbSwitch = () => {
     const toggle = async () => {
         if (!source) return;
         const newSource = source === 'MONGODB' ? 'SUPABASE' : 'MONGODB';
-        if (!confirm(`⚠️ SWITCH DATABASE TO ${newSource}?\n\nThis will instantly change where data is read/written for EVERYONE.`)) return;
+        
+        // ⚠️ Enforce Typed Affirmation
+        const doubleCheck = prompt(`⚠️ WARNING: YOU ARE ABOUT TO SWITCH DATABASE TO ${newSource} FOR ALL USERS.\n\nTo confirm, type the word "SWITCH" below:`);
+        if (doubleCheck !== "SWITCH") {
+            alert("Database switch aborted.");
+            return;
+        }
 
         setLoading(true);
         try {
@@ -75,6 +81,18 @@ const LiveDbSwitch = () => {
             const data = await res.json();
             if (data.success) {
                 setSource(data.source);
+                
+                // Write Audit Log
+                await fetch('/api/super-admin/audit-logs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: "SWITCH_ACTIVE_DB",
+                        details: `Switched global active database source to ${newSource}`,
+                        user: "Super Admin"
+                    })
+                });
+
                 localStorage.clear();
                 alert(`✅ Switched to ${data.source}`);
                 window.location.reload();
@@ -112,9 +130,47 @@ const LiveDbSwitch = () => {
 
 export default function SuperAdminDashboard() {
     const [tenants, setTenants] = useState<Tenant[]>([]);
-    const [viewMode, setViewMode] = useState<"active" | "recycle">("active");
+    const [viewMode, setViewMode] = useState<"active" | "recycle" | "audit">("active");
     const [globalStats, setGlobalStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+
+    const [auditLogs, setAuditLogs] = useState<any[]>([]);
+    const [loadingLogs, setLoadingLogs] = useState(false);
+
+    const fetchAuditLogs = async () => {
+        setLoadingLogs(true);
+        try {
+            const res = await fetch("/api/super-admin/audit-logs");
+            const data = await res.json();
+            if (data.success) {
+                setAuditLogs(data.logs);
+            }
+        } catch (error) {
+            console.error("Failed to fetch audit logs", error);
+        } finally {
+            setLoadingLogs(false);
+        }
+    };
+
+    const logAdminAction = async (action: string, details: string) => {
+        try {
+            const res = await fetch("/api/super-admin/audit-logs", {
+                method: "POST",
+                body: JSON.stringify({
+                    action,
+                    details,
+                    user: "Super Admin"
+                }),
+                headers: { "Content-Type": "application/json" }
+            });
+            const data = await res.json();
+            if (data.success) {
+                setAuditLogs(data.logs);
+            }
+        } catch (error) {
+            console.error("Failed to write audit log", error);
+        }
+    };
     const [showAddModal, setShowAddModal] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [registrationSuccessData, setRegistrationSuccessData] = useState<any | null>(null);
@@ -237,6 +293,7 @@ export default function SuperAdminDashboard() {
             });
             const data = await res.json();
             if (data.success) {
+                logAdminAction("UPDATE_PAYMENT_CONFIG", `Updated global payment configuration (Price/Student: $${paymentSettings.pricePerStudentPerMonth}, Razorpay: ${paymentSettings.enableRazorpay ? 'ENABLED' : 'DISABLED'})`);
                 alert("Payment Settings updated successfully!");
                 setShowPaymentSettingsModal(false);
             } else {
@@ -253,6 +310,7 @@ export default function SuperAdminDashboard() {
         if (isAuthorized && isMounted) {
             fetchTenants();
             fetchPaymentSettings();
+            fetchAuditLogs();
         }
         
         // Auto-refresh stats every 30 seconds for live traffic
@@ -287,6 +345,7 @@ export default function SuperAdminDashboard() {
             });
             const data = await res.json();
             if (data.success) {
+                logAdminAction("PROVISION_NODE", `Provisioned new university node '${data.tenant.slug}' (${data.tenant.name})`);
                 setTenants([data.tenant, ...tenants]);
                 setShowAddModal(false);
                 setRegistrationSuccessData({
@@ -316,6 +375,7 @@ export default function SuperAdminDashboard() {
             });
             const data = await res.json();
             if (data.success) {
+                logAdminAction("TOGGLE_STATUS", `Toggled active state of university node ID: ${id} to ${!currentStatus ? 'ACTIVE' : 'DEACTIVE'}`);
                 setTenants(tenants.map(t => t._id === id ? { ...t, isActive: !currentStatus } : t));
             }
         } catch (error) {
@@ -347,6 +407,7 @@ export default function SuperAdminDashboard() {
             const res = await fetch(`/api/super-admin/tenants?id=${deletingTenant._id}&purge=true`, { method: "DELETE" });
             const data = await res.json();
             if (data.success) {
+                logAdminAction("DESTROY_PURGE_NODE", `Permanently destroyed university node '${deletingTenant.slug}' (${deletingTenant.name})`);
                 setTenants(tenants.filter(t => t._id !== deletingTenant._id));
                 setDeletingTenant(null);
                 setDeleteConfirmText("");
@@ -368,6 +429,8 @@ export default function SuperAdminDashboard() {
             const res = await fetch(`/api/super-admin/tenants?id=${id}`, { method: "DELETE" });
             const data = await res.json();
             if (data.success) {
+                const t = tenants.find(x => x._id === id);
+                logAdminAction("SOFT_DELETE_NODE", `Moved university node '${t?.slug || id}' to Recycle Bin`);
                 setTenants(tenants.filter(t => t._id !== id));
                 alert("University successfully moved to Recycle Bin.");
             }
@@ -385,6 +448,7 @@ export default function SuperAdminDashboard() {
             });
             const data = await res.json();
             if (data.success) {
+                logAdminAction("RESTORE_NODE", `Restored university node ID: ${id} to active network`);
                 alert("University Node successfully restored to the network.");
                 fetchTenants();
             }
@@ -394,6 +458,7 @@ export default function SuperAdminDashboard() {
     };
 
     const handleImpersonateAdmin = (slug: string) => {
+        logAdminAction("IMPERSONATE_ADMIN", `Logged in to proxy console for tenant '${slug}'`);
         const hostname = window.location.hostname;
         let impersonateUrl = "";
         
@@ -430,6 +495,7 @@ export default function SuperAdminDashboard() {
             });
             const data = await res.json();
             if (data.success) {
+                logAdminAction("CONFIGURE_NODE", `Updated settings and details for university node '${editingTenant.slug}'`);
                 setTenants(tenants.map(t => t._id === editingTenant._id ? { ...t, ...data.tenant } : t));
                 setEditingTenant(null);
                 alert("University Node successfully configured.");
@@ -449,6 +515,8 @@ export default function SuperAdminDashboard() {
             });
             const data = await res.json();
             if (data.success) {
+                const t = tenants.find(x => x._id === tenantId);
+                logAdminAction("CALCULATE_STORAGE", `Recalculated exact storage sizes for '${t?.slug || tenantId}'`);
                 setTenants(tenants.map(t => t._id === tenantId ? { ...t, storageBytes: data.storageBytes } : t));
             }
         } catch (error) {
@@ -469,6 +537,7 @@ export default function SuperAdminDashboard() {
             });
             const data = await res.json();
             if (data.success) {
+                logAdminAction("BROADCAST", broadcastMessage ? `Dispatched global platform broadcast alert (${broadcastType}): "${broadcastMessage}"` : "Cleared active global platform broadcast");
                 alert(broadcastMessage ? "Broadcast sent successfully!" : "Broadcast cleared.");
                 setShowBroadcastModal(false);
                 setBroadcastMessage("");
@@ -556,14 +625,29 @@ export default function SuperAdminDashboard() {
 
                     <button
                         onClick={async () => {
-                            const confirm = window.confirm("⚠️ Perform full migration to Supabase? This may take time.");
-                            if (!confirm) return;
+                            const doubleCheck = prompt("⚠️ WARNING: This will trigger a full database migration from MongoDB to Supabase. This should ONLY be run once.\n\nTo confirm, type the word \"MIGRATE\" below:");
+                            if (doubleCheck !== "MIGRATE") {
+                                alert("Migration aborted.");
+                                return;
+                            }
 
                             try {
                                 const res = await fetch('/api/admin/migrate-db', { method: 'POST' });
                                 const data = await res.json();
-                                if (data.success) alert(data.message);
-                                else alert("Migration breakdown: " + data.error);
+                                if (data.success) {
+                                    alert(data.message);
+                                    await fetch('/api/super-admin/audit-logs', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            action: "DATABASE_MIGRATION",
+                                            details: "Triggered database data migration to Supabase successfully",
+                                            user: "Super Admin"
+                                        })
+                                    });
+                                } else {
+                                    alert("Migration breakdown: " + data.error);
+                                }
                             } catch (e: any) {
                                 alert("Critical Error: " + e.message);
                             }
@@ -586,12 +670,20 @@ export default function SuperAdminDashboard() {
             </header>
 
             <div className="px-4 sm:px-8 pt-6 sm:pt-8">
-                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 no-scrollbar">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 no-scrollbar">
                     {[
                         { icon: Users, label: "Total Students", value: tenants.reduce((acc, t) => acc + (t.studentCount || 0), 0), sub: "Across nodes", trend: "+12.4%", color: "blue" },
                         { icon: Zap, label: "Active Nodes", value: globalStats?.revenueSummary?.active || 0, sub: "Subscribed", trend: "Stable", color: "amber" },
                         { icon: TrendingUp, label: "Trial Nodes", value: globalStats?.revenueSummary?.trial || 0, sub: "Evaluation", trend: "Future", color: "indigo" },
                         { icon: CreditCard, label: "Active Revenue", value: `$${(globalStats?.revenueSummary?.active || 0) * 249}`, sub: "Monthly", trend: "High", color: "emerald" },
+                        {
+                            icon: Database,
+                            label: "Total Storage",
+                            value: `${(tenants.reduce((acc, t) => acc + (t.storageBytes || 0), 0) / (1024 * 1024)).toFixed(2)} MB`,
+                            sub: "Global disk usage",
+                            trend: `${((tenants.reduce((acc, t) => acc + (t.storageBytes || 0), 0) / (10 * 1024 * 1024 * 1024)) * 100).toFixed(2)}% of 10GB`,
+                            color: "purple"
+                        }
                     ].map((stat, i) => (
                         <div key={i} className="bg-white p-3 sm:p-7 rounded-[20px] sm:rounded-[32px] border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-gray-200/40 transition-all duration-500 group">
                             <div className="flex justify-between items-center mb-2 sm:mb-4">
@@ -643,6 +735,12 @@ export default function SuperAdminDashboard() {
                         >
                             Recycle Bin
                         </button>
+                        <button 
+                            onClick={() => setViewMode('audit')}
+                            className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'audit' ? 'bg-white text-purple-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-purple-400'}`}
+                        >
+                            Audit Logs
+                        </button>
                     </div>
                 </div>
 
@@ -650,204 +748,258 @@ export default function SuperAdminDashboard() {
                     <div className="flex items-center justify-between">
                          <div className="flex items-center gap-3">
                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
-                                {viewMode === 'active' ? 'Operational Hub' : 'Trash Registry'}
+                                {viewMode === 'active' ? 'Operational Hub' : viewMode === 'recycle' ? 'Trash Registry' : 'HQ Security Logs'}
                             </p>
                          </div>
                          <div className="flex gap-2">
                              <div className="px-3 py-1 bg-white rounded-lg border border-gray-100 text-[9px] font-black text-gray-400 uppercase tracking-widest">
-                                {viewMode === 'active' ? `Total Active Nodes: ${tenants.length}` : `Deleted Nodes: ${tenants.length}`}
+                                {viewMode === 'active' ? `Total Active Nodes: ${tenants.length}` : viewMode === 'recycle' ? `Deleted Nodes: ${tenants.length}` : `Audit Records: ${auditLogs.length}`}
                              </div>
                          </div>
                     </div>
                     <div className="bg-white sm:bg-transparent rounded-[32px] sm:rounded-none overflow-hidden">
-                        {/* Unified Grid View */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                            {loading ? (
-                                <div className="col-span-full bg-white p-12 rounded-[32px] border border-gray-100 text-center flex flex-col items-center gap-4">
-                                     <div className="w-12 h-12 border-4 border-gray-100 border-t-blue-600 rounded-full animate-spin"></div>
-                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Syncing Nodes...</p>
+                        {viewMode === 'audit' ? (
+                            <div className="bg-white p-6 rounded-[24px] sm:rounded-[32px] border border-slate-100 shadow-sm">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                                    <div>
+                                        <h3 className="font-black text-gray-900 uppercase tracking-tight text-sm">Security Audit Trail</h3>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Real-time log of administrative and infrastructure events</p>
+                                    </div>
+                                    <button 
+                                        onClick={fetchAuditLogs}
+                                        disabled={loadingLogs}
+                                        className="bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all w-full sm:w-auto flex items-center justify-center gap-2"
+                                    >
+                                        {loadingLogs ? 'Syncing...' : '🔄 Refresh Logs'}
+                                    </button>
                                 </div>
-                            ) : tenants.length === 0 ? (
-                                <div className="col-span-full bg-white p-8 rounded-[32px] border border-gray-100 text-center flex flex-col items-center gap-3">
-                                    <Globe className="w-8 h-8 text-gray-200 mx-auto" />
-                                    <p className="text-gray-400 text-[10px] italic font-bold">No global nodes provisioned yet.</p>
+
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse text-[10px]">
+                                        <thead>
+                                            <tr className="border-b border-slate-100 text-slate-400 font-black uppercase tracking-wider text-[8px]">
+                                                <th className="py-3 px-4">Timestamp</th>
+                                                <th className="py-3 px-4">Operator</th>
+                                                <th className="py-3 px-4">Event Type</th>
+                                                <th className="py-3 px-4">Details</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50 font-bold">
+                                            {auditLogs.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={4} className="py-12 text-center text-slate-400 italic">No audit records found.</td>
+                                                </tr>
+                                            ) : auditLogs.map((log: any, idx: number) => (
+                                                <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{new Date(log.timestamp).toLocaleString()}</td>
+                                                    <td className="py-3 px-4 text-blue-600 font-black">{log.user}</td>
+                                                    <td className="py-3 px-4">
+                                                        <span className={`px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-tighter ${
+                                                            log.action?.includes('DESTROY') || log.action?.includes('DELETE') ? 'bg-red-50 text-red-600 border border-red-100' :
+                                                            log.action?.includes('PROVISION') || log.action?.includes('RESTORE') ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                                            log.action?.includes('SWITCH') ? 'bg-orange-50 text-orange-600 border border-orange-100' :
+                                                            'bg-slate-50 text-slate-600 border border-slate-100'
+                                                        }`}>
+                                                            {log.action}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-slate-700 leading-normal">{log.details}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
-                            ) : tenants.map((tenant) => (
-                                <div key={tenant._id} className="bg-white rounded-[24px] sm:rounded-[32px] p-4 sm:p-6 shadow-sm border border-slate-100 hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 flex flex-col group">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="flex flex-col min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <h3 className="font-black text-gray-900 uppercase tracking-tight text-sm leading-tight break-words">{tenant.name}</h3>
-                                                {viewMode === 'active' && tenant.liveTraffic && tenant.liveTraffic > 0 ? (
-                                                    <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
-                                                ) : null}
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                {loading ? (
+                                    <div className="col-span-full bg-white p-12 rounded-[32px] border border-gray-100 text-center flex flex-col items-center gap-4">
+                                         <div className="w-12 h-12 border-4 border-gray-100 border-t-blue-600 rounded-full animate-spin"></div>
+                                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Syncing Nodes...</p>
+                                    </div>
+                                ) : tenants.length === 0 ? (
+                                    <div className="col-span-full bg-white p-8 rounded-[32px] border border-gray-100 text-center flex flex-col items-center gap-3">
+                                        <Globe className="w-8 h-8 text-gray-200 mx-auto" />
+                                        <p className="text-gray-400 text-[10px] italic font-bold">No global nodes provisioned yet.</p>
+                                    </div>
+                                ) : tenants.map((tenant) => (
+                                    <div key={tenant._id} className="bg-white rounded-[24px] sm:rounded-[32px] p-4 sm:p-6 shadow-sm border border-slate-100 hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 flex flex-col group">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="flex flex-col min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="font-black text-gray-900 uppercase tracking-tight text-sm leading-tight break-words">{tenant.name}</h3>
+                                                    {viewMode === 'active' && tenant.liveTraffic && tenant.liveTraffic > 0 ? (
+                                                        <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                                                    ) : null}
+                                                </div>
+                                                <p className="text-[9px] text-slate-400 font-bold italic opacity-70 break-all mt-0.5">{tenant.adminEmail}</p>
+                                                
+                                                {(tenant.contactName || tenant.contactPhone || tenant.totalHostelars) && (
+                                                    <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2">
+                                                        {tenant.contactName && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Contact:</span> {tenant.contactName}</p>}
+                                                        {tenant.contactPhone && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Phone:</span> {tenant.contactPhone}</p>}
+                                                        {tenant.totalHostelars && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Hostelars:</span> {tenant.totalHostelars}</p>}
+                                                    </div>
+                                                )}
                                             </div>
-                                            <p className="text-[9px] text-slate-400 font-bold italic opacity-70 break-all mt-0.5">{tenant.adminEmail}</p>
-                                            
-                                            {(tenant.contactName || tenant.contactPhone || tenant.totalHostelars) && (
-                                                <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2">
-                                                    {tenant.contactName && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Contact:</span> {tenant.contactName}</p>}
-                                                    {tenant.contactPhone && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Phone:</span> {tenant.contactPhone}</p>}
-                                                    {tenant.totalHostelars && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Hostelars:</span> {tenant.totalHostelars}</p>}
+                                            {viewMode === 'active' ? (
+                                                <button
+                                                    onClick={() => toggleTenantStatus(tenant._id, tenant.isActive)}
+                                                    className={`shrink-0 text-[8px] font-black uppercase tracking-widest flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-colors ${tenant.isActive ? 'text-emerald-600 border-emerald-100 bg-emerald-50 hover:bg-emerald-100' : 'text-red-500 border-red-100 bg-red-50 hover:bg-red-100'}`}
+                                                >
+                                                    <div className={`w-1.5 h-1.5 rounded-full ${tenant.isActive ? 'bg-emerald-500 shadow-emerald-500 shadow-sm' : 'bg-red-500 animate-pulse'}`}></div>
+                                                    {tenant.isActive ? 'OPERATIONAL' : 'OFFLINE'}
+                                                </button>
+                                            ) : (
+                                                <div className="shrink-0 text-[8px] font-black text-red-500/60 uppercase tracking-widest px-2 py-1 bg-red-50/50 rounded-lg border border-red-100/50">
+                                                    Deleted
                                                 </div>
                                             )}
                                         </div>
-                                        {viewMode === 'active' ? (
-                                            <button
-                                                onClick={() => toggleTenantStatus(tenant._id, tenant.isActive)}
-                                                className={`shrink-0 text-[8px] font-black uppercase tracking-widest flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-colors ${tenant.isActive ? 'text-emerald-600 border-emerald-100 bg-emerald-50 hover:bg-emerald-100' : 'text-red-500 border-red-100 bg-red-50 hover:bg-red-100'}`}
-                                            >
-                                                <div className={`w-1.5 h-1.5 rounded-full ${tenant.isActive ? 'bg-emerald-500 shadow-emerald-500 shadow-sm' : 'bg-red-500 animate-pulse'}`}></div>
-                                                {tenant.isActive ? 'OPERATIONAL' : 'OFFLINE'}
-                                            </button>
-                                        ) : (
-                                            <div className="shrink-0 text-[8px] font-black text-red-500/60 uppercase tracking-widest px-2 py-1 bg-red-50/50 rounded-lg border border-red-100/50">
-                                                Deleted
-                                            </div>
-                                        )}
-                                    </div>
 
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex items-center justify-between">
-                                            <div>
-                                                <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Load Status</p>
-                                                <p className="text-sm font-black text-gray-900 leading-none">{tenant.studentCount} <span className="text-[7px] text-gray-400 uppercase">S</span></p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex items-center justify-between">
+                                                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Subscription Period</span>
+                                                {tenant.subscriptionEndDate && (() => {
+                                                    const now = new Date();
+                                                    const end = new Date(tenant.subscriptionEndDate);
+                                                    const diffTime = end.getTime() - now.getTime();
+                                                    const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                                    
+                                                    if (daysRemaining < 0) {
+                                                        return (
+                                                            <span className="text-[7px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 border border-rose-100 rounded px-1.5 py-0.5 leading-none">
+                                                                Expired ({Math.abs(daysRemaining)}d ago)
+                                                            </span>
+                                                        );
+                                                    } else if (daysRemaining <= 7) {
+                                                        return (
+                                                            <span className="text-[7px] font-black uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 leading-none animate-pulse">
+                                                                Expiring ({daysRemaining}d left)
+                                                            </span>
+                                                        );
+                                                    } else {
+                                                        return (
+                                                            <span className="text-[7px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 leading-none">
+                                                                {daysRemaining} days left
+                                                            </span>
+                                                        );
+                                                    }
+                                                })()}
                                             </div>
-                                            <Users className="w-3 h-3 text-slate-200" />
-                                        </div>
-                                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex items-center justify-between">
-                                            <div>
-                                                <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Level</p>
-                                                <span className={`text-[8px] font-black uppercase tracking-tight leading-none ${tenant.subscriptionStatus === 'active' ? 'text-emerald-500' : 'text-blue-500'}`}>
-                                                    {tenant.subscriptionStatus}
-                                                </span>
+                                            <div className="flex justify-between items-center text-xs font-bold text-gray-700">
+                                                <div>
+                                                    <p className="text-[6px] font-black text-slate-400 uppercase tracking-widest">Start Date</p>
+                                                    <p className="text-[10px] font-extrabold">{tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}</p>
+                                                </div>
+                                                <div className="h-4 w-px bg-slate-200" />
+                                                <div className="text-right">
+                                                    <p className="text-[6px] font-black text-slate-400 uppercase tracking-widest">End Date</p>
+                                                    <p className="text-[10px] font-extrabold">{tenant.subscriptionEndDate ? new Date(tenant.subscriptionEndDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "Unlimited"}</p>
+                                                </div>
                                             </div>
-                                            <ShieldCheck className="w-3 h-3 text-slate-200" />
                                         </div>
-                                    </div>
 
-                                    {/* Subscription Period Block */}
-                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1.5 text-[10px]">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Subscription Period</span>
-                                            {tenant.subscriptionEndDate && (() => {
-                                                const now = new Date();
-                                                const end = new Date(tenant.subscriptionEndDate);
-                                                const diffTime = end.getTime() - now.getTime();
-                                                const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                                
-                                                if (daysRemaining < 0) {
-                                                    return (
-                                                        <span className="text-[7px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 border border-rose-100 rounded px-1.5 py-0.5 leading-none">
-                                                            Expired ({Math.abs(daysRemaining)}d ago)
-                                                        </span>
-                                                    );
-                                                } else if (daysRemaining <= 7) {
-                                                    return (
-                                                        <span className="text-[7px] font-black uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 leading-none animate-pulse">
-                                                            Expiring ({daysRemaining}d left)
-                                                        </span>
-                                                    );
-                                                } else {
-                                                    return (
-                                                        <span className="text-[7px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 leading-none">
-                                                            {daysRemaining} days left
-                                                        </span>
-                                                    );
-                                                }
-                                            })()}
-                                        </div>
-                                        <div className="flex justify-between items-center text-xs font-bold text-gray-700">
-                                            <div>
-                                                <p className="text-[6px] font-black text-slate-400 uppercase tracking-widest">Start Date</p>
-                                                <p className="text-[10px] font-extrabold">{tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}</p>
-                                            </div>
-                                            <div className="h-4 w-px bg-slate-200" />
-                                            <div className="text-right">
-                                                <p className="text-[6px] font-black text-slate-400 uppercase tracking-widest">End Date</p>
-                                                <p className="text-[10px] font-extrabold">{tenant.subscriptionEndDate ? new Date(tenant.subscriptionEndDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "Unlimited"}</p>
-                                            </div>
-                                        </div>
-                                    </div>
+                                        <div className="mt-auto flex flex-col gap-4">
+                                            {tenant.renewalStatus === 'pending' && (
+                                                <div className="glowing-border-blue p-3 text-[10px] font-bold text-amber-900 space-y-0.5">
+                                                    <div className="relative z-10 space-y-0.5">
+                                                        <span className="uppercase text-[8px] tracking-wider font-black text-amber-700 block">Renewal Requested</span>
+                                                        <div className="flex justify-between items-center font-mono">
+                                                            <span className="select-all font-extrabold">UTR: {tenant.renewalUtr}</span>
+                                                            <span className="text-[8px] text-amber-600 font-sans">
+                                                                {tenant.renewalSubmittedAt ? new Date(tenant.renewalSubmittedAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }) : "N/A"}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
 
-                                    <div className="mt-auto flex flex-col gap-4">
-                                        {tenant.renewalStatus === 'pending' && (
-                                            <div className="glowing-border-blue p-3 text-[10px] font-bold text-amber-900 space-y-0.5">
-                                                <div className="relative z-10 space-y-0.5">
-                                                    <span className="uppercase text-[8px] tracking-wider font-black text-amber-700 block">Renewal Requested</span>
-                                                    <div className="flex justify-between items-center font-mono">
-                                                        <span className="select-all font-extrabold">UTR: {tenant.renewalUtr}</span>
-                                                        <span className="text-[8px] text-amber-600 font-sans">
-                                                            {tenant.renewalSubmittedAt ? new Date(tenant.renewalSubmittedAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }) : "N/A"}
+                                            <div className="flex items-center gap-2 bg-slate-900 text-white p-2 rounded-xl">
+                                                <Globe className="w-3 h-3 text-blue-400 shrink-0" />
+                                                <a 
+                                                    href={getTenantUrl(tenant.slug)} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer" 
+                                                    className="text-[10px] font-bold tracking-tight truncate flex-1 hover:text-blue-400 hover:underline transition-colors"
+                                                >
+                                                    {getTenantDisplayUrl(tenant.slug)}
+                                                </a>
+                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                    <button 
+                                                        onClick={() => handleCalculateStorage(tenant._id)}
+                                                        disabled={calculatingStorageFor === tenant._id}
+                                                        className="flex items-center gap-1 px-1.5 py-0.5 bg-white/10 hover:bg-white/20 transition-all rounded-lg cursor-pointer disabled:opacity-50" 
+                                                        title="Click to calculate exact storage from database"
+                                                    >
+                                                        {calculatingStorageFor === tenant._id ? (
+                                                            <Loader2 className="w-2 h-2 text-indigo-400 animate-spin" />
+                                                        ) : (
+                                                            <Database className="w-2 h-2 text-indigo-400" />
+                                                        )}
+                                                        <span className="text-[8px] font-black">
+                                                            {tenant.storageBytes !== null && tenant.storageBytes !== undefined ? `${(tenant.storageBytes / (1024 * 1024)).toFixed(2)}MB` : "CALCULATE"}
                                                         </span>
+                                                    </button>
+                                                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-white/10 rounded-lg" title="Active Connections">
+                                                        <Activity className="w-2 h-2 text-emerald-400" />
+                                                        <span className="text-[8px] font-black">{tenant.liveTraffic || 0}</span>
                                                     </div>
                                                 </div>
                                             </div>
-                                        )}
 
-                                        <div className="flex items-center gap-2 bg-slate-900 text-white p-2 rounded-xl">
-                                            <Globe className="w-3 h-3 text-blue-400 shrink-0" />
-                                            <a 
-                                                href={getTenantUrl(tenant.slug)} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer" 
-                                                className="text-[10px] font-bold tracking-tight truncate flex-1 hover:text-blue-400 hover:underline transition-colors"
-                                            >
-                                                {getTenantDisplayUrl(tenant.slug)}
-                                            </a>
-                                            <div className="flex items-center gap-1.5 shrink-0">
-                                                <button 
-                                                    onClick={() => handleCalculateStorage(tenant._id)}
-                                                    disabled={calculatingStorageFor === tenant._id}
-                                                    className="flex items-center gap-1 px-1.5 py-0.5 bg-white/10 hover:bg-white/20 transition-all rounded-lg cursor-pointer disabled:opacity-50" 
-                                                    title="Click to calculate exact storage from database"
-                                                >
-                                                    {calculatingStorageFor === tenant._id ? (
-                                                        <Loader2 className="w-2 h-2 text-indigo-400 animate-spin" />
-                                                    ) : (
-                                                        <Database className="w-2 h-2 text-indigo-400" />
-                                                    )}
-                                                    <span className="text-[8px] font-black">
-                                                        {tenant.storageBytes !== null && tenant.storageBytes !== undefined ? `${(tenant.storageBytes / (1024 * 1024)).toFixed(2)}MB` : "CALCULATE"}
-                                                    </span>
-                                                </button>
-                                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-white/10 rounded-lg" title="Active Connections">
-                                                    <Activity className="w-2 h-2 text-emerald-400" />
-                                                    <span className="text-[8px] font-black">{tenant.liveTraffic || 0}</span>
+                                            {/* Storage Quota Progress Bar */}
+                                            {tenant.storageBytes !== null && tenant.storageBytes !== undefined && (
+                                                <div className="px-1 space-y-1">
+                                                    <div className="flex justify-between items-center text-[7px] font-black uppercase text-slate-400 tracking-wider">
+                                                        <span>Storage Quota</span>
+                                                        <span>{((tenant.storageBytes / (100 * 1024 * 1024)) * 100).toFixed(1)}% of 100MB</span>
+                                                    </div>
+                                                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
+                                                        <div 
+                                                            className={`h-full rounded-full transition-all duration-500 ${
+                                                                (tenant.storageBytes / (100 * 1024 * 1024)) > 0.8 ? 'bg-red-500 animate-pulse' :
+                                                                (tenant.storageBytes / (100 * 1024 * 1024)) > 0.5 ? 'bg-amber-500' :
+                                                                'bg-blue-500'
+                                                            }`}
+                                                            style={{ width: `${Math.min(100, (tenant.storageBytes / (100 * 1024 * 1024)) * 100)}%` }}
+                                                        ></div>
+                                                    </div>
                                                 </div>
+                                            )}
+
+                                            <div className="flex gap-2">
+                                                {viewMode === 'active' ? (
+                                                    <>
+                                                        <button onClick={() => handleImpersonateAdmin(tenant.slug)} className="flex-1 bg-blue-600 text-white h-9 rounded-xl flex items-center justify-center gap-2 font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-blue-500/10">
+                                                            <LogIn className="w-3.5 h-3.5" /> Sign In
+                                                        </button>
+                                                        <button onClick={() => setEditingTenant(tenant)} className="w-9 h-9 bg-slate-50 text-slate-400 border border-slate-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
+                                                            <Settings className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <button onClick={() => handleSoftDelete(tenant._id)} className="w-9 h-9 bg-red-50 text-red-500/60 border border-red-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <button onClick={() => handleRestore(tenant._id)} className="flex-1 bg-blue-600 text-white h-9 rounded-xl flex items-center justify-center gap-2 font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/10">
+                                                            Restore Node
+                                                        </button>
+                                                        <button onClick={() => setDeletingTenant(tenant)} className="w-9 h-9 bg-red-50 text-red-600 border border-red-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
-
-                                        <div className="flex gap-2">
-                                            {viewMode === 'active' ? (
-                                                <>
-                                                    <button onClick={() => handleImpersonateAdmin(tenant.slug)} className="flex-1 bg-blue-600 text-white h-9 rounded-xl flex items-center justify-center gap-2 font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-blue-500/10">
-                                                        <LogIn className="w-3.5 h-3.5" /> Sign In
-                                                    </button>
-                                                    <button onClick={() => setEditingTenant(tenant)} className="w-9 h-9 bg-slate-50 text-slate-400 border border-slate-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
-                                                        <Settings className="w-3.5 h-3.5" />
-                                                    </button>
-                                                    <button onClick={() => handleSoftDelete(tenant._id)} className="w-9 h-9 bg-red-50 text-red-500/60 border border-red-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                    </button>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <button onClick={() => handleRestore(tenant._id)} className="flex-1 bg-blue-600 text-white h-9 rounded-xl flex items-center justify-center gap-2 font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/10">
-                                                        Restore Node
-                                                    </button>
-                                                    <button onClick={() => setDeletingTenant(tenant)} className="w-9 h-9 bg-red-50 text-red-600 border border-red-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                    </button>
-                                                </>
-                                            )}
-                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
+                        )}
                         </div>
                     </div>
-                </div>
+                
 
                 {/* Boss Overrides Section */}
                 <div className="lg:col-span-12 mt-8 sm:mt-12">
