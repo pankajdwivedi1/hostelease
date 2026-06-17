@@ -191,64 +191,7 @@ const DeveloperTools = ({ hostels, developerPassword }: { hostels: any[], develo
   );
 };
 
-// ⚡ LIVE SWITCH COMPONENT
-const LiveDbSwitch = () => {
-  const [source, setSource] = useState<'MONGODB' | 'SUPABASE' | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    fetch('/api/admin/active-db').then(res => res.json()).then(data => setSource(data.source));
-  }, []);
-
-  const toggle = async () => {
-    if (!source) return;
-    const newSource = source === 'MONGODB' ? 'SUPABASE' : 'MONGODB';
-    if (!confirm(`⚠️ SWITCH DATABASE TO ${newSource}?\n\nThis will instantly change where data is read/written for EVERYONE.`)) return;
-
-    setLoading(true);
-    try {
-      const res = await fetch('/api/admin/active-db', {
-        method: 'POST',
-        body: JSON.stringify({ source: newSource }),
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSource(data.source);
-        // ⚡ CRITICAL: Clear all storage to prevent stale cache after DB switch
-        localStorage.clear();
-        alert(`✅ Switched to ${data.source}`);
-        window.location.reload(); // Reload to refresh data view
-      } else {
-        alert("Failed: " + data.error);
-      }
-    } catch (e: any) {
-      alert("Error: " + e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (!source) return <span className="text-xs text-gray-400">Loading DB...</span>;
-
-  return (
-    <button
-      onClick={toggle}
-      disabled={loading}
-      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-tight transition-all border ${source === 'SUPABASE'
-        ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
-        : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-        }`}
-    >
-      {loading ? 'Switching...' : (
-        <>
-          <span className={`w-2 h-2 rounded-full ${source === 'SUPABASE' ? 'bg-orange-500 animate-pulse' : 'bg-green-500'}`}></span>
-          {source === 'SUPABASE' ? '⚡ SUPABASE (LIVE)' : '🍃 MONGODB (LEGACY)'}
-        </>
-      )}
-    </button>
-  );
-};
 
 
 interface Permission {
@@ -3655,30 +3598,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   )}
 
 
-                  {title === "Super Admin Dashboard" && (
-                    <button
-                      onClick={async () => {
-                        const confirm = window.confirm("⚠️ Perform full migration to Supabase? This may take time.");
-                        if (!confirm) return;
 
-                        try {
-                          const res = await fetch('/api/admin/migrate-db', { method: 'POST' });
-                          const data = await res.json();
-                          if (data.success) alert(data.message);
-                          else alert("Migration breakdown: " + data.error);
-                        } catch (e: any) {
-                          alert("Critical Error: " + e.message);
-                        }
-                      }}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-purple-100 transition-all whitespace-nowrap"
-                    >
-                      🚀 Migration
-                    </button>
-                  )}
-
-                  {title === "Super Admin Dashboard" && (
-                    <LiveDbSwitch />
-                  )}
 
                   {title === "Super Admin Dashboard" && (
                     <button
