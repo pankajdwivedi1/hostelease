@@ -533,7 +533,7 @@ export default function SuperAdminDashboard() {
                         <Building2 className="text-blue-400 w-6 h-6 sm:w-7 sm:h-7" />
                     </div>
                     <div className="min-w-0">
-                        <h2 className="text-lg sm:text-xl font-black text-gray-900 uppercase tracking-tighter truncate">Campus Boss Control</h2>
+                        <h2 className="text-lg sm:text-xl font-black text-gray-900 uppercase tracking-tighter truncate">Hosteleaze Boss Control</h2>
                         <div className="flex items-center gap-2">
                             <div className="flex gap-0.5 shrink-0">
                                 <span className="w-1 h-2 sm:w-1 sm:h-3 bg-blue-500 rounded-full animate-bounce"></span>
