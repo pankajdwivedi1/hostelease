@@ -820,35 +820,35 @@ export default function SuperAdminDashboard() {
                     <div className="flex items-center gap-0.5 bg-gray-100 p-1 rounded-xl sm:rounded-2xl border border-gray-200 w-full sm:w-auto">
                         <button 
                             onClick={() => setShowPaymentSettingsModal(true)}
-                            className="flex-1 min-w-0 px-1 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[7px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-1"
+                            className="flex-1 min-w-0 px-0.5 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[6px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-1 whitespace-normal leading-tight text-center"
                         >
-                            <CreditCard className="w-2.5 h-2.5 shrink-0 hidden xs:block" />
-                            <span className="truncate">Payment</span>
+                            <CreditCard className="w-2 h-2 shrink-0 sm:w-3.5 sm:h-3.5" />
+                            <span>Payment Config</span>
                         </button>
                         <div className="w-px h-5 bg-gray-300 shrink-0"></div>
                         <button 
                             onClick={() => setViewMode('active')}
-                            className={`flex-1 min-w-0 px-1 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[7px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center ${viewMode === 'active' ? 'bg-white text-blue-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
+                            className={`flex-1 min-w-0 px-0.5 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[6px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center whitespace-normal leading-tight ${viewMode === 'active' ? 'bg-white text-blue-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
                         >
-                            <span className="truncate">Active</span>
+                            Active Nodes
                         </button>
                         <button 
                             onClick={() => setViewMode('recycle')}
-                            className={`flex-1 min-w-0 px-1 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[7px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center ${viewMode === 'recycle' ? 'bg-white text-red-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-red-400'}`}
+                            className={`flex-1 min-w-0 px-0.5 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[6px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center whitespace-normal leading-tight ${viewMode === 'recycle' ? 'bg-white text-red-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-red-400'}`}
                         >
-                            <span className="truncate">Recycle</span>
+                            Recycle Bin
                         </button>
                         <button 
                             onClick={() => setViewMode('audit')}
-                            className={`flex-1 min-w-0 px-1 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[7px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center ${viewMode === 'audit' ? 'bg-white text-purple-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-purple-400'}`}
+                            className={`flex-1 min-w-0 px-0.5 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[6px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center whitespace-normal leading-tight ${viewMode === 'audit' ? 'bg-white text-purple-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-purple-400'}`}
                         >
-                            <span className="truncate">Audit</span>
+                            Audit Logs
                         </button>
                         <button 
                             onClick={() => setViewMode('billing')}
-                            className={`flex-1 min-w-0 px-1 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[7px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center ${viewMode === 'billing' ? 'bg-white text-emerald-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-emerald-400'}`}
+                            className={`flex-1 min-w-0 px-0.5 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[6px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center whitespace-normal leading-tight ${viewMode === 'billing' ? 'bg-white text-emerald-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-emerald-400'}`}
                         >
-                            <span className="truncate">Billing</span>
+                            Billing Ledger
                         </button>
                     </div>
                 </div>
