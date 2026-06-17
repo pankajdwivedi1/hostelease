@@ -28,8 +28,8 @@ export default function AppBootstrap() {
       const alreadyAsked = localStorage.getItem(PERMISSIONS_ASKED_KEY) || document.cookie.includes(PERMISSIONS_ASKED_KEY);
       const userType = localStorage.getItem("userType");
 
-      // Only show overlay for students who haven't been asked yet
-      if (!alreadyAsked && (!userType || userType === "student")) {
+      // Only show overlay for logged-in students who haven't been asked yet
+      if (!alreadyAsked && userType === "student") {
         // Delay slightly for better visual entrance
         setTimeout(() => setShowOverlay(true), 1200);
       }
