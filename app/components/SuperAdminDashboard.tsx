@@ -707,7 +707,7 @@ export default function SuperAdminDashboard() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end">
-                     <div className="flex flex-col items-end px-3 py-1 sm:px-4 sm:py-1.5 bg-emerald-50 rounded-xl border border-emerald-100">
+                     <div className="flex flex-col items-end px-3 py-1 sm:px-4 sm:py-1.5 bg-emerald-50 rounded-xl border border-emerald-100 order-1 sm:order-none">
                         <p className="text-[8px] sm:text-[9px] text-emerald-600 font-black uppercase tracking-widest">Live Pulse</p>
                         <p className="text-xs sm:text-sm font-black text-emerald-900">
                             {globalStats?.totalActiveTraffic || 0} 
@@ -715,45 +715,47 @@ export default function SuperAdminDashboard() {
                         </p>
                     </div>
 
-                    <button
-                        onClick={async () => {
-                            const doubleCheck = prompt("⚠️ WARNING: This will trigger a full database migration from MongoDB to Supabase. This should ONLY be run once.\n\nTo confirm, type the word \"MIGRATE\" below:");
-                            if (doubleCheck !== "MIGRATE") {
-                                alert("Migration aborted.");
-                                return;
-                            }
-
-                            try {
-                                const res = await fetch('/api/admin/migrate-db', { method: 'POST' });
-                                const data = await res.json();
-                                if (data.success) {
-                                    alert(data.message);
-                                    await fetch('/api/super-admin/audit-logs', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            action: "DATABASE_MIGRATION",
-                                            details: "Triggered database data migration to Supabase successfully",
-                                            user: "Super Admin"
-                                        })
-                                    });
-                                } else {
-                                    alert("Migration breakdown: " + data.error);
+                    <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto order-3 sm:order-none">
+                        <LiveDbSwitch />
+                        
+                        <button
+                            onClick={async () => {
+                                const doubleCheck = prompt("⚠️ WARNING: This will trigger a full database migration from MongoDB to Supabase. This should ONLY be run once.\n\nTo confirm, type the word \"MIGRATE\" below:");
+                                if (doubleCheck !== "MIGRATE") {
+                                    alert("Migration aborted.");
+                                    return;
                                 }
-                            } catch (e: any) {
-                                alert("Critical Error: " + e.message);
-                            }
-                        }}
-                        className="bg-purple-50 text-purple-700 border border-purple-200 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-100 transition-all shadow-sm active:scale-95 flex items-center gap-1.5 justify-center"
-                    >
-                        🚀 Migration
-                    </button>
 
-                    <LiveDbSwitch />
+                                try {
+                                    const res = await fetch('/api/admin/migrate-db', { method: 'POST' });
+                                    const data = await res.json();
+                                    if (data.success) {
+                                        alert(data.message);
+                                        await fetch('/api/super-admin/audit-logs', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                action: "DATABASE_MIGRATION",
+                                                details: "Triggered database data migration to Supabase successfully",
+                                                user: "Super Admin"
+                                            })
+                                        });
+                                    } else {
+                                        alert("Migration breakdown: " + data.error);
+                                    }
+                                } catch (e: any) {
+                                    alert("Critical Error: " + e.message);
+                                }
+                            }}
+                            className="bg-purple-50 text-purple-700 border border-purple-200 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-100 transition-all shadow-sm active:scale-95 flex items-center gap-1.5 justify-center shrink-0"
+                        >
+                            🚀 Migration
+                        </button>
+                    </div>
 
                     <button
                         onClick={() => setShowAddModal(true)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl font-black flex items-center gap-2 transition-all shadow-xl shadow-blue-500/20 active:scale-95 text-[10px] sm:text-xs uppercase tracking-widest flex-1 sm:flex-none justify-center"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl font-black flex items-center gap-2 transition-all shadow-xl shadow-blue-500/20 active:scale-95 text-[10px] sm:text-xs uppercase tracking-widest flex-1 sm:flex-none justify-center order-2 sm:order-none"
                     >
                         <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         <span className="whitespace-nowrap">Provision Node</span>
@@ -784,18 +786,18 @@ export default function SuperAdminDashboard() {
                             color: "purple"
                         }
                     ].map((stat, i) => (
-                        <div key={i} className="bg-white p-3 sm:p-7 rounded-[20px] sm:rounded-[32px] border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-gray-200/40 transition-all duration-500 group">
-                            <div className="flex justify-between items-center mb-2 sm:mb-4">
-                                <div className={`w-7 h-7 sm:w-12 sm:h-12 rounded-lg sm:rounded-2xl flex items-center justify-center bg-${stat.color}-50 text-${stat.color}-600 group-hover:bg-${stat.color}-600 group-hover:text-white transition-colors`}>
+                        <div key={i} className="bg-white p-3.5 sm:p-7 rounded-[20px] sm:rounded-[32px] border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-gray-200/40 transition-all duration-500 group">
+                            <div className="flex justify-between items-center mb-3 sm:mb-4">
+                                <div className={`w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-2xl flex items-center justify-center bg-${stat.color}-50 text-${stat.color}-600 group-hover:bg-${stat.color}-600 group-hover:text-white transition-colors`}>
                                     <stat.icon className="w-3.5 h-3.5 sm:w-6 sm:h-6" />
                                 </div>
-                                <div className={`text-[6px] sm:text-[10px] font-black px-1 py-0.5 sm:px-2 sm:py-1 rounded-md sm:rounded-lg bg-${stat.color}-50 text-${stat.color}-600 uppercase tracking-tighter`}>
+                                <div className={`text-[7px] sm:text-[10px] font-black px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md sm:rounded-lg bg-${stat.color}-50 text-${stat.color}-600 uppercase tracking-tighter`}>
                                     {stat.trend}
                                 </div>
                             </div>
                             <div>
                                 <h3 className="text-lg sm:text-3xl font-black text-gray-900 leading-none tracking-tighter">{stat.value}</h3>
-                                <p className="text-[7px] sm:text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{stat.label}</p>
+                                <p className="text-[8px] sm:text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{stat.label}</p>
                                 <p className="hidden sm:block text-[8px] sm:text-[9px] text-gray-300 font-medium italic mt-2 truncate">{stat.sub}</p>
                             </div>
                         </div>
@@ -813,36 +815,39 @@ export default function SuperAdminDashboard() {
                         <h2 className="text-lg sm:text-xl font-black text-gray-900 uppercase tracking-tighter">Infrastructure Control</h2>
                     </div>
 
-                    <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl sm:rounded-2xl border border-gray-200 w-full sm:w-auto overflow-hidden">
+                    <div 
+                        className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl sm:rounded-2xl border border-gray-200 w-full sm:w-auto overflow-x-auto no-scrollbar"
+                        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                    >
                         <button 
                             onClick={() => setShowPaymentSettingsModal(true)}
-                            className="flex-1 sm:flex-none px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-2"
+                            className="flex-1 sm:flex-none shrink-0 px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-2"
                         >
                             <CreditCard className="w-3.5 h-3.5" />
                             Payment Config
                         </button>
-                        <div className="w-px h-6 bg-gray-300 mx-1"></div>
+                        <div className="w-px h-6 bg-gray-300 mx-1 shrink-0"></div>
                         <button 
                             onClick={() => setViewMode('active')}
-                            className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'active' ? 'bg-white text-blue-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
+                            className={`flex-1 sm:flex-none shrink-0 px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'active' ? 'bg-white text-blue-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
                         >
                             Active Nodes
                         </button>
                         <button 
                             onClick={() => setViewMode('recycle')}
-                            className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'recycle' ? 'bg-white text-red-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-red-400'}`}
+                            className={`flex-1 sm:flex-none shrink-0 px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'recycle' ? 'bg-white text-red-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-red-400'}`}
                         >
                             Recycle Bin
                         </button>
                         <button 
                             onClick={() => setViewMode('audit')}
-                            className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'audit' ? 'bg-white text-purple-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-purple-400'}`}
+                            className={`flex-1 sm:flex-none shrink-0 px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'audit' ? 'bg-white text-purple-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-purple-400'}`}
                         >
                             Audit Logs
                         </button>
                         <button 
                             onClick={() => setViewMode('billing')}
-                            className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'billing' ? 'bg-white text-emerald-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-emerald-600'}`}
+                            className={`flex-1 sm:flex-none shrink-0 px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'billing' ? 'bg-white text-emerald-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-emerald-400'}`}
                         >
                             Billing Ledger
                         </button>
