@@ -675,7 +675,14 @@ export default function SuperAdminDashboard() {
                         { icon: Users, label: "Total Students", value: tenants.reduce((acc, t) => acc + (t.studentCount || 0), 0), sub: "Across nodes", trend: "+12.4%", color: "blue" },
                         { icon: Zap, label: "Active Nodes", value: globalStats?.revenueSummary?.active || 0, sub: "Subscribed", trend: "Stable", color: "amber" },
                         { icon: TrendingUp, label: "Trial Nodes", value: globalStats?.revenueSummary?.trial || 0, sub: "Evaluation", trend: "Future", color: "indigo" },
-                        { icon: CreditCard, label: "Active Revenue", value: `$${(globalStats?.revenueSummary?.active || 0) * 249}`, sub: "Monthly", trend: "High", color: "emerald" },
+                        { 
+                            icon: CreditCard, 
+                            label: "Projected MRR", 
+                            value: `₹${(tenants.filter(t => t.subscriptionStatus === 'active' && !t.isDeleted).reduce((acc, t) => acc + (t.studentCount || 0), 0) * (paymentSettings.pricePerStudentPerMonth || 30)).toLocaleString("en-IN")}`, 
+                            sub: `₹${paymentSettings.pricePerStudentPerMonth || 30}/student monthly rate`, 
+                            trend: "Expected", 
+                            color: "emerald" 
+                        },
                         {
                             icon: Database,
                             label: "Total Storage",
