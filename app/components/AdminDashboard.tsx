@@ -1819,6 +1819,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       setIsUpdatingSettings(true);
 
       let response;
+      const payload = {
+        ...locationForm,
+        name: locationForm.name.trim()
+      };
+
       if (editingLocationIndex !== null) {
         // UPDATE existing location
         response = await fetch("/api/admin/locations", {
@@ -1826,7 +1831,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             index: editingLocationIndex,
-            ...locationForm
+            ...payload
           })
         });
       } else {
@@ -1834,7 +1839,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         response = await fetch("/api/admin/locations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(locationForm)
+          body: JSON.stringify(payload)
         });
       }
 
@@ -3773,7 +3778,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     )}
                   </div>
 
-                  <div className="bg-white p-3 md:p-6 rounded-2xl border border-dashed border-gray-300 font-mono text-[11.5px] sm:text-[13px] md:text-sm shadow-sm">
+                  <div className="bg-white p-3 md:p-6 rounded-2xl border border-dashed border-gray-300 font-mono text-[10.5px] sm:text-[13px] md:text-sm shadow-sm">
                     <div className="text-center space-y-1 mb-6">
                       <h3 className="font-bold text-gray-900 tracking-widest uppercase text-xs md:text-sm">INFORMATION</h3>
                       <p className="font-bold text-gray-500 tracking-wider uppercase text-[10px] md:text-xs">YOU HAVE ADDED {hostelLocations.length} LOCATION{hostelLocations.length !== 1 ? "S" : ""}</p>
@@ -3793,7 +3798,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     onClick={() => setExpandedLocations(prev => ({ ...prev, [index]: !prev[index] }))}
                                     className="cursor-pointer text-blue-600 hover:text-blue-800 font-semibold transition-colors"
                                   >
-                                    {loc.name}
+                                    {loc.name?.trim()}
                                   </span>
                                   , Radius:{loc.radius}
                                 </span>
@@ -3813,7 +3818,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 </div>
                               </div>
                               {isExpanded && (
-                                <div className="pl-5 text-gray-500 text-[12px] md:text-sm">
+                                <div className="pl-5 text-gray-500 text-[11px] md:text-sm">
                                   Lat:{loc.lat}, Lng:{loc.lng}
                                 </div>
                               )}
