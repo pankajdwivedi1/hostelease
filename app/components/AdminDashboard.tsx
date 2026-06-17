@@ -3778,7 +3778,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     )}
                   </div>
 
-                  <div className="bg-white p-3 md:p-6 rounded-2xl border border-dashed border-gray-300 font-mono text-[10.5px] sm:text-[13px] md:text-sm shadow-sm">
+                  <div className="bg-white pl-3 pr-1 py-3 md:p-6 rounded-2xl border border-dashed border-gray-300 font-mono text-[10.5px] sm:text-[13px] md:text-sm shadow-sm">
                     <div className="text-center space-y-1 mb-6">
                       <h3 className="font-bold text-gray-900 tracking-widest uppercase text-xs md:text-sm">INFORMATION</h3>
                       <p className="font-bold text-gray-500 tracking-wider uppercase text-[10px] md:text-xs">YOU HAVE ADDED {hostelLocations.length} LOCATION{hostelLocations.length !== 1 ? "S" : ""}</p>
@@ -3789,7 +3789,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         hostelLocations.map((loc, index) => {
                           const isExpanded = !!expandedLocations[index];
                           return (
-                            <div key={index} className="flex flex-col group relative gap-1 py-0.5 px-1 md:py-1 md:px-2 rounded hover:bg-gray-50 transition-colors">
+                            <div key={index} className="flex flex-col group relative gap-1 py-0.5 pl-1 pr-0 md:py-1 md:px-2 rounded hover:bg-gray-50 transition-colors">
                               <div className="flex items-center justify-between gap-1.5 flex-nowrap w-full">
                                 <span className="truncate text-gray-700 leading-tight flex-1">
                                   <span className="font-bold text-gray-800 mr-1">{index + 1}.</span>
