@@ -764,7 +764,7 @@ export default function SuperAdminDashboard() {
             </header>
 
             <div className="px-4 sm:px-8 pt-6 sm:pt-8">
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 no-scrollbar">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
                     {[
                         { icon: Users, label: "Total Students", value: tenants.reduce((acc, t) => acc + (t.studentCount || 0), 0), sub: "Across nodes", trend: "+12.4%", color: "blue" },
                         { icon: Zap, label: "Active Nodes", value: globalStats?.revenueSummary?.active || 0, sub: "Subscribed", trend: "Stable", color: "amber" },
@@ -785,19 +785,21 @@ export default function SuperAdminDashboard() {
                             trend: `${((tenants.reduce((acc, t) => acc + (t.storageBytes || 0), 0) / (10 * 1024 * 1024 * 1024)) * 100).toFixed(2)}% of 10GB`,
                             color: "purple"
                         }
-                    ].map((stat, i) => (
-                        <div key={i} className="bg-white p-3.5 sm:p-7 rounded-[20px] sm:rounded-[32px] border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-gray-200/40 transition-all duration-500 group">
-                            <div className="flex justify-between items-center mb-3 sm:mb-4">
-                                <div className={`w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-2xl flex items-center justify-center bg-${stat.color}-50 text-${stat.color}-600 group-hover:bg-${stat.color}-600 group-hover:text-white transition-colors`}>
-                                    <stat.icon className="w-3.5 h-3.5 sm:w-6 sm:h-6" />
+                    ].map((stat, i, arr) => (
+                        <div key={i} className={`bg-white p-2.5 sm:p-7 rounded-[16px] sm:rounded-[32px] border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-gray-200/40 transition-all duration-500 group ${
+                            i === arr.length - 1 ? 'col-span-2 sm:col-span-1' : ''
+                        }`}>
+                            <div className="flex justify-between items-center mb-2 sm:mb-4">
+                                <div className={`w-6 h-6 sm:w-12 sm:h-12 rounded-lg sm:rounded-2xl flex items-center justify-center bg-${stat.color}-50 text-${stat.color}-600 group-hover:bg-${stat.color}-600 group-hover:text-white transition-colors`}>
+                                    <stat.icon className="w-3 h-3 sm:w-6 sm:h-6" />
                                 </div>
-                                <div className={`text-[7px] sm:text-[10px] font-black px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md sm:rounded-lg bg-${stat.color}-50 text-${stat.color}-600 uppercase tracking-tighter`}>
+                                <div className={`text-[6px] sm:text-[10px] font-black px-1 py-0.5 sm:px-2 sm:py-1 rounded sm:rounded-lg bg-${stat.color}-50 text-${stat.color}-600 uppercase tracking-tighter leading-none`}>
                                     {stat.trend}
                                 </div>
                             </div>
                             <div>
-                                <h3 className="text-lg sm:text-3xl font-black text-gray-900 leading-none tracking-tighter">{stat.value}</h3>
-                                <p className="text-[8px] sm:text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{stat.label}</p>
+                                <h3 className="text-sm sm:text-3xl font-black text-gray-900 leading-none tracking-tighter">{stat.value}</h3>
+                                <p className="text-[7px] sm:text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">{stat.label}</p>
                                 <p className="hidden sm:block text-[8px] sm:text-[9px] text-gray-300 font-medium italic mt-2 truncate">{stat.sub}</p>
                             </div>
                         </div>
