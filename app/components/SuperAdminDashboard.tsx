@@ -808,50 +808,47 @@ export default function SuperAdminDashboard() {
             </div>
 
             {/* Main Content Area */}
-            <main className="px-4 sm:px-8 py-6 sm:py-8 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
+            <main className="px-4 sm:px-8 py-2 sm:py-8 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
                 
                 {/* View Switcher & Header */}
-                <div className="lg:col-span-12 flex flex-col md:flex-row md:items-center justify-between gap-6 mb-4 sm:mb-8 mt-6 sm:mt-12 border-t border-gray-100 pt-8 sm:pt-12">
+                <div className="lg:col-span-12 flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3 sm:mb-8 mt-2 sm:mt-12 border-t border-gray-100 pt-4 sm:pt-12">
                     <div className="flex items-center gap-3">
                         <Activity className="w-5 h-5 text-blue-600" />
                         <h2 className="text-lg sm:text-xl font-black text-gray-900 uppercase tracking-tighter">Infrastructure Control</h2>
                     </div>
 
-                    <div 
-                        className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl sm:rounded-2xl border border-gray-200 w-full sm:w-auto overflow-x-auto no-scrollbar"
-                        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                    >
+                    <div className="flex items-center gap-0.5 bg-gray-100 p-1 rounded-xl sm:rounded-2xl border border-gray-200 w-full sm:w-auto">
                         <button 
                             onClick={() => setShowPaymentSettingsModal(true)}
-                            className="flex-1 sm:flex-none shrink-0 px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-2"
+                            className="flex-1 min-w-0 px-1 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[7px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-1"
                         >
-                            <CreditCard className="w-3.5 h-3.5" />
-                            Payment Config
+                            <CreditCard className="w-2.5 h-2.5 shrink-0 hidden xs:block" />
+                            <span className="truncate">Payment</span>
                         </button>
-                        <div className="w-px h-6 bg-gray-300 mx-1 shrink-0"></div>
+                        <div className="w-px h-5 bg-gray-300 shrink-0"></div>
                         <button 
                             onClick={() => setViewMode('active')}
-                            className={`flex-1 sm:flex-none shrink-0 px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'active' ? 'bg-white text-blue-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
+                            className={`flex-1 min-w-0 px-1 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[7px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center ${viewMode === 'active' ? 'bg-white text-blue-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
                         >
-                            Active Nodes
+                            <span className="truncate">Active</span>
                         </button>
                         <button 
                             onClick={() => setViewMode('recycle')}
-                            className={`flex-1 sm:flex-none shrink-0 px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'recycle' ? 'bg-white text-red-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-red-400'}`}
+                            className={`flex-1 min-w-0 px-1 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[7px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center ${viewMode === 'recycle' ? 'bg-white text-red-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-red-400'}`}
                         >
-                            Recycle Bin
+                            <span className="truncate">Recycle</span>
                         </button>
                         <button 
                             onClick={() => setViewMode('audit')}
-                            className={`flex-1 sm:flex-none shrink-0 px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'audit' ? 'bg-white text-purple-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-purple-400'}`}
+                            className={`flex-1 min-w-0 px-1 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[7px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center ${viewMode === 'audit' ? 'bg-white text-purple-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-purple-400'}`}
                         >
-                            Audit Logs
+                            <span className="truncate">Audit</span>
                         </button>
                         <button 
                             onClick={() => setViewMode('billing')}
-                            className={`flex-1 sm:flex-none shrink-0 px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'billing' ? 'bg-white text-emerald-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-emerald-400'}`}
+                            className={`flex-1 min-w-0 px-1 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[7px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center ${viewMode === 'billing' ? 'bg-white text-emerald-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-emerald-400'}`}
                         >
-                            Billing Ledger
+                            <span className="truncate">Billing</span>
                         </button>
                     </div>
                 </div>
