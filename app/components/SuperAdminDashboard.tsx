@@ -130,12 +130,14 @@ const LiveDbSwitch = () => {
 
 export default function SuperAdminDashboard() {
     const [tenants, setTenants] = useState<Tenant[]>([]);
-    const [viewMode, setViewMode] = useState<"active" | "recycle" | "audit">("active");
+    const [viewMode, setViewMode] = useState<"active" | "recycle" | "audit" | "billing">("active");
     const [globalStats, setGlobalStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
     const [loadingLogs, setLoadingLogs] = useState(false);
+
+
 
     const fetchAuditLogs = async () => {
         setLoadingLogs(true);
@@ -215,6 +217,77 @@ export default function SuperAdminDashboard() {
         subscriptionStatus: "trial" as const,
         primaryColor: "#3b82f6"
     });
+
+    const [billingLogs, setBillingLogs] = useState<any[]>([]);
+    const [loadingBilling, setLoadingBilling] = useState(false);
+    const [dnsStatus, setDnsStatus] = useState<Record<string, 'resolved' | 'pending' | 'checking'>>({});
+
+    // Billing details states in edit modal
+    const [modalBillingType, setModalBillingType] = useState<"Verified Payment" | "Complimentary" | "Deferred Billing (On Credit)">("Verified Payment");
+    const [modalAmount, setModalAmount] = useState<string>("");
+    const [modalUtr, setModalUtr] = useState<string>("");
+    const [modalBillingPeriod, setModalBillingPeriod] = useState<string>("1 Year");
+    const [modalRemarks, setModalRemarks] = useState<string>("");
+    const [recordBillingEntry, setRecordBillingEntry] = useState<boolean>(true);
+
+    const fetchBillingLedger = async () => {
+        setLoadingBilling(true);
+        try {
+            const res = await fetch("/api/super-admin/billing-ledger");
+            const data = await res.json();
+            if (data.success) {
+                setBillingLogs(data.logs);
+            }
+        } catch (error) {
+            console.error("Failed to fetch billing ledger", error);
+        } finally {
+            setLoadingBilling(false);
+        }
+    };
+
+    const checkTenantDns = async (slug: string) => {
+        const domain = slug + ".hosteleaze.com";
+        setDnsStatus(prev => ({ ...prev, [slug]: 'checking' }));
+        try {
+            const res = await fetch("/api/super-admin/tenants/dns", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ domain })
+            });
+            const data = await res.json();
+            setDnsStatus(prev => ({
+                ...prev,
+                [slug]: data.resolved ? 'resolved' : 'pending'
+            }));
+        } catch (error) {
+            setDnsStatus(prev => ({ ...prev, [slug]: 'pending' }));
+        }
+    };
+
+    useEffect(() => {
+        if (tenants.length > 0) {
+            tenants.forEach(tenant => {
+                if (!dnsStatus[tenant.slug]) {
+                    checkTenantDns(tenant.slug);
+                }
+            });
+        }
+    }, [tenants]);
+
+    useEffect(() => {
+        if (editingTenant) {
+            const count = editingTenant.studentCount || 0;
+            const price = paymentSettings.pricePerStudentPerMonth || 30;
+            const calculatedYearly = count * price * 12;
+
+            setModalBillingType("Verified Payment");
+            setModalAmount(calculatedYearly > 0 ? String(calculatedYearly) : "");
+            setModalUtr(editingTenant.renewalUtr || "");
+            setModalBillingPeriod("1 Year");
+            setModalRemarks("");
+            setRecordBillingEntry(editingTenant.subscriptionStatus !== 'active');
+        }
+    }, [editingTenant, paymentSettings]);
 
     useEffect(() => {
         setIsMounted(true);
@@ -311,6 +384,7 @@ export default function SuperAdminDashboard() {
             fetchTenants();
             fetchPaymentSettings();
             fetchAuditLogs();
+            fetchBillingLedger();
         }
         
         // Auto-refresh stats every 30 seconds for live traffic
@@ -496,6 +570,24 @@ export default function SuperAdminDashboard() {
             const data = await res.json();
             if (data.success) {
                 logAdminAction("CONFIGURE_NODE", `Updated settings and details for university node '${editingTenant.slug}'`);
+                
+                if (recordBillingEntry && editingTenant.subscriptionStatus === 'active') {
+                    await fetch("/api/super-admin/billing-ledger", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            tenantId: editingTenant._id,
+                            tenantName: editingTenant.name,
+                            amount: modalBillingType === 'Verified Payment' ? Number(modalAmount) || 0 : 0,
+                            utr: modalBillingType === 'Verified Payment' ? modalUtr : "",
+                            billingType: modalBillingType,
+                            billingPeriod: modalBillingPeriod,
+                            remarks: modalRemarks || `Subscription Activated (${modalBillingType})`
+                        })
+                    });
+                    fetchBillingLedger();
+                }
+
                 setTenants(tenants.map(t => t._id === editingTenant._id ? { ...t, ...data.tenant } : t));
                 setEditingTenant(null);
                 alert("University Node successfully configured.");
@@ -748,6 +840,12 @@ export default function SuperAdminDashboard() {
                         >
                             Audit Logs
                         </button>
+                        <button 
+                            onClick={() => setViewMode('billing')}
+                            className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'billing' ? 'bg-white text-emerald-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-emerald-600'}`}
+                        >
+                            Billing Ledger
+                        </button>
                     </div>
                 </div>
 
@@ -755,17 +853,76 @@ export default function SuperAdminDashboard() {
                     <div className="flex items-center justify-between">
                          <div className="flex items-center gap-3">
                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
-                                {viewMode === 'active' ? 'Operational Hub' : viewMode === 'recycle' ? 'Trash Registry' : 'HQ Security Logs'}
+                                {viewMode === 'active' ? 'Operational Hub' : viewMode === 'recycle' ? 'Trash Registry' : viewMode === 'audit' ? 'HQ Security Logs' : 'Subscription Billing Ledger'}
                             </p>
                          </div>
                          <div className="flex gap-2">
                              <div className="px-3 py-1 bg-white rounded-lg border border-gray-100 text-[9px] font-black text-gray-400 uppercase tracking-widest">
-                                {viewMode === 'active' ? `Total Active Nodes: ${tenants.length}` : viewMode === 'recycle' ? `Deleted Nodes: ${tenants.length}` : `Audit Records: ${auditLogs.length}`}
+                                {viewMode === 'active' ? `Total Active Nodes: ${tenants.length}` : viewMode === 'recycle' ? `Deleted Nodes: ${tenants.length}` : viewMode === 'audit' ? `Audit Records: ${auditLogs.length}` : `Ledger Transactions: ${billingLogs.length}`}
                              </div>
                          </div>
                     </div>
                     <div className="bg-white sm:bg-transparent rounded-[32px] sm:rounded-none overflow-hidden">
-                        {viewMode === 'audit' ? (
+                        {viewMode === 'billing' ? (
+                            <div className="bg-white p-6 rounded-[24px] sm:rounded-[32px] border border-slate-100 shadow-sm">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                                    <div>
+                                        <h3 className="font-black text-gray-900 uppercase tracking-tight text-sm">Subscription Billing Ledger</h3>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Logs of all approved payments, complimentary setups, and deferred credits</p>
+                                    </div>
+                                    <button 
+                                        onClick={fetchBillingLedger}
+                                        disabled={loadingBilling}
+                                        className="bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all w-full sm:w-auto flex items-center justify-center gap-2"
+                                    >
+                                        {loadingBilling ? 'Syncing...' : '🔄 Refresh Ledger'}
+                                    </button>
+                                </div>
+
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse text-[10px]">
+                                        <thead>
+                                            <tr className="border-b border-slate-100 text-slate-400 font-black uppercase tracking-wider text-[8px]">
+                                                <th className="py-3 px-4">Date</th>
+                                                <th className="py-3 px-4">College/University</th>
+                                                <th className="py-3 px-4">Billing Type</th>
+                                                <th className="py-3 px-4">Billing Period</th>
+                                                <th className="py-3 px-4">UTR Number</th>
+                                                <th className="py-3 px-4">Amount</th>
+                                                <th className="py-3 px-4">Remarks</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50 font-bold">
+                                            {billingLogs.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={7} className="py-12 text-center text-slate-400 italic">No billing records found.</td>
+                                                </tr>
+                                            ) : billingLogs.map((log: any, idx: number) => (
+                                                <tr key={log.id || idx} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{new Date(log.date).toLocaleDateString("en-IN", { dateStyle: "medium" })}</td>
+                                                    <td className="py-3 px-4 text-slate-900 font-extrabold">{log.tenantName}</td>
+                                                    <td className="py-3 px-4">
+                                                        <span className={`px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-tighter ${
+                                                            log.billingType === 'Verified Payment' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                                            log.billingType === 'Complimentary' ? 'bg-purple-50 text-purple-600 border border-purple-100' :
+                                                            'bg-amber-50 text-amber-600 border border-amber-100'
+                                                        }`}>
+                                                            {log.billingType}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-slate-600">{log.billingPeriod}</td>
+                                                    <td className="py-3 px-4 text-slate-700 font-mono select-all">{log.utr || "N/A"}</td>
+                                                    <td className="py-3 px-4 text-slate-900 font-black">
+                                                        {log.amount > 0 ? `₹${log.amount.toLocaleString("en-IN")}` : "₹0"}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-slate-500 leading-normal max-w-xs truncate" title={log.remarks}>{log.remarks || "-"}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ) : viewMode === 'audit' ? (
                             <div className="bg-white p-6 rounded-[24px] sm:rounded-[32px] border border-slate-100 shadow-sm">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                                     <div>
@@ -933,6 +1090,32 @@ export default function SuperAdminDashboard() {
                                                     {getTenantDisplayUrl(tenant.slug)}
                                                 </a>
                                                 <div className="flex items-center gap-1.5 shrink-0">
+                                                    {(() => {
+                                                        const status = dnsStatus[tenant.slug];
+                                                        if (status === 'checking') {
+                                                            return (
+                                                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-white/10 rounded-lg text-amber-400 animate-pulse animate-duration-1000" title="Resolving DNS...">
+                                                                    <Clock className="w-2.5 h-2.5" />
+                                                                </div>
+                                                            );
+                                                        } else if (status === 'resolved') {
+                                                            return (
+                                                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/20 rounded-lg text-emerald-400 border border-emerald-500/30" title="🟢 DNS Resolved">
+                                                                    <CheckCircle2 className="w-2.5 h-2.5" />
+                                                                </div>
+                                                            );
+                                                        } else {
+                                                            return (
+                                                                <button 
+                                                                    onClick={() => checkTenantDns(tenant.slug)}
+                                                                    className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 rounded-lg text-red-400 border border-red-500/30 cursor-pointer hover:bg-red-500/30 transition-all" 
+                                                                    title="🔴 DNS Unresolved (Click to retry)"
+                                                                >
+                                                                    <AlertCircle className="w-2.5 h-2.5" />
+                                                                </button>
+                                                            );
+                                                        }
+                                                    })()}
                                                     <button 
                                                         onClick={() => handleCalculateStorage(tenant._id)}
                                                         disabled={calculatingStorageFor === tenant._id}
@@ -940,16 +1123,16 @@ export default function SuperAdminDashboard() {
                                                         title="Click to calculate exact storage from database"
                                                     >
                                                         {calculatingStorageFor === tenant._id ? (
-                                                            <Loader2 className="w-2 h-2 text-indigo-400 animate-spin" />
+                                                            <Loader2 className="w-2.5 h-2.5 text-indigo-400 animate-spin" />
                                                         ) : (
-                                                            <Database className="w-2 h-2 text-indigo-400" />
+                                                            <Database className="w-2.5 h-2.5 text-indigo-400" />
                                                         )}
                                                         <span className="text-[8px] font-black">
                                                             {tenant.storageBytes !== null && tenant.storageBytes !== undefined ? `${(tenant.storageBytes / (1024 * 1024)).toFixed(2)}MB` : "CALCULATE"}
                                                         </span>
                                                     </button>
                                                     <div className="flex items-center gap-1 px-1.5 py-0.5 bg-white/10 rounded-lg" title="Active Connections">
-                                                        <Activity className="w-2 h-2 text-emerald-400" />
+                                                        <Activity className="w-2.5 h-2.5 text-emerald-400" />
                                                         <span className="text-[8px] font-black">{tenant.liveTraffic || 0}</span>
                                                     </div>
                                                 </div>
@@ -1245,6 +1428,108 @@ export default function SuperAdminDashboard() {
                                     <option value="expired">Expired (Node Locked)</option>
                                 </select>
                             </div>
+
+                            {editingTenant.subscriptionStatus === 'active' && (
+                                <div className="space-y-4 p-5 bg-slate-50 rounded-2xl border border-slate-200/50">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Record Billing Entry</label>
+                                        <input 
+                                            type="checkbox"
+                                            checked={recordBillingEntry}
+                                            onChange={(e) => setRecordBillingEntry(e.target.checked)}
+                                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                                        />
+                                    </div>
+                                    {recordBillingEntry && (
+                                        <div className="space-y-4 border-t border-slate-200/50 pt-4 animate-in fade-in">
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Billing Type</label>
+                                                <select
+                                                    value={modalBillingType}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value as any;
+                                                        setModalBillingType(val);
+                                                        if (val !== 'Verified Payment') {
+                                                            setModalAmount("0");
+                                                            setModalUtr("");
+                                                        } else {
+                                                            const count = editingTenant.studentCount || 0;
+                                                            const price = paymentSettings.pricePerStudentPerMonth || 30;
+                                                            setModalAmount(String(count * price * 12));
+                                                            setModalUtr(editingTenant.renewalUtr || "");
+                                                        }
+                                                    }}
+                                                    className="w-full bg-white border border-slate-200 p-3.5 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
+                                                >
+                                                    <option value="Verified Payment">Verified Payment</option>
+                                                    <option value="Complimentary">Complimentary</option>
+                                                    <option value="Deferred Billing (On Credit)">Deferred/On Credit</option>
+                                                </select>
+                                            </div>
+
+                                            {modalBillingType === 'Verified Payment' && (
+                                                <div className="grid grid-cols-2 gap-3 animate-in slide-in-from-top-1">
+                                                    <div className="space-y-1">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Amount Paid (₹)</label>
+                                                        <input
+                                                            type="number"
+                                                            value={modalAmount}
+                                                            onChange={(e) => setModalAmount(e.target.value)}
+                                                            className="w-full bg-white border border-slate-200 p-3 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
+                                                            placeholder="Amount in ₹"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">UTR / Tx Number</label>
+                                                        <input
+                                                            type="text"
+                                                            value={modalUtr}
+                                                            onChange={(e) => setModalUtr(e.target.value)}
+                                                            className="w-full bg-white border border-slate-200 p-3 rounded-xl font-mono font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
+                                                            placeholder="UTR Log"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Billing Period</label>
+                                                    <select
+                                                        value={modalBillingPeriod}
+                                                        onChange={(e) => setModalBillingPeriod(e.target.value)}
+                                                        className="w-full bg-white border border-slate-200 p-3 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
+                                                    >
+                                                        <option value="1 Month">1 Month</option>
+                                                        <option value="3 Months">3 Months</option>
+                                                        <option value="6 Months">6 Months</option>
+                                                        <option value="1 Year">1 Year</option>
+                                                    </select>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Date</label>
+                                                    <input
+                                                        type="date"
+                                                        defaultValue={new Date().toISOString().split('T')[0]}
+                                                        className="w-full bg-white border border-slate-200 p-3 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Remarks</label>
+                                                <input
+                                                    type="text"
+                                                    value={modalRemarks}
+                                                    onChange={(e) => setModalRemarks(e.target.value)}
+                                                    className="w-full bg-white border border-slate-200 p-3 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
+                                                    placeholder="Remarks / Notes"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Subscription End Date</label>

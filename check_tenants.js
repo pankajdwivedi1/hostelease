@@ -1,6 +1,30 @@
 
 const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config({ path: '.env.local' });
+const fs = require('fs');
+const path = require('path');
+try {
+    const envFile = fs.readFileSync(path.join(__dirname, '.env.local'), 'utf8');
+    envFile.split('\n').forEach(line => {
+        const parts = line.split('=');
+        if (parts.length >= 2) {
+            const key = parts[0].trim();
+            const val = parts.slice(1).join('=').trim().replace(/^['"]|['"]$/g, '');
+            process.env[key] = val;
+        }
+    });
+} catch (e) {
+    try {
+        const envFile = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
+        envFile.split('\n').forEach(line => {
+            const parts = line.split('=');
+            if (parts.length >= 2) {
+                const key = parts[0].trim();
+                const val = parts.slice(1).join('=').trim().replace(/^['"]|['"]$/g, '');
+                process.env[key] = val;
+            }
+        });
+    } catch (err) {}
+}
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

@@ -13,8 +13,39 @@ const lora = Lora({
 });
 
 export const metadata: Metadata = {
-  title: "Hosteleaze - Hostel Management",
-  description: "Hostel Management System Reimagined - Manage permissions, students, and hostel operations seamlessly",
+  title: "Hosteleaze - Premium Hostel Management System",
+  description: "Hosteleaze is a modern, enterprise-grade multi-tenant hostel management platform for colleges and universities to manage check-ins, gatepasses, students, and attendance.",
+  metadataBase: new URL("https://www.hosteleaze.com"),
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_IN",
+    url: "https://www.hosteleaze.com",
+    siteName: "Hosteleaze",
+    title: "Hosteleaze - Premium Hostel Management System",
+    description: "Hosteleaze is an enterprise-grade platform for universities to manage hostels, permissions, and gatepasses in real-time.",
+    images: [
+      {
+        url: "/logo.jpeg",
+        width: 800,
+        height: 600,
+        alt: "Hosteleaze Logo",
+      }
+    ],
+  },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
