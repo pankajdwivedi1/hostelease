@@ -524,7 +524,7 @@ function LoginForm() {
   };
 
   return (
-    <div className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-x-hidden overflow-y-auto no-scrollbar bg-[#fafafa] font-sans selection:bg-blue-100 p-4 sm:p-6 lg:p-8">
+    <div className="relative flex h-[100dvh] w-full items-center justify-center overflow-hidden bg-[#fafafa] font-sans selection:bg-blue-100 p-2 sm:p-4 lg:p-6">
       {loading && (
         <div className="fixed inset-0 z-[9999] bg-[#050510]/80 backdrop-blur-md flex items-center justify-center p-4 text-white">
           <div className="flex flex-col items-center justify-center gap-4 animate-in fade-in zoom-in duration-300">
@@ -543,7 +543,7 @@ function LoginForm() {
       <style jsx global>{`
         html, body {
           height: 100%;
-          overflow-y: auto !important;
+          overflow: hidden !important;
           margin: 0;
           padding: 0;
         }
@@ -565,12 +565,12 @@ function LoginForm() {
         />
       </div>
 
-      <main className="relative z-10 w-full max-w-lg lg:max-w-5xl flex flex-col justify-center min-h-full py-2 sm:py-6">
+      <main className="relative z-10 w-full max-w-lg lg:max-w-5xl flex flex-col justify-center max-h-full py-1 sm:py-2">
         <div className={`transition-all duration-1000 transform ${mounted ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'} flex flex-col justify-center w-full`}>
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-center lg:items-start w-full">
 
             {/* Left Column: Logo, Title, and Features (Desktop only showcase) */}
-            <div className="flex flex-col items-center space-y-4 sm:space-y-6 text-center lg:col-span-5 w-full lg:pt-8">
+            <div className="flex flex-col items-center space-y-3 sm:space-y-4 text-center lg:col-span-5 w-full lg:pt-4">
               {/* Logo and Title */}
               <div className="flex flex-col items-center space-y-2.5">
                 <div
@@ -585,7 +585,7 @@ function LoginForm() {
                   <img
                     src={tenantLogo || "/uvw_logo.jpg"}
                     alt="University Logo"
-                    className="relative rounded-full object-cover transition-all duration-500 group-hover:scale-105 group-hover:rotate-3 shadow-2xl border-4 border-white h-16 w-16 sm:h-20 sm:w-20"
+                    className="relative rounded-full object-cover transition-all duration-500 group-hover:scale-105 group-hover:rotate-3 shadow-2xl border-4 border-white h-14 w-14 sm:h-16 sm:w-16"
                     title="Click for Super Admin login"
                     onError={(e) => {
                       (e.target as any).src = "/uvw_logo.jpg";
@@ -603,7 +603,7 @@ function LoginForm() {
                   )}
                 </div>
                 <div className="space-y-1 sm:space-y-2 text-center flex flex-col items-center w-full">
-                  <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-slate-900 transition-all duration-500 text-center w-full">
+                  <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-slate-900 transition-all duration-500 text-center w-full">
                     {tenantName}
                     {tenantName !== "Hosteleaze" && <span className="block text-[8px] sm:text-[10px] text-slate-400 font-bold tracking-widest mt-1 text-center w-full">POWERED BY HOSTELEAZE</span>}
                   </h1>
@@ -624,7 +624,7 @@ function LoginForm() {
                       </div>
                     )}
 
-                    <p className="max-h-20 opacity-100 max-w-[260px] sm:max-w-[280px] lg:max-w-md text-[11px] sm:text-sm font-medium text-slate-500 leading-tight sm:leading-relaxed transition-all duration-500 overflow-hidden text-center mx-auto">
+                    <p className="max-h-20 opacity-100 max-w-[260px] sm:max-w-[280px] lg:max-w-md text-[10px] sm:text-xs font-medium text-slate-500 leading-tight sm:leading-relaxed transition-all duration-500 overflow-hidden text-center mx-auto">
                       The smart, all-in-one ecosystem for modern hostel administration and student living.
                     </p>
                     {tenantName === "Hosteleaze" && !showAdminPassword && !showWardenPassword && (
@@ -643,52 +643,52 @@ function LoginForm() {
               </div>
 
               {/* Desktop Feature Showcase (Visible only on Desktop lg: screens) */}
-              <div className="hidden lg:flex flex-col gap-5 w-full max-w-md mt-4 animate-in fade-in slide-in-from-left-4 duration-1000">
-                <div className="flex items-center gap-4 py-1.5 px-1 hover:translate-x-1 transition-transform duration-300">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="hidden lg:flex flex-col gap-3 w-full max-w-md mt-2 animate-in fade-in slide-in-from-left-4 duration-1000">
+                <div className="flex items-center gap-3 py-1 px-1 hover:translate-x-1 transition-transform duration-300">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                   <div>
-                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">Wifi & Geolocation Verification</h4>
-                    <p className="text-[11px] text-slate-500 font-medium">Secure local network and coordinate geofencing.</p>
+                    <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">Wifi & Geolocation Verification</h4>
+                    <p className="text-[10px] text-slate-500 font-medium">Secure local network and coordinate geofencing.</p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 py-1.5 px-1 hover:translate-x-1 transition-transform duration-300">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="flex items-center gap-3 py-1 px-1 hover:translate-x-1 transition-transform duration-300">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
                     </svg>
                   </div>
                   <div>
-                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">Digital Gatepass System</h4>
-                    <p className="text-[11px] text-slate-500 font-medium">Online outing requests with automated QR scans.</p>
+                    <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">Digital Gatepass System</h4>
+                    <p className="text-[10px] text-slate-500 font-medium">Online outing requests with automated QR scans.</p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 py-1.5 px-1 hover:translate-x-1 transition-transform duration-300">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="flex items-center gap-3 py-1 px-1 hover:translate-x-1 transition-transform duration-300">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" />
                     </svg>
                   </div>
                   <div>
-                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">Advanced Analytics Dashboard</h4>
-                    <p className="text-[11px] text-slate-500 font-medium">Live attendance insights and security reports.</p>
+                    <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">Advanced Analytics Dashboard</h4>
+                    <p className="text-[10px] text-slate-500 font-medium">Live attendance insights and security reports.</p>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Right Column: Login Card & Footer */}
-            <div className="flex flex-col items-center lg:col-span-7 w-full space-y-4 sm:space-y-6">
-              <div className="w-full max-w-[460px] relative group">
-                <div className="absolute -inset-1 rounded-[32px] bg-gradient-to-b from-gray-200/50 to-transparent opacity-50 blur-sm transition duration-500 group-hover:opacity-100" />
+            <div className="flex flex-col items-center lg:col-span-7 w-full space-y-3 sm:space-y-4">
+              <div className="w-full max-w-[420px] relative group">
+                <div className="absolute -inset-1 rounded-[24px] bg-gradient-to-b from-gray-200/50 to-transparent opacity-50 blur-sm transition duration-500 group-hover:opacity-100" />
 
-                <div className="relative overflow-hidden rounded-[24px] sm:rounded-[32px] border border-white bg-white/80 backdrop-blur-xl p-1 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.08)] transition-all duration-500">
-                  <div className="rounded-[20px] sm:rounded-[26px] bg-slate-50/40 p-4 sm:p-7">
+                <div className="relative overflow-hidden rounded-[20px] sm:rounded-[24px] border border-white bg-white/80 backdrop-blur-xl p-1 shadow-[0_16px_32px_-10px_rgba(0,0,0,0.06)] transition-all duration-500">
+                  <div className="rounded-[16px] sm:rounded-[20px] bg-slate-50/40 p-3 sm:p-5">
 
                     {error && (
                       <div className="mb-6 flex animate-in fade-in slide-in-from-top-4 items-center gap-3 rounded-xl border border-red-100 bg-red-50/50 p-4 text-sm text-red-600 backdrop-blur-md">
@@ -816,7 +816,7 @@ function LoginForm() {
                             <button
                               type="button"
                               onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-                              className="flex w-full items-center justify-between gap-3 sm:gap-4 rounded-xl sm:rounded-2xl border border-slate-200 bg-white px-4 py-3.5 sm:py-4.5 text-xs sm:text-sm font-bold text-slate-900 hover:border-blue-200 transition-all active:scale-[0.98]"
+                              className="flex w-full items-center justify-between gap-3 sm:gap-4 rounded-xl sm:rounded-2xl border border-slate-200 bg-white px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-slate-900 hover:border-blue-200 transition-all active:scale-[0.98]"
                             >
                               <span className="flex items-center gap-3">
                                 <svg className="h-5 w-5 flex-shrink-0" viewBox="0 0 24 24">
@@ -873,61 +873,61 @@ function LoginForm() {
                         </div>
                       )}
 
-                      <div className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "py-1 sm:py-2" : "py-2"} relative flex items-center transition-all`}>
+                      <div className="py-1.5 relative flex items-center transition-all">
                         <div className="grow border-t border-slate-100"></div>
                         <span className="mx-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">Staff Portal</span>
                         <div className="grow border-t border-slate-100"></div>
                       </div>
 
                       {/* Staff Selection */}
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-2 gap-3">
                         <button
                           onClick={handleAdminLogin}
-                          className={`group flex flex-col items-center justify-center gap-2 sm:gap-3 rounded-2xl border-2 p-3 sm:p-5 transition-all duration-500 active:scale-95 ${showAdminPassword
+                          className={`group flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 rounded-xl border-2 p-2 sm:p-3.5 transition-all duration-500 active:scale-95 ${showAdminPassword
                             ? "border-blue-500 bg-blue-50/50 shadow-inner"
                             : "border-transparent bg-white hover:bg-slate-50 hover:border-slate-100 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)]"
                             }`}
                         >
-                          <div className={`flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-2xl transition-all duration-500 ${showAdminPassword ? "bg-blue-600 text-white rotate-6 shadow-blue-200 shadow-xl" : "bg-blue-50 text-blue-600 group-hover:scale-110 group-hover:-rotate-3"
+                          <div className={`flex h-8 w-8 sm:h-11 sm:w-11 items-center justify-center rounded-xl transition-all duration-500 ${showAdminPassword ? "bg-blue-600 text-white rotate-6 shadow-blue-200 shadow-xl" : "bg-blue-50 text-blue-600 group-hover:scale-110 group-hover:-rotate-3"
                             }`}>
-                            <svg className="h-6 w-6 sm:h-7 sm:w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                             </svg>
                           </div>
                           <div className="text-center">
-                            <span className={`block text-sm font-bold tracking-tight transition-colors ${showAdminPassword ? "text-blue-900" : "text-slate-800"}`}>
+                            <span className={`block text-xs sm:text-sm font-bold tracking-tight transition-colors ${showAdminPassword ? "text-blue-900" : "text-slate-800"}`}>
                               Dean
                             </span>
-                            <span className="text-[10px] font-medium text-slate-400">Institutional Access</span>
+                            <span className="text-[9px] font-medium text-slate-400">Institutional Access</span>
                           </div>
                         </button>
 
                         <button
                           onClick={handleWardenLogin}
-                          className={`group flex flex-col items-center justify-center gap-2 sm:gap-3 rounded-2xl border-2 p-3 sm:p-5 transition-all duration-500 active:scale-95 ${showWardenPassword
+                          className={`group flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 rounded-xl border-2 p-2 sm:p-3.5 transition-all duration-500 active:scale-95 ${showWardenPassword
                             ? "border-indigo-500 bg-indigo-50/50 shadow-inner"
                             : "border-transparent bg-white hover:bg-slate-50 hover:border-slate-100 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)]"
                             }`}
                         >
-                          <div className={`flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-2xl transition-all duration-500 ${showWardenPassword ? "bg-indigo-600 text-white -rotate-6 shadow-indigo-200 shadow-xl" : "bg-indigo-50 text-indigo-600 group-hover:scale-110 group-hover:rotate-3"
+                          <div className={`flex h-8 w-8 sm:h-11 sm:w-11 items-center justify-center rounded-xl transition-all duration-500 ${showWardenPassword ? "bg-indigo-600 text-white -rotate-6 shadow-indigo-200 shadow-xl" : "bg-indigo-50 text-indigo-600 group-hover:scale-110 group-hover:rotate-3"
                             }`}>
-                            <svg className="h-6 w-6 sm:h-7 sm:w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                             </svg>
                           </div>
                           <div className="text-center">
-                            <span className={`block text-sm font-bold tracking-tight transition-colors ${showWardenPassword ? "text-indigo-900" : "text-slate-800"}`}>
+                            <span className={`block text-xs sm:text-sm font-bold tracking-tight transition-colors ${showWardenPassword ? "text-indigo-900" : "text-slate-800"}`}>
                               Campus
                             </span>
-                            <span className="text-[10px] font-medium text-slate-400">Campus Management</span>
+                            <span className="text-[9px] font-medium text-slate-400">Campus Management</span>
                           </div>
                         </button>
                       </div>
 
                       {/* Password Verification Section */}
                       {(showAdminPassword || showWardenPassword || showDeveloperPassword) && (
-                        <div className="mt-4 sm:mt-8 animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-500">
-                          <div className="rounded-2xl border border-slate-100 bg-white p-4 sm:p-6 shadow-[0_12px_24px_-8px_rgba(0,0,0,0.08)]">
+                        <div className="mt-3 sm:mt-4 animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-500">
+                          <div className="rounded-xl border border-slate-100 bg-white p-3 sm:p-4 shadow-[0_8px_16px_-6px_rgba(0,0,0,0.06)]">
                             {showDeveloperPassword && superAdminResetStep !== "none" ? (
                               <div className="space-y-4 animate-in fade-in duration-300">
                                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest text-center">
@@ -1110,10 +1110,10 @@ function LoginForm() {
                                         else handleDeveloperLogin();
                                       }
                                     }}
-                                    className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:py-4 text-center text-sm sm:text-lg font-black tracking-[0.4em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-300 placeholder:font-medium placeholder:tracking-normal"
+                                    className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 sm:py-3 text-center text-sm sm:text-base font-black tracking-[0.4em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-300 placeholder:font-medium placeholder:tracking-normal"
                                     placeholder={showAdminPassword ? "············" : showWardenPassword ? "············" : !isDeveloperSetup ? "Create password" : "Enter Super Admin key"}
                                   />
-                                  <div className="flex justify-between items-center mt-2.5 px-1">
+                                  <div className="flex justify-between items-center mt-2 px-1">
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -1122,7 +1122,7 @@ function LoginForm() {
                                         if (showDeveloperPassword) setShowDeveloperPassword(false);
                                         setError("");
                                       }}
-                                      className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
+                                      className="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
                                     >
                                       Cancel
                                     </button>
@@ -1134,18 +1134,18 @@ function LoginForm() {
                                           setSuperAdminResetPhone("");
                                           setError("");
                                         }}
-                                        className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 hover:underline transition-colors"
+                                        className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 hover:underline transition-colors"
                                       >
                                         Forgot Password?
                                       </button>
                                     )}
                                   </div>
                                 </div>
-                                <div className="mt-6 flex gap-3">
+                                <div className="mt-4 flex gap-3">
                                   <button
                                     onClick={showAdminPassword ? handleAdminLogin : showWardenPassword ? handleWardenLogin : handleDeveloperLogin}
                                     disabled={adminLoading || wardenLoading || developerLoading}
-                                    className={`w-full py-3.5 sm:py-4.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-widest text-white shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 ${showAdminPassword ? 'bg-blue-600 shadow-blue-200' : showWardenPassword ? 'bg-indigo-600 shadow-indigo-200' : 'bg-slate-900 shadow-slate-200'}`}
+                                    className={`w-full py-2.5 sm:py-3.5 rounded-xl font-black text-xs sm:text-sm uppercase tracking-widest text-white shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 ${showAdminPassword ? 'bg-blue-600 shadow-blue-200' : showWardenPassword ? 'bg-indigo-600 shadow-indigo-200' : 'bg-slate-900 shadow-slate-200'}`}
                                   >
                                     {adminLoading || wardenLoading || developerLoading ? "Processing..." : 
                                      showAdminPassword || showWardenPassword ? "Confirm Identity" : 
@@ -1163,29 +1163,29 @@ function LoginForm() {
               </div>
 
               {/* Premium Refined Footer */}
-              <footer className="w-full max-w-sm mt-2 sm:mt-4 pb-4 sm:pb-8">
-                <div className="flex flex-col items-center space-y-2 sm:space-y-4 text-center">
-                  <div className="space-y-1.5 sm:space-y-3">
-                    <div className="flex flex-col items-center gap-1">
-                      <p className="text-[8px] sm:text-[10px] font-bold tracking-[0.1em] text-slate-400 uppercase">
+              <footer className="w-full max-w-sm mt-1 sm:mt-2 pb-1 sm:pb-2">
+                <div className="flex flex-col items-center space-y-1.5 sm:space-y-2 text-center">
+                  <div className="space-y-1 sm:space-y-1.5">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <p className="text-[7px] sm:text-[9px] font-bold tracking-[0.1em] text-slate-400 uppercase">
                         &copy; 2026 HOSTELEAZE. All Rights Reserved.
                       </p>
-                      <p className="text-[7px] sm:text-[9px] font-medium text-slate-300 uppercase tracking-wider">
+                      <p className="text-[6px] sm:text-[8px] font-medium text-slate-300 uppercase tracking-wider">
                         Unauthorized copying, modification, or distribution is strictly prohibited
                       </p>
                     </div>
 
                     <div className="group cursor-default">
-                      <p className="text-[8px] sm:text-[10px] font-medium text-slate-400 tracking-wider" style={{ fontFamily: 'var(--font-lora), Cambria' }}>
+                      <p className="text-[7px] sm:text-[9px] font-medium text-slate-400 tracking-wider" style={{ fontFamily: 'var(--font-lora), Cambria' }}>
                         Developed meticulously by
                       </p>
-                      <p className="text-xs sm:text-sm font-bold text-slate-700 mt-0.5 transition-colors group-hover:text-blue-600" style={{ fontFamily: 'var(--font-lora), Cambria' }}>
+                      <p className="text-xs font-bold text-slate-700 mt-0.5 transition-colors group-hover:text-blue-600" style={{ fontFamily: 'var(--font-lora), Cambria' }}>
                         Dr. Pankaj Prasad Dwivedi
                       </p>
                     </div>
                   </div>
 
-                  <nav className="flex items-center gap-4 sm:gap-6 text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
+                  <nav className="flex items-center gap-3 sm:gap-4 text-[7px] sm:text-[9px] font-black uppercase tracking-[0.2em] text-slate-300">
                     <a href="#" className="hover:text-blue-600 transition-colors">Security</a>
                     <div className="h-1 w-1 rounded-full bg-slate-200" />
                     <a href="#" className="hover:text-blue-600 transition-colors">Privacy</a>
