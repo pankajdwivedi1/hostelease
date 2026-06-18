@@ -543,7 +543,7 @@ function LoginForm() {
       <style jsx global>{`
         html, body {
           height: 100%;
-          overflow: hidden !important;
+          overflow-y: auto !important;
           margin: 0;
           padding: 0;
         }
@@ -565,7 +565,7 @@ function LoginForm() {
         />
       </div>
 
-      <main className="relative z-10 w-full max-w-6xl flex flex-col justify-center min-h-full py-2 sm:py-6">
+      <main className="relative z-10 w-full max-w-lg lg:max-w-5xl flex flex-col justify-center min-h-full py-2 sm:py-6">
         <div className={`transition-all duration-1000 transform ${mounted ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'} flex flex-col justify-center w-full`}>
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-center w-full">
 
@@ -646,40 +646,40 @@ function LoginForm() {
               </div>
 
               {/* Desktop Feature Showcase (Visible only on Desktop lg: screens) */}
-              <div className="hidden lg:flex flex-col gap-4 w-full max-w-md mt-4 animate-in fade-in slide-in-from-left-4 duration-1000">
-                <div className="flex items-start gap-4 rounded-2xl border border-slate-100 bg-white/40 p-4 shadow-sm backdrop-blur-md hover:bg-white/70 transition-all">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <div className="hidden lg:flex flex-col gap-5 w-full max-w-md mt-4 animate-in fade-in slide-in-from-left-4 duration-1000">
+                <div className="flex items-center gap-4 py-1.5 px-1 hover:translate-x-1 transition-transform duration-300">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">Automatic Wifi & Location Verification</h4>
-                    <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">Students can mark attendance easily with Wi-Fi BSSID verification and location geofencing.</p>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">Wifi & Geolocation Verification</h4>
+                    <p className="text-[11px] text-slate-500 font-medium">Secure local network and coordinate geofencing.</p>
                   </div>
                 </div>
 
-                <div className="flex items-start gap-4 rounded-2xl border border-slate-100 bg-white/40 p-4 shadow-sm backdrop-blur-md hover:bg-white/70 transition-all">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                <div className="flex items-center gap-4 py-1.5 px-1 hover:translate-x-1 transition-transform duration-300">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
                     </svg>
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">Digital Gatepass System</h4>
-                    <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">Apply for outings and leaves online. Instantly scan QR codes for quick checkout and check-in.</p>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">Digital Gatepass System</h4>
+                    <p className="text-[11px] text-slate-500 font-medium">Online outing requests with automated QR scans.</p>
                   </div>
                 </div>
 
-                <div className="flex items-start gap-4 rounded-2xl border border-slate-100 bg-white/40 p-4 shadow-sm backdrop-blur-md hover:bg-white/70 transition-all">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white">
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" />
+                <div className="flex items-center gap-4 py-1.5 px-1 hover:translate-x-1 transition-transform duration-300">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" />
                     </svg>
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">Advanced Analytics Dashboard</h4>
-                    <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">Real-time statistics, logs, and reports for Deans and Campus Admin to manage campuses effectively.</p>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">Advanced Analytics Dashboard</h4>
+                    <p className="text-[11px] text-slate-500 font-medium">Live attendance insights and security reports.</p>
                   </div>
                 </div>
               </div>
@@ -687,8 +687,7 @@ function LoginForm() {
 
             {/* Right Column: Login Card & Footer */}
             <div className="flex flex-col items-center lg:col-span-7 w-full space-y-4 sm:space-y-6">
-              {/* Login Container */}
-              <div className="w-full relative group">
+              <div className="w-full max-w-[460px] relative group">
                 <div className="absolute -inset-1 rounded-[32px] bg-gradient-to-b from-gray-200/50 to-transparent opacity-50 blur-sm transition duration-500 group-hover:opacity-100" />
 
                 <div className="relative overflow-hidden rounded-[24px] sm:rounded-[32px] border border-white bg-white/80 backdrop-blur-xl p-1 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.08)] transition-all duration-500">
