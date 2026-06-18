@@ -585,10 +585,7 @@ function LoginForm() {
                   <img
                     src={tenantLogo || "/uvw_logo.jpg"}
                     alt="University Logo"
-                    className={`relative rounded-full object-cover transition-all duration-500 group-hover:scale-105 group-hover:rotate-3 shadow-2xl border-4 border-white ${(showAdminPassword || showWardenPassword || showDeveloperPassword)
-                      ? "h-10 w-10 sm:h-14 sm:w-14"
-                      : "h-16 w-16 sm:h-20 sm:w-20"
-                      }`}
+                    className="relative rounded-full object-cover transition-all duration-500 group-hover:scale-105 group-hover:rotate-3 shadow-2xl border-4 border-white h-16 w-16 sm:h-20 sm:w-20"
                     title="Click for Super Admin login"
                     onError={(e) => {
                       (e.target as any).src = "/uvw_logo.jpg";
@@ -606,7 +603,7 @@ function LoginForm() {
                   )}
                 </div>
                 <div className="space-y-1 sm:space-y-2 text-center flex flex-col items-center w-full">
-                  <h1 className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "text-2xl sm:text-4xl" : "text-3xl sm:text-5xl"} font-black tracking-tight text-slate-900 transition-all duration-500 text-center w-full`}>
+                  <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-slate-900 transition-all duration-500 text-center w-full">
                     {tenantName}
                     {tenantName !== "Hosteleaze" && <span className="block text-[8px] sm:text-[10px] text-slate-400 font-bold tracking-widest mt-1 text-center w-full">POWERED BY HOSTELEAZE</span>}
                   </h1>
@@ -627,7 +624,7 @@ function LoginForm() {
                       </div>
                     )}
 
-                    <p className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "hidden sm:block opacity-0 sm:opacity-100 max-h-0 sm:max-h-20" : "max-h-20 opacity-100"} max-w-[260px] sm:max-w-[280px] lg:max-w-md text-[11px] sm:text-sm font-medium text-slate-500 leading-tight sm:leading-relaxed transition-all duration-500 overflow-hidden text-center mx-auto`}>
+                    <p className="max-h-20 opacity-100 max-w-[260px] sm:max-w-[280px] lg:max-w-md text-[11px] sm:text-sm font-medium text-slate-500 leading-tight sm:leading-relaxed transition-all duration-500 overflow-hidden text-center mx-auto">
                       The smart, all-in-one ecosystem for modern hostel administration and student living.
                     </p>
                     {tenantName === "Hosteleaze" && !showAdminPassword && !showWardenPassword && (
