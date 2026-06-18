@@ -567,12 +567,12 @@ function LoginForm() {
 
       <main className="relative z-10 w-full max-w-lg lg:max-w-5xl flex flex-col justify-center min-h-full py-2 sm:py-6">
         <div className={`transition-all duration-1000 transform ${mounted ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'} flex flex-col justify-center w-full`}>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-center w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-center lg:items-start w-full">
 
             {/* Left Column: Logo, Title, and Features (Desktop only showcase) */}
-            <div className="flex flex-col items-center lg:items-start space-y-4 sm:space-y-6 text-center lg:text-left lg:col-span-5 w-full">
+            <div className="flex flex-col items-center space-y-4 sm:space-y-6 text-center lg:col-span-5 w-full lg:pt-8">
               {/* Logo and Title */}
-              <div className="flex flex-col items-center lg:items-start space-y-2.5">
+              <div className="flex flex-col items-center space-y-2.5">
                 <div
                   className="group relative cursor-pointer"
                   onClick={() => {
@@ -605,12 +605,12 @@ function LoginForm() {
                     </div>
                   )}
                 </div>
-                <div className="space-y-1 sm:space-y-2">
-                  <h1 className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "text-2xl sm:text-4xl" : "text-3xl sm:text-5xl"} font-black tracking-tight text-slate-900 transition-all duration-500`}>
+                <div className="space-y-1 sm:space-y-2 text-center flex flex-col items-center w-full">
+                  <h1 className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "text-2xl sm:text-4xl" : "text-3xl sm:text-5xl"} font-black tracking-tight text-slate-900 transition-all duration-500 text-center w-full`}>
                     {tenantName}
-                    {tenantName !== "Hosteleaze" && <span className="block text-[8px] sm:text-[10px] text-slate-400 font-bold tracking-widest mt-1">POWERED BY HOSTELEAZE</span>}
+                    {tenantName !== "Hosteleaze" && <span className="block text-[8px] sm:text-[10px] text-slate-400 font-bold tracking-widest mt-1 text-center w-full">POWERED BY HOSTELEAZE</span>}
                   </h1>
-                  <div className="flex flex-col items-center lg:items-start space-y-2 sm:space-y-3">
+                  <div className="flex flex-col items-center space-y-2 sm:space-y-3 w-full">
                     {showLogoutToast && (
                       <div className="w-full max-w-[280px] sm:max-w-[320px] animate-in fade-in slide-in-from-top-2 duration-500 my-0.5 sm:my-1">
                         <div className="flex items-center gap-2 sm:gap-3 rounded-lg sm:rounded-xl border border-emerald-100 bg-[#e6fcf5] pr-3 sm:pr-4 shadow-sm overflow-hidden min-h-[40px] sm:min-h-[48px]">
@@ -627,7 +627,7 @@ function LoginForm() {
                       </div>
                     )}
 
-                    <p className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "hidden sm:block opacity-0 sm:opacity-100 max-h-0 sm:max-h-20" : "max-h-20 opacity-100"} max-w-[260px] sm:max-w-[280px] lg:max-w-md text-[11px] sm:text-sm font-medium text-slate-500 leading-tight sm:leading-relaxed transition-all duration-500 overflow-hidden`}>
+                    <p className={`${(showAdminPassword || showWardenPassword || showDeveloperPassword) ? "hidden sm:block opacity-0 sm:opacity-100 max-h-0 sm:max-h-20" : "max-h-20 opacity-100"} max-w-[260px] sm:max-w-[280px] lg:max-w-md text-[11px] sm:text-sm font-medium text-slate-500 leading-tight sm:leading-relaxed transition-all duration-500 overflow-hidden text-center mx-auto`}>
                       The smart, all-in-one ecosystem for modern hostel administration and student living.
                     </p>
                     {tenantName === "Hosteleaze" && !showAdminPassword && !showWardenPassword && (
