@@ -83,6 +83,9 @@ export default function Dashboard() {
                 window.location.href = `/?tenant=${data.tenantSlug}`;
                 return;
               }
+              if (data.tenantSubscription) {
+                data.student.tenantSubscription = data.tenantSubscription;
+              }
               // ⚡ Cache student data for instant load next time
               localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
               setStudentData(data.student);
@@ -128,6 +131,9 @@ export default function Dashboard() {
                     window.location.href = `/?tenant=${data.tenantSlug}`;
                     return;
                   }
+                  if (data.tenantSubscription) {
+                    data.student.tenantSubscription = data.tenantSubscription;
+                  }
                   localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
                   setStudentData(data.student);
                   setUserType("student");
@@ -156,6 +162,9 @@ export default function Dashboard() {
             if (response.ok) {
               const data = await response.json();
               if (data.student) {
+                if (data.tenantSubscription) {
+                  data.student.tenantSubscription = data.tenantSubscription;
+                }
                 setStudentData(data.student);
                 setUserType("parent");
                 setLoading(false);

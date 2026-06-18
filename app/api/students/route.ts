@@ -240,7 +240,15 @@ export async function GET(request: NextRequest) {
 
       const student = db.mapStudentToCamelCase(matched);
       const tenant = student?.tenantId ? await getTenantById(student.tenantId) : null;
-      return NextResponse.json({ student, tenantSlug: tenant?.slug }, { status: 200 });
+      return NextResponse.json({ 
+        student, 
+        tenantSlug: tenant?.slug,
+        tenantSubscription: tenant ? {
+          status: tenant.subscriptionStatus,
+          endDate: tenant.subscriptionEndDate,
+          createdAt: tenant.createdAt
+        } : null
+      }, { status: 200 });
     }
 
     if (firebaseUID) {
@@ -249,7 +257,15 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
       const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
-      return NextResponse.json({ student, tenantSlug: tenant?.slug }, { status: 200 });
+      return NextResponse.json({ 
+        student, 
+        tenantSlug: tenant?.slug,
+        tenantSubscription: tenant ? {
+          status: tenant.subscriptionStatus,
+          endDate: tenant.subscriptionEndDate,
+          createdAt: tenant.createdAt
+        } : null
+      }, { status: 200 });
     }
 
     if (supabaseId) {
@@ -258,7 +274,15 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
       const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
-      return NextResponse.json({ student, tenantSlug: tenant?.slug }, { status: 200 });
+      return NextResponse.json({ 
+        student, 
+        tenantSlug: tenant?.slug,
+        tenantSubscription: tenant ? {
+          status: tenant.subscriptionStatus,
+          endDate: tenant.subscriptionEndDate,
+          createdAt: tenant.createdAt
+        } : null
+      }, { status: 200 });
     }
 
     if (email) {
@@ -267,7 +291,15 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
       const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
-      return NextResponse.json({ student, tenantSlug: tenant?.slug }, { status: 200 });
+      return NextResponse.json({ 
+        student, 
+        tenantSlug: tenant?.slug,
+        tenantSubscription: tenant ? {
+          status: tenant.subscriptionStatus,
+          endDate: tenant.subscriptionEndDate,
+          createdAt: tenant.createdAt
+        } : null
+      }, { status: 200 });
     }
 
     const search = searchParams.get("search");

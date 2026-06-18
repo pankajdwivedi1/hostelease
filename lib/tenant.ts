@@ -221,6 +221,9 @@ export async function getTenantById(id: string) {
     return {
         _id: tenant.id,
         name: tenant.name,
-        slug: tenant.slug
+        slug: tenant.slug,
+        createdAt: tenant.created_at,
+        subscriptionEndDate: tenant.subscription_end_date,
+        subscriptionStatus: tenant.subscription_status
     };
 }

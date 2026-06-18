@@ -3061,11 +3061,33 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                     const isBeforeJoining = joiningDateObj && cell.date < new Date(new Date(joiningDateObj).setHours(0,0,0,0));
                                                                     const isJoiningDate = joiningDateObj && cell.date.getTime() === new Date(new Date(joiningDateObj).setHours(0,0,0,0)).getTime();
  
-                                                                    const status = (isFuture || isBeforeJoining) ? null : getDayOutingStatus(cell.date);
+                                                                    const isOutsideSubscription = (() => {
+                                                                        if (!studentProfile?.tenantSubscription) return false;
+                                                                        
+                                                                        // Check start date (createdAt)
+                                                                        if (studentProfile.tenantSubscription.createdAt) {
+                                                                            const start = new Date(studentProfile.tenantSubscription.createdAt);
+                                                                            if (new Date(cell.date).setHours(0,0,0,0) < new Date(start).setHours(0,0,0,0)) {
+                                                                                return true;
+                                                                            }
+                                                                        }
+                                                                        
+                                                                        // Check end date (subscriptionEndDate)
+                                                                        if (studentProfile.tenantSubscription.endDate) {
+                                                                            const end = new Date(studentProfile.tenantSubscription.endDate);
+                                                                            if (new Date(cell.date).setHours(0,0,0,0) > new Date(end).setHours(23,59,59,999)) {
+                                                                                return true;
+                                                                            }
+                                                                        }
+                                                                        
+                                                                        return false;
+                                                                    })();
+
+                                                                    const status = (isFuture || isBeforeJoining || isOutsideSubscription) ? null : getDayOutingStatus(cell.date);
                                                                     let colorClasses = "";
                                                                     if (isJoiningDate) {
                                                                         colorClasses = "bg-gradient-to-br from-blue-400 to-indigo-600 text-white shadow-lg shadow-blue-500/20 border-0";
-                                                                    } else if (isFuture || isBeforeJoining) {
+                                                                    } else if (isFuture || isBeforeJoining || isOutsideSubscription) {
                                                                         colorClasses = "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-400 border border-gray-200/50 shadow-sm opacity-60";
                                                                     } else if (status === 'red') {
                                                                         colorClasses = "bg-gradient-to-br from-rose-400 to-red-600 text-white shadow-lg shadow-red-500/20";
@@ -3077,7 +3099,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
  
                                                                     const dateStr = cell.date.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
                                                                     const attendanceRecord = attendanceHistory.find((r: any) => r.date === dateStr);
-                                                                    const attendanceStatus = attendanceRecord ? 'Present' : (isBeforeJoining || isFuture ? 'No Record' : 'Absent');
+                                                                    const attendanceStatus = attendanceRecord ? 'Present' : (isBeforeJoining || isFuture || isOutsideSubscription ? 'No Record' : 'Absent');
  
                                                                     return (
                                                                         <button
@@ -3106,7 +3128,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                     );
                                                                 })}
                                                             </div>
-
+ 
                                                             {/* Selected Day Details */}
                                                             {selectedCalendarDay && (
                                                                 <div className="px-6 pb-6 pt-4 border-t border-gray-100 bg-gray-50/50">
@@ -3121,16 +3143,42 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                                                         const joiningDateObj = studentProfile?.joiningDate ? new Date(studentProfile.joiningDate) : null;
                                                                         const isBeforeJoining = joiningDateObj && selectedCalendarDay < new Date(new Date(joiningDateObj).setHours(0,0,0,0));
                                                                         const isJoiningDate = joiningDateObj && selectedCalendarDay.getTime() === new Date(new Date(joiningDateObj).setHours(0,0,0,0)).getTime();
+ 
+                                                                        const isOutsideSubscription = (() => {
+                                                                            if (!studentProfile?.tenantSubscription) return false;
+                                                                            if (studentProfile.tenantSubscription.createdAt) {
+                                                                                const start = new Date(studentProfile.tenantSubscription.createdAt);
+                                                                                if (new Date(selectedCalendarDay).setHours(0,0,0,0) < new Date(start).setHours(0,0,0,0)) {
+                                                                                    return true;
+                                                                                }
+                                                                            }
+                                                                            if (studentProfile.tenantSubscription.endDate) {
+                                                                                const end = new Date(studentProfile.tenantSubscription.endDate);
+                                                                                if (new Date(selectedCalendarDay).setHours(0,0,0,0) > new Date(end).setHours(23,59,59,999)) {
+                                                                                    return true;
+                                                                                }
+                                                                            }
+                                                                            return false;
+                                                                        })();
 
                                                                         const dateStr = selectedCalendarDay.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
                                                                         const attendanceRecord = attendanceHistory.find((r: any) => r.date === dateStr);
-                                                                        const attendanceStatus = attendanceRecord ? 'Present' : (isBeforeJoining || isFuture ? 'No Record' : 'Absent');
-
+                                                                        const attendanceStatus = attendanceRecord ? 'Present' : (isBeforeJoining || isFuture || isOutsideSubscription ? 'No Record' : 'Absent');
+ 
                                                                         if (isFuture) {
                                                                             return (
                                                                                 <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 text-center">
                                                                                     <p className="text-gray-500 text-xs font-bold flex items-center justify-center gap-1.5">
                                                                                         <span>⏳</span> Logs not available for future dates.
+                                                                                    </p>
+                                                                                </div>
+                                                                            );
+                                                                        }
+                                                                        if (isOutsideSubscription) {
+                                                                            return (
+                                                                                <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 text-center">
+                                                                                    <p className="text-gray-500 text-xs font-bold flex items-center justify-center gap-1.5">
+                                                                                        <span>🛇</span> Subscription not active on this date.
                                                                                     </p>
                                                                                 </div>
                                                                             );
