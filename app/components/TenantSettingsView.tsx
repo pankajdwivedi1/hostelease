@@ -2,16 +2,19 @@
 
 import { useState, useEffect } from "react";
 
+// Module-level cache to enable instant display on remount
+let cachedSettings: any = null;
+
 export default function TenantSettingsView() {
-    const [settings, setSettings] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
+    const [settings, setSettings] = useState<any>(cachedSettings);
+    const [loading, setLoading] = useState(!cachedSettings);
     const [saving, setSaving] = useState(false);
     
     // Editable state
-    const [contactName, setContactName] = useState("");
-    const [contactPhone, setContactPhone] = useState("");
-    const [totalHostelars, setTotalHostelars] = useState("");
-    const [leaveApprovalMethod, setLeaveApprovalMethod] = useState("app");
+    const [contactName, setContactName] = useState(cachedSettings?.contactName || "");
+    const [contactPhone, setContactPhone] = useState(cachedSettings?.contactPhone || "");
+    const [totalHostelars, setTotalHostelars] = useState(cachedSettings?.totalHostelars || "");
+    const [leaveApprovalMethod, setLeaveApprovalMethod] = useState(cachedSettings?.leaveApprovalMethod || "app");
 
     // OTP Modal state
     const [showOtpModal, setShowOtpModal] = useState(false);
@@ -19,21 +22,22 @@ export default function TenantSettingsView() {
     const [maskedPhone, setMaskedPhone] = useState("");
 
     const fetchSettings = async () => {
-        setLoading(true);
+        if (!cachedSettings) {
+            setLoading(true);
+        }
         try {
             const res = await fetch("/api/admin/settings/get");
             const data = await res.json();
             if (data.success && data.settings) {
                 setSettings(data.settings);
+                cachedSettings = data.settings;
                 setContactName(data.settings.contactName || "");
                 setContactPhone(data.settings.contactPhone || "");
                 setTotalHostelars(data.settings.totalHostelars || "");
                 setLeaveApprovalMethod(data.settings.leaveApprovalMethod || "app");
-            } else {
-                alert("Failed to load settings.");
             }
         } catch (e: any) {
-            alert("Error loading settings: " + e.message);
+            console.error("Error loading settings:", e);
         } finally {
             setLoading(false);
         }

@@ -16,6 +16,7 @@ import {
     Clock,
     Trash2,
     LogIn,
+    LogOut,
     Activity,
     X,
     TrendingUp,
@@ -112,7 +113,7 @@ const LiveDbSwitch = () => {
         <button
             onClick={toggle}
             disabled={loading}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border shadow-sm ${
+            className={`h-10 sm:h-11 px-3 sm:px-4 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all border shadow-sm active:scale-95 flex items-center gap-1.5 justify-center w-full sm:w-auto ${
                 source === 'SUPABASE'
                     ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
                     : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
@@ -120,8 +121,8 @@ const LiveDbSwitch = () => {
         >
             {loading ? 'Switching...' : (
                 <>
-                    <span className={`w-2.5 h-2.5 rounded-full ${source === 'SUPABASE' ? 'bg-orange-500 animate-pulse' : 'bg-green-500'}`}></span>
-                    {source === 'SUPABASE' ? '⚡ SUPABASE (LIVE)' : '🍃 MONGODB (LEGACY)'}
+                    <span className={`w-2 h-2 rounded-full ${source === 'SUPABASE' ? 'bg-orange-500 animate-pulse' : 'bg-green-500'}`}></span>
+                    {source === 'SUPABASE' ? 'Supabase' : 'MongoDB'}
                 </>
             )}
         </button>
@@ -184,6 +185,7 @@ export default function SuperAdminDashboard() {
 
     const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
     const [deletingTenant, setDeletingTenant] = useState<Tenant | null>(null);
+    const [softDeletingTenant, setSoftDeletingTenant] = useState<Tenant | null>(null);
     const [deleteConfirmText, setDeleteConfirmText] = useState("");
     const [isDeleting, setIsDeleting] = useState(false);
     const [calculatingStorageFor, setCalculatingStorageFor] = useState<string | null>(null);
@@ -439,8 +441,6 @@ export default function SuperAdminDashboard() {
     };
 
     const toggleTenantStatus = async (id: string, currentStatus: boolean) => {
-        if (!confirm(`Are you sure you want to ${currentStatus ? 'DEACTIVATE' : 'ACTIVATE'} this university?`)) return;
-
         try {
             const res = await fetch("/api/super-admin/tenants", {
                 method: "PATCH",
@@ -451,6 +451,7 @@ export default function SuperAdminDashboard() {
             if (data.success) {
                 logAdminAction("TOGGLE_STATUS", `Toggled active state of university node ID: ${id} to ${!currentStatus ? 'ACTIVE' : 'DEACTIVE'}`);
                 setTenants(tenants.map(t => t._id === id ? { ...t, isActive: !currentStatus } : t));
+                alert(`University Node successfully ${!currentStatus ? 'activated' : 'deactivated'}.`);
             }
         } catch (error) {
             alert("Status update failed");
@@ -467,14 +468,6 @@ export default function SuperAdminDashboard() {
             alert("Confirmation text mismatch. Please type the name exactly as shown.");
             return;
         }
-
-        // Final safety check with student count
-        const studentCount = deletingTenant.studentCount || 0;
-        const finalConfirm = window.confirm(
-            `⚠️ FINAL WARNING: ${studentCount} students are registered in ${deletingTenant.name}.\n\nAre you absolutely sure you want to delete all student records and this university node permanently?`
-        );
-
-        if (!finalConfirm) return;
 
         setIsDeleting(true);
         try {
@@ -497,8 +490,6 @@ export default function SuperAdminDashboard() {
     };
 
     const handleSoftDelete = async (id: string) => {
-        if (!confirm("Move this university to the Recycle Bin? All students and admins will lose access immediately.")) return;
-        
         try {
             const res = await fetch(`/api/super-admin/tenants?id=${id}`, { method: "DELETE" });
             const data = await res.json();
@@ -506,7 +497,7 @@ export default function SuperAdminDashboard() {
                 const t = tenants.find(x => x._id === id);
                 logAdminAction("SOFT_DELETE_NODE", `Moved university node '${t?.slug || id}' to Recycle Bin`);
                 setTenants(tenants.filter(t => t._id !== id));
-                alert("University successfully moved to Recycle Bin.");
+                alert("University Node successfully moved to the Recycle Bin.");
             }
         } catch (error) {
             alert("Soft-delete failed.");
@@ -706,56 +697,62 @@ export default function SuperAdminDashboard() {
                     </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end">
-                     <div className="flex flex-col items-end px-3 py-1 sm:px-4 sm:py-1.5 bg-emerald-50 rounded-xl border border-emerald-100 order-1 sm:order-none">
-                        <p className="text-[8px] sm:text-[9px] text-emerald-600 font-black uppercase tracking-widest">Live Pulse</p>
-                        <p className="text-xs sm:text-sm font-black text-emerald-900">
-                            {globalStats?.totalActiveTraffic || 0} 
-                            <span className="text-[8px] ml-1 font-bold text-emerald-700 opacity-60 italic">Att/Min</span>
-                        </p>
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2 w-full sm:w-auto">
+                    <div className="h-10 sm:h-11 px-3 sm:px-4 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl flex items-center gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-widest shadow-sm justify-center w-full sm:w-auto">
+                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shrink-0"></span>
+                        <span>Pulse: {globalStats?.totalActiveTraffic || 0} <span className="text-[8px] font-bold opacity-60 italic">Att/M</span></span>
                     </div>
 
-                    <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto order-3 sm:order-none">
-                        <LiveDbSwitch />
-                        
-                        <button
-                            onClick={async () => {
-                                const doubleCheck = prompt("⚠️ WARNING: This will trigger a full database migration from MongoDB to Supabase. This should ONLY be run once.\n\nTo confirm, type the word \"MIGRATE\" below:");
-                                if (doubleCheck !== "MIGRATE") {
-                                    alert("Migration aborted.");
-                                    return;
-                                }
+                    <LiveDbSwitch />
 
-                                try {
-                                    const res = await fetch('/api/admin/migrate-db', { method: 'POST' });
-                                    const data = await res.json();
-                                    if (data.success) {
-                                        alert(data.message);
-                                        await fetch('/api/super-admin/audit-logs', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({
-                                                action: "DATABASE_MIGRATION",
-                                                details: "Triggered database data migration to Supabase successfully",
-                                                user: "Super Admin"
-                                            })
-                                        });
-                                    } else {
-                                        alert("Migration breakdown: " + data.error);
-                                    }
-                                } catch (e: any) {
-                                    alert("Critical Error: " + e.message);
+                    <button
+                        onClick={async () => {
+                            const doubleCheck = prompt("⚠️ WARNING: This will trigger a full database migration from MongoDB to Supabase. This should ONLY be run once.\n\nTo confirm, type the word \"MIGRATE\" below:");
+                            if (doubleCheck !== "MIGRATE") {
+                                alert("Migration aborted.");
+                                return;
+                            }
+
+                            try {
+                                const res = await fetch('/api/admin/migrate-db', { method: 'POST' });
+                                const data = await res.json();
+                                if (data.success) {
+                                    alert(data.message);
+                                    await fetch('/api/super-admin/audit-logs', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            action: "DATABASE_MIGRATION",
+                                            details: "Triggered database data migration to Supabase successfully",
+                                            user: "Super Admin"
+                                        })
+                                    });
+                                } else {
+                                    alert("Migration breakdown: " + data.error);
                                 }
-                            }}
-                            className="bg-purple-50 text-purple-700 border border-purple-200 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-100 transition-all shadow-sm active:scale-95 flex items-center gap-1.5 justify-center shrink-0"
-                        >
-                            🚀 Migration
-                        </button>
-                    </div>
+                            } catch (e: any) {
+                                alert("Critical Error: " + e.message);
+                            }
+                        }}
+                        className="h-10 sm:h-11 px-3 sm:px-4 bg-purple-50 text-purple-700 border border-purple-200 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest hover:bg-purple-100 transition-all shadow-sm active:scale-95 flex items-center gap-1.5 justify-center w-full sm:w-auto"
+                    >
+                        🚀 Migration
+                    </button>
+
+                    <button
+                        onClick={() => {
+                            localStorage.removeItem("superadmin_session");
+                            setIsAuthorized(false);
+                        }}
+                        className="h-10 sm:h-11 px-3 sm:px-4 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/50 rounded-xl font-black flex items-center gap-1.5 transition-all active:scale-95 text-[10px] sm:text-xs uppercase tracking-widest justify-center w-full sm:w-auto"
+                    >
+                        <LogOut className="w-3.5 h-3.5 text-rose-500" />
+                        <span>Log Out</span>
+                    </button>
 
                     <button
                         onClick={() => setShowAddModal(true)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl font-black flex items-center gap-2 transition-all shadow-xl shadow-blue-500/20 active:scale-95 text-[10px] sm:text-xs uppercase tracking-widest flex-1 sm:flex-none justify-center order-2 sm:order-none"
+                        className="h-10 sm:h-11 col-span-2 sm:col-auto px-4 sm:px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black flex items-center gap-1.5 transition-all shadow-lg shadow-blue-500/20 active:scale-95 text-[10px] sm:text-xs uppercase tracking-widest justify-center w-full sm:w-auto"
                     >
                         <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         <span className="whitespace-nowrap">Provision Node</span>
@@ -994,21 +991,21 @@ export default function SuperAdminDashboard() {
                                     <div key={tenant._id} className="bg-white rounded-[24px] sm:rounded-[32px] p-4 sm:p-6 shadow-sm border border-slate-100 hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 flex flex-col group">
                                         <div className="flex items-start justify-between gap-3">
                                             <div className="flex flex-col min-w-0">
-                                                <div className="flex items-center gap-2">
+                                                <div className="flex items-center flex-wrap gap-1.5">
                                                     <h3 className="font-black text-gray-900 uppercase tracking-tight text-sm leading-tight break-words">{tenant.name}</h3>
+                                                    <span className={`text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border select-none leading-none ${
+                                                        tenant.subscriptionStatus === 'trial' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
+                                                        tenant.subscriptionStatus === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                                        tenant.subscriptionStatus === 'expired' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                                                        'bg-slate-50 text-slate-500 border-slate-150'
+                                                    }`}>
+                                                        {tenant.subscriptionStatus}
+                                                    </span>
                                                     {viewMode === 'active' && tenant.liveTraffic && tenant.liveTraffic > 0 ? (
                                                         <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
                                                     ) : null}
                                                 </div>
                                                 <p className="text-[9px] text-slate-400 font-bold italic opacity-70 break-all mt-0.5">{tenant.adminEmail}</p>
-                                                
-                                                {(tenant.contactName || tenant.contactPhone || tenant.totalHostelars) && (
-                                                    <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2">
-                                                        {tenant.contactName && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Contact:</span> {tenant.contactName}</p>}
-                                                        {tenant.contactPhone && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Phone:</span> {tenant.contactPhone}</p>}
-                                                        {tenant.totalHostelars && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Hostelars:</span> {tenant.totalHostelars}</p>}
-                                                    </div>
-                                                )}
                                             </div>
                                             {viewMode === 'active' ? (
                                                 <button
@@ -1025,46 +1022,61 @@ export default function SuperAdminDashboard() {
                                             )}
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex items-center justify-between">
-                                                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Subscription Period</span>
-                                                {tenant.subscriptionEndDate && (() => {
-                                                    const now = new Date();
-                                                    const end = new Date(tenant.subscriptionEndDate);
-                                                    const diffTime = end.getTime() - now.getTime();
-                                                    const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                                    
-                                                    if (daysRemaining < 0) {
-                                                        return (
-                                                            <span className="text-[7px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 border border-rose-100 rounded px-1.5 py-0.5 leading-none">
-                                                                Expired ({Math.abs(daysRemaining)}d ago)
-                                                            </span>
-                                                        );
-                                                    } else if (daysRemaining <= 7) {
-                                                        return (
-                                                            <span className="text-[7px] font-black uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 leading-none animate-pulse">
-                                                                Expiring ({daysRemaining}d left)
-                                                            </span>
-                                                        );
-                                                    } else {
-                                                        return (
-                                                            <span className="text-[7px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 leading-none">
-                                                                {daysRemaining} days left
-                                                            </span>
-                                                        );
-                                                    }
-                                                })()}
+                                        <div className="mt-3 grid grid-cols-12 gap-3 border-t border-slate-100 pt-3 w-full">
+                                            {/* Contact Details (Left) */}
+                                            <div className="col-span-7 flex flex-col gap-1 min-w-0">
+                                                {tenant.contactName && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1.5"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Contact:</span> {tenant.contactName}</p>}
+                                                {tenant.contactPhone && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1.5"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Phone:</span> {tenant.contactPhone}</p>}
+                                                {tenant.totalHostelars && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1.5"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Hostelars:</span> {tenant.totalHostelars}</p>}
+                                                {!tenant.contactName && !tenant.contactPhone && !tenant.totalHostelars && (
+                                                    <p className="text-[9px] text-slate-400 italic">No college details provided.</p>
+                                                )}
                                             </div>
-                                            <div className="flex justify-between items-center text-xs font-bold text-gray-700">
-                                                <div>
-                                                    <p className="text-[6px] font-black text-slate-400 uppercase tracking-widest">Start Date</p>
-                                                    <p className="text-[10px] font-extrabold">{tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}</p>
+                                            
+                                            {/* Subscription Period Card (Right) */}
+                                            <div className="col-span-5 flex flex-col items-end justify-center">
+                                                <div className="bg-slate-50/80 p-2 sm:p-2.5 rounded-xl border border-slate-100 flex flex-col items-center justify-center gap-1 w-full text-center max-w-[150px] shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
+                                                    <span className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest leading-none">Subscription Period</span>
+                                                    {tenant.subscriptionEndDate && (() => {
+                                                        const now = new Date();
+                                                        const end = new Date(tenant.subscriptionEndDate);
+                                                        const diffTime = end.getTime() - now.getTime();
+                                                        const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                                        
+                                                        if (daysRemaining < 0) {
+                                                            return (
+                                                                <span className="text-[7px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 border border-rose-100 rounded px-1.5 py-0.5 leading-none">
+                                                                    Expired ({Math.abs(daysRemaining)}d ago)
+                                                                </span>
+                                                            );
+                                                        } else if (daysRemaining <= 7) {
+                                                            return (
+                                                                <span className="text-[7px] font-black uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 leading-none animate-pulse">
+                                                                    Expiring ({daysRemaining}d left)
+                                                                </span>
+                                                            );
+                                                        } else {
+                                                            return (
+                                                                <span className="text-[7px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 leading-none">
+                                                                    {daysRemaining} days left
+                                                                </span>
+                                                            );
+                                                        }
+                                                    })()}
                                                 </div>
-                                                <div className="h-4 w-px bg-slate-200" />
-                                                <div className="text-right">
-                                                    <p className="text-[6px] font-black text-slate-400 uppercase tracking-widest">End Date</p>
-                                                    <p className="text-[10px] font-extrabold">{tenant.subscriptionEndDate ? new Date(tenant.subscriptionEndDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "Unlimited"}</p>
-                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Start Date & End Date (Full Width Row) */}
+                                        <div className="mt-3 flex justify-between items-center text-xs font-bold text-gray-700 border-t border-slate-100 pt-3 w-full">
+                                            <div>
+                                                <p className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest">Start Date</p>
+                                                <p className="text-[10px] font-extrabold text-left">{tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}</p>
+                                            </div>
+                                            <div className="h-4 w-px bg-slate-200" />
+                                            <div className="text-right">
+                                                <p className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest">End Date</p>
+                                                <p className="text-[10px] font-extrabold text-right">{tenant.subscriptionEndDate ? new Date(tenant.subscriptionEndDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "Unlimited"}</p>
                                             </div>
                                         </div>
 
@@ -1171,7 +1183,7 @@ export default function SuperAdminDashboard() {
                                                         <button onClick={() => setEditingTenant(tenant)} className="w-9 h-9 bg-slate-50 text-slate-400 border border-slate-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
                                                             <Settings className="w-3.5 h-3.5" />
                                                         </button>
-                                                        <button onClick={() => handleSoftDelete(tenant._id)} className="w-9 h-9 bg-red-50 text-red-500/60 border border-red-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
+                                                        <button onClick={() => setSoftDeletingTenant(tenant)} className="w-9 h-9 bg-red-50 text-red-500/60 border border-red-100 rounded-xl flex items-center justify-center active:scale-95 transition-all">
                                                             <Trash2 className="w-3.5 h-3.5" />
                                                         </button>
                                                     </>
@@ -1386,66 +1398,108 @@ export default function SuperAdminDashboard() {
             {/* Config Modal */}
             {editingTenant && (
                 <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden animate-in zoom-in duration-500 border border-white">
-                        <div className="bg-slate-800 p-10 text-white flex justify-between items-start">
+                    <div className="bg-white w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in duration-500 border border-white max-h-[90vh] flex flex-col">
+                        <div className="bg-slate-800 px-6 py-4 text-white flex justify-between items-center shrink-0">
                             <div>
-                                <h3 className="text-3xl font-black uppercase tracking-tighter">Configure Node</h3>
-                                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">{editingTenant?.name}</p>
+                                <h3 className="text-xl font-black uppercase tracking-tighter">Configure Node</h3>
+                                <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest mt-0.5">{editingTenant?.name}</p>
                             </div>
-                            <X className="w-6 h-6 text-slate-500 cursor-pointer" onClick={() => setEditingTenant(null)} />
+                            <X className="w-5 h-5 text-slate-400 hover:text-white cursor-pointer transition-colors" onClick={() => setEditingTenant(null)} />
                         </div>
 
-                        <form onSubmit={handleUpdateTenant} className="p-10 space-y-8 animate-in fade-in duration-300">
+                        <form onSubmit={handleUpdateTenant} className="p-5 sm:p-6 space-y-4 animate-in fade-in duration-300 overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
                             {editingTenant.renewalStatus === 'pending' && (
-                                <div className="bg-amber-50 border border-amber-200 p-6 rounded-[28px] space-y-4 shadow-sm animate-pulse">
-                                    <div className="flex items-center gap-2.5 text-amber-800">
-                                        <AlertCircle className="w-5 h-5 shrink-0" />
-                                        <span className="text-[11px] font-black uppercase tracking-wider">Pending Subscription Renewal Submission</span>
+                                <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl space-y-2.5 shadow-sm animate-pulse shrink-0">
+                                    <div className="flex items-center gap-2 text-amber-800">
+                                        <AlertCircle className="w-4 h-4 shrink-0" />
+                                        <span className="text-[10px] font-black uppercase tracking-wider">Pending Subscription Renewal</span>
                                     </div>
-                                    <div className="space-y-2 text-xs text-amber-950">
-                                        <div className="flex justify-between items-center border-b border-amber-100 pb-1.5">
-                                            <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest">Submitted UTR:</span>
-                                            <span className="font-mono font-black select-all bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-lg">{editingTenant.renewalUtr}</span>
+                                    <div className="grid grid-cols-2 gap-2 text-[11px] text-amber-950">
+                                        <div className="flex justify-between items-center bg-white/60 px-2.5 py-1.5 rounded-xl border border-amber-100/50">
+                                            <span className="text-[8px] font-black text-amber-700 uppercase tracking-widest">UTR:</span>
+                                            <span className="font-mono font-black select-all bg-amber-100 px-1.5 py-0.5 rounded">{editingTenant.renewalUtr}</span>
                                         </div>
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest">Submitted At:</span>
+                                        <div className="flex justify-between items-center bg-white/60 px-2.5 py-1.5 rounded-xl border border-amber-100/50">
+                                            <span className="text-[8px] font-black text-amber-700 uppercase tracking-widest">At:</span>
                                             <span className="font-extrabold text-amber-900">
-                                                {editingTenant.renewalSubmittedAt ? new Date(editingTenant.renewalSubmittedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "N/A"}
+                                                {editingTenant.renewalSubmittedAt ? new Date(editingTenant.renewalSubmittedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "N/A"}
                                             </span>
                                         </div>
                                     </div>
-                                    <p className="text-[9.5px] text-amber-700 leading-relaxed font-semibold bg-white/60 p-3.5 rounded-2xl border border-amber-100">
-                                        💡 To approve, update the subscription entitlement and/or expiration date below, and save. This will clear the pending request automatically.
+                                    <p className="text-[9px] text-amber-700 leading-relaxed font-semibold bg-white/60 p-2.5 rounded-xl border border-amber-100/50">
+                                        💡 To approve, update entitlement/expiration below, and save.
                                     </p>
                                 </div>
                             )}
 
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Subscription Entitlement</label>
-                                <select
-                                    value={editingTenant?.subscriptionStatus || 'trial'}
-                                    onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, subscriptionStatus: e.target.value as any })}
-                                    className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none appearance-none transition-all"
-                                >
-                                    <option value="active">Active (Premium Full Access)</option>
-                                    <option value="trial">Standard Trial (Restricted)</option>
-                                    <option value="expired">Expired (Node Locked)</option>
-                                </select>
+                            <div className="space-y-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/50">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-0.5">Subscription</label>
+                                        <select
+                                            value={editingTenant?.subscriptionStatus || 'trial'}
+                                            onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, subscriptionStatus: e.target.value as any })}
+                                            className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
+                                        >
+                                            <option value="active">Active (Premium)</option>
+                                            <option value="trial">Trial (Restricted)</option>
+                                            <option value="expired">Expired (Locked)</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-0.5">End Date</label>
+                                        <div className="relative">
+                                            <input
+                                                type="date"
+                                                value={(() => {
+                                                    if (!editingTenant?.subscriptionEndDate) return "";
+                                                    try {
+                                                        const d = new Date(editingTenant.subscriptionEndDate);
+                                                        if (isNaN(d.getTime())) return "";
+                                                        return d.toISOString().split('T')[0];
+                                                    } catch {
+                                                        return "";
+                                                    }
+                                                })()}
+                                                onChange={(e) => {
+                                                    if (editingTenant) {
+                                                        const val = e.target.value;
+                                                        setEditingTenant({
+                                                            ...editingTenant,
+                                                            subscriptionEndDate: val ? new Date(val).toISOString() : undefined
+                                                        });
+                                                    }
+                                                }}
+                                                className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs cursor-pointer"
+                                            />
+                                            {editingTenant?.subscriptionEndDate && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => editingTenant && setEditingTenant({ ...editingTenant, subscriptionEndDate: undefined })}
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[8px] font-black text-rose-500 uppercase tracking-wider hover:underline"
+                                                >
+                                                    Clear
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             {editingTenant.subscriptionStatus === 'active' && (
-                                <div className="space-y-4 p-5 bg-slate-50 rounded-2xl border border-slate-200/50">
+                                <div className="space-y-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/50">
                                     <div className="flex items-center justify-between">
-                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Record Billing Entry</label>
+                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Record Billing Entry</label>
                                         <input 
                                             type="checkbox"
                                             checked={recordBillingEntry}
                                             onChange={(e) => setRecordBillingEntry(e.target.checked)}
-                                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                                            className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-500"
                                         />
                                     </div>
                                     {recordBillingEntry && (
-                                        <div className="space-y-4 border-t border-slate-200/50 pt-4 animate-in fade-in">
+                                        <div className="space-y-3 border-t border-slate-200/50 pt-3 animate-in fade-in">
                                             <div className="space-y-1">
                                                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Billing Type</label>
                                                 <select
@@ -1463,7 +1517,7 @@ export default function SuperAdminDashboard() {
                                                             setModalUtr(editingTenant.renewalUtr || "");
                                                         }
                                                     }}
-                                                    className="w-full bg-white border border-slate-200 p-3.5 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
+                                                    className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
                                                 >
                                                     <option value="Verified Payment">Verified Payment</option>
                                                     <option value="Complimentary">Complimentary</option>
@@ -1479,7 +1533,7 @@ export default function SuperAdminDashboard() {
                                                             type="number"
                                                             value={modalAmount}
                                                             onChange={(e) => setModalAmount(e.target.value)}
-                                                            className="w-full bg-white border border-slate-200 p-3 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
+                                                            className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
                                                             placeholder="Amount in ₹"
                                                         />
                                                     </div>
@@ -1489,7 +1543,7 @@ export default function SuperAdminDashboard() {
                                                             type="text"
                                                             value={modalUtr}
                                                             onChange={(e) => setModalUtr(e.target.value)}
-                                                            className="w-full bg-white border border-slate-200 p-3 rounded-xl font-mono font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
+                                                            className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-mono font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
                                                             placeholder="UTR Log"
                                                         />
                                                     </div>
@@ -1502,7 +1556,7 @@ export default function SuperAdminDashboard() {
                                                     <select
                                                         value={modalBillingPeriod}
                                                         onChange={(e) => setModalBillingPeriod(e.target.value)}
-                                                        className="w-full bg-white border border-slate-200 p-3 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
+                                                        className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
                                                     >
                                                         <option value="1 Month">1 Month</option>
                                                         <option value="3 Months">3 Months</option>
@@ -1515,7 +1569,7 @@ export default function SuperAdminDashboard() {
                                                     <input
                                                         type="date"
                                                         defaultValue={new Date().toISOString().split('T')[0]}
-                                                        className="w-full bg-white border border-slate-200 p-3 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
+                                                        className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
                                                     />
                                                 </div>
                                             </div>
@@ -1526,7 +1580,7 @@ export default function SuperAdminDashboard() {
                                                     type="text"
                                                     value={modalRemarks}
                                                     onChange={(e) => setModalRemarks(e.target.value)}
-                                                    className="w-full bg-white border border-slate-200 p-3 rounded-xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
+                                                    className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs"
                                                     placeholder="Remarks / Notes"
                                                 />
                                             </div>
@@ -1535,115 +1589,70 @@ export default function SuperAdminDashboard() {
                                 </div>
                             )}
 
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Subscription End Date</label>
-                                <div className="relative">
-                                    <input
-                                        type="date"
-                                        value={(() => {
-                                            if (!editingTenant?.subscriptionEndDate) return "";
-                                            try {
-                                                const d = new Date(editingTenant.subscriptionEndDate);
-                                                if (isNaN(d.getTime())) return "";
-                                                return d.toISOString().split('T')[0];
-                                            } catch {
-                                                return "";
-                                            }
-                                        })()}
-                                        onChange={(e) => {
-                                            if (editingTenant) {
-                                                const val = e.target.value;
-                                                setEditingTenant({
-                                                    ...editingTenant,
-                                                    subscriptionEndDate: val ? new Date(val).toISOString() : undefined
-                                                });
-                                            }
-                                        }}
-                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all cursor-pointer text-slate-700"
-                                    />
-                                    {editingTenant?.subscriptionEndDate && (
-                                        <button
-                                            type="button"
-                                            onClick={() => editingTenant && setEditingTenant({ ...editingTenant, subscriptionEndDate: undefined })}
-                                            className="absolute right-5 top-1/2 -translate-y-1/2 text-[9px] font-black text-rose-500 uppercase tracking-wider hover:underline"
-                                        >
-                                            Clear
-                                        </button>
-                                    )}
-                                </div>
-                                <p className="text-[9px] text-gray-400 px-1 font-medium">Leave blank for unlimited/perpetual access.</p>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Contact Name</label>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-0.5">Contact Name</label>
                                     <input
                                         type="text"
                                         value={editingTenant?.contactName || ""}
                                         onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, contactName: e.target.value })}
-                                        placeholder="e.g. John Doe"
-                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 text-slate-700"
+                                        placeholder="Name"
+                                        className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs placeholder:text-gray-300"
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Contact Phone</label>
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-0.5">Contact Phone</label>
                                     <input
                                         type="tel"
                                         value={editingTenant?.contactPhone || ""}
                                         onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, contactPhone: e.target.value })}
-                                        placeholder="Phone Number"
-                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 text-slate-700"
+                                        placeholder="Phone"
+                                        className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs placeholder:text-gray-300"
                                     />
                                 </div>
                             </div>
 
-                            <div className="space-y-4 pt-4 border-t border-gray-100">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Feature Flags (Premium Modules)</label>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                    <label className={`flex flex-col p-4 rounded-2xl border-2 cursor-pointer transition-all ${editingTenant?.features?.smsEnabled !== false ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'}`}>
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-xs font-black text-slate-700 uppercase tracking-wide">SMS Alerts</span>
-                                            <input type="checkbox" checked={editingTenant?.features?.smsEnabled !== false} onChange={(e) => editingTenant && setEditingTenant({...editingTenant, features: {...(editingTenant.features || {}), smsEnabled: e.target.checked}})} className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" />
-                                        </div>
+                            <div className="space-y-2.5 pt-3 border-t border-gray-100">
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-0.5">Feature Flags (Premium Modules)</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <label className={`flex items-center justify-between px-3 py-2.5 rounded-xl border-2 cursor-pointer transition-all ${editingTenant?.features?.smsEnabled !== false ? 'border-blue-500 bg-blue-50/50' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'}`}>
+                                        <span className="text-[10px] font-black text-slate-700 uppercase tracking-wide">SMS Alerts</span>
+                                        <input type="checkbox" checked={editingTenant?.features?.smsEnabled !== false} onChange={(e) => editingTenant && setEditingTenant({...editingTenant, features: {...(editingTenant.features || {}), smsEnabled: e.target.checked}})} className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-500" />
                                     </label>
-                                    <label className={`flex flex-col p-4 rounded-2xl border-2 cursor-pointer transition-all ${editingTenant?.features?.biometricEnabled !== false ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'}`}>
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-xs font-black text-slate-700 uppercase tracking-wide">Biometrics</span>
-                                            <input type="checkbox" checked={editingTenant?.features?.biometricEnabled !== false} onChange={(e) => editingTenant && setEditingTenant({...editingTenant, features: {...(editingTenant.features || {}), biometricEnabled: e.target.checked}})} className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500" />
-                                        </div>
+                                    <label className={`flex items-center justify-between px-3 py-2.5 rounded-xl border-2 cursor-pointer transition-all ${editingTenant?.features?.biometricEnabled !== false ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'}`}>
+                                        <span className="text-[10px] font-black text-slate-700 uppercase tracking-wide">Biometrics</span>
+                                        <input type="checkbox" checked={editingTenant?.features?.biometricEnabled !== false} onChange={(e) => editingTenant && setEditingTenant({...editingTenant, features: {...(editingTenant.features || {}), biometricEnabled: e.target.checked}})} className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500" />
                                     </label>
-                                    <label className={`flex flex-col p-4 rounded-2xl border-2 cursor-pointer transition-all ${editingTenant?.features?.advancedAnalytics === true ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'}`}>
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-xs font-black text-slate-700 uppercase tracking-wide">Analytics+</span>
-                                            <input type="checkbox" checked={editingTenant?.features?.advancedAnalytics === true} onChange={(e) => editingTenant && setEditingTenant({...editingTenant, features: {...(editingTenant.features || {}), advancedAnalytics: e.target.checked}})} className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500" />
-                                        </div>
+                                    <label className={`flex items-center justify-between px-3 py-2.5 rounded-xl border-2 cursor-pointer transition-all ${editingTenant?.features?.advancedAnalytics === true ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'}`}>
+                                        <span className="text-[10px] font-black text-slate-700 uppercase tracking-wide">Analytics+</span>
+                                        <input type="checkbox" checked={editingTenant?.features?.advancedAnalytics === true} onChange={(e) => editingTenant && setEditingTenant({...editingTenant, features: {...(editingTenant.features || {}), advancedAnalytics: e.target.checked}})} className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500" />
                                     </label>
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Total Hostelars</label>
+                            <div className="space-y-1.5">
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-0.5">Total Hostelars</label>
                                 <input
                                     type="number"
                                     min="0"
                                     value={editingTenant?.totalHostelars || ""}
                                     onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, totalHostelars: e.target.value })}
                                     placeholder="e.g. 500"
-                                    className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 text-slate-700"
+                                    className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs placeholder:text-gray-300"
                                 />
                             </div>
 
-                            <div className="flex gap-4 pt-4">
+                            <div className="flex gap-3 pt-3 border-t border-slate-100 shrink-0">
                                 <button
                                     type="button"
                                     onClick={() => setEditingTenant(null)}
-                                    className="flex-1 p-5 rounded-2xl bg-slate-50 text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-slate-100"
+                                    className="flex-1 py-3 rounded-xl bg-slate-50 text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 transition-colors"
                                 >
                                     Abort
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 p-5 rounded-2xl bg-blue-600 text-white font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-blue-500/20 active:scale-95 transition-all"
+                                    className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-black uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 active:scale-[0.98] hover:bg-blue-700 transition-all"
                                 >
                                     Commit Sync
                                 </button>
@@ -1751,7 +1760,7 @@ export default function SuperAdminDashboard() {
                                     <p className="text-xs font-black uppercase tracking-tight">Warning: Irreversible Action</p>
                                 </div>
                                 <p className="text-xs text-red-800 font-medium leading-relaxed">
-                                    This will permanently delete <span className="font-black underline">{deletingTenant?.name || 'this node'}</span> and every single record associated with it, including students, attendance history, and gatepasses.
+                                    This will permanently delete <span className="font-black underline">{deletingTenant?.name || 'this node'}</span> along with all <span className="font-black underline">{deletingTenant?.studentCount || 0} registered students</span> and every single record associated with it, including attendance history and gatepasses.
                                 </p>
                             </div>
 
@@ -1801,6 +1810,52 @@ export default function SuperAdminDashboard() {
                 </div>
             )}
             
+            {/* Soft Delete Confirmation Modal */}
+            {softDeletingTenant && (
+                <div className="fixed inset-0 bg-[#7c2d12]/20 backdrop-blur-xl z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl overflow-hidden border border-amber-100 animate-in zoom-in duration-500">
+                        <div className="bg-amber-500 p-10 text-white relative">
+                            <div className="absolute top-0 right-0 p-12 opacity-10">
+                                <Trash2 className="w-24 h-24" />
+                            </div>
+                            <h3 className="text-3xl font-black uppercase tracking-tighter">Deactivate Node</h3>
+                            <p className="text-amber-100/60 text-[10px] font-black uppercase tracking-widest mt-1 italic">Move to Recycle Bin</p>
+                        </div>
+
+                        <div className="p-10 space-y-8">
+                            <div className="bg-amber-50 border border-amber-100 p-6 rounded-[28px] space-y-3">
+                                <div className="flex items-center gap-3 text-amber-600">
+                                    <AlertCircle className="w-5 h-5" />
+                                    <p className="text-xs font-black uppercase tracking-tight">Warning: Temporary Suspension</p>
+                                </div>
+                                <p className="text-xs text-amber-850 font-medium leading-relaxed">
+                                    Are you sure you want to move <span className="font-black underline">{softDeletingTenant.name}</span> to the Recycle Bin? All students and admins will lose access immediately.
+                                </p>
+                            </div>
+
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => setSoftDeletingTenant(null)}
+                                    className="flex-1 p-5 rounded-2xl bg-slate-100 text-slate-500 font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const id = softDeletingTenant._id;
+                                        setSoftDeletingTenant(null);
+                                        handleSoftDelete(id);
+                                    }}
+                                    className="flex-1 p-5 rounded-2xl bg-amber-500 text-white font-black uppercase text-[10px] tracking-widest shadow-xl shadow-amber-500/20 active:scale-95 transition-all"
+                                >
+                                    Move to Recycle Bin
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Broadcast Modal */}
             {showBroadcastModal && (
                 <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">

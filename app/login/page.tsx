@@ -568,9 +568,9 @@ function LoginForm() {
       <main className="relative z-10 w-full max-w-lg lg:max-w-5xl flex flex-col justify-center max-h-full py-1 sm:py-2">
         <div className={`transition-all duration-1000 transform ${mounted ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'} flex flex-col justify-center w-full`}>
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-center lg:items-start w-full">
-
             {/* Left Column: Logo, Title, and Features (Desktop only showcase) */}
             <div className="flex flex-col items-center space-y-3 sm:space-y-4 text-center lg:col-span-5 w-full lg:pt-4">
+              
               {/* Logo and Title */}
               <div className="flex flex-col items-center space-y-2.5">
                 <div
@@ -607,7 +607,7 @@ function LoginForm() {
                     {tenantName}
                     {tenantName !== "Hosteleaze" && <span className="block text-[8px] sm:text-[10px] text-slate-400 font-bold tracking-widest mt-1 text-center w-full">POWERED BY HOSTELEAZE</span>}
                   </h1>
-                  <div className="flex flex-col items-center space-y-2 sm:space-y-3 w-full">
+                  <div className="flex flex-col items-center space-y-2 sm:space-y-2.5 w-full">
                     {showLogoutToast && (
                       <div className="w-full max-w-[280px] sm:max-w-[320px] animate-in fade-in slide-in-from-top-2 duration-500 my-0.5 sm:my-1">
                         <div className="flex items-center gap-2 sm:gap-3 rounded-lg sm:rounded-xl border border-emerald-100 bg-[#e6fcf5] pr-3 sm:pr-4 shadow-sm overflow-hidden min-h-[40px] sm:min-h-[48px]">
@@ -627,6 +627,23 @@ function LoginForm() {
                     <p className="max-h-20 opacity-100 max-w-[260px] sm:max-w-[280px] lg:max-w-md text-[10px] sm:text-xs font-medium text-slate-500 leading-tight sm:leading-relaxed transition-all duration-500 overflow-hidden text-center mx-auto">
                       The smart, all-in-one ecosystem for modern hostel administration and student living.
                     </p>
+
+                    {/* Premium Statistics Chips Row (Desktop only) */}
+                    <div className="hidden lg:flex items-center gap-2.5 justify-center py-1 select-none">
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200/80 bg-white/70 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-md hover:scale-105 hover:-translate-y-0.5 hover:border-emerald-250 hover:bg-emerald-50/20 hover:shadow-md transition-all duration-300 cursor-default">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-700">10k+ Scans/Day</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200/80 bg-white/70 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-md hover:scale-105 hover:-translate-y-0.5 hover:border-blue-250 hover:bg-blue-50/20 hover:shadow-md transition-all duration-300 cursor-default">
+                        <span className="h-2 w-2 rounded-full bg-blue-500" />
+                        <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-700">99.9% Uptime</span>
+                      </div>
+                      <div className="flex items-center gap-1 px-3 py-1.5 rounded-full border border-slate-200/80 bg-white/70 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-md hover:scale-105 hover:-translate-y-0.5 hover:border-amber-250 hover:bg-amber-50/20 hover:shadow-md transition-all duration-300 cursor-default">
+                        <span className="text-amber-500 text-[11px] leading-none">★</span>
+                        <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-700">5.0 Rating</span>
+                      </div>
+                    </div>
+
                     {tenantName === "Hosteleaze" && !showAdminPassword && !showWardenPassword && (
                       <button 
                         onClick={() => {
@@ -643,43 +660,83 @@ function LoginForm() {
               </div>
 
               {/* Desktop Feature Showcase (Visible only on Desktop lg: screens) */}
-              <div className="hidden lg:flex flex-col gap-3 w-full max-w-md mt-2 animate-in fade-in slide-in-from-left-4 duration-1000">
-                <div className="flex items-center gap-3 py-1 px-1 hover:translate-x-1 transition-transform duration-300">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+              <div className="hidden lg:flex flex-col gap-2.5 w-full max-w-md mt-1.5 animate-in fade-in slide-in-from-left-4 duration-1000 relative">
+                
+                {/* Micro Card 1 */}
+                <div className="group flex items-center justify-between py-2 px-4 rounded-2xl border border-white/65 bg-white/50 shadow-[0_8px_22px_-6px_rgba(0,0,0,0.03)] backdrop-blur-md hover:bg-white/85 hover:shadow-md hover:border-blue-100 transition-all duration-500 hover:-translate-y-0.5">
+                  <div className="flex items-center gap-3.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100 shadow-sm transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600">
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">Wifi & Geolocation Verification</h4>
+                      <p className="text-[10px] text-slate-500 font-semibold leading-none mt-0.5">Secure local network and coordinate geofencing.</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">Wifi & Geolocation Verification</h4>
-                    <p className="text-[10px] text-slate-500 font-medium">Secure local network and coordinate geofencing.</p>
-                  </div>
+                  <span className="text-[7.5px] font-black uppercase tracking-wider text-blue-600 bg-blue-50/80 px-2 py-0.5 rounded-md border border-blue-100/50 select-none opacity-90">
+                    REAL-TIME
+                  </span>
                 </div>
 
-                <div className="flex items-center gap-3 py-1 px-1 hover:translate-x-1 transition-transform duration-300">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-                    </svg>
+                {/* Micro Card 2 */}
+                <div className="group flex items-center justify-between py-2 px-4 rounded-2xl border border-white/65 bg-white/50 shadow-[0_8px_22px_-6px_rgba(0,0,0,0.03)] backdrop-blur-md hover:bg-white/85 hover:shadow-md hover:border-indigo-100 transition-all duration-500 hover:-translate-y-0.5">
+                  <div className="flex items-center gap-3.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-sm transition-all duration-500 group-hover:scale-110 group-hover:-rotate-6 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600">
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">Digital Gatepass System</h4>
+                      <p className="text-[10px] text-slate-500 font-semibold leading-none mt-0.5">Online outing requests with automated QR scans.</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">Digital Gatepass System</h4>
-                    <p className="text-[10px] text-slate-500 font-medium">Online outing requests with automated QR scans.</p>
-                  </div>
+                  <span className="text-[7.5px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-50/80 px-2 py-0.5 rounded-md border border-indigo-100/50 select-none opacity-90">
+                    SECURE QR
+                  </span>
                 </div>
 
-                <div className="flex items-center gap-3 py-1 px-1 hover:translate-x-1 transition-transform duration-300">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" />
-                    </svg>
+                {/* Micro Card 3 */}
+                <div className="group flex items-center justify-between py-2 px-4 rounded-2xl border border-white/65 bg-white/50 shadow-[0_8px_22px_-6px_rgba(0,0,0,0.03)] backdrop-blur-md hover:bg-white/85 hover:shadow-md hover:border-emerald-100 transition-all duration-500 hover:-translate-y-0.5">
+                  <div className="flex items-center gap-3.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-sm transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600">
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">Advanced Analytics Dashboard</h4>
+                      <p className="text-[10px] text-slate-500 font-semibold leading-none mt-0.5">Live attendance insights and security reports.</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800">Advanced Analytics Dashboard</h4>
-                    <p className="text-[10px] text-slate-500 font-medium">Live attendance insights and security reports.</p>
-                  </div>
+                  <span className="text-[7.5px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50/80 px-2 py-0.5 rounded-md border border-emerald-100/50 select-none opacity-90">
+                    ANALYTICS
+                  </span>
                 </div>
               </div>
+
+              {/* Security & Trust Badges (Desktop only) */}
+              <div className="hidden lg:flex items-center gap-3 justify-center w-full max-w-md pt-2 select-none opacity-85 animate-in fade-in slide-in-from-bottom-2 duration-1000 relative z-10">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px]">🛡️</span>
+                  <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-500">Role-Based Access</span>
+                </div>
+                <div className="h-1 w-1 rounded-full bg-slate-300" />
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px]">⚡</span>
+                  <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-500">Instant OTP SMS</span>
+                </div>
+                <div className="h-1 w-1 rounded-full bg-slate-300" />
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px]">🔒</span>
+                  <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-500">SSL Secured Data</span>
+                </div>
+              </div>
+
+              {/* Bottom Gradient Aura for Left Column */}
+              <div className="absolute bottom-[-40px] left-[-30px] w-[200px] h-[200px] rounded-full bg-gradient-to-br from-indigo-300/10 to-purple-300/10 blur-2xl pointer-events-none" />
             </div>
 
             {/* Right Column: Login Card & Footer */}

@@ -30,10 +30,7 @@ const FieldEnforcementComponent = dynamic(() => import("./FieldEnforcementCompon
   loading: () => <div className="h-64 w-full bg-gray-100 animate-pulse rounded-xl flex items-center justify-center text-gray-400 text-xs">Loading Field Enforcement...</div>
 });
 
-const TenantSettingsView = dynamic(() => import("./TenantSettingsView"), {
-  ssr: false,
-  loading: () => <div className="h-64 w-full bg-gray-100 animate-pulse rounded-xl flex items-center justify-center text-gray-400 text-xs">Loading Settings...</div>
-});
+import TenantSettingsView from "./TenantSettingsView";
 
 import HostelManagementModal from "./HostelManagementModal";
 
