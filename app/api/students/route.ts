@@ -173,14 +173,13 @@ export async function GET(request: NextRequest) {
       // and device_history/web_authn_credentials to minimize DB latency & bandwidth.
       const selectFields = "_id, firebase_uid, name, email, phone_number, hostel_name, room_number, dob, category, profile_picture, student_status, father_name, father_number, mother_name, mother_number, permanent_address, home_state, erp_id, joining_date, branch, college_name, year, semester, section, floor_number, local_guardian_address, local_guardian_phone_number, device_id, registration_id, is_profile_locked, attendance_mode, device_reset_count, created_at, updated_at, dynamic_fields, tenant_id, supabase_id, auth_provider";
 
-      // ⚡ FAST QUERY: Search directly for matching father_number, mother_number, or local_guardian_phone_number
-      const variations = [cleaned, `+91${cleaned}`, `91${cleaned}`];
-      const filters: string[] = [];
-      variations.forEach(v => {
-        filters.push(`father_number.eq."${v}"`);
-        filters.push(`mother_number.eq."${v}"`);
-        filters.push(`local_guardian_phone_number.eq."${v}"`);
-      });
+      // ⚡ FAST WILDCARD QUERY: Search directly for matching digits with any delimiters in between
+      const digitPattern = `%${cleaned.split("").join("%")}%`;
+      const filters = [
+        `father_number.like."${digitPattern}"`,
+        `mother_number.like."${digitPattern}"`,
+        `local_guardian_phone_number.like."${digitPattern}"`
+      ];
       const filterString = filters.join(",");
 
       let { data: students, error } = await supabase

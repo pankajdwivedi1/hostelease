@@ -1112,11 +1112,6 @@ function LoginForm() {
                               </div>
                             ) : (
                               <>
-                                <label className="mb-2 sm:mb-3 block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                  {showAdminPassword ? "Dean Authentication Key" : 
-                                   showWardenPassword ? "Campus Authentication Key" : 
-                                   !isDeveloperSetup ? "CREATE YOUR PASSWORD" : "Super Admin Authentication"}
-                                </label>
                                 {!isDeveloperSetup && showDeveloperPassword && (
                                   <p className="mb-4 text-[10px] text-blue-600 font-bold bg-blue-50 p-2 rounded-lg border border-blue-100 flex items-center gap-2">
                                     <span className="text-sm">🔑</span>
@@ -1124,79 +1119,114 @@ function LoginForm() {
                                   </p>
                                 )}
 
-                                {showWardenPassword && (
-                                  <div className="mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                    <select
-                                      value={selectedHostelId}
-                                      onChange={(e) => {
-                                        setSelectedHostelId(e.target.value);
-                                        setError("");
-                                      }}
-                                      className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:py-4 text-sm sm:text-base text-slate-900 appearance-none focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-medium"
-                                    >
-                                      <option value="" disabled>Select Your Hostel</option>
-                                      <option value="getpass" className="font-bold text-blue-600">🎟️ GATEPASS MONITOR</option>
-                                      {hostels.map(hostel => (
-                                        <option key={hostel._id} value={hostel._id}>
-                                          {hostel.name}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    <div className="mt-1.5 px-1 flex items-center gap-1.5">
-                                      <div className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                                      <span className="text-[10px] font-bold text-indigo-600/70 uppercase tracking-wider">Select hostel to proceed</span>
+                                {showWardenPassword ? (
+                                  <div className="grid grid-cols-2 gap-3 mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                    {/* Left Column: Select Campus Role */}
+                                    <div className="flex flex-col">
+                                      <div className="flex items-center justify-between mb-2 sm:mb-3 min-h-[14px]">
+                                        <label className="block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                          Campus Role
+                                        </label>
+                                      </div>
+                                      <select
+                                        value={selectedHostelId}
+                                        onChange={(e) => {
+                                          setSelectedHostelId(e.target.value);
+                                          setError("");
+                                        }}
+                                        className="w-full rounded-xl border border-slate-100 bg-slate-50 pl-3 pr-8 py-2.5 sm:py-3.5 text-xs sm:text-sm text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-semibold"
+                                      >
+                                        <option value="" disabled>Select role</option>
+                                        <option value="getpass" className="font-bold text-blue-600">🎟️ GATEPASS MONITOR</option>
+                                        {hostels.map(hostel => (
+                                          <option key={hostel._id} value={hostel._id}>
+                                            {hostel.name}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+
+                                    {/* Right Column: Enter Password */}
+                                    <div className="flex flex-col">
+                                      <div className="flex items-center justify-between mb-2 sm:mb-3 min-h-[14px]">
+                                        <label className="block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                          Enter Password
+                                        </label>
+                                      </div>
+                                      <div className="relative group">
+                                        <input
+                                          type="password"
+                                          autoFocus
+                                          value={wardenPassword}
+                                          onChange={(e) => {
+                                            setWardenPassword(e.target.value);
+                                            setError("");
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              handleWardenLogin();
+                                            }
+                                          }}
+                                          className="w-full rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 sm:py-3.5 text-center text-xs sm:text-sm font-black tracking-[0.2em] text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-slate-300 placeholder:font-medium placeholder:tracking-normal"
+                                          placeholder="••••••••••••"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="mb-4 animate-in fade-in duration-300">
+                                    <label className="mb-2 sm:mb-3 block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                      {showAdminPassword ? "Dean Authentication Key" : 
+                                       !isDeveloperSetup ? "CREATE YOUR PASSWORD" : "Super Admin Authentication"}
+                                    </label>
+                                    <div className="relative group">
+                                      <input
+                                        type="password"
+                                        autoFocus
+                                        value={showAdminPassword ? adminPassword : developerPassword}
+                                        onChange={(e) => {
+                                          if (showAdminPassword) setAdminPassword(e.target.value);
+                                          else setDeveloperPassword(e.target.value);
+                                          setError("");
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            if (showAdminPassword) handleAdminLogin();
+                                            else handleDeveloperLogin();
+                                          }
+                                        }}
+                                        className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 sm:py-3 text-center text-sm sm:text-base font-black tracking-[0.4em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-300 placeholder:font-medium placeholder:tracking-normal"
+                                        placeholder={showAdminPassword ? "············" : !isDeveloperSetup ? "Create password" : "Enter Super Admin key"}
+                                      />
                                     </div>
                                   </div>
                                 )}
-
-                                <div className="relative group">
-                                  <input
-                                    type="password"
-                                    autoFocus
-                                    value={showAdminPassword ? adminPassword : showWardenPassword ? wardenPassword : developerPassword}
-                                    onChange={(e) => {
-                                      if (showAdminPassword) setAdminPassword(e.target.value);
-                                      else if (showWardenPassword) setWardenPassword(e.target.value);
-                                      else setDeveloperPassword(e.target.value);
+                                <div className="flex justify-between items-center mt-2 px-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (showAdminPassword) setShowAdminPassword(false);
+                                      if (showWardenPassword) setShowWardenPassword(false);
+                                      if (showDeveloperPassword) setShowDeveloperPassword(false);
                                       setError("");
                                     }}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") {
-                                        if (showAdminPassword) handleAdminLogin();
-                                        else if (showWardenPassword) handleWardenLogin();
-                                        else handleDeveloperLogin();
-                                      }
-                                    }}
-                                    className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 sm:py-3 text-center text-sm sm:text-base font-black tracking-[0.4em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-300 placeholder:font-medium placeholder:tracking-normal"
-                                    placeholder={showAdminPassword ? "············" : showWardenPassword ? "············" : !isDeveloperSetup ? "Create password" : "Enter Super Admin key"}
-                                  />
-                                  <div className="flex justify-between items-center mt-2 px-1">
+                                    className="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                  {showDeveloperPassword && isDeveloperSetup && (
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        if (showAdminPassword) setShowAdminPassword(false);
-                                        if (showWardenPassword) setShowWardenPassword(false);
-                                        if (showDeveloperPassword) setShowDeveloperPassword(false);
+                                        setSuperAdminResetStep("phone");
+                                        setSuperAdminResetPhone("");
                                         setError("");
                                       }}
-                                      className="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
+                                      className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 hover:underline transition-colors"
                                     >
-                                      Cancel
+                                      Forgot Password?
                                     </button>
-                                    {showDeveloperPassword && isDeveloperSetup && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setSuperAdminResetStep("phone");
-                                          setSuperAdminResetPhone("");
-                                          setError("");
-                                        }}
-                                        className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 hover:underline transition-colors"
-                                      >
-                                        Forgot Password?
-                                      </button>
-                                    )}
-                                  </div>
+                                  )}
                                 </div>
                                 <div className="mt-4 flex gap-3">
                                   <button

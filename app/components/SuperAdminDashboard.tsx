@@ -552,6 +552,7 @@ export default function SuperAdminDashboard() {
                     subscriptionStatus: editingTenant.subscriptionStatus,
                     is_active: editingTenant.isActive,
                     subscriptionEndDate: editingTenant.subscriptionEndDate || null,
+                    createdAt: editingTenant.createdAt || null,
                     contactName: editingTenant.contactName,
                     contactPhone: editingTenant.contactPhone,
                     totalHostelars: editingTenant.totalHostelars,
@@ -1433,7 +1434,7 @@ export default function SuperAdminDashboard() {
                             )}
 
                             <div className="space-y-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/50">
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-3 gap-3">
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-0.5">Subscription</label>
                                         <select
@@ -1445,6 +1446,35 @@ export default function SuperAdminDashboard() {
                                             <option value="trial">Trial (Restricted)</option>
                                             <option value="expired">Expired (Locked)</option>
                                         </select>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-0.5">Start Date</label>
+                                        <div className="relative">
+                                            <input
+                                                type="date"
+                                                value={(() => {
+                                                    if (!editingTenant?.createdAt) return "";
+                                                    try {
+                                                        const d = new Date(editingTenant.createdAt);
+                                                        if (isNaN(d.getTime())) return "";
+                                                        return d.toISOString().split('T')[0];
+                                                    } catch {
+                                                        return "";
+                                                    }
+                                                })()}
+                                                onChange={(e) => {
+                                                    if (editingTenant) {
+                                                        const val = e.target.value;
+                                                        setEditingTenant({
+                                                            ...editingTenant,
+                                                            createdAt: val ? new Date(val).toISOString() : editingTenant.createdAt
+                                                        });
+                                                    }
+                                                }}
+                                                className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs cursor-pointer"
+                                            />
+                                        </div>
                                     </div>
 
                                     <div className="space-y-1">

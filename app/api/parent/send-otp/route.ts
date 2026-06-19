@@ -31,14 +31,13 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
-    // ⚡ FAST QUERY: Search directly for matching father_number, mother_number, or local_guardian_phone_number
-    const variations = [cleaned, `+91${cleaned}`, `91${cleaned}`];
-    const filters: string[] = [];
-    variations.forEach(v => {
-      filters.push(`father_number.eq."${v}"`);
-      filters.push(`mother_number.eq."${v}"`);
-      filters.push(`local_guardian_phone_number.eq."${v}"`);
-    });
+    // ⚡ FAST WILDCARD QUERY: Search directly for matching digits with any delimiters in between
+    const digitPattern = `%${cleaned.split("").join("%")}%`;
+    const filters = [
+      `father_number.like."${digitPattern}"`,
+      `mother_number.like."${digitPattern}"`,
+      `local_guardian_phone_number.like."${digitPattern}"`
+    ];
     const filterString = filters.join(",");
 
     let { data: students, error } = await supabase
@@ -52,7 +51,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Database error occurred" }, { status: 500 });
     }
 
-    // ⚡ FALLBACK: If fast query returned no results, fall back to slow scan to support custom formatting
+    // ⚡ FALLBACK: If fast wildcard query returned no results, fall back to slow scan to support custom formatting
     if (!students || students.length === 0) {
       console.log(`[Send-OTP] Fast query missed. Running fallback full scan for: ${cleaned}`);
       const { data: allStudents, error: allErr } = await supabase

@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
     export async function PATCH(request: NextRequest) {
     try {
         const body = await request.json();
-        const { id, is_active, subscriptionStatus, subscriptionEndDate, contactName, contactPhone, totalHostelars, features } = body;
+        const { id, is_active, subscriptionStatus, subscriptionEndDate, createdAt, contactName, contactPhone, totalHostelars, features } = body;
 
         if (!id) return NextResponse.json({ success: false, error: "Tenant ID is required" }, { status: 400 });
 
@@ -196,6 +196,9 @@ export async function POST(request: NextRequest) {
         if (subscriptionStatus) updateData.subscription_status = subscriptionStatus;
         if (typeof subscriptionEndDate !== 'undefined') {
             updateData.subscription_end_date = subscriptionEndDate ? new Date(subscriptionEndDate).toISOString() : null;
+        }
+        if (typeof createdAt !== 'undefined') {
+            updateData.created_at = createdAt ? new Date(createdAt).toISOString() : null;
         }
 
         const { data: tenant, error } = await supabase
@@ -252,6 +255,7 @@ export async function POST(request: NextRequest) {
                 isActive: tenant.is_active,
                 subscriptionStatus: tenant.subscription_status,
                 subscriptionEndDate: tenant.subscription_end_date,
+                createdAt: tenant.created_at,
                 contactName,
                 contactPhone,
                 totalHostelars,
