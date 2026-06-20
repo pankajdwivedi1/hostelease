@@ -3,6 +3,7 @@
 -- (Standard PostgreSQL)
 
 -- 1. ADMN SETTINGS
+DROP TABLE IF EXISTS admin_settings CASCADE;
 CREATE TABLE IF NOT EXISTS admin_settings (
     _id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     active_database_source TEXT DEFAULT 'MONGODB',
@@ -26,11 +27,18 @@ CREATE TABLE IF NOT EXISTS admin_settings (
     wifi_whitelist JSONB DEFAULT '[]'::jsonb,
     hostel_prefix_map JSONB DEFAULT '[]'::jsonb,
     
+    -- New columns from Supabase
+    enable_manual_attendance BOOLEAN DEFAULT FALSE,
+    tenant_id TEXT,
+    developer_password TEXT,
+    leave_approval_method TEXT,
+    
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 2. GATE PASS
+DROP TABLE IF EXISTS gate_passes CASCADE;
 CREATE TABLE IF NOT EXISTS gate_passes (
     _id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     student_id TEXT NOT NULL, -- Logical FK to students._id
@@ -55,6 +63,15 @@ CREATE TABLE IF NOT EXISTS gate_passes (
     qr_token_used_out TEXT NOT NULL,
     qr_token_used_in TEXT,
     
+    -- New columns from Supabase
+    type TEXT,
+    reason TEXT,
+    destination TEXT,
+    parent_mobile TEXT,
+    permission_id TEXT,
+    phone_number TEXT,
+    tenant_id TEXT,
+    
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -70,6 +87,7 @@ CREATE TABLE IF NOT EXISTS gate_pass_tokens (
 );
 
 -- 4. HOSTEL
+DROP TABLE IF EXISTS hostels CASCADE;
 CREATE TABLE IF NOT EXISTS hostels (
     _id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     name TEXT NOT NULL UNIQUE,
@@ -77,11 +95,13 @@ CREATE TABLE IF NOT EXISTS hostels (
     warden_username TEXT,
     warden_password TEXT,
     attendance_mode TEXT DEFAULT 'strict', -- 'strict', 'gps-only', 'biometric'
+    tenant_id TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 5. PERMISSION
+DROP TABLE IF EXISTS permissions CASCADE;
 CREATE TABLE IF NOT EXISTS permissions (
     _id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     student_id TEXT NOT NULL,
@@ -91,6 +111,11 @@ CREATE TABLE IF NOT EXISTS permissions (
     status TEXT DEFAULT 'pending', -- pending, allowed, rejected
     warden_status TEXT DEFAULT 'pending',
     dean_status TEXT DEFAULT 'pending',
+    
+    -- New columns from Supabase
+    request_type TEXT,
+    parent_status TEXT,
+    
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -144,6 +169,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 
 -- 9. FIELD ENFORCEMENT
+DROP TABLE IF EXISTS field_enforcement CASCADE;
 CREATE TABLE IF NOT EXISTS field_enforcement (
     _id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     hostel_name TEXT NOT NULL UNIQUE,
@@ -152,6 +178,7 @@ CREATE TABLE IF NOT EXISTS field_enforcement (
     notification_priority TEXT DEFAULT 'normal',
     success_message TEXT DEFAULT 'All required fields have been completed! Thank you.',
     auto_close_notification BOOLEAN DEFAULT TRUE,
+    tenant_id TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

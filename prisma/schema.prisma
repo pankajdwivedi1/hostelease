@@ -1,0 +1,350 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 1. tenants
+model Tenant {
+  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                String
+  slug                String               @unique
+  logoUrl             String?              @map("logo_url")
+  primaryColor        String               @default("#3b82f6") @map("primary_color")
+  secondaryColor      String               @default("#1e40af") @map("secondary_color")
+  adminEmail          String               @map("admin_email")
+  isActive            Boolean              @default(true) @map("is_active")
+  subscriptionStatus  String               @default("trial") @map("subscription_status")
+  subscriptionEndDate DateTime?            @map("subscription_end_date")
+  isDeleted           Boolean              @default(false) @map("is_deleted")
+  deletedAt           DateTime?            @map("deleted_at")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @default(now()) @updatedAt @map("updated_at")
+  students            Student[]
+  adminSettings       AdminSettings[]
+  gatePasses          GatePass[]
+  hostels             Hostel[]
+  fieldEnforcements   FieldEnforcement[]
+
+  @@map("tenants")
+}
+
+// 2. students
+model Student {
+  id             String           @id @map("_id")
+  tenantId       String           @db.Uuid @map("tenant_id")
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  firebaseUid    String           @unique @map("firebase_uid")
+  name           String
+  email          String           @unique
+  phoneNumber    String           @map("phone_number")
+  hostelName     String           @map("hostel_name")
+  roomNumber     String           @map("room_number")
+  profilePicture String?          @map("profile_picture")
+  studentStatus  String           @default("in") @map("student_status")
+  supabaseId     String?          @map("supabase_id")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @default(now()) @updatedAt @map("updated_at")
+
+  profile        StudentProfile?
+  security       StudentSecurity?
+
+  attendances    Attendance[]
+  gatePasses     GatePass[]
+  permissions    Permission[]
+  transactions   Transaction[]
+  fieldProgress  StudentFieldProgress[]
+
+  @@map("students")
+}
+
+model StudentProfile {
+  studentId                String    @id @map("student_id")
+  student                  Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  dob                      DateTime?
+  category                 String?
+  fatherName               String?   @map("father_name")
+  fatherNumber             String?   @map("father_number")
+  motherName               String?   @map("mother_name")
+  motherNumber             String?   @map("mother_number")
+  permanentAddress         String?   @map("permanent_address")
+  homeState                String?   @map("home_state")
+  erpInformation           String?   @map("erp_information")
+  erpId                    String?   @map("erp_id")
+  joiningDate              DateTime? @map("joining_date")
+  branch                   String?
+  collegeName              String?   @map("college_name")
+  year                     String?
+  semester                 String?
+  section                  String?
+  floorNumber              String?   @map("floor_number")
+  localGuardianAddress     String?   @map("local_guardian_address")
+  localGuardianPhoneNumber String?   @map("local_guardian_phone_number")
+  registrationId           String?   @unique @map("registration_id")
+  createdByErpId           String?   @map("created_by_erp_id")
+
+  @@map("student_profiles")
+}
+
+model StudentSecurity {
+  studentId           String   @id @map("student_id")
+  student             Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  deviceId            String?  @map("device_id")
+  deviceResetCount    Int      @default(0) @map("device_reset_count")
+  deviceHistory       Json     @default("[]") @map("device_history")
+  isProfileLocked     Boolean  @default(false) @map("is_profile_locked")
+  faceDescriptor      Float[]  @map("face_descriptor")
+  thumbImpressionId   String?  @map("thumb_impression_id")
+  attendanceMode      String   @default("default") @map("attendance_mode")
+  webAuthnCredentials Json?    @map("web_authn_credentials")
+  lastCheckInLocation Json?    @map("last_check_in_location")
+  authProvider        String?  @map("auth_provider")
+
+  @@map("student_security")
+}
+
+// 3. attendance
+model Attendance {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid @map("_id")
+  tenantId            String   @db.Uuid @map("tenant_id")
+  studentId           String   @map("student_id")
+  student             Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  firebaseUid         String   @map("firebase_uid")
+  name                String
+  hostelName          String   @map("hostel_name")
+  roomNumber          String   @map("room_number")
+  date                String
+  timestamp           DateTime @default(now())
+  istTime             String?  @map("ist_time")
+  istDate             String?  @map("ist_date")
+  location            Json
+  deviceId            String   @map("device_id")
+  status              String   @default("present")
+  faceMatchPercentage Float?   @map("face_match_percentage")
+  faceMatchStatus     String?  @map("face_match_status")
+  flaggedPhotoUrl     String?  @map("flagged_photo_url")
+  needsReview         Boolean  @default(false) @map("needs_review")
+  isTest              Boolean  @default(false) @map("is_test")
+  markedBy            String?  @map("marked_by")
+  faceScore           Float?   @map("face_score")
+  gps                 Json?
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([studentId, date], map: "idx_attendance_student_date")
+  @@map("attendance")
+}
+
+// 4. admin_settings
+model AdminSettings {
+  id                       String   @id @default(dbgenerated("gen_random_uuid()")) @map("_id")
+  activeDatabaseSource     String   @default("MONGODB") @map("active_database_source")
+  attendanceStartTime      String   @default("21:00") @map("attendance_start_time")
+  attendanceEndTime        String   @default("22:30") @map("attendance_end_time")
+  adminPassword            String   @default("pankajdwivedi81") @map("admin_password")
+  wardenPassword           String   @default("warden456") @map("warden_password")
+  getpassPassword          String   @default("GET456") @map("getpass_password")
+  hostelFeeAmount          Int      @default(0) @map("hostel_fee_amount")
+  paymentInstructions      String?  @map("payment_instructions")
+  isPaymentEnabled         Boolean  @default(false) @map("is_payment_enabled")
+  overlapRadius            Boolean  @default(false) @map("overlap_radius")
+  prioritizeAssignedHostel Boolean  @default(false) @map("prioritize_assigned_hostel")
+  hostelLocations          Json     @default("[]") @map("hostel_locations")
+  wardenAccounts           Json     @default("[]") @map("warden_accounts")
+  registrationFieldsConfig Json     @default("{}") @map("registration_fields_config")
+  formBuilderConfig        Json     @default("[]") @map("form_builder_config")
+  universityBankDetails    Json     @default("{}") @map("university_bank_details")
+  wifiWhitelist            Json     @default("[]") @map("wifi_whitelist")
+  hostelPrefixMap          Json     @default("[]") @map("hostel_prefix_map")
+  enableManualAttendance   Boolean  @default(false) @map("enable_manual_attendance")
+  tenantId                 String?  @db.Uuid @map("tenant_id")
+  tenant                   Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  developerPassword        String?  @map("developer_password")
+  leaveApprovalMethod      String   @default("app") @map("leave_approval_method")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("admin_settings")
+}
+
+// 5. gate_passes
+model GatePass {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @map("_id")
+  studentId        String    @map("student_id")
+  student          Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  firebaseUid      String    @map("firebase_uid")
+  studentName      String    @map("student_name")
+  hostelName       String    @map("hostel_name")
+  roomNumber       String    @map("room_number")
+  registrationId   String?   @map("registration_id")
+  checkOutTime     DateTime  @default(now()) @map("check_out_time")
+  checkOutIstTime  String    @map("check_out_ist_time")
+  checkOutIstDate  String    @map("check_out_ist_date")
+  checkInTime      DateTime? @map("check_in_time")
+  checkInIstTime   String?   @map("check_in_ist_time")
+  checkInIstDate   String?   @map("check_in_ist_date")
+  status           String    @default("out") @map("status")
+  durationMinutes  Int?      @map("duration_minutes")
+  gateName         String    @default("Main Gate") @map("gate_name")
+  qrTokenUsedOut   String    @map("qr_token_used_out")
+  qrTokenUsedIn    String?   @map("qr_token_used_in")
+  type             String?
+  reason           String?
+  destination      String?
+  parentMobile     String?   @map("parent_mobile")
+  permissionId     String?   @map("permission_id")
+  phoneNumber      String?   @map("phone_number")
+  tenantId         String?   @db.Uuid @map("tenant_id")
+  tenant           Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("gate_passes")
+}
+
+// 6. gate_pass_tokens
+model GatePassToken {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @map("_id")
+  token     String   @unique
+  gateName  String   @default("Main Gate") @map("gate_name")
+  expiresAt DateTime @map("expires_at")
+  isUsed    Boolean  @default(false) @map("is_used")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("gate_pass_tokens")
+}
+
+// 7. hostels
+model Hostel {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @map("_id")
+  name           String   @unique
+  totalRooms     Int      @default(100) @map("total_rooms")
+  wardenUsername String?  @map("warden_username")
+  wardenPassword String?  @map("warden_password")
+  attendanceMode String   @default("strict") @map("attendance_mode")
+  tenantId       String?  @db.Uuid @map("tenant_id")
+  tenant         Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("hostels")
+}
+
+// 8. permissions
+model Permission {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @map("_id")
+  studentId    String   @map("student_id")
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  fromDateTime DateTime @map("from_date_time")
+  toDateTime   DateTime @map("to_date_time")
+  reason       String
+  status       String   @default("pending")
+  wardenStatus String   @default("pending") @map("warden_status")
+  deanStatus   String   @default("pending") @map("dean_status")
+  requestType  String?  @map("request_type")
+  parentStatus String?  @map("parent_status")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("permissions")
+}
+
+// 9. transactions
+model Transaction {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @map("_id")
+  studentId        String    @map("student_id")
+  student          Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  registrationId   String    @map("registration_id")
+  utrNumber        String    @map("utr_number")
+  amount           Decimal   @db.Decimal
+  paymentSource    String    @map("payment_source")
+  screenshot       String?
+  status           String    @default("pending")
+  adminRemarks     String?   @map("admin_remarks")
+  verifiedAt       DateTime? @map("verified_at")
+  reconciledViaCSV Boolean   @default(false) @map("reconciled_via_csv")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("transactions")
+}
+
+// 10. student_field_progress
+model StudentFieldProgress {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @map("_id")
+  studentId      String    @map("student_id")
+  student        Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  firebaseUid    String    @map("firebase_uid")
+  hostelName     String    @map("hostel_name")
+  fieldId        String    @map("field_id")
+  fieldLabel     String    @map("field_label")
+  isCompleted    Boolean   @default(false) @map("is_completed")
+  completedAt    DateTime? @map("completed_at")
+  notificationId String?   @map("notification_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("student_field_progress")
+}
+
+// 11. notifications
+model Notification {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @map("_id")
+  senderId        String    @map("sender_id")
+  targetType      String    @map("target_type")
+  targetHostel    String?   @map("target_hostel")
+  targetStudentId String?   @map("target_student_id")
+  message         String
+  image           String?
+  priority        String    @default("normal")
+  expiresAt       DateTime? @map("expires_at")
+  acknowledgedBy  Json      @default("[]") @map("acknowledged_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("notifications")
+}
+
+// 12. field_enforcement
+model FieldEnforcement {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @map("_id")
+  hostelName            String   @unique @map("hostel_name")
+  enforcedFields        Json     @default("[]") @map("enforced_fields")
+  isActive              Boolean  @default(false) @map("is_active")
+  notificationPriority  String   @default("normal") @map("notification_priority")
+  successMessage        String   @default("All required fields have been completed! Thank you.") @map("success_message")
+  autoCloseNotification Boolean  @default(true) @map("auto_close_notification")
+  tenantId              String?  @db.Uuid @map("tenant_id")
+  tenant                Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("field_enforcement")
+}
+
+// 13. erp_members
+model ErpMember {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid @map("_id")
+  name                  String
+  phoneNumber           String?  @map("phone_number")
+  dashboardName         String   @map("dashboard_name")
+  inactivityTimeoutMins Int?     @map("inactivity_timeout_mins")
+  isActive              Boolean  @default(true) @map("is_active")
+  tenantId              String?  @map("tenant_id")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("erp_members")
+}
+
+// 14. platform_settings
+model PlatformSetting {
+  id        String   @id
+  settings  Json?
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("platform_settings")
+}

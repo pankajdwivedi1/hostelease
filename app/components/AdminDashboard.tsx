@@ -206,6 +206,7 @@ interface Permission {
     branch?: string;
     semester?: string;
     section?: string;
+    floorNumber?: string;
   };
   fromDateTime: string | Date;
   toDateTime: string | Date;
@@ -231,13 +232,19 @@ interface SimplePermission {
 interface AttendanceLog {
   _id: string;
   studentId: {
+    id?: string;
     _id: string;
     name: string;
     email: string;
+    phoneNumber?: string;
     hostelName: string;
     roomNumber: string;
     registrationId?: string;
   } | null;
+  name?: string;
+  hostelName?: string;
+  roomNumber?: string;
+  student_id?: string;
   istTime: string;
   istDate: string;
   location: {
@@ -315,6 +322,7 @@ interface StudentDetails {
   thumbImpressionId?: string; // ⚡ NEW: Thumb biometrics
   outingType?: string | null;
   permissions: SimplePermission[];
+  firebaseUID?: string;
 }
 
 // Cache constants
@@ -2873,7 +2881,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       // If we're exporting a specific hostel, make sure we filter the ALL logs down to it
       if (attendanceHostelFilter !== 'all') {
          logsToExport = attendanceLogs.filter(log => {
-           const studentHostel = getHostelCategory(log.hostelName) || log.hostelName || "";
+           const studentHostel = getHostelCategory(log.hostelName || "") || log.hostelName || "";
            return studentHostel.toLowerCase() === attendanceHostelFilter.toLowerCase();
          });
       } else {
@@ -2948,8 +2956,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const handleProfileClick = async (studentId: string) => {
     let student = students.find((s) => s.id === studentId);
 
-    // If student doesn't have profile picture (light mode), fetch full details
-    if (student && !student.profilePicture) {
+    // If student is in light mode (e.g. registrationId or fatherName is missing), fetch full details on demand
+    if (student && (student.registrationId === undefined || student.fatherName === undefined)) {
       try {
         // Fetch full student details on demand using email
         const res = await fetch(`/api/students?email=${student.email}`);
@@ -2977,6 +2985,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             deviceResetCount: data.student.deviceResetCount || 0,
             deviceHistory: data.student.deviceHistory || [],
             attendanceMode: data.student.attendanceMode || "default",
+            dob: data.student.dob,
+            category: data.student.category,
+            branch: data.student.branch,
+            collegeName: data.student.collegeName,
+            year: data.student.year,
+            semester: data.student.semester,
+            section: data.student.section,
           };
         }
       } catch (e) {

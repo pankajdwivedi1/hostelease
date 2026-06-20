@@ -33,31 +33,48 @@ async function verifyRegistrationFlow() {
     console.log(`✅ Using prefix: ${prefix}`);
 
     console.log("\nStep 3: Simulating DB Save (Insert)...");
-    const supabaseData = {
-        _id: 'TEST_UUID_' + Date.now(),
+    const testId = 'TEST_UUID_' + Date.now();
+    const studentData = {
+        _id: testId,
         firebase_uid: testStudent.firebaseUID,
         name: testStudent.name,
         email: testStudent.email,
         phone_number: testStudent.phoneNumber,
         hostel_name: testStudent.hostelName,
         room_number: testStudent.roomNumber,
-        registration_id: `${prefix}-9999`,
         student_status: 'in',
         tenant_id: testStudent.tenantId,
         created_at: new Date().toISOString()
     };
 
+    const profileData = {
+        student_id: testId,
+        registration_id: `${prefix}-9999`,
+        college_name: 'OIST'
+    };
+
     const { data: saved, error } = await supabase
         .from('students')
-        .insert([supabaseData])
+        .insert([studentData])
         .select()
         .single();
 
     if (error) {
-        console.error("❌ Registration Save Error:", error);
+        console.error("❌ Student Save Error:", error);
     } else {
-        console.log(`✅ Student registered successfully with ID: ${saved._id}`);
-        console.log(`✅ Registration ID assigned: ${saved.registration_id}`);
+        console.log(`✅ Student registered successfully in core table with ID: ${saved._id}`);
+
+        const { data: savedProfile, error: profileError } = await supabase
+            .from('student_profiles')
+            .insert([profileData])
+            .select()
+            .single();
+
+        if (profileError) {
+            console.error("❌ Student Profile Save Error:", profileError);
+        } else {
+            console.log(`✅ Registration ID assigned in profile table: ${savedProfile.registration_id}`);
+        }
         
         // Cleanup
         console.log("\nStep 4: Cleaning up test data...");

@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const useSupabase = source === 'SUPABASE';
 
     try {
-        const students = await db.students.getAll(10, useSupabase);
+        const students = await db.students.getAll(10);
 
         return NextResponse.json({
             source: useSupabase ? 'SUPABASE ⚡' : 'MONGODB 🍃',

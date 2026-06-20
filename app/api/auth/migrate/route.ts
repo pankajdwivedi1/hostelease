@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
         const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
         if (listError) throw listError;
 
-        let supabaseUser = users.find(u => u.email === email);
+        let supabaseUser = users.find((u: any) => u.email === email);
         let temporaryPassword = `Migrate-${firebaseUID.substring(0, 8)}-${Math.random().toString(36).slice(-8)}`;
 
         if (!supabaseUser) {

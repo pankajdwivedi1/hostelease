@@ -17,6 +17,7 @@ interface Permission {
     status: "pending" | "allowed" | "rejected";
     wardenStatus: "pending" | "allowed" | "rejected";
     deanStatus: "pending" | "allowed" | "rejected";
+    parentStatus?: "pending" | "allowed" | "rejected" | "no_response" | null;
     createdAt?: string;
     updatedAt?: string;
 }
@@ -62,6 +63,11 @@ interface StudentProfile {
         createdAt: string;
     }[]; // ⚡ NEW: Persistent keys
     dynamicFields?: Record<string, any>;
+    tenantSubscription?: {
+        status: string;
+        endDate?: string;
+        createdAt?: string;
+    } | null;
 }
 
 interface DBNotification {
@@ -920,7 +926,9 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
             if (!currentStudent) {
                 try {
                     // ⚡ STEP 1: Load MINIMAL data first if not provided
-                    const queryParam = user.source === 'supabase' ? `supabaseId=${user.uid}` : `firebaseUID=${user.uid}`;
+                    const queryParam = user.source === 'supabase'
+                        ? `supabaseId=${user.uid}${user.email ? `&email=${encodeURIComponent(user.email)}` : ''}`
+                        : `firebaseUID=${user.uid}`;
                     const minimalResponse = await fetch(`/api/students?${queryParam}&minimal=true${getTenantParam(false)}`, { cache: 'no-store' });
                     if (!minimalResponse.ok) throw new Error(`Failed to fetch minimal data: ${minimalResponse.status}`);
                     const minimalData = await minimalResponse.json();
@@ -949,7 +957,9 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                 // ⚡ STEP 2: Load FULL profile data asynchronously in background
                 const loadFullProfile = async () => {
                     try {
-                        const queryParam = user.source === 'supabase' ? `supabaseId=${user.uid}` : `firebaseUID=${user.uid}`;
+                        const queryParam = user.source === 'supabase'
+                        ? `supabaseId=${user.uid}${user.email ? `&email=${encodeURIComponent(user.email)}` : ''}`
+                        : `firebaseUID=${user.uid}`;
                         let fullResponse = await fetch(`/api/students?${queryParam}${getTenantParam(false)}`, { cache: 'no-store' });
                         
                         // ⚡ FALLBACK: If 404 by ID, try fetching by email (extremely robust)

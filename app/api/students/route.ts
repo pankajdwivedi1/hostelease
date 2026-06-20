@@ -168,68 +168,24 @@ export async function GET(request: NextRequest) {
 
       const { getSupabaseAdmin } = await import("@/lib/supabaseServer");
       const supabase = getSupabaseAdmin();
-      
-      // Exclude heavy columns like face_descriptor (which contains large float arrays)
-      // and device_history/web_authn_credentials to minimize DB latency & bandwidth.
-      const selectFields = "_id, firebase_uid, name, email, phone_number, hostel_name, room_number, dob, category, profile_picture, student_status, father_name, father_number, mother_name, mother_number, permanent_address, home_state, erp_id, joining_date, branch, college_name, year, semester, section, floor_number, local_guardian_address, local_guardian_phone_number, device_id, registration_id, is_profile_locked, attendance_mode, device_reset_count, created_at, updated_at, dynamic_fields, tenant_id, supabase_id, auth_provider";
-
-      // ⚡ FAST WILDCARD QUERY: Search directly for matching digits with any delimiters in between
-      const digitPattern = `%${cleaned.split("").join("%")}%`;
-      const filters = [
-        `father_number.like."${digitPattern}"`,
-        `mother_number.like."${digitPattern}"`,
-        `local_guardian_phone_number.like."${digitPattern}"`
-      ];
-      const filterString = filters.join(",");
 
       let { data: students, error } = await supabase
         .from("students")
-        .select(selectFields)
-        .eq("tenant_id", tenantId)
-        .or(filterString);
+        .select("*, student_profiles(*), student_security(*)")
+        .eq("tenant_id", tenantId);
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
-      // ⚡ FALLBACK: If fast query returned no results, fall back to slow scan but ONLY fetch key identifiers.
-      // This prevents downloading massive face descriptors for all students in the tenant context.
-      if (!students || students.length === 0) {
-        console.log(`[Students API] Fast query missed. Running fallback lightweight scan for parent phone: ${cleaned}`);
-        const { data: idMapping, error: allErr } = await supabase
-          .from("students")
-          .select("_id, father_number, mother_number, local_guardian_phone_number")
-          .eq("tenant_id", tenantId);
-        
-        if (!allErr && idMapping) {
-          const cleanDbPhone = (num: string) => num ? num.replace(/\D/g, "").replace(/^91/, "") : "";
-          const matchedMap = idMapping.find(s => {
-            const fatherClean = cleanDbPhone(s.father_number);
-            const motherClean = cleanDbPhone(s.mother_number);
-            const lgClean = cleanDbPhone(s.local_guardian_phone_number);
-            return fatherClean === cleaned || motherClean === cleaned || lgClean === cleaned;
-          });
-
-          if (matchedMap) {
-            // Found a match! Do a fast single-row primary key lookup to get the student's details
-            const { data: matchedStudentData, error: lookupErr } = await supabase
-              .from("students")
-              .select(selectFields)
-              .eq("_id", matchedMap._id)
-              .maybeSingle();
-
-            if (!lookupErr && matchedStudentData) {
-              students = [matchedStudentData];
-            }
-          }
-        }
-      }
-
       const cleanDbPhone = (num: string) => num ? num.replace(/\D/g, "").replace(/^91/, "") : "";
-      const matched = students?.find(s => {
-        const fatherClean = cleanDbPhone(s.father_number);
-        const motherClean = cleanDbPhone(s.mother_number);
-        const lgClean = cleanDbPhone(s.local_guardian_phone_number);
+      const matched = students?.find((s: any) => {
+        const prof = Array.isArray(s.student_profiles) ? s.student_profiles[0] : s.student_profiles;
+        if (!prof) return false;
+
+        const fatherClean = cleanDbPhone(prof.father_number);
+        const motherClean = cleanDbPhone(prof.mother_number);
+        const lgClean = cleanDbPhone(prof.local_guardian_phone_number);
         return fatherClean === cleaned || motherClean === cleaned || lgClean === cleaned;
       });
 
@@ -268,7 +224,28 @@ export async function GET(request: NextRequest) {
     }
 
     if (supabaseId) {
-      const student = await db.students.findOne({ supabaseId });
+      let student = await db.students.findOne({ supabaseId });
+      
+      // Auto-link fallback: if not found by supabaseId but email is provided
+      if (!student && email) {
+        console.log(`[Auto-Link] supabaseId search missed. Trying fallback by email: ${email}`);
+        student = await db.students.findOne({ email });
+        if (student) {
+          console.log(`[Auto-Link] Found student by email. Linking to Supabase ID: ${supabaseId}`);
+          try {
+            await db.students.save(student.firebaseUID, {
+              ...student,
+              supabaseId,
+              authProvider: 'supabase'
+            });
+            student.supabaseId = supabaseId;
+            student.authProvider = 'supabase';
+          } catch (linkErr: any) {
+            console.error("Failed to auto-link Supabase ID in supabaseId query:", linkErr.message);
+          }
+        }
+      }
+
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
@@ -289,6 +266,23 @@ export async function GET(request: NextRequest) {
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
+
+      // Auto-link: if found by email, but supabaseId is missing from DB and provided in query params
+      if (supabaseId && !student.supabaseId) {
+        console.log(`[Auto-Link] Linking student ${student.email} to Supabase ID: ${supabaseId}`);
+        try {
+          await db.students.save(student.firebaseUID, {
+            ...student,
+            supabaseId,
+            authProvider: 'supabase'
+          });
+          student.supabaseId = supabaseId;
+          student.authProvider = 'supabase';
+        } catch (linkErr: any) {
+          console.error("Failed to auto-link Supabase ID in email query:", linkErr.message);
+        }
+      }
+
       const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
       return NextResponse.json({ 
         student, 

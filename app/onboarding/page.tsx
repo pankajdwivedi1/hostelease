@@ -642,7 +642,7 @@ export default function OnboardingPage() {
         return;
       }
 
-      setFaceDescriptor(Array.from(descriptor.descriptor));
+      setFaceDescriptor(descriptor.descriptor);
       console.log("✅ Background Face Scan Complete");
     } catch (err) {
       console.error("Error generating face descriptor:", err);

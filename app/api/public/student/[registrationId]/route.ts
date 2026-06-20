@@ -6,10 +6,10 @@ export const dynamic = "force-dynamic";
 // GET - Fetch public student information by registration ID
 export async function GET(
     request: NextRequest,
-    { params }: { params: { registrationId: string } }
+    context: { params: Promise<{ registrationId: string }> }
 ) {
     try {
-        const { registrationId } = params;
+        const { registrationId } = await context.params;
 
         if (!registrationId) {
             return NextResponse.json(

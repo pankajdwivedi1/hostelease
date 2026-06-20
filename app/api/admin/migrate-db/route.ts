@@ -21,6 +21,7 @@ export async function POST() {
 
         const transformedStudents = students.map((s: any) => ({
             _id: s._id.toString(), // Keep Mongo ID for reference (ensure column is TEXT or UUID)
+            tenant_id: s.tenantId || 'default', // Map tenantId correctly
             firebase_uid: s.firebaseUID,
             name: s.name,
             email: s.email,
@@ -66,11 +67,75 @@ export async function POST() {
         const chunkSize = 100;
         for (let i = 0; i < transformedStudents.length; i += chunkSize) {
             const chunk = transformedStudents.slice(i, i + chunkSize);
-            const { error } = await supabase.from('students').upsert(chunk, { onConflict: 'firebase_uid' });
 
-            if (error) {
-                console.error(`❌ Error migrating students batch ${i}:`, error);
-                throw new Error(`Migration Failed: ${error.message}`);
+            // Split chunk into three tables
+            const studentsChunk = chunk.map((s: any) => ({
+                _id: s._id,
+                tenant_id: s.tenant_id,
+                firebase_uid: s.firebase_uid,
+                name: s.name,
+                email: s.email,
+                phone_number: s.phone_number,
+                hostel_name: s.hostel_name,
+                room_number: s.room_number,
+                profile_picture: s.profile_picture,
+                student_status: s.student_status
+            }));
+
+            const profilesChunk = chunk.map((s: any) => ({
+                student_id: s._id,
+                dob: s.dob,
+                category: s.category,
+                father_name: s.father_name,
+                father_number: s.father_number,
+                mother_name: s.mother_name,
+                mother_number: s.mother_number,
+                permanent_address: s.permanent_address,
+                home_state: s.home_state,
+                erp_id: s.erp_id,
+                joining_date: s.joining_date,
+                branch: s.branch,
+                college_name: s.college_name,
+                year: s.year,
+                semester: s.semester,
+                section: s.section,
+                floor_number: s.floor_number,
+                local_guardian_address: s.local_guardian_address,
+                local_guardian_phone_number: s.local_guardian_phone_number,
+                registration_id: s.registration_id
+            }));
+
+            const securityChunk = chunk.map((s: any) => ({
+                student_id: s._id,
+                device_id: s.device_id,
+                device_reset_count: s.device_reset_count,
+                device_history: s.device_history ? (typeof s.device_history === 'string' ? JSON.parse(s.device_history) : s.device_history) : [],
+                is_profile_locked: s.is_profile_locked,
+                face_descriptor: s.face_descriptor,
+                attendance_mode: s.attendance_mode,
+                web_authn_credentials: s.web_authn_credentials,
+                last_check_in_location: s.last_check_in_location
+            }));
+
+            // Upsert into students first (parent table)
+            const { error: studentsError } = await supabase.from('students').upsert(studentsChunk, { onConflict: 'firebase_uid' });
+            if (studentsError) {
+                console.error(`❌ Error migrating students batch ${i}:`, studentsError);
+                throw new Error(`Migration Failed (students table): ${studentsError.message}`);
+            }
+
+            // Upsert profiles
+            const { error: profilesError } = await supabase.from('student_profiles').upsert(profilesChunk, { onConflict: 'student_id' });
+            if (profilesError) {
+                console.error(`❌ Error migrating profiles batch ${i}:`, profilesError);
+                throw new Error(`Migration Failed (student_profiles table): ${profilesError.message}`);
+            }
+
+            // Upsert security
+            const { error: securityError } = await supabase.from('student_security').upsert(securityChunk, { onConflict: 'student_id' });
+            if (securityError) {
+                console.error(`❌ Error migrating security batch ${i}:`, securityError);
+                throw new Error(`Migration Failed (student_security table): ${securityError.message}`);
             }
         }
         console.log("✅ Students Migrated Successfully");

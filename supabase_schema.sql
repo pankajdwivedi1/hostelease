@@ -3,6 +3,7 @@
 -- Copy and paste this into the SQL Editor in your Supabase Dashboard
 
 -- 0. Create Tenants Table (The University Registry)
+DROP TABLE IF EXISTS tenants CASCADE;
 CREATE TABLE IF NOT EXISTS tenants (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     name TEXT NOT NULL,
@@ -14,11 +15,14 @@ CREATE TABLE IF NOT EXISTS tenants (
     is_active BOOLEAN DEFAULT TRUE,
     subscription_status TEXT DEFAULT 'trial',
     subscription_end_date TIMESTAMPTZ,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 1. Create Students Table
+DROP TABLE IF EXISTS students CASCADE;
 CREATE TABLE IF NOT EXISTS students (
     _id TEXT PRIMARY KEY, 
     tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
@@ -45,6 +49,7 @@ CREATE TABLE IF NOT EXISTS students (
     permanent_address TEXT,
     home_state TEXT,
     erp_information TEXT,
+    erp_id TEXT,
     joining_date DATE,
     branch TEXT,
     college_name TEXT,
@@ -74,7 +79,12 @@ CREATE TABLE IF NOT EXISTS students (
     last_check_in_location JSONB,
     web_authn_credentials JSONB,
     dynamic_fields JSONB DEFAULT '{}'::jsonb,
-    device_history JSONB DEFAULT '[]'::jsonb
+    device_history JSONB DEFAULT '[]'::jsonb,
+
+    -- New Fields from Supabase
+    supabase_id TEXT,
+    auth_provider TEXT,
+    created_by_erp_id TEXT
 );
 
 -- Indexes for Students (Tenant Isolation)
@@ -84,6 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_students_name ON students(name);
 
 
 -- 2. Create Attendance Table
+DROP TABLE IF EXISTS attendance CASCADE;
 CREATE TABLE IF NOT EXISTS attendance (
     _id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
@@ -114,6 +125,10 @@ CREATE TABLE IF NOT EXISTS attendance (
     is_test BOOLEAN DEFAULT FALSE,
     marked_by TEXT,
     
+    -- New Fields from Supabase
+    face_score DOUBLE PRECISION,
+    gps JSONB,
+    
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -142,12 +157,14 @@ CREATE POLICY tenant_isolation_policy ON attendance
 -- VALUES ('Oriental Institute of Science and Technology', 'oist', 'pankajdwivedi81@gmail.com', 'active');
 
 -- ERP Members Table
+DROP TABLE IF EXISTS erp_members CASCADE;
 CREATE TABLE IF NOT EXISTS erp_members (
-    _id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    _id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
-    mobile_number TEXT NOT NULL UNIQUE,
+    phone_number TEXT,
     dashboard_name TEXT NOT NULL,
-    expiry_date TIMESTAMPTZ NOT NULL,
+    inactivity_timeout_mins INTEGER,
+    is_active BOOLEAN DEFAULT TRUE,
     tenant_id TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()

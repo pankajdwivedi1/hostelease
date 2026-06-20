@@ -15,6 +15,14 @@ const TENANT_CACHE_TTL = 60 * 1000; // 1 minute cache
  * injected by the global Next.js middleware.
  */
 export const getTenantFromRequest = cache(async () => {
+    if (process.env.MOCK_TENANT_ID) {
+        return {
+            _id: process.env.MOCK_TENANT_ID,
+            name: 'Mock Tenant',
+            slug: 'mock',
+            isActive: true,
+        };
+    }
     const headersList = await (headers as any)();
     let slug = headersList.get('x-tenant-slug');
 

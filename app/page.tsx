@@ -67,7 +67,7 @@ export default function Dashboard() {
       
       if (sbSession && sbSession.user.email) {
         try {
-          const response = await fetch(`/api/students?email=${encodeURIComponent(sbSession.user.email)}&minimal=true`);
+          const response = await fetch(`/api/students?email=${encodeURIComponent(sbSession.user.email)}&supabaseId=${sbSession.user.id}&minimal=true`);
           if (response.status === 404) {
              // Not found locally or globally - might be a new user or admin
              router.push("/onboarding");

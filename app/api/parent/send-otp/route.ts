@@ -42,36 +42,35 @@ export async function POST(request: NextRequest) {
 
     let { data: students, error } = await supabase
       .from("students")
-      .select("name, father_name, mother_name, father_number, mother_number, local_guardian_phone_number")
-      .eq("tenant_id", tenantId)
-      .or(filterString);
+      .select("name, student_profiles(father_name, mother_name, father_number, mother_number, local_guardian_phone_number)")
+      .eq("tenant_id", tenantId);
 
     if (error) {
       console.error("❌ Error fetching students in send-otp:", error);
       return NextResponse.json({ success: false, error: "Database error occurred" }, { status: 500 });
     }
 
-    // ⚡ FALLBACK: If fast wildcard query returned no results, fall back to slow scan to support custom formatting
-    if (!students || students.length === 0) {
-      console.log(`[Send-OTP] Fast query missed. Running fallback full scan for: ${cleaned}`);
-      const { data: allStudents, error: allErr } = await supabase
-        .from("students")
-        .select("name, father_name, mother_name, father_number, mother_number, local_guardian_phone_number")
-        .eq("tenant_id", tenantId);
-      
-      if (!allErr && allStudents) {
-        students = allStudents;
-      }
-    }
-
     const cleanDbPhone = (num: string) => num ? num.replace(/\D/g, "").replace(/^91/, "") : "";
     
-    const matchedStudent = students?.find(s => {
-      const fatherClean = cleanDbPhone(s.father_number);
-      const motherClean = cleanDbPhone(s.mother_number);
-      const lgClean = cleanDbPhone(s.local_guardian_phone_number);
-      return fatherClean === cleaned || motherClean === cleaned || lgClean === cleaned;
-    });
+    let matchedStudent = null;
+    let studentName = "";
+
+    if (students) {
+      for (const s of students) {
+        const prof = Array.isArray(s.student_profiles) ? s.student_profiles[0] : s.student_profiles;
+        if (!prof) continue;
+
+        const fatherClean = cleanDbPhone(prof.father_number);
+        const motherClean = cleanDbPhone(prof.mother_number);
+        const lgClean = cleanDbPhone(prof.local_guardian_phone_number);
+
+        if (fatherClean === cleaned || motherClean === cleaned || lgClean === cleaned) {
+          matchedStudent = prof;
+          studentName = s.name;
+          break;
+        }
+      }
+    }
 
     if (!matchedStudent) {
       return NextResponse.json({ 
@@ -96,7 +95,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`\n======================================================`);
     console.log(`[PARENT LOGIN OTP] Phone: ${cleaned}`);
-    console.log(`[PARENT LOGIN OTP] Student: ${matchedStudent.name}`);
+    console.log(`[PARENT LOGIN OTP] Student: ${studentName}`);
     console.log(`[PARENT LOGIN OTP] Widget ReqId: ${reqId}`);
     console.log(`======================================================\n`);
 

@@ -50,6 +50,9 @@ interface Tenant {
         advancedAnalytics?: boolean;
     };
     storageBytes?: number;
+    contactName?: string;
+    contactPhone?: string;
+    isDeleted?: boolean;
 }
 
 // ⚡ LIVE SWITCH COMPONENT
@@ -1666,7 +1669,7 @@ export default function SuperAdminDashboard() {
                                     type="number"
                                     min="0"
                                     value={editingTenant?.totalHostelars || ""}
-                                    onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, totalHostelars: e.target.value })}
+                                    onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, totalHostelars: Number(e.target.value) || 0 })}
                                     placeholder="e.g. 500"
                                     className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs placeholder:text-gray-300"
                                 />
