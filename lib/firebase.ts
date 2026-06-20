@@ -22,14 +22,39 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || process.env.NEXT_PHASE?.includes('build');
+
+let app;
+if (isBuildPhase && !process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
+  console.warn("⚠️ Warning: Missing client-side Firebase variables during build. Skipping client initialization.");
+  app = {} as any;
+} else {
+  app = initializeApp(firebaseConfig);
+}
+
+export const auth = new Proxy({} as any, {
+  get(target, prop) {
+    try {
+      if (isBuildPhase && !process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
+        return () => {};
+      }
+      return Reflect.get(getAuth(app), prop);
+    } catch (e) {
+      if (isBuildPhase) {
+        return () => {};
+      }
+      throw e;
+    }
+  }
+});
+
 export const googleProvider = new GoogleAuthProvider();
 
 let analytics;
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && app && app.options) {
   analytics = getAnalytics(app);
 }
 
 export { analytics };
+
 

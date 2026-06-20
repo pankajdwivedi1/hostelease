@@ -11,7 +11,17 @@ export const getSupabaseAdmin = () => {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+    const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || process.env.NEXT_PHASE?.includes('build');
+
     if (!supabaseUrl || !supabaseServiceKey) {
+        if (isBuildPhase) {
+            console.warn('⚠️ Warning: Missing Supabase Server-Side Environment Variables during build phase. Returning dummy client.');
+            return new Proxy({}, {
+                get(target, prop) {
+                    return () => {};
+                }
+            }) as any;
+        }
         throw new Error('Missing Supabase Server-Side Environment Variables');
     }
 

@@ -1,10 +1,12 @@
 import mongoose from "mongoose";
 
 const MONGO_URL = process.env.MONGODB_URL;
+const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || process.env.NEXT_PHASE?.includes('build');
 
-if (!MONGO_URL) {
+if (!MONGO_URL && !isBuildPhase) {
   throw new Error("Please add MONGODB_URL to your .env.local file");
 }
+
 
 let cached = (global as any).mongoose;
 
