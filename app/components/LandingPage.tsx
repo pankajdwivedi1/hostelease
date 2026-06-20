@@ -84,7 +84,8 @@ export default function LandingPage() {
                 </div>
                 <div className="hidden lg:flex items-center gap-8">
                     <a href="#features" className="text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-white transition-colors">Features</a>
-                    <a href="#security" className="text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-white transition-colors">Security</a>
+                    <a href="#about" className="text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-white transition-colors">About Us</a>
+                    <a href="#contact" className="text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-white transition-colors">Contact Us</a>
                     <a href="/superadmin" className="text-xs font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300 transition-colors">SuperAdmin Port</a>
                 </div>
                 <div className="flex items-center gap-2 sm:gap-4">
@@ -236,7 +237,108 @@ export default function LandingPage() {
                 </div>
             </section>
 
+            {/* About Us Section */}
+            <section id="about" className="px-4 sm:px-8 pb-32 max-w-7xl mx-auto space-y-12 scroll-mt-24">
+                <div className="text-center max-w-3xl mx-auto space-y-4">
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full">
+                        <Users className="w-4 h-4 text-blue-500" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">Our Story</span>
+                    </div>
+                    <h2 className="text-3xl sm:text-5xl font-black uppercase tracking-tight">About Hosteleaze</h2>
+                    <p className="text-gray-400 text-sm sm:text-base leading-relaxed">
+                        Hosteleaze is a state-of-the-art campus operating system designed to digitize and secure the student housing ecosystem. Developed meticulously by <strong className="text-white">Dr. Pankaj Dwivedi</strong>, Hosteleaze acts as a decentralized multi-tenant infrastructure, linking university administration, wardens, students, and parents under a unified, real-time secure network.
+                    </p>
+                </div>
+
+                <div className="grid md:grid-cols-3 gap-6">
+                    <div className="bg-white/5 border border-white/10 p-8 rounded-3xl backdrop-blur-sm hover:bg-white/[0.07] transition-all">
+                        <h4 className="text-lg font-black uppercase mb-3 text-white">Biometric Precision</h4>
+                        <p className="text-gray-400 text-xs sm:text-sm leading-relaxed">Advanced mathematical face vector extraction allows high-speed check-ins without storing raw personal images, preserving student privacy.</p>
+                    </div>
+                    <div className="bg-white/5 border border-white/10 p-8 rounded-3xl backdrop-blur-sm hover:bg-white/[0.07] transition-all">
+                        <h4 className="text-lg font-black uppercase mb-3 text-white">Unified Governance</h4>
+                        <p className="text-gray-400 text-xs sm:text-sm leading-relaxed">Connects students, Deans, Wardens, and Parents instantly. Automated gatepasses, leaves, and notifications mean zero physical paperwork.</p>
+                    </div>
+                    <div className="bg-white/5 border border-white/10 p-8 rounded-3xl backdrop-blur-sm hover:bg-white/[0.07] transition-all">
+                        <h4 className="text-lg font-black uppercase mb-3 text-white">Ecosystem Isolation</h4>
+                        <p className="text-gray-400 text-xs sm:text-sm leading-relaxed">Every university runs on an isolated subdomain containing fully partitioned databases, tenant-level customizations, and strict access controls.</p>
+                    </div>
+                </div>
+            </section>
+
+            {/* Contact Us Section */}
+            <section id="contact" className="px-4 sm:px-8 pb-32 max-w-7xl mx-auto scroll-mt-24">
+                <div className="bg-white/5 border border-white/10 rounded-[32px] sm:rounded-[48px] overflow-hidden backdrop-blur-md grid md:grid-cols-2">
+                    
+                    {/* Info Side */}
+                    <div className="p-8 sm:p-16 space-y-8 flex flex-col justify-between border-b md:border-b-0 md:border-r border-white/5 bg-gradient-to-br from-blue-900/10 to-transparent">
+                        <div className="space-y-4">
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full">
+                                <Phone className="w-4 h-4 text-blue-500" />
+                                <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">Get In Touch</span>
+                            </div>
+                            <h2 className="text-3xl sm:text-5xl font-black uppercase tracking-tighter">Contact Us</h2>
+                            <p className="text-gray-400 text-sm sm:text-base leading-relaxed">
+                                Ready to deploy Hosteleaze on your campus, or have questions about our licensing? Reach out to us directly.
+                            </p>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div className="flex items-start gap-4">
+                                <div className="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                                    <Building className="w-5 h-5 text-blue-500" />
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-gray-500">Business Address</h4>
+                                    <p className="text-sm font-bold text-white mt-1">Hosteleaze Solutions, Bhopal, Madhya Pradesh, India - 462021</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start gap-4">
+                                <div className="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                                    <Phone className="w-5 h-5 text-blue-500" />
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-gray-500">Direct Phone Line</h4>
+                                    <p className="text-sm font-bold text-white mt-1">+91 8269418956</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start gap-4">
+                                <div className="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                                    <Mail className="w-5 h-5 text-blue-500" />
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-gray-500">Support Email</h4>
+                                    <p className="text-sm font-bold text-white mt-1">support@hosteleaze.com</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Form Side */}
+                    <div className="p-8 sm:p-16 flex flex-col justify-center">
+                        <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Your Name</label>
+                                <input type="text" placeholder="John Doe" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 focus:outline-none transition-colors" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Institutional Email</label>
+                                <input type="email" placeholder="johndoe@university.edu" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 focus:outline-none transition-colors" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Message</label>
+                                <textarea rows={4} placeholder="Tell us about your campus and student count..." className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 focus:outline-none transition-colors resize-none"></textarea>
+                            </div>
+                            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors active:scale-95">
+                                Send Inquiry
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
             {/* Footer */}
+
             <footer className="border-t border-white/5 px-4 sm:px-8 py-24 text-center">
                 <div className="max-w-xl mx-auto space-y-8">
                     <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-tighter">Ready to digitize your campus?</h3>
@@ -260,15 +362,26 @@ export default function LandingPage() {
                         
                         <div className="py-2">
                             <p className="text-[9px] font-black text-gray-500 uppercase tracking-[0.3em] mb-1">Developed meticulously by</p>
-                            <p className="text-xs font-black text-white uppercase tracking-tighter">Dr. Pankaj Prasad Dwivedi</p>
+                            <p className="text-xs font-black text-white uppercase tracking-tighter">Dr. Pankaj Dwivedi</p>
+                            <div className="mt-2 text-[9px] text-gray-500 space-y-1">
+                                <p>Hosteleaze Solutions, Bhopal, Madhya Pradesh, India - 462021</p>
+                                <p>Phone: +91 8269418956 | Email: support@hosteleaze.com</p>
+                            </div>
                         </div>
 
                         <div className="flex items-center justify-center gap-6 pt-2">
-                            {["Security", "Privacy", "API"].map((link) => (
-                                <a key={link} href="#" className="text-[9px] font-black uppercase tracking-widest text-gray-500 hover:text-white transition-colors">
-                                    {link}
-                                </a>
-                            ))}
+                            <Link href="/privacy" className="text-[9px] font-black uppercase tracking-widest text-gray-500 hover:text-white transition-colors">
+                                Privacy Policy
+                            </Link>
+                            <Link href="/terms" className="text-[9px] font-black uppercase tracking-widest text-gray-500 hover:text-white transition-colors">
+                                Terms & Conditions
+                            </Link>
+                            <a href="#about" className="text-[9px] font-black uppercase tracking-widest text-gray-500 hover:text-white transition-colors">
+                                About Us
+                            </a>
+                            <a href="#contact" className="text-[9px] font-black uppercase tracking-widest text-gray-500 hover:text-white transition-colors">
+                                Contact Us
+                            </a>
                         </div>
                     </div>
                 </div>
