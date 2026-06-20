@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { sendMSG91_WidgetOTP } from "@/lib/msg91";

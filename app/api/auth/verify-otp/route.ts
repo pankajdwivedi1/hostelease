@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { otpCache } from "@/lib/otpCache";
 import { verifyMSG91_WidgetOTP } from "@/lib/msg91";

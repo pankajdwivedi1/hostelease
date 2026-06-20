@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { db, supabase } from "@/lib/dbAdapter";
 import { sendMSG91_GatepassAlert } from "@/lib/msg91";
