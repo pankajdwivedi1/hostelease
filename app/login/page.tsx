@@ -1267,7 +1267,7 @@ function LoginForm() {
                         Developed meticulously by
                       </p>
                       <p className="text-xs font-bold text-slate-700 mt-0.5 transition-colors group-hover:text-blue-600" style={{ fontFamily: 'var(--font-lora), Cambria' }}>
-                        Dr. Pankaj Prasad Dwivedi
+                        Dr. Pankaj Dwivedi
                       </p>
                     </div>
                   </div>
