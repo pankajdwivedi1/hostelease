@@ -287,8 +287,16 @@ export default function OnboardingPage() {
     }
 
     try {
-      await supabase.auth.signOut();
-      await firebaseSignOut(firebaseAuth);
+      try {
+        await supabase.auth.signOut();
+      } catch (e) {
+        console.warn("Supabase sign out error:", e);
+      }
+      try {
+        await firebaseSignOut(firebaseAuth);
+      } catch (e) {
+        console.warn("Firebase sign out error:", e);
+      }
       localStorage.clear();
       router.push("/login");
     } catch (error) {
@@ -425,6 +433,9 @@ export default function OnboardingPage() {
 
       // Premium Success Transition
       setIsSuccess(true);
+      if (data.student) {
+        localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
+      }
       setTimeout(() => {
         localStorage.setItem("userType", "student");
         window.location.href = "/"; // Force hard redirect
@@ -918,6 +929,25 @@ export default function OnboardingPage() {
                 )}
               </div>
             )}
+
+            {isSuccess && (
+              <div className="p-4 rounded-xl bg-green-50 border border-green-200 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-xs font-black text-green-800 uppercase tracking-tight">Success</p>
+                  <p className="text-[11px] text-green-600 font-medium">
+                    {isExistingStudent 
+                      ? "Your profile updated successfully" 
+                      : "Congratulations! Your profile has been generated successfully."}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {formBuilderConfig.length > 0 && (
               <div className="flex gap-4 mt-6">
                 <button
@@ -933,7 +963,7 @@ export default function OnboardingPage() {
                     disabled={loading || isSavingDB || isFaceProcessing || isSuccess}
                     className={`flex-[2] h-12 rounded-lg font-medium transition-colors ${isSuccess ? 'bg-green-600 text-white' : 'bg-blue-600 text-background hover:bg-blue-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
-                    {isSuccess ? "Thank you, your profile is created" : isSavingDB ? "Verifying..." : loading ? "Sending OTP..." : isFaceProcessing ? "Scanning Face..." : "Save your details"}
+                    {isSuccess ? (isExistingStudent ? "Profile Updated!" : "Profile Generated!") : isSavingDB ? "Verifying..." : loading ? "Sending OTP..." : isFaceProcessing ? "Scanning Face..." : "Save your details"}
                   </button>
                 )}
               </div>

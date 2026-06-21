@@ -173,13 +173,16 @@ export async function GET(request: NextRequest) {
       const supabase = getSupabaseAdmin();
 
       const selectStr = minimal
-        ? "*, student_profiles(*)"
-        : "*, student_profiles(*), student_security(*)";
+        ? "*, student_profiles!inner(*)"
+        : "*, student_profiles!inner(*), student_security(*)";
+
+      const digitPattern = `%${cleaned.split("").join("%")}%`;
 
       let { data: students, error } = await supabase
         .from("students")
         .select(selectStr)
-        .eq("tenant_id", tenantId);
+        .eq("tenant_id", tenantId)
+        .or(`father_number.like.${digitPattern},mother_number.like.${digitPattern},local_guardian_phone_number.like.${digitPattern}`, { foreignTable: 'student_profiles' });
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });

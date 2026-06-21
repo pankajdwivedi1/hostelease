@@ -96,6 +96,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
     const [highlightLocation, setHighlightLocation] = useState(false);
     const [requestType, setRequestType] = useState<"outing" | "leave">("outing");
     const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(initialData || null);
+    const [isFullProfileLoaded, setIsFullProfileLoaded] = useState(!!initialData?.collegeName || !!initialData?.joiningDate);
     const [permissions, setPermissions] = useState<Permission[]>([]);
     
     // Outing Calendar states
@@ -714,6 +715,9 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                     setShowMandatoryUpdate(false);
                     return;
                 }
+                if (!isFullProfileLoaded) {
+                    return;
+                }
                 try {
                     const res = await fetch(`/api/student/profile-blockers?studentId=${studentProfile._id}${getTenantParam(false)}`, { cache: 'no-store' });
                     if (!res.ok) throw new Error('Failed to check profile blockers');
@@ -868,7 +872,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                 document.removeEventListener('visibilitychange', handleVisibilityChange);
             };
         }
-    }, [studentProfile, loading]);
+    }, [studentProfile, loading, isFullProfileLoaded]);
 
     // ⚡ OPTIMIZATION: Lazy-load notification images ONLY when the popup is shown
     useEffect(() => {
@@ -905,8 +909,16 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
 
     const handleLogout = async () => {
         try {
-            await supabase.auth.signOut();
-            await firebaseSignOut(firebaseAuth);
+            try {
+                await supabase.auth.signOut();
+            } catch (e) {
+                console.warn("Supabase sign out error:", e);
+            }
+            try {
+                await firebaseSignOut(firebaseAuth);
+            } catch (e) {
+                console.warn("Firebase sign out error:", e);
+            }
             localStorage.clear();
             router.push("/login?logout=success");
         } catch (error) {
@@ -976,6 +988,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                 studentStatus: fullData.student.studentStatus || "in"
                             };
                             setStudentProfile(fullStudentData);
+                            setIsFullProfileLoaded(true);
 
                             // ⚡ NEW: Check for Missing Required Fields (Strict Mode)
                             if (formBuilderConfig && formBuilderConfig.length > 0) {
@@ -1001,6 +1014,10 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                         }
                     } catch (error) {
                         console.error("Error loading full profile:", error);
+                    } finally {
+                        if (isMounted) {
+                            setIsFullProfileLoaded(true);
+                        }
                     }
                 };
 
@@ -1088,6 +1105,10 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                     }
                                 } catch (e) {
                                     console.error("Parent load full profile failed", e);
+                                } finally {
+                                    if (isMounted) {
+                                        setIsFullProfileLoaded(true);
+                                    }
                                 }
                             };
 
@@ -2810,25 +2831,30 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
 
                                 <div className="p-6">
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-6">
-                                        {formBuilderConfig.filter(f => f.visible && f.type !== 'image').map((field) => {
-                                            const value = (studentProfile as any)[field.id] || studentProfile.dynamicFields?.[field.id] || "N/A";
-                                            const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? formatDate(value) : value;
+                                        {(() => {
+                                            const isProfileLoading = !isFullProfileLoaded;
+                                            return formBuilderConfig.filter(f => f.visible && f.type !== 'image').map((field) => {
+                                                const value = studentProfile ? ((studentProfile as any)[field.id] || studentProfile.dynamicFields?.[field.id] || "N/A") : "N/A";
+                                                const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? formatDate(value) : value;
 
-                                            return (
-                                                <div key={field.id} className={['homePinCode', 'localGuardianAddress', 'permanentAddress'].includes(field.id) ? "md:col-span-2" : ""}>
-                                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{field.label}</p>
-                                                    {field.type === 'tel' || field.id.toLowerCase().includes('number') || field.id.toLowerCase().includes('phone') ? (
-                                                        <a href={`tel:${value}`} title="Click to call" className="text-[12px] font-bold text-blue-600 hover:underline">
-                                                            {value}
-                                                        </a>
-                                                    ) : (
-                                                        <p className={`text-[12px] font-bold ${field.id === 'roomNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
-                                                            {field.id === 'roomNumber' && value !== 'N/A' ? '#' : ''}{displayValue}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
+                                                return (
+                                                    <div key={field.id} className={['homePinCode', 'localGuardianAddress', 'permanentAddress'].includes(field.id) ? "md:col-span-2" : ""}>
+                                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{field.label}</p>
+                                                        {isProfileLoading ? (
+                                                            <div className="h-4 w-20 bg-gray-100 animate-pulse rounded mt-1"></div>
+                                                        ) : field.type === 'tel' || field.id.toLowerCase().includes('number') || field.id.toLowerCase().includes('phone') ? (
+                                                            <a href={`tel:${value}`} title="Click to call" className="text-[12px] font-bold text-blue-600 hover:underline">
+                                                                {value}
+                                                            </a>
+                                                        ) : (
+                                                            <p className={`text-[12px] font-bold ${field.id === 'roomNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
+                                                                {field.id === 'roomNumber' && value !== 'N/A' ? '#' : ''}{displayValue}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                );
+                                            });
+                                        })()}
                                     </div>
 
                                 </div>

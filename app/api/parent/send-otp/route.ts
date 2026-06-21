@@ -35,17 +35,12 @@ export async function POST(request: NextRequest) {
 
     // ⚡ FAST WILDCARD QUERY: Search directly for matching digits with any delimiters in between
     const digitPattern = `%${cleaned.split("").join("%")}%`;
-    const filters = [
-      `father_number.like."${digitPattern}"`,
-      `mother_number.like."${digitPattern}"`,
-      `local_guardian_phone_number.like."${digitPattern}"`
-    ];
-    const filterString = filters.join(",");
-
+    
     let { data: students, error } = await supabase
       .from("students")
-      .select("name, student_profiles(father_name, mother_name, father_number, mother_number, local_guardian_phone_number)")
-      .eq("tenant_id", tenantId);
+      .select("name, student_profiles!inner(father_name, mother_name, father_number, mother_number, local_guardian_phone_number)")
+      .eq("tenant_id", tenantId)
+      .or(`father_number.like.${digitPattern},mother_number.like.${digitPattern},local_guardian_phone_number.like.${digitPattern}`, { foreignTable: 'student_profiles' });
 
     if (error) {
       console.error("❌ Error fetching students in send-otp:", error);

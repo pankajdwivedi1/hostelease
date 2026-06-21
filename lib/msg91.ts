@@ -1,3 +1,24 @@
+async function fetchWithRetry(url: string, options: any, retries = 2, delay = 1000): Promise<Response> {
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const res = await fetch(url, options);
+            return res;
+        } catch (err: any) {
+            const isTimeoutOrNetwork = err.name === 'ConnectTimeoutError' || 
+                                       err.message?.includes('fetch failed') || 
+                                       err.message?.includes('timeout') ||
+                                       err.code === 'UND_ERR_CONNECT_TIMEOUT';
+            if (isTimeoutOrNetwork && i < retries) {
+                console.warn(`⚠️ [MSG91 Fetch] Connect timeout/network error. Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+            throw err;
+        }
+    }
+    throw new Error("Fetch failed after retries");
+}
+
 export async function sendMSG91_OTP(phoneNumber: string, otp: string) {
     try {
         const authKey = process.env.MSG91_AUTH_KEY;
@@ -25,7 +46,7 @@ export async function sendMSG91_OTP(phoneNumber: string, otp: string) {
             }
         };
 
-        const response = await fetch(url, options);
+        const response = await fetchWithRetry(url, options);
         const data = await response.json();
 
         if (data.type === "success") {
@@ -90,7 +111,7 @@ export async function sendMSG91_GatepassAlert(
             body: JSON.stringify(payload)
         };
 
-        const response = await fetch('https://control.msg91.com/api/v5/flow/', options);
+        const response = await fetchWithRetry('https://control.msg91.com/api/v5/flow/', options);
         const data = await response.json();
 
         if (data.type === "success" || data.type === "success ") {
@@ -136,13 +157,7 @@ export async function sendMSG91_WidgetOTP(phoneNumber: string) {
             body: JSON.stringify(payload)
         };
 
-        let response;
-        try {
-            response = await fetch('https://control.msg91.com/api/v5/widget/sendOtp', options);
-        } catch (e) {
-            console.warn("control.msg91.com failed, falling back to api.msg91.com...");
-            response = await fetch('https://api.msg91.com/api/v5/widget/sendOtp', options);
-        }
+        const response = await fetchWithRetry('https://api.msg91.com/api/v5/widget/sendOtp', options);
 
         const data = await response.json();
 
@@ -191,13 +206,7 @@ export async function verifyMSG91_WidgetOTP(phoneNumber: string, reqId: string, 
             body: JSON.stringify(payload)
         };
 
-        let response;
-        try {
-            response = await fetch('https://control.msg91.com/api/v5/widget/verifyOtp', options);
-        } catch (e) {
-            console.warn("control.msg91.com failed, falling back to api.msg91.com...");
-            response = await fetch('https://api.msg91.com/api/v5/widget/verifyOtp', options);
-        }
+        const response = await fetchWithRetry('https://api.msg91.com/api/v5/widget/verifyOtp', options);
 
         const data = await response.json();
 
@@ -239,7 +248,7 @@ export async function triggerLeaveVoiceCall(params: {
   }
 
   try {
-    const response = await fetch("https://control.msg91.com/api/v5/voice/call/", {
+    const response = await fetchWithRetry("https://control.msg91.com/api/v5/voice/call/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
