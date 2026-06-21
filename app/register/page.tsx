@@ -128,6 +128,7 @@ export default function RegisterPage() {
                                 <div className="w-14 h-14 sm:w-16 sm:h-16 bg-white rounded-2xl flex items-center justify-center border border-blue-500/30 mx-auto mb-4 overflow-hidden shadow-lg shadow-blue-500/20">
                                     <img src="/uvw_logo.jpg" alt="UVW Logo" className="w-full h-full object-cover" />
                                 </div>
+                                <div className="text-xs sm:text-sm font-black uppercase tracking-[0.25em] bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent mt-2">HOSTELEAZE</div>
                                 <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-tighter text-white">Launch Your Campus</h3>
                                 <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest">Provision your university's digital infrastructure in seconds.</p>
                             </div>
