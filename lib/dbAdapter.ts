@@ -237,8 +237,8 @@ const mapStudentToCamelCase = (s: any) => {
     if (!s) return null;
 
     // Extract sub-tables from Joined query result
-    const profile = Array.isArray(s.student_profiles) ? s.student_profiles[0] : s.student_profiles;
-    const security = Array.isArray(s.student_security) ? s.student_security[0] : s.student_security;
+    const profile = Array.isArray(s.student_profiles) ? s.student_profiles[0] : (s.student_profiles || s.profile);
+    const security = Array.isArray(s.student_security) ? s.student_security[0] : (s.student_security || s.security);
 
     return {
         id: s._id || s.id,
@@ -1153,7 +1153,8 @@ export const db = {
                             { id: id },
                             { firebaseUid: id }
                         ]
-                    }
+                    },
+                    include: { profile: true, security: true }
                 });
                 return student ? mapStudentToCamelCase(student) : null;
             } else {
@@ -1274,7 +1275,10 @@ export const db = {
                 if (filter.registrationId) whereClause.registrationId = filter.registrationId;
                 if (filter.erpInformation) whereClause.erpId = filter.erpInformation;
 
-                let student = await prisma.student.findFirst({ where: whereClause });
+                let student = await prisma.student.findFirst({
+                    where: whereClause,
+                    include: { profile: true, security: true }
+                });
 
                 if (!student) {
                     // Global lookup fallback
@@ -1283,7 +1287,10 @@ export const db = {
                     if (filter.email) globalWhere.email = filter.email;
                     
                     if (Object.keys(globalWhere).length > 0) {
-                        student = await prisma.student.findFirst({ where: globalWhere });
+                        student = await prisma.student.findFirst({
+                            where: globalWhere,
+                            include: { profile: true, security: true }
+                        });
                     }
                 }
                 return student ? mapStudentToCamelCase(student) : null;
@@ -1445,7 +1452,7 @@ export const db = {
         // ⚡ DATABASE-AWARE LIST WITH FILTERS
         list: async (filters: any = {}, options: { light?: boolean; select?: string; limit?: number } = {}) => {
             const source = await getDbSource();
-            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,supabase_id,profile_picture';
+            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,supabase_id,profile_picture,student_profiles(*),student_security(device_id,device_reset_count,device_history,is_profile_locked,attendance_mode,web_authn_credentials,auth_provider)';
             const selection = options.select || (options.light ? lightFields : '*, student_profiles(*), student_security(*)');
 
             if (source === 'SUPABASE') {
@@ -1557,6 +1564,20 @@ export const db = {
 
                 const data = await prisma.student.findMany({
                     where: whereClause,
+                    include: {
+                        profile: true,
+                        security: {
+                            select: {
+                                deviceId: true,
+                                deviceResetCount: true,
+                                deviceHistory: true,
+                                isProfileLocked: true,
+                                attendanceMode: true,
+                                webAuthnCredentials: true,
+                                authProvider: true
+                            }
+                        }
+                    },
                     orderBy: { name: 'asc' },
                     take: options.limit || 1000
                 });
