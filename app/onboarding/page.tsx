@@ -679,6 +679,38 @@ export default function OnboardingPage() {
 
   const formatUndertakingText = (text: string) => {
     if (!text) return null;
+
+    // Infer S/o or D/o relation
+    let parentRelation = "S/o / D/o";
+    const genderKey = Object.keys(formData).find(k => k.toLowerCase() === 'gender' || k.toLowerCase() === 'sex');
+    if (genderKey) {
+      const val = String(formData[genderKey]).toLowerCase();
+      if (val.startsWith('f') || val.includes('girl') || val.includes('woman')) {
+        parentRelation = "D/o";
+      } else if (val.startsWith('m') || val.includes('boy') || val.includes('man')) {
+        parentRelation = "S/o";
+      }
+    } else {
+      const hostel = String(formData.hostelName || "").toLowerCase();
+      if (
+        hostel.includes('girls') || 
+        hostel.includes('girl') || 
+        hostel.includes('female') || 
+        hostel.includes('women') || 
+        hostel.includes('ghb') ||
+        hostel.startsWith('gh')
+      ) {
+        parentRelation = "D/o";
+      } else if (
+        hostel.includes('boys') || 
+        hostel.includes('boy') || 
+        hostel.includes('male') ||
+        hostel.startsWith('bh')
+      ) {
+        parentRelation = "S/o";
+      }
+    }
+
     const placeholderRegex = /({name}|{parent}|{college}|{email}|{phone})/g;
     const parts = text.split(placeholderRegex);
     return parts.map((part, index) => {
@@ -697,7 +729,13 @@ export default function OnboardingPage() {
       if (part === "{phone}") {
         return <span key={index} className="text-blue-700 font-extrabold">{formData.phoneNumber || "____________________"}</span>;
       }
-      return part;
+      
+      // For regular text parts, dynamically replace S/o / D/o based on gender inference
+      let formattedPart = part;
+      formattedPart = formattedPart.replace(/S\/o\s*\/\s*D\/o/gi, parentRelation);
+      formattedPart = formattedPart.replace(/S\/O\s*or\s*D\/O/gi, parentRelation);
+      formattedPart = formattedPart.replace(/S\/o\s*or\s*D\/o/gi, parentRelation);
+      return formattedPart;
     });
   };
 
