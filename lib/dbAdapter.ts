@@ -1204,11 +1204,14 @@ export const db = {
         },
 
         // Get a single student by specific filter
-        findOne: async (filter: any) => {
+        findOne: async (filter: any, options: { minimal?: boolean } = {}) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
-                let query = supabase.from('students').select('*, student_profiles(*), student_security(*)');
+                const selection = options.minimal
+                    ? '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,supabase_id,profile_picture'
+                    : '*, student_profiles(*), student_security(*)';
+                let query = supabase.from('students').select(selection);
                 query = query.eq('tenant_id', tenantId);
 
                 if (filter.firebaseUID) query = query.eq('firebase_uid', filter.firebaseUID);
@@ -1249,7 +1252,7 @@ export const db = {
                 if (error) return null;
                 if (!data) {
                     console.log(`[DB_ADAPTER] Student not found in tenant ${tenantId}, trying global lookup...`);
-                    let globalQuery = supabase.from('students').select('*, student_profiles(*), student_security(*)');
+                    let globalQuery = supabase.from('students').select(selection);
                     if (filter.firebaseUID) globalQuery = globalQuery.eq('firebase_uid', filter.firebaseUID);
                     if (filter.email) globalQuery = globalQuery.eq('email', filter.email);
 
@@ -1277,7 +1280,7 @@ export const db = {
 
                 let student = await prisma.student.findFirst({
                     where: whereClause,
-                    include: { profile: true, security: true }
+                    ...(options.minimal ? {} : { include: { profile: true, security: true } })
                 });
 
                 if (!student) {
@@ -1289,7 +1292,7 @@ export const db = {
                     if (Object.keys(globalWhere).length > 0) {
                         student = await prisma.student.findFirst({
                             where: globalWhere,
-                            include: { profile: true, security: true }
+                            ...(options.minimal ? {} : { include: { profile: true, security: true } })
                         });
                     }
                 }
@@ -1297,7 +1300,11 @@ export const db = {
             } else {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
-                const student = await StudentModel.findOne(filter).lean();
+                let query = StudentModel.findOne(filter);
+                if (options.minimal) {
+                    query = query.select('_id firebaseUID name email studentStatus phoneNumber hostelName roomNumber profilePicture supabaseId');
+                }
+                const student = await query.lean();
                 return mapStudentToCamelCase(student);
             }
         },

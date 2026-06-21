@@ -156,6 +156,7 @@ export async function GET(request: NextRequest) {
     const supabaseId = searchParams.get("supabaseId");
     const email = searchParams.get("email");
     const parentPhone = searchParams.get("parentPhone");
+    const minimal = searchParams.get("minimal") === "true";
 
     if (parentPhone) {
       let cleaned = parentPhone.replace(/\D/g, "");
@@ -171,9 +172,13 @@ export async function GET(request: NextRequest) {
       const { getSupabaseAdmin } = await import("@/lib/supabaseServer");
       const supabase = getSupabaseAdmin();
 
+      const selectStr = minimal
+        ? "*, student_profiles(*)"
+        : "*, student_profiles(*), student_security(*)";
+
       let { data: students, error } = await supabase
         .from("students")
-        .select("*, student_profiles(*), student_security(*)")
+        .select(selectStr)
         .eq("tenant_id", tenantId);
 
       if (error) {
@@ -209,7 +214,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (firebaseUID) {
-      const student = await db.students.findOne({ firebaseUID });
+      const student = await db.students.findOne({ firebaseUID }, { minimal });
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
@@ -226,12 +231,12 @@ export async function GET(request: NextRequest) {
     }
 
     if (supabaseId) {
-      let student = await db.students.findOne({ supabaseId });
+      let student = await db.students.findOne({ supabaseId }, { minimal });
       
       // Auto-link fallback: if not found by supabaseId but email is provided
       if (!student && email) {
         console.log(`[Auto-Link] supabaseId search missed. Trying fallback by email: ${email}`);
-        student = await db.students.findOne({ email });
+        student = await db.students.findOne({ email }, { minimal });
         if (student) {
           console.log(`[Auto-Link] Found student by email. Linking to Supabase ID: ${supabaseId}`);
           try {
@@ -264,7 +269,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (email) {
-      const student = await db.students.findOne({ email });
+      const student = await db.students.findOne({ email }, { minimal });
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
