@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     // Check cache for reqId
     const cacheEntry = otpCache.get(cleaned);
-    if (!cacheEntry || !cacheEntry.reqId) {
+    if (!cacheEntry || (!cacheEntry.reqId && !cacheEntry.otp)) {
       return NextResponse.json({ success: false, error: "OTP session expired or not found. Please request a new OTP." }, { status: 400 });
     }
 
@@ -28,10 +28,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "OTP expired. Please request a new one." }, { status: 400 });
     }
 
-    const verifyResponse = await verifyMSG91_WidgetOTP(cleaned, cacheEntry.reqId, otp);
-
-    if (!verifyResponse.success) {
-        return NextResponse.json({ success: false, error: verifyResponse.error || "Invalid OTP" }, { status: 400 });
+    if (cacheEntry.otp) {
+      if (cacheEntry.otp !== otp) {
+        return NextResponse.json({ success: false, error: "Invalid OTP" }, { status: 400 });
+      }
+    } else {
+      const verifyResponse = await verifyMSG91_WidgetOTP(cleaned, cacheEntry.reqId as string, otp);
+      if (!verifyResponse.success) {
+          return NextResponse.json({ success: false, error: verifyResponse.error || "Invalid OTP" }, { status: 400 });
+      }
     }
 
     // Clear cache upon success

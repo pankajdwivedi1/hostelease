@@ -31,11 +31,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "OTP expired. Please request a new one." }, { status: 400 });
     }
 
-    // Verify using MSG91 Widget API
-    const verification = await verifyMSG91_WidgetOTP(cleaned, cachedData.reqId as string, otp);
-    
-    if (!verification.success) {
-      return NextResponse.json({ success: false, error: verification.error || "Invalid OTP" }, { status: 400 });
+    // Verify
+    if (cachedData.otp) {
+      if (cachedData.otp !== otp) {
+        return NextResponse.json({ success: false, error: "Invalid OTP" }, { status: 400 });
+      }
+    } else {
+      // Verify using MSG91 Widget API
+      const verification = await verifyMSG91_WidgetOTP(cleaned, cachedData.reqId as string, otp);
+      if (!verification.success) {
+        return NextResponse.json({ success: false, error: verification.error || "Invalid OTP" }, { status: 400 });
+      }
     }
 
     // Clear cache after successful verification

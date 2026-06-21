@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { otpCache } from "@/lib/otpCache";
-import { sendMSG91_WidgetOTP } from "@/lib/msg91";
+import { sendMSG91_WidgetOTP, sendMSG91_OTP } from "@/lib/msg91";
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,19 +36,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 🔥 Trigger MSG91 Widget API (Invisible Mode)
-    const smsResponse = await sendMSG91_WidgetOTP(cleaned);
-    
-    if (!smsResponse.success) {
-        console.warn(`⚠️ SMS error for ${cleaned}: ${smsResponse.error}`);
-        return NextResponse.json({ success: false, error: `MSG91 Server Error: ${smsResponse.error}` }, { status: 500 });
-    }
+    // Check if direct OTP template is configured
+    const templateId = process.env.MSG91_TEMPLATE_ID_OTP;
+    const isDirectConfigured = templateId && templateId.trim() !== "" && !templateId.includes("here") && !templateId.includes("template_id") && !templateId.includes("YOUR_");
 
-    const reqId = smsResponse.reqId; 
+    let reqId = "";
+    let generatedOtp = "";
+
+    if (isDirectConfigured) {
+      // Generate a 6-digit OTP
+      generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      const smsResponse = await sendMSG91_OTP(cleaned, generatedOtp);
+      if (!smsResponse.success) {
+        console.warn(`⚠️ Direct SMS error for ${cleaned}: ${smsResponse.error}`);
+        return NextResponse.json({ success: false, error: `MSG91 Server Error: ${smsResponse.error}` }, { status: 500 });
+      }
+    } else {
+      // 🔥 Trigger MSG91 Widget API (Invisible Mode)
+      const smsResponse = await sendMSG91_WidgetOTP(cleaned);
+      if (!smsResponse.success) {
+         console.warn(`⚠️ SMS error for ${cleaned}: ${smsResponse.error}`);
+         return NextResponse.json({ success: false, error: `MSG91 Server Error: ${smsResponse.error}` }, { status: 500 });
+      }
+      reqId = smsResponse.reqId;
+    }
     
     // Store in global cache with 5 minute expiration
     const expires = Date.now() + 5 * 60 * 1000;
-    otpCache.set(cleaned, { reqId: reqId, expires } as any);
+    otpCache.set(cleaned, { reqId, otp: generatedOtp, expires } as any);
 
     console.log(`\n======================================================`);
     console.log(`[STUDENT ONBOARDING OTP] Phone: ${cleaned}`);
