@@ -355,7 +355,8 @@ const splitStudentFields = (data: any) => {
     const studentKeys = [
         'firebase_uid', 'name', 'email', 'phone_number', 'hostel_name',
         'room_number', 'profile_picture', 'student_status', 'supabase_id',
-        'tenant_id'
+        'tenant_id',
+        'dynamic_fields'
     ];
     
     const profileKeys = [
@@ -369,8 +370,7 @@ const splitStudentFields = (data: any) => {
     const securityKeys = [
         'device_id', 'device_reset_count', 'device_history', 'is_profile_locked',
         'face_descriptor', 'thumb_impression_id', 'attendance_mode',
-        'web_authn_credentials', 'last_check_in_location', 'auth_provider',
-        'dynamic_fields'
+        'web_authn_credentials', 'last_check_in_location', 'auth_provider'
     ];
 
     const studentUpdate: any = {};
