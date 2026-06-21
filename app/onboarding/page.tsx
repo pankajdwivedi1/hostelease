@@ -34,6 +34,14 @@ const loadAIModels = async () => {
     return warmupPromise;
 };
 
+const DEFAULT_UNDERTAKING_TEXT = `I, {name}, S/o / D/o {parent}, student of {college} (Email: {email}, Mobile: {phone}), solemnly affirm and declare that:
+1. I will abide by the hostel/institute rules and will maintain proper discipline.
+2. I will not indulge in any act of indiscipline and will not damage any hostel/institute property.
+3. I will not use any motorized vehicle within the campus during my study.
+4. I will not indulge in ragging directly or indirectly.
+5. I shall abide by any other guidelines notified by the Institute/hostel authorities.
+6. In case of violation of rules by me, I shall abide by the decision taken by the Institute/hostel authorities.`;
+
 export default function OnboardingPage() {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -669,6 +677,30 @@ export default function OnboardingPage() {
     }
   };
 
+  const formatUndertakingText = (text: string) => {
+    if (!text) return null;
+    const placeholderRegex = /({name}|{parent}|{college}|{email}|{phone})/g;
+    const parts = text.split(placeholderRegex);
+    return parts.map((part, index) => {
+      if (part === "{name}") {
+        return <span key={index} className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{formData.name || "____________________"}</span>;
+      }
+      if (part === "{parent}") {
+        return <span key={index} className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{formData.fatherName || "____________________"}</span>;
+      }
+      if (part === "{college}") {
+        return <span key={index} className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{formData.collegeName || "____________________"}</span>;
+      }
+      if (part === "{email}") {
+        return <span key={index} className="text-blue-700 font-extrabold">{formData.email || user?.email || "____________________"}</span>;
+      }
+      if (part === "{phone}") {
+        return <span key={index} className="text-blue-700 font-extrabold">{formData.phoneNumber || "____________________"}</span>;
+      }
+      return part;
+    });
+  };
+
   const handleChange = (field: string, value: string) => {
     // Automatically convert to uppercase except for email and joiningDate
     // Also handle select fields carefully
@@ -927,21 +959,10 @@ export default function OnboardingPage() {
                   </h3>
                 </div>
                 
-                <div className="text-[11px] text-indigo-950 font-bold leading-relaxed space-y-2.5 max-h-[220px] overflow-y-auto pr-1 select-none scrollbar-thin">
-                  <p>
-                    I, <span className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{formData.name || "____________________"}</span>, 
-                    S/o / D/o <span className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{formData.fatherName || "____________________"}</span>, 
-                    student of <span className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{formData.collegeName || "____________________"}</span> (Email: <span className="text-blue-700 font-extrabold">{formData.email || user?.email || "____________________"}</span>, Mobile: <span className="text-blue-700 font-extrabold">{formData.phoneNumber || "____________________"}</span>), 
-                    solemnly affirm and declare that:
+                <div className="text-[11px] text-indigo-950 font-bold leading-relaxed max-h-[220px] overflow-y-auto pr-1 select-none scrollbar-thin">
+                  <p className="whitespace-pre-line text-left">
+                    {formatUndertakingText(formConfig.undertakingText || DEFAULT_UNDERTAKING_TEXT)}
                   </p>
-                  <ol className="list-decimal pl-4 space-y-1.5 font-medium text-indigo-850">
-                    <li>I will abide by the hostel/institute rules and will maintain proper discipline.</li>
-                    <li>I will not indulge in any act of indiscipline and will not damage any hostel/institute property.</li>
-                    <li>I will not use any motorized vehicle within the campus during my study.</li>
-                    <li>I will not indulge in ragging directly or indirectly.</li>
-                    <li>I shall abide by any other guidelines notified by the Institute/hostel authorities.</li>
-                    <li>In case of violation of rules by me, I shall abide by the decision taken by the Institute/hostel authorities.</li>
-                  </ol>
                 </div>
 
                 <div className="pt-2.5 border-t border-indigo-100 flex items-start gap-2.5">

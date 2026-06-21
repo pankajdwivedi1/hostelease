@@ -333,6 +333,14 @@ const CACHE_KEYS = {
 };
 const CACHE_DURATION = 1800000; // ⚡ CACHE ENABLED: 30-minute TTL to save bandwidth across tab switches
 
+const DEFAULT_UNDERTAKING_TEXT = `I, {name}, S/o / D/o {parent}, student of {college} (Email: {email}, Mobile: {phone}), solemnly affirm and declare that:
+1. I will abide by the hostel/institute rules and will maintain proper discipline.
+2. I will not indulge in any act of indiscipline and will not damage any hostel/institute property.
+3. I will not use any motorized vehicle within the campus during my study.
+4. I will not indulge in ragging directly or indirectly.
+5. I shall abide by any other guidelines notified by the Institute/hostel authorities.
+6. In case of violation of rules by me, I shall abide by the decision taken by the Institute/hostel authorities.`;
+
 export default function AdminDashboard({ title = "Admin Dashboard", showRemoveButton = false }: { title?: string; showRemoveButton?: boolean }) {
   const router = useRouter();
   const [filter, setFilter] = useState<"all" | "allowed" | "rejected" | "pending">("all");
@@ -522,6 +530,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [registrationFields, setRegistrationFields] = useState<Record<string, any>>({});
   const [formBuilderFields, setFormBuilderFields] = useState<any[]>([]);
   const [requireUndertaking, setRequireUndertaking] = useState(false);
+  const [undertakingText, setUndertakingText] = useState("");
   const [savedFormBuilderConfig, setSavedFormBuilderConfig] = useState<any[]>([]); // ⚡ NEW: Reference for Diff
   const [activeSettingsTab, setActiveSettingsTab] = useState<"general" | "rooms" | "form" | "password" | "bank" | "system" | "audit" | "superadmin" | "subscription">("general");
   const [tenantFormData, setTenantFormData] = useState({
@@ -1061,6 +1070,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (settingsData.success) {
         const config = settingsData.registrationFieldsConfig || {};
         setRequireUndertaking(!!config.requireUndertaking);
+        setUndertakingText(config.undertakingText || DEFAULT_UNDERTAKING_TEXT);
         const mergedFields = { ...DEFAULT_REGISTRATION_FIELDS };
 
         // Merge DB config into defaults
@@ -1297,7 +1307,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           formBuilderConfig: pendingFormBuilderChanges,
           registrationFieldsConfig: {
             ...registrationFields,
-            requireUndertaking: requireUndertaking
+            requireUndertaking: requireUndertaking,
+            undertakingText: undertakingText
           }
         })
       });
@@ -7770,29 +7781,48 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 {activeSettingsTab === "form" && (
                   <div className="space-y-6 pb-8">
                     {/* Student Undertaking Toggle Card */}
-                    <div className="bg-purple-50/50 border-2 border-purple-100 p-4 rounded-2xl flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-6">
-                      <div className="flex items-start gap-4 flex-1 w-full">
-                        <span className="text-xl sm:text-2xl mt-1">📜</span>
-                        <div className="flex-1">
-                          <p className="text-xs sm:text-sm text-purple-900 font-black uppercase tracking-tight">Student Undertaking Requirement</p>
-                          <p className="text-[10px] sm:text-xs text-purple-700/80 font-medium mt-1">
-                            If enabled, students will see the undertaking agreement terms at the bottom of their onboarding form and must check the agreement box before submitting.
-                          </p>
+                    <div className="bg-purple-50/50 border-2 border-purple-100 p-4 rounded-2xl flex flex-col gap-4 mb-6">
+                      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+                        <div className="flex items-start gap-4 flex-1 w-full">
+                          <span className="text-xl sm:text-2xl mt-1">📜</span>
+                          <div className="flex-1">
+                            <p className="text-xs sm:text-sm text-purple-900 font-black uppercase tracking-tight">Student Undertaking Requirement</p>
+                            <p className="text-[10px] sm:text-xs text-purple-700/80 font-medium mt-1">
+                              If enabled, students will see the undertaking agreement terms at the bottom of their onboarding form and must check the agreement box before submitting.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={requireUndertaking}
+                              onChange={(e) => {
+                                setRequireUndertaking(e.target.checked);
+                              }}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                          </label>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={requireUndertaking}
-                            onChange={(e) => {
-                              setRequireUndertaking(e.target.checked);
-                            }}
-                            className="sr-only peer"
+
+                      {requireUndertaking && (
+                        <div className="border-t border-purple-200/60 pt-4 space-y-2.5 animate-in slide-in-from-top-2 duration-200">
+                          <label className="block text-[10px] font-black text-purple-950 uppercase tracking-widest px-1">
+                            Customize Undertaking Text
+                          </label>
+                          <textarea
+                            value={undertakingText}
+                            onChange={(e) => setUndertakingText(e.target.value)}
+                            placeholder="Enter undertaking text points..."
+                            className="w-full min-h-[160px] p-4 rounded-xl border-2 border-purple-200/60 bg-white font-mono text-xs text-purple-950 focus:border-purple-600 focus:outline-none shadow-inner"
                           />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                        </label>
-                      </div>
+                          <p className="text-[9px] text-purple-600 font-bold uppercase tracking-wider px-1">
+                            💡 Use placeholders: <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{name}`}</code>, <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{parent}`}</code>, <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{college}`}</code>, <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{email}`}</code>, <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{phone}`}</code>
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <div className="bg-purple-50 border-2 border-purple-100 p-4 rounded-2xl flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-6">
