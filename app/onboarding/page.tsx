@@ -68,6 +68,7 @@ export default function OnboardingPage() {
   const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
   const [tempConfig, setTempConfig] = useState<any[]>([]);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [agreeUndertaking, setAgreeUndertaking] = useState(false);
 
 
 
@@ -275,6 +276,10 @@ export default function OnboardingPage() {
         }
       }
     });
+
+    if (formConfig.requireUndertaking && !agreeUndertaking) {
+      newErrors["undertaking"] = "You must accept the undertaking to proceed";
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -912,6 +917,57 @@ export default function OnboardingPage() {
               </div>
             )}
 
+
+            {formConfig.requireUndertaking && formBuilderConfig.length > 0 && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-indigo-50/50 border-2 border-indigo-100/80 space-y-3.5 my-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">📜</span>
+                  <h3 className="text-xs font-black text-indigo-900 uppercase tracking-widest">
+                    Undertaking by Student
+                  </h3>
+                </div>
+                
+                <div className="text-[11px] text-indigo-950 font-bold leading-relaxed space-y-2.5 max-h-[220px] overflow-y-auto pr-1 select-none scrollbar-thin">
+                  <p>
+                    I, <span className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{formData.name || "____________________"}</span>, 
+                    S/o / D/o <span className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{formData.fatherName || "____________________"}</span>, 
+                    student of <span className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{formData.collegeName || "____________________"}</span> (Email: <span className="text-blue-700 font-extrabold">{formData.email || user?.email || "____________________"}</span>, Mobile: <span className="text-blue-700 font-extrabold">{formData.phoneNumber || "____________________"}</span>), 
+                    solemnly affirm and declare that:
+                  </p>
+                  <ol className="list-decimal pl-4 space-y-1.5 font-medium text-indigo-850">
+                    <li>I will abide by the hostel/institute rules and will maintain proper discipline.</li>
+                    <li>I will not indulge in any act of indiscipline and will not damage any hostel/institute property.</li>
+                    <li>I will not use any motorized vehicle within the campus during my study.</li>
+                    <li>I will not indulge in ragging directly or indirectly.</li>
+                    <li>I shall abide by any other guidelines notified by the Institute/hostel authorities.</li>
+                    <li>In case of violation of rules by me, I shall abide by the decision taken by the Institute/hostel authorities.</li>
+                  </ol>
+                </div>
+
+                <div className="pt-2.5 border-t border-indigo-100 flex items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    id="undertaking-agreement"
+                    checked={agreeUndertaking}
+                    onChange={(e) => {
+                      setAgreeUndertaking(e.target.checked);
+                      if (errors["undertaking"]) {
+                        setErrors(prev => ({ ...prev, undertaking: "" }));
+                      }
+                    }}
+                    className="mt-0.5 h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <label htmlFor="undertaking-agreement" className="text-[10px] font-black text-indigo-900 uppercase tracking-wide cursor-pointer select-none leading-tight">
+                    I solemnly agree to all the undertaking points mentioned above <span className="text-red-500">*</span>
+                  </label>
+                </div>
+                {errors["undertaking"] && (
+                  <p className="text-[9px] text-red-650 font-black uppercase tracking-widest animate-pulse">
+                    ⚠️ {errors["undertaking"]}
+                  </p>
+                )}
+              </div>
+            )}
 
             {Object.keys(errors).length > 0 && (
               <div className="p-3 rounded-lg bg-red-50 border border-red-200">

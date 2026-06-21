@@ -521,6 +521,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [hostelsConfig, setHostelsConfig] = useState<any[]>([]);
   const [registrationFields, setRegistrationFields] = useState<Record<string, any>>({});
   const [formBuilderFields, setFormBuilderFields] = useState<any[]>([]);
+  const [requireUndertaking, setRequireUndertaking] = useState(false);
   const [savedFormBuilderConfig, setSavedFormBuilderConfig] = useState<any[]>([]); // ⚡ NEW: Reference for Diff
   const [activeSettingsTab, setActiveSettingsTab] = useState<"general" | "rooms" | "form" | "password" | "bank" | "system" | "audit" | "superadmin" | "subscription">("general");
   const [tenantFormData, setTenantFormData] = useState({
@@ -1059,6 +1060,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const settingsData = await settingsRes.json();
       if (settingsData.success) {
         const config = settingsData.registrationFieldsConfig || {};
+        setRequireUndertaking(!!config.requireUndertaking);
         const mergedFields = { ...DEFAULT_REGISTRATION_FIELDS };
 
         // Merge DB config into defaults
@@ -1291,7 +1293,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const res = await fetch("/api/admin/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formBuilderConfig: pendingFormBuilderChanges })
+        body: JSON.stringify({ 
+          formBuilderConfig: pendingFormBuilderChanges,
+          registrationFieldsConfig: {
+            ...registrationFields,
+            requireUndertaking: requireUndertaking
+          }
+        })
       });
       const data = await res.json();
       if (data.success) {
@@ -7761,6 +7769,32 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 )}
                 {activeSettingsTab === "form" && (
                   <div className="space-y-6 pb-8">
+                    {/* Student Undertaking Toggle Card */}
+                    <div className="bg-purple-50/50 border-2 border-purple-100 p-4 rounded-2xl flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-6">
+                      <div className="flex items-start gap-4 flex-1 w-full">
+                        <span className="text-xl sm:text-2xl mt-1">📜</span>
+                        <div className="flex-1">
+                          <p className="text-xs sm:text-sm text-purple-900 font-black uppercase tracking-tight">Student Undertaking Requirement</p>
+                          <p className="text-[10px] sm:text-xs text-purple-700/80 font-medium mt-1">
+                            If enabled, students will see the undertaking agreement terms at the bottom of their onboarding form and must check the agreement box before submitting.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={requireUndertaking}
+                            onChange={(e) => {
+                              setRequireUndertaking(e.target.checked);
+                            }}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                        </label>
+                      </div>
+                    </div>
+
                     <div className="bg-purple-50 border-2 border-purple-100 p-4 rounded-2xl flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-6">
                       <div className="flex items-start gap-4 flex-1 w-full">
                         <span className="text-xl sm:text-2xl mt-1">⚡</span>
