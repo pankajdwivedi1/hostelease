@@ -17,12 +17,12 @@ export default function AuthCallback() {
     };
 
     // 1. If session is instantly available, redirect immediately.
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: any } }) => {
       if (session) doRedirect();
     });
 
     // 2. Otherwise, listen for the exact moment Supabase finishes parsing the URL hash.
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event: string, session: any) => {
       if (event === "SIGNED_IN" || event === "PASSWORD_RECOVERY") {
         if (session) doRedirect();
       }

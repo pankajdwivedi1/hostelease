@@ -844,7 +844,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                         table: 'students',
                         filter: `_id=eq.${studentProfile._id}`
                     },
-                    (payload) => {
+                    (payload: any) => {
                         console.log("⚡ [REALTIME] Student status updated:", payload.new.student_status);
                         setStudentProfile(prev => prev ? ({ ...prev, studentStatus: payload.new.student_status }) : prev);
                     }
