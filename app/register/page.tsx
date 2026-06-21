@@ -27,6 +27,7 @@ export default function RegisterPage() {
         totalHostelars: "",
     });
     const [successData, setSuccessData] = useState<any>(null);
+    const [showTermsModal, setShowTermsModal] = useState(false);
 
     const handleSendOTP = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -307,12 +308,86 @@ export default function RegisterPage() {
 
                     {regStep === 1 && (
                         <p className="text-[8px] sm:text-[9px] text-gray-600 text-center leading-relaxed font-medium">
-                            By launching your campus, you agree to our <span className="text-gray-400 underline cursor-pointer">Terms of Infrastructure Service</span>. <br />
+                            By launching your campus, you agree to our <span onClick={() => setShowTermsModal(true)} className="text-gray-400 underline cursor-pointer hover:text-white transition-colors">Terms of Infrastructure Service</span>. <br />
                             Automated provisioning may take up to 30 seconds for DNS propagation.
                         </p>
                     )}
                 </div>
             </div>
+
+            {/* Terms of Infrastructure Service Modal */}
+            {showTermsModal && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[120] flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="bg-[#0b0c16] border border-white/10 rounded-[24px] sm:rounded-[32px] w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-300 relative text-left" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                            type="button"
+                            onClick={() => setShowTermsModal(false)}
+                            className="absolute top-6 right-6 text-gray-400 hover:text-white transition-colors z-10"
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+
+                        <div className="p-6 sm:p-10 space-y-6">
+                            <div className="border-b border-white/5 pb-4">
+                                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-blue-500">Institutional SLA & Policy</span>
+                                <h2 className="text-xl sm:text-2xl font-black uppercase text-white tracking-tight mt-1">Terms of Infrastructure Service</h2>
+                                <p className="text-[9px] text-gray-500 uppercase tracking-widest font-bold mt-1">Hosteleaze Secure Node Deployment Agreement</p>
+                            </div>
+
+                            <div className="space-y-6 text-xs sm:text-sm text-gray-400 leading-relaxed font-medium">
+                                
+                                <div className="space-y-1">
+                                    <h4 className="font-black text-white uppercase tracking-wide text-[10px] sm:text-xs text-blue-400">1. Node Provisioning & Dedicated Data Partitioning</h4>
+                                    <p className="text-[11px] sm:text-xs text-gray-400">
+                                        By launching this node, a secure, isolated database schema (tenant partition) is deployed exclusively for your institution. Hosteleaze guarantees complete data isolation. Under no circumstances will database records, student logs, or system audits be shared, pooled, or leaked between tenants.
+                                    </p>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <h4 className="font-black text-white uppercase tracking-wide text-[10px] sm:text-xs text-blue-400">2. Biometric Consent & Compliance Responsibility</h4>
+                                    <p className="text-[11px] sm:text-xs text-gray-400">
+                                        As the institution administrator (Warden/Dean/Super Admin), you acknowledge that Hosteleaze processes mathematical vector hashes (descriptors) of student faces for identity verification. The institution assumes sole responsibility for obtaining explicit consent from students (or parents, if minor) in compliance with local privacy frameworks (such as the Digital Personal Data Protection Act - DPDP).
+                                    </p>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <h4 className="font-black text-white uppercase tracking-wide text-[10px] sm:text-xs text-blue-400">3. Device Lock & Anti-Spoofing Protocols</h4>
+                                    <p className="text-[11px] sm:text-xs text-gray-400">
+                                        To maintain hostel security, a strict one-account-to-one-device mapping is enforced. The platform audits and locks unique hardware fingerprints and WebAuthn credentials. Attempts to bypass, spoof, or clone device configurations will result in automatic lockout and require administrative approval to unlock.
+                                    </p>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <h4 className="font-black text-white uppercase tracking-wide text-[10px] sm:text-xs text-blue-400">4. Live Audit Logs & Real-Time Monitoring Availability</h4>
+                                    <p className="text-[11px] sm:text-xs text-gray-400">
+                                        All Gatepass requests, night attendance logs, leave records, and manual warden overrides are permanently audited. Hosteleaze guarantees a 99.9% uptime for core security APIs (QR code validation, Wi-Fi BSSID validation, and location checks) to ensure student safety records remain active and uncompromised.
+                                    </p>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <h4 className="font-black text-white uppercase tracking-wide text-[10px] sm:text-xs text-blue-400">5. Seat Allocation & Fair-Use Limitations</h4>
+                                    <p className="text-[11px] sm:text-xs text-gray-400">
+                                        The provisioned node is restricted to the student seating count declared during registration. Scaling up active hostelars beyond the initial plan requires license upgrades. Node activity is continually monitored to ensure resource stability and prevent network abuse.
+                                    </p>
+                                </div>
+
+                            </div>
+
+                            <div className="pt-6 border-t border-white/5">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowTermsModal(false)}
+                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl sm:rounded-2xl font-black uppercase tracking-widest text-[10px] sm:text-xs transition-all active:scale-95 shadow-xl shadow-blue-500/20"
+                                >
+                                    I Understand & Accept
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
