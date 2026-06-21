@@ -2951,23 +2951,196 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const confirmDownload = () => {
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(exportPreviewData);
+  const confirmDownload = async () => {
+    const XLSXStyle = await import('xlsx-js-style');
+
+    const isAbsenteeReport = exportPreviewData.length > 0 && exportPreviewData[0].Status === "Absent";
+    const reportPrefix = isAbsenteeReport ? "absentees" : "attendance";
+    const hostelNameSuffix = attendanceHostelFilter !== "all" ? `_${attendanceHostelFilter}` : "";
 
     if (exportType === 'students') {
-      XLSX.utils.book_append_sheet(wb, ws, "Students");
-      XLSX.writeFile(wb, "students_data.xlsx");
-    } else {
-      const hostelNameSuffix = attendanceHostelFilter !== "all" ? `_${attendanceHostelFilter}` : "";
-
-      // Determine file name based on data
-      const isAbsenteeReport = exportPreviewData.length > 0 && exportPreviewData[0].Status === "Absent";
-      const reportPrefix = isAbsenteeReport ? "absentees" : "attendance";
-
-      XLSX.utils.book_append_sheet(wb, ws, `${reportPrefix}${hostelNameSuffix}`.slice(0, 31));
-      XLSX.writeFile(wb, `${reportPrefix}_report_${selectedDate}${hostelNameSuffix}.xlsx`);
+      // ── Simple styled Students export ──
+      const wb2 = XLSXStyle.utils.book_new();
+      const ws2 = XLSXStyle.utils.json_to_sheet(exportPreviewData);
+      XLSXStyle.utils.book_append_sheet(wb2, ws2, "Students");
+      XLSXStyle.writeFile(wb2, "students_data.xlsx");
+      setShowExportPreview(false);
+      return;
     }
+
+    // ── ATTENDANCE / ABSENTEE PROFESSIONAL REPORT ──
+    const institutionName = tenantFormData?.name || "HOSTELEAZE";
+    const hostelLabel = attendanceHostelFilter !== "all" ? attendanceHostelFilter : "All Hostels";
+    const reportDate = selectedDate;
+    const generatedAt = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+    const totalStudents = students.length;
+    const presentCount = isAbsenteeReport ? (totalStudents - exportPreviewData.length) : exportPreviewData.length;
+    const absentCount  = isAbsenteeReport ? exportPreviewData.length : (totalStudents - exportPreviewData.length);
+    const reportTitle  = isAbsenteeReport ? "ABSENTEE REPORT" : "ATTENDANCE REPORT";
+
+    // ── Column definitions ──
+    const columns = isAbsenteeReport
+      ? ["S.No", "Student ID", "Name", "Mobile", "Hostel", "Status"]
+      : ["S.No", "Student ID", "Name", "Room", "Mobile", "Hostel", "Entry Time", "GPS Accuracy"];
+
+    // ── Data rows (with S.No) ──
+    const dataRows = exportPreviewData.map((row: any, idx: number) => {
+      if (isAbsenteeReport) {
+        return [idx + 1, row["Student ID"] || "N/A", row["Name"] || "N/A", row["Mobile"] || "N/A", row["Hostel"] || "N/A", "ABSENT"];
+      }
+      return [idx + 1, row["Student ID"] || "N/A", row["Name"] || "N/A", row["Room"] || "N/A", row["Mobile"] || "N/A", row["Hostel"] || "N/A", row["Time"] || "N/A", row["Accuracy"] || "N/A"];
+    });
+
+    // ── Build AOA (Array of Arrays) ──
+    const aoa: any[][] = [
+      // Row 1: Institution name (merged across all columns)
+      [institutionName],
+      // Row 2: Report title
+      [reportTitle],
+      // Row 3: blank separator
+      [],
+      // Row 4: Report metadata
+      ["Report Date:", reportDate, "", "Hostel:", hostelLabel],
+      // Row 5: Summary stats
+      ["Total Students:", totalStudents, "", "Present:", presentCount, "", "Absent:", absentCount],
+      // Row 6: Generated at
+      ["Generated At:", generatedAt],
+      // Row 7: blank separator
+      [],
+      // Row 8: Column headers
+      columns,
+      // Rows 9+: Data
+      ...dataRows,
+      // Footer: blank then signature line
+      [],
+      ["", "", "", "", "", "", "Authorised Signature: ___________________"],
+    ];
+
+    const ws = XLSXStyle.utils.aoa_to_sheet(aoa);
+    const colCount = columns.length;
+
+    // ── Merge cells ──
+    ws["!merges"] = [
+      // Institution name: A1 across all columns
+      { s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } },
+      // Report title: A2 across all columns
+      { s: { r: 1, c: 0 }, e: { r: 1, c: colCount - 1 } },
+    ];
+
+    // ── Column widths ──
+    ws["!cols"] = [
+      { wch: 6 },   // S.No
+      { wch: 14 },  // Student ID
+      { wch: 24 },  // Name
+      { wch: 8 },   // Room / Mobile (abs)
+      { wch: 14 },  // Mobile / Hostel (abs)
+      { wch: 18 },  // Hostel / Status (abs)
+      { wch: 14 },  // Entry Time
+      { wch: 14 },  // GPS Accuracy
+    ];
+
+    // ── Row heights ──
+    ws["!rows"] = [
+      { hpt: 32 }, // Row 1: institution (tall)
+      { hpt: 22 }, // Row 2: report title
+    ];
+
+    // ── Cell styles ──
+    const HEADER_ROW = 7; // 0-indexed → row 8 in 1-indexed (columns row)
+    const DATA_START  = 8; // 0-indexed → row 9
+
+    for (let R = 0; R < aoa.length; R++) {
+      for (let C = 0; C < colCount; C++) {
+        const addr = XLSXStyle.utils.encode_cell({ r: R, c: C });
+        if (!ws[addr]) ws[addr] = { t: "z", v: "" };
+
+        const cell = ws[addr];
+
+        // ── Institution name ──
+        if (R === 0) {
+          cell.s = {
+            font: { bold: true, sz: 16, color: { rgb: "1A3C6E" } },
+            alignment: { horizontal: "center", vertical: "center", wrapText: true },
+            fill: { fgColor: { rgb: "D6E4F7" } },
+          };
+          continue;
+        }
+
+        // ── Report title ──
+        if (R === 1) {
+          cell.s = {
+            font: { bold: true, sz: 13, color: { rgb: "FFFFFF" } },
+            alignment: { horizontal: "center", vertical: "center" },
+            fill: { fgColor: { rgb: isAbsenteeReport ? "C0392B" : "1A6E3C" } },
+          };
+          continue;
+        }
+
+        // ── Metadata rows (4-6) ──
+        if (R >= 3 && R <= 5) {
+          cell.s = {
+            font: { bold: C % 2 === 0, sz: 10, color: { rgb: C % 2 === 0 ? "555555" : "222222" } },
+            alignment: { horizontal: C % 2 === 0 ? "right" : "left" },
+          };
+          continue;
+        }
+
+        // ── Column header row ──
+        if (R === HEADER_ROW) {
+          cell.s = {
+            font: { bold: true, sz: 11, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: isAbsenteeReport ? "922B21" : "1D6A2E" } },
+            alignment: { horizontal: "center", vertical: "center", wrapText: true },
+            border: {
+              top:    { style: "thin", color: { rgb: "AAAAAA" } },
+              bottom: { style: "thin", color: { rgb: "AAAAAA" } },
+              left:   { style: "thin", color: { rgb: "AAAAAA" } },
+              right:  { style: "thin", color: { rgb: "AAAAAA" } },
+            },
+          };
+          continue;
+        }
+
+        // ── Data rows: zebra striping ──
+        if (R >= DATA_START && R < aoa.length - 2) {
+          const isEvenRow = (R - DATA_START) % 2 === 0;
+          const isLastCol = C === colCount - 1;
+          const cellValue = cell.v?.toString() || "";
+
+          // Colour "ABSENT" red
+          const isAbsent = cellValue === "ABSENT";
+
+          cell.s = {
+            font: {
+              sz: 10,
+              color: { rgb: isAbsent ? "C0392B" : "222222" },
+              bold: isAbsent,
+            },
+            fill: { fgColor: { rgb: isEvenRow ? "F2F9F4" : "FFFFFF" } },
+            alignment: {
+              horizontal: C === 0 ? "center" : isLastCol ? "center" : "left",
+              vertical: "center",
+            },
+            border: {
+              top:    { style: "hair", color: { rgb: "DDDDDD" } },
+              bottom: { style: "hair", color: { rgb: "DDDDDD" } },
+              left:   { style: "thin", color: { rgb: "BBBBBB" } },
+              right:  { style: "thin", color: { rgb: "BBBBBB" } },
+            },
+          };
+          continue;
+        }
+      }
+    }
+
+    // ── Sheet range ──
+    ws["!ref"] = XLSXStyle.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: colCount - 1 } });
+
+    const sheetName = `${reportPrefix}${hostelNameSuffix}`.slice(0, 31);
+    const wb = XLSXStyle.utils.book_new();
+    XLSXStyle.utils.book_append_sheet(wb, ws, sheetName);
+    XLSXStyle.writeFile(wb, `${reportPrefix}_report_${reportDate}${hostelNameSuffix}.xlsx`);
+
     setShowExportPreview(false);
   };
 
