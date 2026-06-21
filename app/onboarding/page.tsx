@@ -202,8 +202,8 @@ export default function OnboardingPage() {
           if (data.student) {
             setIsExistingStudent(true);
             setFormData({
-              ...data.student,
               ...(data.student.dynamicFields || {}),
+              ...data.student,
               dob: data.student.dob ? new Date(data.student.dob).toISOString().split("T")[0] : "",
               joiningDate: data.student.joiningDate ? new Date(data.student.joiningDate).toISOString().split("T")[0] : "",
             });
@@ -227,8 +227,8 @@ export default function OnboardingPage() {
               setIsExistingStudent(true);
               // ... set form data ...
               setFormData({
-                ...data.student,
                 ...(data.student.dynamicFields || {}),
+                ...data.student,
                 dob: data.student.dob ? new Date(data.student.dob).toISOString().split("T")[0] : "",
                 joiningDate: data.student.joiningDate ? new Date(data.student.joiningDate).toISOString().split("T")[0] : "",
               });
@@ -433,7 +433,22 @@ export default function OnboardingPage() {
           category: formData.category,
           deviceId: currentDeviceId,
           faceDescriptor: faceDescriptor ? Array.from(faceDescriptor) : undefined,
-          dynamicFields: formData,
+          dynamicFields: Object.keys(formData).reduce((acc: any, key) => {
+            const coreKeys = [
+              'firebaseUID', 'supabase_id', 'name', 'email', 'phoneNumber',
+              'erpInformation', 'hostelName', 'joiningDate', 'roomNumber',
+              'profilePicture', 'fatherName', 'fatherNumber', 'motherName',
+              'motherNumber', 'homePinCode', 'homeState', 'branch',
+              'collegeName', 'year', 'semester', 'section', 'floorNumber',
+              'localGuardianAddress', 'localGuardianPhoneNumber', 'dob',
+              'category', 'deviceId', 'faceDescriptor', 'id', '_id',
+              'createdAt', 'updatedAt', 'studentStatus', 'registrationId'
+            ];
+            if (!coreKeys.includes(key)) {
+              acc[key] = (formData as any)[key];
+            }
+            return acc;
+          }, {}),
         }),
       });
 
