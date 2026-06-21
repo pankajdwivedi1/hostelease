@@ -7,7 +7,7 @@ import { sendMSG91_WidgetOTP, sendMSG91_OTP } from "@/lib/msg91";
 
 export async function POST(request: NextRequest) {
   try {
-    const { phoneNumber, firebaseUID } = await request.json();
+    const { phoneNumber, firebaseUID, email } = await request.json();
     if (!phoneNumber) {
       return NextResponse.json({ success: false, error: "Phone number is required" }, { status: 400 });
     }
@@ -29,7 +29,12 @@ export async function POST(request: NextRequest) {
     const existingStudent = await db.students.findOne({ phoneNumber: rawPhoneNumber });
     
     // Only block if the number belongs to a DIFFERENT student
-    if (existingStudent && existingStudent.firebaseUID !== firebaseUID) {
+    if (
+      existingStudent && 
+      existingStudent.firebaseUID !== firebaseUID && 
+      existingStudent.supabaseId !== firebaseUID &&
+      (!email || existingStudent.email?.toLowerCase().trim() !== email.toLowerCase().trim())
+    ) {
       return NextResponse.json(
         { success: false, error: "This mobile number is already registered to another student. Please use another number." },
         { status: 409 }

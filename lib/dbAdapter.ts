@@ -1126,11 +1126,11 @@ export const db = {
                     .maybeSingle();
 
                 if (error || !data) {
-                    console.log(`[DB_ADAPTER] Falling back to firebase_uid lookup for: ${id}`);
+                    console.log(`[DB_ADAPTER] Falling back to firebase_uid/supabase_id lookup for: ${id}`);
                     const fbLookup = await supabase
                         .from('students')
                         .select('*, student_profiles(*), student_security(*)')
-                        .eq('firebase_uid', id)
+                        .or(`firebase_uid.eq.${id},supabase_id.eq.${id}`)
                         .eq('tenant_id', tenantId)
                         .maybeSingle();
 
@@ -1151,7 +1151,8 @@ export const db = {
                         tenantId,
                         OR: [
                             { id: id },
-                            { firebaseUid: id }
+                            { firebaseUid: id },
+                            { supabaseId: id }
                         ]
                     },
                     include: { profile: true, security: true }
@@ -1161,7 +1162,15 @@ export const db = {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
                 try {
-                    const student = await StudentModel.findById(id).lean();
+                    let student = await StudentModel.findById(id).lean();
+                    if (!student) {
+                        student = await StudentModel.findOne({
+                            $or: [
+                                { firebaseUID: id },
+                                { supabaseId: id }
+                            ]
+                        }).lean();
+                    }
                     return mapStudentToCamelCase(student);
                 } catch (e) {
                     console.error("MongoDB Error:", e);
@@ -1214,7 +1223,9 @@ export const db = {
                 let query = supabase.from('students').select(selection);
                 query = query.eq('tenant_id', tenantId);
 
-                if (filter.firebaseUID) query = query.eq('firebase_uid', filter.firebaseUID);
+                if (filter.firebaseUID) {
+                    query = query.or(`firebase_uid.eq.${filter.firebaseUID},supabase_id.eq.${filter.firebaseUID}`);
+                }
                 if (filter.supabaseId) {
                     query = query.or(`supabase_id.eq.${filter.supabaseId},firebase_uid.eq.${filter.supabaseId}`);
                 }
@@ -1265,7 +1276,12 @@ export const db = {
             } else if (source === 'PRISMA') {
                 const tenantId = await getTenantIdOrThrow();
                 const whereClause: any = { tenantId };
-                if (filter.firebaseUID) whereClause.firebaseUid = filter.firebaseUID;
+                if (filter.firebaseUID) {
+                    whereClause.OR = [
+                        { firebaseUid: filter.firebaseUID },
+                        { supabaseId: filter.firebaseUID }
+                    ];
+                }
                 if (filter.supabaseId) {
                     whereClause.OR = [
                         { supabaseId: filter.supabaseId },
@@ -1300,7 +1316,28 @@ export const db = {
             } else {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
-                let query = StudentModel.findOne(filter);
+                let queryFilter = { ...filter };
+                if (filter.firebaseUID) {
+                    queryFilter = {
+                        ...queryFilter,
+                        $or: [
+                            { firebaseUID: filter.firebaseUID },
+                            { supabaseId: filter.firebaseUID }
+                        ]
+                    };
+                    delete (queryFilter as any).firebaseUID;
+                }
+                if (filter.supabaseId) {
+                    queryFilter = {
+                        ...queryFilter,
+                        $or: [
+                            { supabaseId: filter.supabaseId },
+                            { firebaseUID: filter.supabaseId }
+                        ]
+                    };
+                    delete (queryFilter as any).supabaseId;
+                }
+                let query = StudentModel.findOne(queryFilter);
                 if (options.minimal) {
                     query = query.select('_id firebaseUID name email studentStatus phoneNumber hostelName roomNumber profilePicture supabaseId');
                 }
@@ -1316,12 +1353,33 @@ export const db = {
                 const supabaseData = mapStudentToSnakeCase(studentData);
                 const { studentUpdate, profileUpdate, securityUpdate } = splitStudentFields(supabaseData);
                 const tenantId = await getTenantIdOrThrow();
-                const { data: existingStudent } = await supabase
+                // Try finding by firebaseUID, supabaseId, or email
+                let { data: existingStudent } = await supabase
                     .from('students')
                     .select('_id')
                     .eq('firebase_uid', firebaseUID)
                     .eq('tenant_id', tenantId)
                     .maybeSingle();
+
+                if (!existingStudent && studentData.supabaseId) {
+                    const fbLookup = await supabase
+                        .from('students')
+                        .select('_id')
+                        .eq('supabase_id', studentData.supabaseId)
+                        .eq('tenant_id', tenantId)
+                        .maybeSingle();
+                    existingStudent = fbLookup.data;
+                }
+
+                if (!existingStudent && studentData.email) {
+                    const fbLookup = await supabase
+                        .from('students')
+                        .select('_id')
+                        .eq('email', studentData.email)
+                        .eq('tenant_id', tenantId)
+                        .maybeSingle();
+                    existingStudent = fbLookup.data;
+                }
 
                 let studentId = existingStudent?._id;
 
@@ -1361,7 +1419,14 @@ export const db = {
                 const prismaData = { ...filterStudentForPrisma(studentData), tenantId };
                 
                 const existing = await prisma.student.findFirst({
-                    where: { firebaseUid: firebaseUID, tenantId }
+                    where: {
+                        tenantId,
+                        OR: [
+                            { firebaseUid: firebaseUID },
+                            ...(studentData.supabaseId ? [{ supabaseId: studentData.supabaseId }] : []),
+                            ...(studentData.email ? [{ email: studentData.email }] : [])
+                        ]
+                    }
                 });
                 if (existing) {
                     const result = await prisma.student.update({
@@ -1379,8 +1444,13 @@ export const db = {
             } else {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
-                const student = await StudentModel.findOneAndUpdate(
+                const queryConditions = [
                     { firebaseUID },
+                    ...(studentData.supabaseId ? [{ supabaseId: studentData.supabaseId }] : []),
+                    ...(studentData.email ? [{ email: studentData.email }] : [])
+                ];
+                const student = await StudentModel.findOneAndUpdate(
+                    { $or: queryConditions },
                     studentData,
                     { upsert: true, new: true, setDefaultsOnInsert: true }
                 );

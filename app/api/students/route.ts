@@ -29,23 +29,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const existingStudent = await db.students.findOne({ firebaseUID });
-
-    // ✅ NEW: Check for duplicate phone numbers
-    if (!existingStudent) {
-      const phoneExists = await db.students.findOne({ phoneNumber: phoneNumber.trim() });
-      if (phoneExists) {
-        return NextResponse.json(
-          { error: "This phone number is already registered with another account" },
-          { status: 409 }
-        );
-      }
+    // Find existing student by firebaseUID, or supabase_id, or email, or phoneNumber fallback
+    let existingStudent = await db.students.findOne({ firebaseUID });
+    if (!existingStudent && supabase_id) {
+      existingStudent = await db.students.findOne({ supabaseId: supabase_id });
+    }
+    if (!existingStudent && email) {
+      existingStudent = await db.students.findOne({ email: email.toLowerCase().trim() });
+    }
+    if (!existingStudent && phoneNumber) {
+      existingStudent = await db.students.findOne({ phoneNumber: phoneNumber.trim() });
     }
 
-    // ✅ NEW: Check for duplicate email
-    if (!existingStudent) {
+    // ✅ Check for duplicate phone numbers belonging to another student
+    const phoneExists = await db.students.findOne({ phoneNumber: phoneNumber.trim() });
+    if (phoneExists && (!existingStudent || phoneExists.firebaseUID !== existingStudent.firebaseUID)) {
+      return NextResponse.json(
+        { error: "This phone number is already registered with another account" },
+        { status: 409 }
+      );
+    }
+
+    // ✅ Check for duplicate email belonging to another student
+    if (email) {
       const emailExists = await db.students.findOne({ email: email.toLowerCase().trim() });
-      if (emailExists) {
+      if (emailExists && (!existingStudent || emailExists.firebaseUID !== existingStudent.firebaseUID)) {
         return NextResponse.json(
           { error: "This email is already registered with another account" },
           { status: 409 }

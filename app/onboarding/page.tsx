@@ -197,7 +197,7 @@ export default function OnboardingPage() {
 
         try {
           // Identify by email for silent handoff compatibility
-          const response = await fetch(`/api/students?email=${encodeURIComponent(currentUser.email || "")}`);
+          const response = await fetch(`/api/students?email=${encodeURIComponent(currentUser.email || "")}&supabaseId=${currentUser.id}`);
           const data = await response.json();
           if (data.student) {
             setIsExistingStudent(true);
@@ -335,7 +335,8 @@ export default function OnboardingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           phoneNumber: formData.phoneNumber,
-          firebaseUID: user?.uid 
+          firebaseUID: user?.uid,
+          email: user?.email
         }),
       });
 
