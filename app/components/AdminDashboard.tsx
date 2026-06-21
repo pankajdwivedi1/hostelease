@@ -2070,7 +2070,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           phoneNumber: s.phoneNumber,
           hostelName: s.hostelName,
           roomNumber: s.room_number || s.roomNumber,
-          profilePicture: null, // Defer loading to on-demand fetch (saves bandwidth)
+          profilePicture: s.profilePicture || null,
           dob: s.dob,
           category: s.category,
           fatherName: s.fatherName,
@@ -2952,12 +2952,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     setShowExportPreview(false);
   };
 
-
   const handleProfileClick = async (studentId: string) => {
     let student = students.find((s) => s.id === studentId);
 
-    // If student is in light mode (e.g. registrationId or fatherName is missing), fetch full details on demand
-    if (student && (student.registrationId === undefined || student.fatherName === undefined)) {
+    // If student is in light mode (e.g. registrationId or fatherName is missing or profilePicture is missing), fetch full details on demand
+    if (student && (student.registrationId === undefined || student.fatherName === undefined || !student.profilePicture)) {
       try {
         // Fetch full student details on demand using email
         const res = await fetch(`/api/students?email=${student.email}`);
