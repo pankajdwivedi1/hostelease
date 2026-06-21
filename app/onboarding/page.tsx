@@ -680,35 +680,52 @@ export default function OnboardingPage() {
   const formatUndertakingText = (text: string) => {
     if (!text) return null;
 
-    // Infer S/o or D/o relation
-    let parentRelation = "S/o / D/o";
-    const genderKey = Object.keys(formData).find(k => k.toLowerCase() === 'gender' || k.toLowerCase() === 'sex');
-    if (genderKey) {
-      const val = String(formData[genderKey]).toLowerCase();
-      if (val.startsWith('f') || val.includes('girl') || val.includes('woman')) {
-        parentRelation = "D/o";
-      } else if (val.startsWith('m') || val.includes('boy') || val.includes('man')) {
-        parentRelation = "S/o";
-      }
-    } else {
-      const hostel = String(formData.hostelName || "").toLowerCase();
-      if (
-        hostel.includes('girls') || 
-        hostel.includes('girl') || 
-        hostel.includes('female') || 
-        hostel.includes('women') || 
-        hostel.includes('ghb') ||
-        hostel.startsWith('gh')
-      ) {
-        parentRelation = "D/o";
-      } else if (
-        hostel.includes('boys') || 
-        hostel.includes('boy') || 
-        hostel.includes('male') ||
-        hostel.startsWith('bh')
-      ) {
-        parentRelation = "S/o";
-      }
+    // Infer S/o or D/o relation
+    let parentRelation = "S/o / D/o";
+    
+    // 1. Check by field label in formBuilderConfig
+    const genderField = formBuilderConfig.find(f => {
+      const label = String(f.label || "").toLowerCase().trim();
+      return label === 'gender' || label === 'sex';
+    });
+    
+    let genderValue = "";
+    if (genderField) {
+      genderValue = String(formData[genderField.id] || "").toLowerCase().trim();
+    } else {
+      // Fallback: Check if there's a literal key like "gender" or "sex" in formData
+      const literalKey = Object.keys(formData).find(k => k.toLowerCase() === 'gender' || k.toLowerCase() === 'sex');
+      if (literalKey) {
+        genderValue = String(formData[literalKey] || "").toLowerCase().trim();
+      }
+    }
+    
+    if (genderValue) {
+      if (genderValue.startsWith('f') || genderValue.includes('girl') || genderValue.includes('woman') || genderValue === 'female') {
+        parentRelation = "D/o";
+      } else if (genderValue.startsWith('m') || genderValue.includes('boy') || genderValue.includes('man') || genderValue === 'male') {
+        parentRelation = "S/o";
+      }
+    } else {
+      // 2. Check hostel name if gender field doesn't exist
+      const hostel = String(formData.hostelName || "").toLowerCase();
+      if (
+        hostel.includes('girls') || 
+        hostel.includes('girl') || 
+        hostel.includes('female') || 
+        hostel.includes('women') || 
+        hostel.includes('ghb') ||
+        hostel.startsWith('gh')
+      ) {
+        parentRelation = "D/o";
+      } else if (
+        hostel.includes('boys') || 
+        hostel.includes('boy') || 
+        hostel.includes('male') ||
+        hostel.startsWith('bh')
+      ) {
+        parentRelation = "S/o";
+      }
     }
 
     const placeholderRegex = /({name}|{parent}|{college}|{email}|{phone})/g;
