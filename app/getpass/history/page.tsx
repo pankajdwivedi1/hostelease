@@ -488,7 +488,7 @@ export default function OutingHistoryPage() {
                             <p className="text-white/40 text-sm font-black uppercase tracking-widest">Searching Archives...</p>
                         </div>
                     ) : records.length > 0 ? (
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 pb-8">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 pb-8">
                             {records.map((record) => (
                                 <div key={record._id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3 px-3 bg-[#121421]/90 rounded-2xl border border-white/5 transition-all hover:bg-[#161a29]/90 hover:border-blue-500/20 group gap-2.5">
                                     <div className="flex items-center gap-3 w-full">
