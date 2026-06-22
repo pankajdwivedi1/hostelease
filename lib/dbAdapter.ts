@@ -4387,9 +4387,19 @@ export const db = {
                 
                 // ⚡ WARDEN FILTER
                 if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
-                    query = query.in('students.hostel_name', filters.authorizedHostels);
+                    const hostelVariations = filters.authorizedHostels.flatMap((h: string) => [
+                        h,
+                        h.toUpperCase(),
+                        h.toLowerCase()
+                    ]);
+                    query = query.in('students.hostel_name', hostelVariations);
                 } else if (filters.hostelName) {
-                    query = query.eq('students.hostel_name', filters.hostelName);
+                    const hostelVariations = [
+                        filters.hostelName,
+                        filters.hostelName.toUpperCase(),
+                        filters.hostelName.toLowerCase()
+                    ];
+                    query = query.in('students.hostel_name', hostelVariations);
                 }
 
                 query = query.order('created_at', { ascending: false });
@@ -4422,9 +4432,19 @@ export const db = {
                 if (filters.status && filters.status !== 'all') whereClause.status = filters.status;
 
                 if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
-                    whereClause.student.hostelName = { in: filters.authorizedHostels };
+                    const hostelVariations = filters.authorizedHostels.flatMap((h: string) => [
+                        h,
+                        h.toUpperCase(),
+                        h.toLowerCase()
+                    ]);
+                    whereClause.student.hostelName = { in: hostelVariations };
                 } else if (filters.hostelName) {
-                    whereClause.student.hostelName = filters.hostelName;
+                    const hostelVariations = [
+                        filters.hostelName,
+                        filters.hostelName.toUpperCase(),
+                        filters.hostelName.toLowerCase()
+                    ];
+                    whereClause.student.hostelName = { in: hostelVariations };
                 }
 
                 const total = await prisma.permission.count({
@@ -4460,9 +4480,19 @@ export const db = {
                     const StudentModel = (await import('@/models/Student')).default;
                     const studentQuery: any = {};
                     if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
-                        studentQuery.hostelName = { $in: filters.authorizedHostels };
+                        const hostelVariations = filters.authorizedHostels.flatMap((h: string) => [
+                            h,
+                            h.toUpperCase(),
+                            h.toLowerCase()
+                        ]);
+                        studentQuery.hostelName = { $in: hostelVariations };
                     } else if (filters.hostelName) {
-                        studentQuery.hostelName = filters.hostelName;
+                        const hostelVariations = [
+                            filters.hostelName,
+                            filters.hostelName.toUpperCase(),
+                            filters.hostelName.toLowerCase()
+                        ];
+                        studentQuery.hostelName = { $in: hostelVariations };
                     }
                     const matchingStudents = await StudentModel.find(studentQuery, '_id').lean();
                     filters.studentId = { $in: matchingStudents.map(s => s._id) };
