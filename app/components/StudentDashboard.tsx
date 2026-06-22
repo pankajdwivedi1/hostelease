@@ -2788,7 +2788,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                             AGREE
                                                                         </span>
                                                                     )}
-                                                                    {(latestPermission.parentStatus === "no_response" || latestPermission.parentStatus === "pending") && (
+                                                                    {(!latestPermission.parentStatus || latestPermission.parentStatus === "no_response" || latestPermission.parentStatus === "pending") && (
                                                                         <span className="text-[6.5px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
                                                                             Pending
                                                                         </span>
@@ -3457,7 +3457,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                                 AGREE
                                                                                             </span>
                                                                                         )}
-                                                                                        {(permission.parentStatus === "no_response" || permission.parentStatus === "pending") && (
+                                                                                        {(!permission.parentStatus || permission.parentStatus === "no_response" || permission.parentStatus === "pending") && (
                                                                                             <span className="text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
                                                                                                 Pending
                                                                                             </span>

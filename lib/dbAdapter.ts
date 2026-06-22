@@ -4629,6 +4629,7 @@ export const db = {
                 const permissionWithDefaults = {
                     wardenStatus: 'pending',
                     deanStatus: 'pending',
+                    parentStatus: 'pending',
                     ...permissionData
                 };
                 let snakeData = { ...mapPermissionToSnakeCase(permissionWithDefaults), tenant_id: tenantId };
@@ -4664,6 +4665,7 @@ export const db = {
                 const permissionWithDefaults = {
                     wardenStatus: 'pending',
                     deanStatus: 'pending',
+                    parentStatus: 'pending',
                     ...permissionData
                 };
                 const prismaData = filterPermissionForPrisma(permissionWithDefaults);
