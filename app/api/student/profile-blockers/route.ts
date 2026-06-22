@@ -54,12 +54,12 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        // Fetch student field progress via adapter
-        const progress = await db.studentFieldProgress.find({
-            studentId: student._id
-        });
-
-
+        // Fetch student field progress via adapter (try both studentId and firebaseUID for robustness)
+        let progress = await db.studentFieldProgress.find({ studentId: student._id });
+        // Fallback: if no progress found by _id, try by firebaseUID (handles Supabase vs Firebase ID mismatch)
+        if (!progress || progress.length === 0) {
+            progress = await db.studentFieldProgress.find({ firebaseUID: student.firebaseUID });
+        }
 
         // Check which required fields are missing or need updating
         const enabledFields = enforcement.enforcedFields.filter((f: any) => f.isEnabled);
@@ -75,26 +75,36 @@ export async function GET(request: NextRequest) {
                 fieldValue === "" ||
                 (typeof fieldValue === "string" && fieldValue.trim() === "");
 
-            // ✅ FIXED BLOCKER LOGIC:
-            // A field is a blocker ONLY if:
-            //   1. It is genuinely empty in the student's profile, OR
-            //   2. Admin set skipCompleted=false (force re-fill every time, field must be refilled)
-            // A field is NOT a blocker if:
-            //   - It already has a value in the student profile (even without a progress record)
-            //   - skipCompleted=true and the field already has a value (already done once)
+            // ✅ CORRECT BLOCKER LOGIC (handles all 3 cases):
+            //
+            // Case 1: Field is empty → ALWAYS block (student must fill it)
+            //
+            // Case 2: Field has value + skipCompleted=false → ALWAYS block
+            //   (Admin wants this re-collected every enforcement cycle, e.g. re-confirm room number)
+            //
+            // Case 3: Field has value + skipCompleted=true/undefined + NO completed progress record
+            //   → Block ONCE (this is a NEW enforcement rule the student hasn't confirmed yet)
+            //   After student clicks "Save & Continue", a progress record is saved → never shown again
+            //
+            // Case 4: Field has value + completed progress record → NOT a blocker
+            //   (Student has already confirmed this enforcement, respect their submission)
             let isBlocker = false;
 
             if (isEmpty) {
-                // Field has no value at all → always block
+                // Case 1: Field genuinely missing — must fill
                 isBlocker = true;
             } else if (field.skipCompleted === false) {
-                // Admin explicitly wants this re-filled every enforcement cycle
-                // Only block if no completed progress record for this enforcement run
+                // Case 2: Admin wants repeated collection — block if no completed progress
                 isBlocker = !progressRecord?.isCompleted;
+            } else {
+                // Case 3 vs 4: Has value, skipCompleted=true
+                // Block if no completed progress record (new enforcement not yet confirmed)
+                // Do NOT block if progress record exists and isCompleted=true
+                isBlocker = !progressRecord || !progressRecord.isCompleted;
             }
-            // else: field has a value and skipCompleted is true/undefined → NOT a blocker
 
             if (isBlocker) {
+                // Only push the fields that are ACTUAL blockers (not all enforced fields)
                 missingFields.push({
                     fieldId: field.fieldId,
                     fieldLabel: field.fieldLabel,
@@ -108,6 +118,7 @@ export async function GET(request: NextRequest) {
 
         // Sort by order
         missingFields.sort((a, b) => a.order - b.order);
+
 
         return NextResponse.json({
             hasBlockers: missingFields.length > 0,
