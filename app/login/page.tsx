@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
@@ -41,6 +41,86 @@ function LoginForm() {
   const [superAdminNewPassword, setSuperAdminNewPassword] = useState("");
   const [superAdminConfirmPassword, setSuperAdminConfirmPassword] = useState("");
   const [superAdminResetLoading, setSuperAdminResetLoading] = useState(false);
+
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const handleOtpBoxChange = (index: number, value: string) => {
+    const cleanValue = value.replace(/\D/g, "");
+    if (!cleanValue) {
+      const newOtp = otp.split("");
+      newOtp[index] = "";
+      setOtp(newOtp.join(""));
+      setError("");
+      return;
+    }
+
+    if (cleanValue.length > 1) {
+      const newOtpDigits = cleanValue.slice(0, 6).split("");
+      while (newOtpDigits.length < 6) newOtpDigits.push("");
+      const finalOtp = newOtpDigits.join("");
+      setOtp(finalOtp);
+      setError("");
+      if (finalOtp.length === 6) {
+        handleVerifyOtp(finalOtp);
+      }
+      const focusIndex = Math.min(cleanValue.length - 1, 5);
+      otpRefs.current[focusIndex]?.focus();
+      return;
+    }
+
+    const newOtp = otp.split("");
+    newOtp[index] = cleanValue;
+    const finalOtp = newOtp.join("");
+    setOtp(finalOtp);
+    setError("");
+
+    if (index < 5) {
+      otpRefs.current[index + 1]?.focus();
+    }
+
+    if (finalOtp.length === 6) {
+      handleVerifyOtp(finalOtp);
+    }
+  };
+
+  const handleOtpBoxKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace") {
+      if (!otp[index] && index > 0) {
+        const newOtp = otp.split("");
+        newOtp[index - 1] = "";
+        setOtp(newOtp.join(""));
+        otpRefs.current[index - 1]?.focus();
+        e.preventDefault();
+      }
+    } else if (e.key === "ArrowLeft" && index > 0) {
+      otpRefs.current[index - 1]?.focus();
+      e.preventDefault();
+    } else if (e.key === "ArrowRight" && index < 5) {
+      otpRefs.current[index + 1]?.focus();
+      e.preventDefault();
+    } else if (e.key === "Enter") {
+      handleVerifyOtp();
+    }
+  };
+
+  const handleOtpBoxPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData("text").replace(/\D/g, "");
+    if (pastedData) {
+      const newOtpDigits = pastedData.slice(0, 6).split("");
+      while (newOtpDigits.length < 6) newOtpDigits.push("");
+      const finalOtp = newOtpDigits.join("");
+      setOtp(finalOtp);
+      setError("");
+      
+      const focusIndex = Math.min(pastedData.length - 1, 5);
+      otpRefs.current[focusIndex]?.focus();
+
+      if (finalOtp.length === 6) {
+        handleVerifyOtp(finalOtp);
+      }
+    }
+  };
 
   // ⚡ INSTANT BRANDING SYNC: Initialize from URL or Local Storage to prevent flickering
   const [tenantName, setTenantName] = useState("Hosteleaze");
@@ -826,34 +906,35 @@ function LoginForm() {
                                   Change Phone
                                 </button>
                               </div>
-                              <div className="relative">
-                                <input
-                                  type="text"
-                                  id="otp"
-                                  name="otp"
-                                  autoFocus
-                                  inputMode="numeric"
-                                  pattern="[0-9]*"
-                                  autoComplete="one-time-code"
-                                  maxLength={6}
-                                  value={otp}
-                                  onChange={(e) => {
-                                    setOtp(e.target.value.replace(/\D/g, ""));
-                                    setError("");
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") handleVerifyOtp();
-                                  }}
-                                  className="w-full rounded-xl border border-slate-200 bg-white px-16 py-3 text-center text-lg font-black tracking-[0.5em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:font-medium"
-                                  placeholder="······"
-                                />
+                              <div className="flex flex-col items-center gap-3">
+                                <div className="flex justify-between gap-2 max-w-[360px] w-full mx-auto">
+                                  {[0, 1, 2, 3, 4, 5].map((index) => (
+                                    <input
+                                      key={index}
+                                      ref={(el) => {
+                                        otpRefs.current[index] = el;
+                                      }}
+                                      type="text"
+                                      inputMode="numeric"
+                                      pattern="[0-9]*"
+                                      maxLength={1}
+                                      autoFocus={index === 0}
+                                      autoComplete={index === 0 ? "one-time-code" : "off"}
+                                      value={otp[index] || ""}
+                                      onChange={(e) => handleOtpBoxChange(index, e.target.value)}
+                                      onKeyDown={(e) => handleOtpBoxKeyDown(index, e)}
+                                      onPaste={index === 0 ? handleOtpBoxPaste : undefined}
+                                      className="w-12 h-12 rounded-xl border border-slate-200 bg-white text-center text-lg font-black text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                    />
+                                  ))}
+                                </div>
                                 <button
                                   type="button"
                                   onClick={handlePasteClipboard}
-                                  className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 border border-blue-100"
+                                  className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 border border-blue-100"
                                   title="Paste code from clipboard"
                                 >
-                                  Paste
+                                  Paste Code
                                 </button>
                               </div>
                               <button
