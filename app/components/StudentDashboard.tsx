@@ -3223,7 +3223,17 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
  
                                                                     const dateStr = cell.date.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
                                                                     const attendanceRecord = attendanceHistory.find((r: any) => r.date === dateStr);
-                                                                    const attendanceStatus = attendanceRecord ? 'Present' : (isBeforeJoining || isFuture || isOutsideSubscription ? 'No Record' : 'Absent');
+                                                                    const isPastWindow = (() => {
+                                                                        const now = new Date();
+                                                                        const istTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false });
+                                                                        const istTime = istTimeStr.substring(0, 5);
+                                                                        return (istTime > attendanceWindow.end) || (now.getHours() >= 0 && now.getHours() < 6);
+                                                                    })();
+                                                                    const attendanceStatus = attendanceRecord 
+                                                                        ? 'Present' 
+                                                                        : (isBeforeJoining || isFuture || isOutsideSubscription 
+                                                                            ? 'No Record' 
+                                                                            : (isToday && !isPastWindow ? 'Pending' : 'Absent'));
  
                                                                     return (
                                                                         <button
@@ -3287,7 +3297,23 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                                                                         const dateStr = selectedCalendarDay.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).split('/').reverse().join('-');
                                                                         const attendanceRecord = attendanceHistory.find((r: any) => r.date === dateStr);
-                                                                        const attendanceStatus = attendanceRecord ? 'Present' : (isBeforeJoining || isFuture || isOutsideSubscription ? 'No Record' : 'Absent');
+                                                                        const isToday = (() => {
+                                                                            const today = new Date();
+                                                                            return selectedCalendarDay.getDate() === today.getDate() &&
+                                                                                selectedCalendarDay.getMonth() === today.getMonth() &&
+                                                                                selectedCalendarDay.getFullYear() === today.getFullYear();
+                                                                        })();
+                                                                        const isPastWindow = (() => {
+                                                                            const now = new Date();
+                                                                            const istTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false });
+                                                                            const istTime = istTimeStr.substring(0, 5);
+                                                                            return (istTime > attendanceWindow.end) || (now.getHours() >= 0 && now.getHours() < 6);
+                                                                        })();
+                                                                        const attendanceStatus = attendanceRecord 
+                                                                            ? 'Present' 
+                                                                            : (isBeforeJoining || isFuture || isOutsideSubscription 
+                                                                                ? 'No Record' 
+                                                                                : (isToday && !isPastWindow ? 'Pending' : 'Absent'));
  
                                                                         if (isFuture) {
                                                                             return (
@@ -3329,9 +3355,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                     <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
                                                                                         attendanceStatus === 'Present' ? 'bg-green-50 text-green-700 border-green-200' :
                                                                                         attendanceStatus === 'Absent' ? 'bg-red-50 text-red-700 border-red-200' :
+                                                                                        attendanceStatus === 'Pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
                                                                                         'bg-gray-100 text-gray-500 border-gray-200'
                                                                                     }`}>
-                                                                                        {attendanceStatus === 'Present' ? `✅ Present (${attendanceRecord?.time})` : attendanceStatus === 'Absent' ? '❌ Absent' : '➖ No Record'}
+                                                                                        {attendanceStatus === 'Present' ? `✅ Present (${attendanceRecord?.time})` : 
+                                                                                         attendanceStatus === 'Absent' ? '❌ Absent' : 
+                                                                                         attendanceStatus === 'Pending' ? `🕒 Pending (${attendanceWindow.start} - ${attendanceWindow.end})` : 
+                                                                                         '➖ No Record'}
                                                                                     </span>
                                                                                 </div>
 
