@@ -1215,6 +1215,7 @@ export const db = {
 
         // Get a single student by specific filter
         findOne: async (filter: any, options: { minimal?: boolean } = {}) => {
+            const isUuidString = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
@@ -1225,10 +1226,18 @@ export const db = {
                 query = query.eq('tenant_id', tenantId);
 
                 if (filter.firebaseUID) {
-                    query = query.or(`firebase_uid.eq.${filter.firebaseUID},supabase_id.eq.${filter.firebaseUID}`);
+                    if (isUuidString(filter.firebaseUID)) {
+                        query = query.or(`firebase_uid.eq.${filter.firebaseUID},supabase_id.eq.${filter.firebaseUID}`);
+                    } else {
+                        query = query.eq('firebase_uid', filter.firebaseUID);
+                    }
                 }
                 if (filter.supabaseId) {
-                    query = query.or(`supabase_id.eq.${filter.supabaseId},firebase_uid.eq.${filter.supabaseId}`);
+                    if (isUuidString(filter.supabaseId)) {
+                        query = query.or(`supabase_id.eq.${filter.supabaseId},firebase_uid.eq.${filter.supabaseId}`);
+                    } else {
+                        query = query.eq('firebase_uid', filter.supabaseId);
+                    }
                 }
                 if (filter._id) query = query.eq('_id', filter._id);
                 if (filter.email) query = query.eq('email', filter.email);
@@ -1261,7 +1270,10 @@ export const db = {
 
                 const { data, error } = await query.maybeSingle();
 
-                if (error) return null;
+                if (error) {
+                    console.error("[DB_ADAPTER] findOne Error:", error);
+                    return null;
+                }
                 if (!data) {
                     console.log(`[DB_ADAPTER] Student not found in tenant ${tenantId}, trying global lookup...`);
                     let globalQuery = supabase.from('students').select(selection);

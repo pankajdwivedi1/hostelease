@@ -80,7 +80,11 @@ export const getTenantFromRequest = cache(async () => {
         return null;
     }
 
-    const normalizedSlug = slug.toLowerCase();
+    let normalizedSlug = slug.toLowerCase();
+    // ⚡ OIST / OGI ALIAS SUPPORT: Map 'oist' slug to 'ogi' which is the database slug for OGI tenant.
+    if (normalizedSlug === 'oist') {
+        normalizedSlug = 'ogi';
+    }
 
     // ⚡ Check local memory cache first
     const cached = tenantCache.get(normalizedSlug);

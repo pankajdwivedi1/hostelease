@@ -83,8 +83,43 @@ export async function PATCH(
         }
       } catch (authError: any) {
         console.error("❌ Firebase Auth update failed:", authError);
-        // We don't necessarily block the DB update if Auth fails, but we should log it.
-        // Or should we? If login depends on it, maybe we should.
+      }
+    }
+
+    // ✅ NEW: Extract any non-standard fields (custom dynamic fields) and merge them into dynamicFields
+    const standardFields = new Set([
+      'firebaseUID', 'firebase_uid', 'name', 'email', 'phoneNumber', 'phone_number',
+      'hostelName', 'hostel_name', 'roomNumber', 'room_number', 'profilePicture', 'profile_picture',
+      'studentStatus', 'student_status', 'supabaseId', 'supabase_id', 'tenantId', 'tenant_id',
+      'dob', 'category', 'fatherName', 'father_name', 'fatherNumber', 'father_number',
+      'motherName', 'mother_name', 'motherNumber', 'mother_number', 'permanentAddress', 'permanent_address',
+      'homePinCode', 'home_pin_code', 'homeState', 'home_state', 'erpInformation', 'erp_id',
+      'joiningDate', 'joining_date', 'branch', 'collegeName', 'college_name', 'year', 'semester',
+      'section', 'floorNumber', 'floor_number', 'localGuardianAddress', 'local_guardian_address',
+      'localGuardianPhoneNumber', 'local_guardian_phone_number', 'registrationId', 'registration_id',
+      'createdByErpId', 'created_by_erp_id', 'deviceId', 'device_id', 'deviceResetCount', 'device_reset_count',
+      'deviceHistory', 'device_history', 'isProfileLocked', 'is_profile_locked', 'faceDescriptor', 'face_descriptor',
+      'thumbImpressionId', 'thumb_impression_id', 'attendanceMode', 'attendance_mode',
+      'webAuthnCredentials', 'web_authn_credentials', 'lastCheckInLocation', 'last_check_in_location',
+      'authProvider', 'auth_provider', 'action', 'dynamicFields', 'dynamic_fields'
+    ]);
+
+    const customKeys = Object.keys(body).filter(key => !standardFields.has(key));
+    if (customKeys.length > 0) {
+      try {
+        console.log(`[DynamicFields] Processing custom keys: ${customKeys.join(', ')}`);
+        const student = await db.students.getById(studentId);
+        const currentDynamicFields = student?.dynamicFields || {};
+        const mergedDynamicFields = { ...currentDynamicFields };
+        
+        customKeys.forEach(key => {
+          mergedDynamicFields[key] = body[key];
+          delete body[key];
+        });
+        
+        body.dynamicFields = mergedDynamicFields;
+      } catch (err: any) {
+        console.error("❌ Failed to process dynamic fields update:", err);
       }
     }
 
