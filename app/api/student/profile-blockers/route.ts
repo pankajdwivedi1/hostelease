@@ -65,9 +65,51 @@ export async function GET(request: NextRequest) {
         const enabledFields = enforcement.enforcedFields.filter((f: any) => f.isEnabled);
         const missingFields: any[] = [];
 
+        // ── Helper: resolve the actual student property key from fieldId OR fieldLabel ──
+        // When admin adds a field via Form Builder, fieldId may be a random string like
+        // "name_copy_1782065596117" instead of the real student property "gender".
+        // We use the fieldLabel to find the canonical property name as a fallback.
+        const LABEL_TO_FIELD: Record<string, string> = {
+            // Label (lowercase) → actual student property key
+            "gender": "gender",
+            "current year": "year",
+            "year": "year",
+            "semester": "semester",
+            "social category": "category",
+            "category": "category",
+            "section": "section",
+            "floor number": "floorNumber",
+            "room number": "roomNumber",
+            "hostel name": "hostelName",
+            "hostel joining date": "joiningDate",
+            "joining date": "joiningDate",
+            "date of birth": "dob",
+            "dob": "dob",
+            "home state": "homeState",
+            "father's name": "fatherName",
+            "mother's name": "motherName",
+            "erp id": "erpId",
+            "college name": "collegeName",
+            "branch": "branch",
+            "permanent address": "permanentAddress",
+        };
+
+        const resolveFieldKey = (fieldId: string, fieldLabel: string): string => {
+            // First try the fieldId directly as a student property
+            if ((student as any)[fieldId] !== undefined) return fieldId;
+            if ((student as any).dynamicFields?.[fieldId] !== undefined) return fieldId;
+            // Fallback: use the label to find the real property name
+            const canonicalKey = LABEL_TO_FIELD[fieldLabel?.toLowerCase()?.trim()];
+            if (canonicalKey) return canonicalKey;
+            // Last resort: return the original fieldId
+            return fieldId;
+        };
+
         for (const field of enabledFields) {
-            const fieldValue = (student as any)[field.fieldId] ?? (student as any).dynamicFields?.[field.fieldId];
+            const resolvedKey = resolveFieldKey(field.fieldId, field.fieldLabel);
+            const fieldValue = (student as any)[resolvedKey] ?? (student as any).dynamicFields?.[resolvedKey];
             const progressRecord = progress.find((p: any) => p.fieldId === field.fieldId);
+
 
             const isEmpty =
                 fieldValue === undefined ||
