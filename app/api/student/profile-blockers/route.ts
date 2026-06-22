@@ -19,7 +19,8 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Fetch student data using adapter
+        // Fetch student data — use raw Supabase to get dynamic_fields JSONB directly
+        // The adapter's getById loses fields like year/gender/section that are stored in dynamic_fields
         const student = await db.students.getById(studentId);
         if (!student) {
             return NextResponse.json(
@@ -27,6 +28,18 @@ export async function GET(request: NextRequest) {
                 { status: 404 }
             );
         }
+
+        // Also fetch raw student row to get dynamic_fields JSONB (contains year, gender, semester, etc.)
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+        const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
+        const { data: rawStudent } = await supabaseAdmin
+            .from('students')
+            .select('dynamic_fields')
+            .eq('_id', student._id)
+            .maybeSingle();
+        const dynamicFields: Record<string, any> = rawStudent?.dynamic_fields || {};
 
         // Fetch field enforcement rules for student's hostel
         const studentHostel = (student.hostelName || "").trim();
@@ -97,7 +110,7 @@ export async function GET(request: NextRequest) {
         const resolveFieldKey = (fieldId: string, fieldLabel: string): string => {
             // First try the fieldId directly as a student property
             if ((student as any)[fieldId] !== undefined) return fieldId;
-            if ((student as any).dynamicFields?.[fieldId] !== undefined) return fieldId;
+            if (dynamicFields[fieldId] !== undefined) return fieldId;
             // Fallback: use the label to find the real property name
             const canonicalKey = LABEL_TO_FIELD[fieldLabel?.toLowerCase()?.trim()];
             if (canonicalKey) return canonicalKey;
@@ -107,7 +120,12 @@ export async function GET(request: NextRequest) {
 
         for (const field of enabledFields) {
             const resolvedKey = resolveFieldKey(field.fieldId, field.fieldLabel);
-            const fieldValue = (student as any)[resolvedKey] ?? (student as any).dynamicFields?.[resolvedKey];
+            // Check both the adapter-mapped student object AND raw dynamicFields JSONB
+            const fieldValue =
+                (student as any)[resolvedKey] ??
+                dynamicFields[resolvedKey] ??
+                dynamicFields[field.fieldId] ??
+                (student as any)[field.fieldId];
             const progressRecord = progress.find((p: any) => p.fieldId === field.fieldId);
 
 
