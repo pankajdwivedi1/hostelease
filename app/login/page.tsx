@@ -42,85 +42,7 @@ function LoginForm() {
   const [superAdminConfirmPassword, setSuperAdminConfirmPassword] = useState("");
   const [superAdminResetLoading, setSuperAdminResetLoading] = useState(false);
 
-  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-  const handleOtpBoxChange = (index: number, value: string) => {
-    const cleanValue = value.replace(/\D/g, "");
-    if (!cleanValue) {
-      const newOtp = otp.split("");
-      newOtp[index] = "";
-      setOtp(newOtp.join(""));
-      setError("");
-      return;
-    }
-
-    if (cleanValue.length > 1) {
-      const newOtpDigits = cleanValue.slice(0, 6).split("");
-      while (newOtpDigits.length < 6) newOtpDigits.push("");
-      const finalOtp = newOtpDigits.join("");
-      setOtp(finalOtp);
-      setError("");
-      if (finalOtp.length === 6) {
-        handleVerifyOtp(finalOtp);
-      }
-      const focusIndex = Math.min(cleanValue.length - 1, 5);
-      otpRefs.current[focusIndex]?.focus();
-      return;
-    }
-
-    const newOtp = otp.split("");
-    newOtp[index] = cleanValue;
-    const finalOtp = newOtp.join("");
-    setOtp(finalOtp);
-    setError("");
-
-    if (index < 5) {
-      otpRefs.current[index + 1]?.focus();
-    }
-
-    if (finalOtp.length === 6) {
-      handleVerifyOtp(finalOtp);
-    }
-  };
-
-  const handleOtpBoxKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Backspace") {
-      if (!otp[index] && index > 0) {
-        const newOtp = otp.split("");
-        newOtp[index - 1] = "";
-        setOtp(newOtp.join(""));
-        otpRefs.current[index - 1]?.focus();
-        e.preventDefault();
-      }
-    } else if (e.key === "ArrowLeft" && index > 0) {
-      otpRefs.current[index - 1]?.focus();
-      e.preventDefault();
-    } else if (e.key === "ArrowRight" && index < 5) {
-      otpRefs.current[index + 1]?.focus();
-      e.preventDefault();
-    } else if (e.key === "Enter") {
-      handleVerifyOtp();
-    }
-  };
-
-  const handleOtpBoxPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    const pastedData = e.clipboardData.getData("text").replace(/\D/g, "");
-    if (pastedData) {
-      const newOtpDigits = pastedData.slice(0, 6).split("");
-      while (newOtpDigits.length < 6) newOtpDigits.push("");
-      const finalOtp = newOtpDigits.join("");
-      setOtp(finalOtp);
-      setError("");
-      
-      const focusIndex = Math.min(pastedData.length - 1, 5);
-      otpRefs.current[focusIndex]?.focus();
-
-      if (finalOtp.length === 6) {
-        handleVerifyOtp(finalOtp);
-      }
-    }
-  };
+  const [isOtpFocused, setIsOtpFocused] = useState(false);
 
   // ⚡ INSTANT BRANDING SYNC: Initialize from URL or Local Storage to prevent flickering
   const [tenantName, setTenantName] = useState("Hosteleaze");
@@ -907,26 +829,58 @@ function LoginForm() {
                                 </button>
                               </div>
                               <div className="flex flex-col items-center gap-3">
-                                <div className="flex justify-between gap-2 max-w-[360px] w-full mx-auto">
-                                  {[0, 1, 2, 3, 4, 5].map((index) => (
-                                    <input
-                                      key={index}
-                                      ref={(el) => {
-                                        otpRefs.current[index] = el;
-                                      }}
-                                      type="text"
-                                      inputMode="numeric"
-                                      pattern="[0-9]*"
-                                      maxLength={1}
-                                      autoFocus={index === 0}
-                                      autoComplete={index === 0 ? "one-time-code" : "off"}
-                                      value={otp[index] || ""}
-                                      onChange={(e) => handleOtpBoxChange(index, e.target.value)}
-                                      onKeyDown={(e) => handleOtpBoxKeyDown(index, e)}
-                                      onPaste={index === 0 ? handleOtpBoxPaste : undefined}
-                                      className="w-12 h-12 rounded-xl border border-slate-200 bg-white text-center text-lg font-black text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
-                                    />
-                                  ))}
+                                <div className="relative w-full max-w-[320px] mx-auto min-h-[48px] flex items-center justify-center">
+                                  {/* Hidden actual input that captures autofill, typing, and keyboard gestures */}
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    maxLength={6}
+                                    autoFocus
+                                    autoComplete="one-time-code"
+                                    value={otp}
+                                    onChange={(e) => {
+                                      const val = e.target.value.replace(/\D/g, "");
+                                      setOtp(val);
+                                      setError("");
+                                      if (val.length === 6) {
+                                        handleVerifyOtp(val);
+                                      }
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        handleVerifyOtp();
+                                      }
+                                    }}
+                                    onFocus={() => setIsOtpFocused(true)}
+                                    onBlur={() => setIsOtpFocused(false)}
+                                    className="absolute inset-0 w-full h-full opacity-0 z-20 cursor-default select-none caret-transparent outline-none"
+                                  />
+                                  
+                                  {/* Visual mock boxes */}
+                                  <div className="flex justify-between gap-2 w-full relative z-10 pointer-events-none">
+                                    {[0, 1, 2, 3, 4, 5].map((index) => {
+                                      const char = otp[index] || "";
+                                      const isFocusedBox = isOtpFocused && (
+                                        index === otp.length || 
+                                        (index === 5 && otp.length === 6)
+                                      );
+                                      return (
+                                        <div
+                                          key={index}
+                                          className={`w-12 h-12 rounded-xl border flex items-center justify-center text-lg font-black text-slate-900 bg-white transition-all ${
+                                            isFocusedBox 
+                                              ? "border-blue-500 ring-4 ring-blue-500/10 bg-blue-50/5" 
+                                              : char 
+                                                ? "border-slate-300 shadow-sm" 
+                                                : "border-slate-200"
+                                          }`}
+                                        >
+                                          {char}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
                                 <button
                                   type="button"
