@@ -20,9 +20,9 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
-    // Verify deviceId if it exists in the record
-    const recordDeviceId = studentRecord.deviceId;
-    if (recordDeviceId && recordDeviceId !== deviceId) {
+    // Verify deviceId if it exists in the record (ignoring 'no-binding' placeholder)
+    const recordDeviceId = studentRecord.deviceId?.trim();
+    if (recordDeviceId && recordDeviceId !== "no-binding" && recordDeviceId !== deviceId) {
       return NextResponse.json(
         { error: "This device is not registered for this student." },
         { status: 403 }

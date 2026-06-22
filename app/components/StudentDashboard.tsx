@@ -205,6 +205,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
     const [isWifiFallback, setIsWifiFallback] = useState(false);
     const [overlapRadius, setOverlapRadius] = useState(false); // ⚡ NEW
     const [prioritizeAssignedHostel, setPrioritizeAssignedHostel] = useState(false); // ⚡ NEW
+    const [deviceIdState, setDeviceIdState] = useState<string>("");
 
     // ⚡ FIELD ENFORCEMENT: Dynamic blocker system driven by admin settings
     const [enforcedMissingFields, setEnforcedMissingFields] = useState<{ fieldId: string; fieldLabel: string; displayMode: string; order: number }[]>([]);
@@ -650,6 +651,14 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
     // Simple obfuscation for local storage
     const getStoredDeviceId = () => {
         try {
+            // First check the unified installation ID key (no encoding)
+            const unified = localStorage.getItem("hosteleaze_installation_id");
+            if (unified) return unified;
+
+            // Fallback: check deviceId key
+            const deviceIdFast = localStorage.getItem("deviceId");
+            if (deviceIdFast) return deviceIdFast;
+
             const stored = localStorage.getItem("device_id_token");
             if (!stored) return null;
             return atob(stored);
@@ -659,7 +668,14 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
     };
 
     const storeDeviceId = (id: string) => {
-        localStorage.setItem("device_id_token", btoa(id));
+        try {
+            localStorage.setItem("hosteleaze_installation_id", id);
+            localStorage.setItem("deviceId", id);
+            localStorage.setItem("getpass_device_id", id);
+            localStorage.setItem("device_id_token", btoa(id));
+        } catch (e) {
+            console.error(e);
+        }
     };
 
     const handleRegisterDevice = async () => {
@@ -873,6 +889,70 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
             };
         }
     }, [studentProfile, loading, isFullProfileLoaded]);
+
+    // Retrieve the persistent PWA installation ID on mount
+    useEffect(() => {
+        const loadUnifiedDeviceId = async () => {
+            try {
+                const { getInstallationId } = await import("@/lib/installationId");
+                const installId = await getInstallationId();
+                setDeviceIdState(installId);
+                // Sync to localStorage
+                localStorage.setItem("deviceId", installId);
+                localStorage.setItem("getpass_device_id", installId);
+                localStorage.setItem("device_id_token", btoa(installId));
+            } catch (e) {
+                console.error("Failed to load device/installation ID:", e);
+            }
+        };
+        loadUnifiedDeviceId();
+    }, []);
+
+    // Sync the device ID to the database automatically on successful login/dashboard load
+    useEffect(() => {
+        if (isFullProfileLoaded && studentProfile && !isParentView) {
+            const syncDeviceId = async () => {
+                try {
+                    const { getInstallationId } = await import("@/lib/installationId");
+                    const currentDeviceId = await getInstallationId();
+                    
+                    const isUnbound = !studentProfile.deviceId || 
+                                      studentProfile.deviceId.trim() === "" || 
+                                      studentProfile.deviceId === "no-binding";
+                    
+                    if (isUnbound || studentProfile.deviceId !== currentDeviceId) {
+                        console.log(`📱 [Device Sync] Updating device ID in DB from "${studentProfile.deviceId || 'none'}" to "${currentDeviceId}"`);
+                        
+                        const response = await fetch(`/api/students/${studentProfile._id}${getTenantParam(true)}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                deviceId: currentDeviceId,
+                                isProfileLocked: true
+                            }),
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.success && data.student) {
+                                setStudentProfile(data.student);
+                                storeDeviceId(currentDeviceId);
+                                console.log("✅ [Device Sync] Device ID successfully synchronized and saved.");
+                            }
+                        } else {
+                            console.warn("⚠️ [Device Sync] Failed to synchronize device ID with DB:", response.status);
+                        }
+                    } else {
+                        // Already in sync, make sure local storage is populated
+                        storeDeviceId(currentDeviceId);
+                    }
+                } catch (err) {
+                    console.error("Error during automatic device ID synchronization:", err);
+                }
+            };
+            syncDeviceId();
+        }
+    }, [isFullProfileLoaded, studentProfile?._id, isParentView]);
 
     // ⚡ OPTIMIZATION: Lazy-load notification images ONLY when the popup is shown
     useEffect(() => {
@@ -1279,19 +1359,14 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
 
             // Parallel check: Save device ID if missing in DB
             let deviceRegisteredSuccessfully = false;
-            if (!studentProfile.deviceId) {
-                const generateUUID = () => {
-                    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-                    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-                        const r = Math.random() * 16 | 0;
-                        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-                        return v.toString(16);
-                    });
-                };
-                const newDeviceId = generateUUID();
-                updateData.deviceId = newDeviceId;
-                storeDeviceId(newDeviceId);
-                deviceRegisteredSuccessfully = true;
+            const isUnbound = !studentProfile.deviceId || studentProfile.deviceId === "no-binding";
+            if (isUnbound) {
+                const newDeviceId = deviceIdState || getStoredDeviceId();
+                if (newDeviceId) {
+                    updateData.deviceId = newDeviceId;
+                    storeDeviceId(newDeviceId);
+                    deviceRegisteredSuccessfully = true;
+                }
             }
 
             const response = await fetch(`/api/students/${studentProfile._id}`, {
@@ -2092,7 +2167,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
         try {
             setIsMarkingAttendance(true);
             setAttendanceRetryCount(retryAttempt);
-            let deviceId = getStoredDeviceId();
+            let deviceId = getStoredDeviceId() || deviceIdState;
 
             // Auto-generate device ID if missing
             if (!deviceId) {

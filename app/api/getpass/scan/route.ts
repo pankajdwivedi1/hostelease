@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
         // ============================================================
         // 🔒 DEVICE BINDING ENFORCEMENT (Google Pay-style)
         // ============================================================
-        const storedDeviceId = student.deviceId?.trim();
+        const storedDeviceId = (student.deviceId && student.deviceId.trim() !== "no-binding") ? student.deviceId.trim() : null;
 
         if (storedDeviceId) {
             // Device is already bound — incoming ID MUST match, no exceptions
