@@ -79,7 +79,7 @@ interface DBNotification {
     createdAt: string;
 }
 
-export default function StudentDashboard({ initialData, isParentView = false }: { initialData?: any; isParentView?: boolean }) {
+export default function StudentDashboard({ initialData, isParentView = false, hasMultipleSiblings = false }: { initialData?: any; isParentView?: boolean; hasMultipleSiblings?: boolean }) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [showRequestForm, setShowRequestForm] = useState(false);
@@ -1148,9 +1148,10 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                 if (storedParentPhone) {
                     try {
                         let currentStudent = initialData;
+                        const selectedStudentId = localStorage.getItem("parentSelectedStudentId");
 
                         if (!currentStudent) {
-                            const response = await fetch(`/api/students?parentPhone=${encodeURIComponent(storedParentPhone)}&minimal=true${getTenantParam(false)}`, { cache: 'no-store' });
+                            const response = await fetch(`/api/students?parentPhone=${encodeURIComponent(storedParentPhone)}&minimal=true${selectedStudentId ? `&selectedStudentId=${selectedStudentId}` : ''}${getTenantParam(false)}`, { cache: 'no-store' });
                             if (response.ok) {
                                 const data = await response.json();
                                 if (data.student) {
@@ -1173,7 +1174,7 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                             const studentId = studentWithStatus._id;
                             const loadFullProfile = async () => {
                                 try {
-                                    const fullResponse = await fetch(`/api/students?parentPhone=${encodeURIComponent(storedParentPhone)}${getTenantParam(false)}`, { cache: 'no-store' });
+                                    const fullResponse = await fetch(`/api/students?parentPhone=${encodeURIComponent(storedParentPhone)}${selectedStudentId ? `&selectedStudentId=${selectedStudentId}` : ''}${getTenantParam(false)}`, { cache: 'no-store' });
                                     if (fullResponse.ok) {
                                         const fullData = await fullResponse.json();
                                         if (fullData.student && isMounted) {
@@ -2351,13 +2352,25 @@ export default function StudentDashboard({ initialData, isParentView = false }: 
                                         </h1>
                                         <button
                                             onClick={handleLogout}
-                                            className="px-3 py-1.5 rounded-xl border border-solid border-gray-100 bg-white text-foreground text-[9px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all flex items-center gap-1.5 hover:bg-gray-50 mt-1 md:mt-0"
+                                            className="px-3 py-1.5 rounded-xl border border-solid border-gray-100 bg-white text-slate-800 text-[9px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all flex items-center gap-1.5 hover:bg-slate-50 mt-1 md:mt-0"
                                         >
                                             LOGOUT
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                                             </svg>
                                         </button>
+                                        {isParentView && hasMultipleSiblings && (
+                                            <button
+                                                onClick={() => {
+                                                    localStorage.removeItem("parentSelectedStudentId");
+                                                    window.location.reload();
+                                                }}
+                                                className="px-3 py-1.5 rounded-xl border border-solid border-blue-100 bg-blue-50 text-blue-700 text-[9px] font-black uppercase tracking-tight shadow-sm active:scale-95 transition-all flex items-center gap-1.5 hover:bg-blue-100 mt-1 md:mt-0"
+                                            >
+                                                SWITCH SIBLING
+                                                <span className="text-[10px]">🔄</span>
+                                            </button>
+                                        )}
                                     </div>
                                     <p className="text-[11px] md:text-sm text-gray-500 font-medium">
                                         {isParentView ? "Monitoring Child's Campus Activities" : "Welcome back to Hosteleaze Dashboard"}

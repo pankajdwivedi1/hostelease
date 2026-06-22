@@ -164,6 +164,7 @@ export async function GET(request: NextRequest) {
     const supabaseId = searchParams.get("supabaseId");
     const email = searchParams.get("email");
     const parentPhone = searchParams.get("parentPhone");
+    const selectedStudentId = searchParams.get("selectedStudentId");
     const minimal = searchParams.get("minimal") === "true";
 
     if (parentPhone) {
@@ -197,7 +198,7 @@ export async function GET(request: NextRequest) {
       }
 
       const cleanDbPhone = (num: string) => num ? num.replace(/\D/g, "").replace(/^91/, "") : "";
-      const matched = students?.find((s: any) => {
+      const matchedList = students?.filter((s: any) => {
         const prof = Array.isArray(s.student_profiles) ? s.student_profiles[0] : s.student_profiles;
         if (!prof) return false;
 
@@ -205,16 +206,26 @@ export async function GET(request: NextRequest) {
         const motherClean = cleanDbPhone(prof.mother_number);
         const lgClean = cleanDbPhone(prof.local_guardian_phone_number);
         return fatherClean === cleaned || motherClean === cleaned || lgClean === cleaned;
-      });
+      }) || [];
 
-      if (!matched) {
+      if (matchedList.length === 0) {
         return NextResponse.json({ error: "Student not found for this parent number" }, { status: 404 });
       }
 
-      const student = db.mapStudentToCamelCase(matched);
+      const camelCasedStudents = matchedList.map((s: any) => db.mapStudentToCamelCase(s));
+      
+      let student = camelCasedStudents[0];
+      if (selectedStudentId) {
+        const found = camelCasedStudents.find((s: any) => s._id === selectedStudentId);
+        if (found) {
+          student = found;
+        }
+      }
+
       const tenant = student?.tenantId ? await getTenantById(student.tenantId) : null;
       return NextResponse.json({ 
         student, 
+        students: camelCasedStudents,
         tenantSlug: tenant?.slug,
         tenantSubscription: tenant ? {
           status: tenant.subscriptionStatus,
