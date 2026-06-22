@@ -160,8 +160,34 @@ export async function POST(request: NextRequest) {
             if (activity && activity.length > 0 && activity[0]) {
                 const last = activity[0] as any;
                 const nowMs = Date.now();
-                const lastOutMs = last.checkOutTime ? new Date(last.checkOutTime).getTime() : 0;
-                const lastInMs = last.checkInTime ? new Date(last.checkInTime).getTime() : 0;
+                const parseSafeDate = (timeVal: any, dateVal: any) => {
+                    if (!timeVal) return 0;
+                    const timeStr = String(timeVal);
+                    if (timeStr.includes('T') || timeStr.includes('Z') || timeStr.length > 10) {
+                        const parsed = new Date(timeStr);
+                        if (!isNaN(parsed.getTime())) return parsed.getTime();
+                    }
+                    if (dateVal && timeStr.includes(':')) {
+                        const dateStr = String(dateVal);
+                        const dateParts = dateStr.split(/[-/]/);
+                        const timeParts = timeStr.split(':');
+                        if (dateParts.length === 3 && timeParts.length >= 2) {
+                            const day = parseInt(dateParts[0]);
+                            const month = parseInt(dateParts[1]) - 1;
+                            const year = parseInt(dateParts[2]);
+                            const hour = parseInt(timeParts[0]);
+                            const minute = parseInt(timeParts[1]);
+                            const second = timeParts[2] ? parseInt(timeParts[2]) : 0;
+                            const parsed = new Date(year, month, day, hour, minute, second);
+                            if (!isNaN(parsed.getTime())) return parsed.getTime();
+                        }
+                    }
+                    const parsed = new Date(timeVal);
+                    return isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+                };
+
+                const lastOutMs = parseSafeDate(last.checkOutTime, last.checkOutISTDate);
+                const lastInMs = parseSafeDate(last.checkInTime, last.checkInISTDate);
                 const mostRecentMs = Math.max(lastOutMs, lastInMs);
                 const timeDiff = nowMs - mostRecentMs;
 

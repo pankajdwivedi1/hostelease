@@ -43,6 +43,7 @@ export default function StudentScannerPage() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const scanIntervalRef = useRef<any>(null);
+    const processingRef = useRef(false);
 
     const [scanning, setScanning] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
@@ -111,6 +112,7 @@ export default function StudentScannerPage() {
 
     // ===================== Start Camera =====================
     const startCamera = async () => {
+        processingRef.current = false;
         setError("");
         setScanResult(null);
         setScanning(true);
@@ -196,7 +198,7 @@ export default function StudentScannerPage() {
             });
 
             scanIntervalRef.current = setInterval(async () => {
-                if (!videoRef.current || processing) return;
+                if (!videoRef.current || processingRef.current) return;
 
                 try {
                     const barcodes = await detector.detect(videoRef.current);
@@ -219,7 +221,7 @@ export default function StudentScannerPage() {
     // ===================== Canvas-based fallback scanning (Essential for iOS) =====================
     const scanWithCanvas = () => {
         scanIntervalRef.current = setInterval(() => {
-            if (!videoRef.current || !canvasRef.current || processing) return;
+            if (!videoRef.current || !canvasRef.current || processingRef.current) return;
 
             const video = videoRef.current;
             const canvas = canvasRef.current;
@@ -251,7 +253,8 @@ export default function StudentScannerPage() {
 
     // ===================== Handle QR Code Detection =====================
     const handleQRCodeDetected = useCallback(async (qrData: string) => {
-        if (processing) return;
+        if (processingRef.current) return;
+        processingRef.current = true;
 
         // Verify it's a GATEPASS QR code
         try {
@@ -315,8 +318,9 @@ export default function StudentScannerPage() {
             });
         }
 
+        processingRef.current = false;
         setProcessing(false);
-    }, [processing, firebaseUID, deviceId]);
+    }, [firebaseUID, deviceId]);
 
     // ===================== Cleanup =====================
     useEffect(() => {
@@ -501,7 +505,10 @@ export default function StudentScannerPage() {
                             </div>
                         )}
                         <button
-                            onClick={() => setScanResult(null)}
+                            onClick={() => {
+                                processingRef.current = false;
+                                setScanResult(null);
+                            }}
                             style={styles.doneButton}
                         >
                             Done
