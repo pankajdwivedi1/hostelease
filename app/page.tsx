@@ -249,8 +249,64 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#050510] flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+      <div className="min-h-screen bg-white flex flex-col items-center justify-between py-16 px-4">
+        {/* Top spacing to center the main content */}
+        <div />
+
+        {/* Center Content: Logo and Keypad-style Dots */}
+        <div className="flex flex-col items-center animate-in fade-in zoom-in duration-500">
+          {/* Logo container */}
+          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-[24px] overflow-hidden shadow-2xl border border-slate-100/50 flex items-center justify-center bg-white mb-10">
+            <img
+              src="/logo.jpeg"
+              alt="Hosteleaze Logo"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.target as any).src = "/uvw_logo.jpg";
+              }}
+            />
+          </div>
+
+          {/* Sequential Dot Loader (Brown dots filling with Blue) */}
+          <div className="flex items-center justify-center space-x-3 my-4">
+            <div className="dot-loader" style={{ animationDelay: '0s' }} />
+            <div className="dot-loader" style={{ animationDelay: '0.15s' }} />
+            <div className="dot-loader" style={{ animationDelay: '0.3s' }} />
+            <div className="dot-loader" style={{ animationDelay: '0.45s' }} />
+            <div className="dot-loader" style={{ animationDelay: '0.6s' }} />
+          </div>
+        </div>
+
+        {/* Bottom Content: App Title */}
+        <div className="flex flex-col items-center text-center animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <h2 className="text-xl font-bold text-slate-800 tracking-tight" style={{ fontFamily: "var(--font-lora), serif" }}>
+            Hosteleaze
+          </h2>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">
+            Hostel Management
+          </p>
+        </div>
+
+        {/* CSS for Dot Flow Animation */}
+        <style dangerouslySetInnerHTML={{__html: `
+          .dot-loader {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #d2c7b7; /* Neutral soft brown/grey dot */
+            animation: fillBlue 1.2s ease-in-out infinite;
+          }
+          @keyframes fillBlue {
+            0%, 100% {
+              background-color: #d2c7b7; /* Brown */
+              transform: scale(1);
+            }
+            50% {
+              background-color: #2563eb; /* Filled Blue */
+              transform: scale(1.2);
+            }
+          }
+        `}} />
       </div>
     );
   }
