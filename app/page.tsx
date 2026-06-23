@@ -5,9 +5,29 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { supabase } from "@/lib/supabase";
-import StudentDashboard from "./components/StudentDashboard";
-import AdminDashboard from "./components/AdminDashboard";
-import LandingPage from "./components/LandingPage";
+import dynamic from "next/dynamic";
+
+const StudentDashboard = dynamic(() => import("./components/StudentDashboard"), {
+  ssr: false,
+  loading: () => (
+    <div className="min-h-screen bg-[#050510] flex items-center justify-center">
+      <div className="w-8 h-8 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+    </div>
+  )
+});
+
+const AdminDashboard = dynamic(() => import("./components/AdminDashboard"), {
+  ssr: false,
+  loading: () => (
+    <div className="min-h-screen bg-[#050510] flex items-center justify-center">
+      <div className="w-8 h-8 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+    </div>
+  )
+});
+
+const LandingPage = dynamic(() => import("./components/LandingPage"), {
+  ssr: false
+});
 
 export default function Dashboard() {
   const [userType, setUserType] = useState<string | null>(null);

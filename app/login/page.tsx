@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
@@ -41,8 +41,6 @@ function LoginForm() {
   const [superAdminNewPassword, setSuperAdminNewPassword] = useState("");
   const [superAdminConfirmPassword, setSuperAdminConfirmPassword] = useState("");
   const [superAdminResetLoading, setSuperAdminResetLoading] = useState(false);
-
-  const [isOtpFocused, setIsOtpFocused] = useState(false);
 
   // ⚡ INSTANT BRANDING SYNC: Initialize from URL or Local Storage to prevent flickering
   const [tenantName, setTenantName] = useState("Hosteleaze");
@@ -828,67 +826,34 @@ function LoginForm() {
                                   Change Phone
                                 </button>
                               </div>
-                              <div className="flex flex-col items-center gap-3">
-                                <div className="relative w-full max-w-[320px] mx-auto min-h-[48px] flex items-center justify-center">
-                                  {/* Hidden actual input that captures autofill, typing, and keyboard gestures */}
-                                  <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    pattern="[0-9]*"
-                                    maxLength={6}
-                                    autoFocus
-                                    autoComplete="one-time-code"
-                                    value={otp}
-                                    onChange={(e) => {
-                                      const val = e.target.value.replace(/\D/g, "");
-                                      setOtp(val);
-                                      setError("");
-                                      if (val.length === 6) {
-                                        handleVerifyOtp(val);
-                                      }
-                                    }}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") {
-                                        handleVerifyOtp();
-                                      }
-                                    }}
-                                    onFocus={() => setIsOtpFocused(true)}
-                                    onBlur={() => setIsOtpFocused(false)}
-                                    className="absolute inset-0 w-full h-full opacity-0 z-20 cursor-default select-none caret-transparent outline-none"
-                                  />
-                                  
-                                  {/* Visual mock boxes */}
-                                  <div className="flex justify-between gap-2 w-full relative z-10 pointer-events-none">
-                                    {[0, 1, 2, 3, 4, 5].map((index) => {
-                                      const char = otp[index] || "";
-                                      const isFocusedBox = isOtpFocused && (
-                                        index === otp.length || 
-                                        (index === 5 && otp.length === 6)
-                                      );
-                                      return (
-                                        <div
-                                          key={index}
-                                          className={`w-12 h-12 rounded-xl border flex items-center justify-center text-lg font-black text-slate-900 bg-white transition-all ${
-                                            isFocusedBox 
-                                              ? "border-blue-500 ring-4 ring-blue-500/10 bg-blue-50/5" 
-                                              : char 
-                                                ? "border-slate-300 shadow-sm" 
-                                                : "border-slate-200"
-                                          }`}
-                                        >
-                                          {char}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  id="otp"
+                                  name="otp"
+                                  autoFocus
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  autoComplete="one-time-code"
+                                  maxLength={6}
+                                  value={otp}
+                                  onChange={(e) => {
+                                    setOtp(e.target.value.replace(/\D/g, ""));
+                                    setError("");
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleVerifyOtp();
+                                  }}
+                                  className="w-full rounded-xl border border-slate-200 bg-white px-16 py-3 text-center text-lg font-black tracking-[0.5em] text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:font-medium"
+                                  placeholder="······"
+                                />
                                 <button
                                   type="button"
                                   onClick={handlePasteClipboard}
-                                  className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 border border-blue-100"
+                                  className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 border border-blue-100"
                                   title="Paste code from clipboard"
                                 >
-                                  Paste Code
+                                  Paste
                                 </button>
                               </div>
                               <button
