@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { showToast, showConfirm, showPrompt } from "@/lib/toast";
 import {
     Building2,
     Users,
@@ -69,9 +70,9 @@ const LiveDbSwitch = () => {
         const newSource = source === 'MONGODB' ? 'SUPABASE' : 'MONGODB';
         
         // ⚠️ Enforce Typed Affirmation
-        const doubleCheck = prompt(`⚠️ WARNING: YOU ARE ABOUT TO SWITCH DATABASE TO ${newSource} FOR ALL USERS.\n\nTo confirm, type the word "SWITCH" below:`);
+        const doubleCheck = await showPrompt(`⚠️ WARNING: YOU ARE ABOUT TO SWITCH DATABASE TO ${newSource} FOR ALL USERS.\n\nTo confirm, type the word "SWITCH" below:`);
         if (doubleCheck !== "SWITCH") {
-            alert("Database switch aborted.");
+            showToast("Database switch aborted.", "warning");
             return;
         }
 
@@ -98,13 +99,13 @@ const LiveDbSwitch = () => {
                 });
 
                 localStorage.clear();
-                alert(`✅ Switched to ${data.source}`);
-                window.location.reload();
+                showToast(`Switched to ${data.source}`, "success");
+                setTimeout(() => window.location.reload(), 1500);
             } else {
-                alert("Failed: " + data.error);
+                showToast("Failed: " + data.error, "error");
             }
         } catch (e: any) {
-            alert("Error: " + e.message);
+            showToast("Error: " + e.message, "error");
         } finally {
             setLoading(false);
         }
@@ -711,9 +712,9 @@ export default function SuperAdminDashboard() {
 
                     <button
                         onClick={async () => {
-                            const doubleCheck = prompt("⚠️ WARNING: This will trigger a full database migration from MongoDB to Supabase. This should ONLY be run once.\n\nTo confirm, type the word \"MIGRATE\" below:");
+                            const doubleCheck = await showPrompt("⚠️ WARNING: This will trigger a full database migration from MongoDB to Supabase. This should ONLY be run once.\n\nTo confirm, type the word \"MIGRATE\" below:");
                             if (doubleCheck !== "MIGRATE") {
-                                alert("Migration aborted.");
+                                showToast("Migration aborted.", "warning");
                                 return;
                             }
 
@@ -721,7 +722,7 @@ export default function SuperAdminDashboard() {
                                 const res = await fetch('/api/admin/migrate-db', { method: 'POST' });
                                 const data = await res.json();
                                 if (data.success) {
-                                    alert(data.message);
+                                    showToast(data.message || "Migration completed successfully!", "success");
                                     await fetch('/api/super-admin/audit-logs', {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
@@ -732,10 +733,10 @@ export default function SuperAdminDashboard() {
                                         })
                                     });
                                 } else {
-                                    alert("Migration breakdown: " + data.error);
+                                    showToast("Migration breakdown: " + data.error, "error");
                                 }
                             } catch (e: any) {
-                                alert("Critical Error: " + e.message);
+                                showToast("Critical Error: " + e.message, "error");
                             }
                         }}
                         className="h-10 sm:h-11 px-3 sm:px-4 bg-purple-50 text-purple-700 border border-purple-200 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest hover:bg-purple-100 transition-all shadow-sm active:scale-95 flex items-center gap-1.5 justify-center w-full sm:w-auto"

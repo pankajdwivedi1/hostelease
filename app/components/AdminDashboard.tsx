@@ -9,7 +9,7 @@ import { signOut } from "firebase/auth";
 import Barcode from "react-barcode";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
-import { showToast } from "@/lib/toast";
+import { showToast, showConfirm, showPrompt } from "@/lib/toast";
 
 const LocationPickerMap = dynamic(() => import("./LocationPickerMap"), {
   ssr: false,
@@ -53,7 +53,7 @@ const DeveloperTools = ({ hostels, developerPassword }: { hostels: any[], develo
 
   const handleReset = async () => {
     if (!selectedHostel) return alert("Please select a hostel");
-    if (!confirm(`⚠️ WARNING: This will reset device IDs and biometrics for ALL students in ${selectedHostel}.\n\nAre you sure you want to proceed?`)) return;
+    if (!await showConfirm(`⚠️ WARNING: This will reset device IDs and biometrics for ALL students in ${selectedHostel}.\n\nAre you sure you want to proceed?`)) return;
 
     setIsResetting(true);
     try {
@@ -76,7 +76,7 @@ const DeveloperTools = ({ hostels, developerPassword }: { hostels: any[], develo
   };
 
   const handleClearGatepassLogs = async () => {
-    if (!confirm("🚨 DANGER: This will permanently delete ALL Gatepass history and tokens for EVERY student. This is irreversible.\n\nAre you absolutely sure?")) return;
+    if (!await showConfirm("🚨 DANGER: This will permanently delete ALL Gatepass history and tokens for EVERY student. This is irreversible.\n\nAre you absolutely sure?")) return;
 
     setIsClearingLogs(true);
     try {
@@ -576,11 +576,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   // Fetch Warden Accounts
   const fetchWardenAccounts = async () => {
     try {
-      const res = await fetch("/api/admin/warden-accounts");
+      const res = await fetch("/api/admin/warden-accounts", { cache: "no-store" });
       const data = await res.json();
       if (data.wardenAccounts) setWardenAccounts(data.wardenAccounts);
     } catch (error) {
       console.error("Failed to fetch warden accounts", error);
+      showToast("Failed to fetch warden accounts.", "error");
     }
   };
 
@@ -766,7 +767,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const handleBulkManualToggle = async (studentIds: string[]) => {
     if (!studentIds || studentIds.length === 0) return;
 
-    if (!confirm(`Are you sure you want to manually mark ${studentIds.length} students as IN (Campus)?`)) return;
+    if (!await showConfirm(`Are you sure you want to manually mark ${studentIds.length} students as IN (Campus)?`)) return;
 
     setIsBulkMarking(true);
     try {
@@ -904,7 +905,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const fetchHostelLocations = async () => {
     try {
       setIsLocationsLoading(true);
-      const response = await fetch("/api/admin/locations");
+      const response = await fetch("/api/admin/locations", { cache: "no-store" });
       if (!response.ok) {
         throw new Error(`Failed to fetch locations: ${response.status} ${response.statusText}`);
       }
@@ -916,6 +917,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (error) {
       console.error("Error fetching locations:", error);
+      showToast("Error fetching hostel locations.", "error");
       setHostelLocations([]);
     } finally {
       setIsLocationsLoading(false);
@@ -925,7 +927,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   // Fetch Attendance Time Settings
   const fetchAttendanceTimeSettings = async () => {
     try {
-      const response = await fetch("/api/admin/settings");
+      const response = await fetch("/api/admin/settings", { cache: "no-store" });
       if (!response.ok) throw new Error("Failed to fetch settings");
       const data = await response.json();
       if (data.success) {
@@ -936,6 +938,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (error) {
       console.error("Error fetching attendance settings:", error);
+      showToast("Error fetching attendance time settings.", "error");
     }
   };
 
@@ -1019,7 +1022,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const fetchTenantConfig = async () => {
     try {
-      const res = await fetch("/api/admin/tenant");
+      const res = await fetch("/api/admin/tenant", { cache: "no-store" });
       const data = await res.json();
       if (data.success && data.tenant) {
         setTenantFormData({
@@ -1031,6 +1034,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (e) {
       console.error("Failed to fetch tenant config", e);
+      showToast("Failed to fetch university branding config.", "error");
     }
   };
 
@@ -1065,7 +1069,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       await fetchTenantConfig();
 
       // Fetch Registration Fields Config
-      const settingsRes = await fetch("/api/admin/settings");
+      const settingsRes = await fetch("/api/admin/settings", { cache: "no-store" });
       const settingsData = await settingsRes.json();
       if (settingsData.success) {
         const config = settingsData.registrationFieldsConfig || {};
@@ -1111,21 +1115,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
 
       // Fetch Hostels (with warden/room info)
-      const hostelsRes = await fetch("/api/admin/hostels");
+      const hostelsRes = await fetch("/api/admin/hostels", { cache: "no-store" });
       const hostelsData = await hostelsRes.json();
       if (hostelsData.success) {
         setHostelsConfig(hostelsData.hostels || []);
       }
     } catch (error) {
       console.error("Error fetching system settings:", error);
+      showToast("Error fetching system settings.", "error");
     }
   };
 
   useEffect(() => {
-    if (showSystemSettingsModal) {
+    if (showSystemSettingsModal || showHostelSettingsModal) {
       fetchSystemSettings();
     }
-  }, [showSystemSettingsModal]);
+  }, [showSystemSettingsModal, showHostelSettingsModal]);
 
   const handleToggleDeveloperSetting = async (key: string, value: boolean) => {
     try {
@@ -1169,7 +1174,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const handleCreateHostel = async () => {
-    const name = prompt("Enter new hostel name:");
+    const name = await showPrompt("Enter new hostel name:");
     if (!name) return;
 
     try {
@@ -1195,7 +1200,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const handleDeleteHostelConfig = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete ${name}? This will NOT delete students, but they will lose their hostel association.`)) return;
+    if (!await showConfirm(`Are you sure you want to delete ${name}? This will NOT delete students, but they will lose their hostel association.`)) return;
 
     try {
       setIsSavingSystemSettings(true);
@@ -1269,6 +1274,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const data = await res.json();
       if (data.success) {
         await fetchSystemSettings();
+        await fetchHostels(true);
       }
     } catch (error) {
       alert("Failed to update hostel");
@@ -1413,7 +1419,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const handleDeleteLocation = async (index: number) => {
-    if (!confirm("Are you sure you want to delete this location?")) return;
+    if (!await showConfirm("Are you sure you want to delete this location?")) return;
 
     try {
       setIsUpdatingSettings(true);
@@ -1474,6 +1480,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (data.success) setPayments(data.payments);
     } catch (e) {
       console.error("Error fetching payments:", e);
+      showToast("Error fetching student payment claims.", "error");
     } finally {
       setPaymentsLoading(false);
     }
@@ -1498,6 +1505,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (e) {
       console.error("Error fetching bank settings:", e);
+      showToast("Error fetching bank details configurations.", "error");
     }
   };
 
@@ -1701,7 +1709,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const handleManualPaymentAction = async (paymentId: string, status: string) => {
-    const remarks = prompt(`Enter remarks for ${status}:`, status === 'verified' ? 'Manually verified by Admin' : 'Incorrect UTR details');
+    const remarks = await showPrompt(`Enter remarks for ${status}:`, status === 'verified' ? 'Manually verified by Admin' : 'Incorrect UTR details');
     if (remarks === null) return;
 
     try {
@@ -1752,7 +1760,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const handleSyncAllStudents = async (hostelName: string) => {
-    if (!confirm(`Are you sure you want to reset all students in '${hostelName}' to use the Hostel Default mode? \n\nThis will remove any individual overrides (like GPS Only or Biometric) set for specific students.`)) return;
+    if (!await showConfirm(`Are you sure you want to reset all students in '${hostelName}' to use the Hostel Default mode? \n\nThis will remove any individual overrides (like GPS Only or Biometric) set for specific students.`)) return;
 
     try {
       setUpdatingHostelId('syncing');
@@ -2042,6 +2050,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (error) {
       console.error("Error fetching hostels:", error);
+      showToast("Error fetching hostel list.", "error");
     }
   };
 
@@ -2131,6 +2140,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (error) {
       console.error("Error fetching students:", error);
+      showToast("Error fetching student profiles list.", "error");
     } finally {
       setStudentsLoading(false);
     }
@@ -2172,6 +2182,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (error) {
       console.error("Error fetching permissions:", error);
+      showToast("Error fetching gatepass permission requests.", "error");
       setPermissions([]); // Set empty array on error
     }
   };
@@ -2210,6 +2221,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (error: any) {
       console.error("Error fetching attendance summary:", error.message);
+      showToast("Error fetching attendance summary statistics.", "error");
       // Fail silently for polling, but log actual error
     }
   };
@@ -2226,6 +2238,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (error: any) {
       console.error("Error fetching attendance logs:", error.message);
+      showToast("Error fetching attendance logs list.", "error");
     } finally {
       setAttendanceLogsLoading(false);
     }
@@ -2249,7 +2262,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (error) {
       console.error(error);
-      alert("Failed to fetch student history");
+      showToast("Failed to fetch student history.", "error");
     } finally {
       setAttendanceHistoryLoading(false);
     }
@@ -2257,7 +2270,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const fetchAdminNotifications = async () => {
     try {
-      const response = await fetch("/api/admin/notifications");
+      const response = await fetch("/api/admin/notifications", { cache: "no-store" });
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
       if (data.success) {
@@ -2265,6 +2278,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (error: any) {
       console.error("Error fetching notifications:", error.message);
+      showToast("Error fetching administrator notifications.", "error");
     }
   };
 
@@ -2329,7 +2343,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const handleDeleteNotification = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this broadcast? This action cannot be undone.")) return;
+    if (!await showConfirm("Are you sure you want to delete this broadcast? This action cannot be undone.")) return;
     try {
       const res = await fetch(`/api/admin/notifications?id=${id}`, { method: "DELETE" });
       const data = await res.json();
@@ -2344,7 +2358,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const handleCleanup = async (type: "attendance" | "notifications") => {
-    if (!confirm(`Are you sure you want to clean up ${type}? This will delete old records.`)) return;
+    if (!await showConfirm(`Are you sure you want to clean up ${type}? This will delete old records.`)) return;
     try {
       const endpoint = type === "attendance" ? "/api/admin/attendance-cleanup" : "/api/admin/notifications?action=cleanup";
       const response = await fetch(endpoint, { method: "DELETE" });
@@ -2394,7 +2408,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const storedUserType = localStorage.getItem("userType") || "warden";
 
     const action = currentStatus === 'out' ? "Mark IN" : "Mark OUT";
-    if (!window.confirm(`⚠️ MANUAL OVERRIDE:\nAre you sure you want to ${action} this student manually?`)) return;
+    if (!await showConfirm(`⚠️ MANUAL OVERRIDE:\nAre you sure you want to ${action} this student manually?`)) return;
 
     try {
       setIsTogglingStatus(true);
@@ -2427,7 +2441,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const handleBulkProfileLock = async (lock: boolean) => {
     const action = lock ? "LOCK" : "UNLOCK";
-    if (!confirm(`Are you sure you want to ${action} ALL student profiles?`)) return;
+    if (!await showConfirm(`Are you sure you want to ${action} ALL student profiles?`)) return;
 
     try {
       setIsUpdatingSettings(true);
@@ -2453,9 +2467,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const handleResetPassword = async (type: "dean" | "warden") => {
-    const newPassword = prompt(`Enter new password for ${type}:`);
+    const newPassword = await showPrompt(`Enter new password for ${type}:`);
     if (!newPassword || newPassword.trim().length < 4) {
-      if (newPassword !== null) alert("Password must be at least 4 characters long.");
+      if (newPassword !== null) showToast("Password must be at least 4 characters long.", "warning");
       return;
     }
 
@@ -2775,7 +2789,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const handleResetDeviceID = async (studentId: string) => {
-    if (!confirm("Are you sure you want to reset this student's device registration? This will allow them to register a new phone.")) return;
+    if (!await showConfirm("Are you sure you want to reset this student's device registration? This will allow them to register a new phone.")) return;
 
     try {
       const response = await fetch(`/api/students/${studentId}`, {
@@ -4238,10 +4252,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <div className="flex flex-col items-center gap-1 relative group">
                                           <div className="flex items-center gap-1 md:gap-2.5 bg-white p-0.5 md:p-1 rounded-md border border-gray-100">
                                             <button
-                                              onClick={() => {
+                                              onClick={async () => {
                                                 if (isOlderThan24Hours) return showToast("Cannot modify: 24 hours have passed.", "error");
                                                 if (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden') return showToast("Waiting for parent approval.", "error");
-                                                if (userType === "warden") handleStatusChange(permission._id, "allowed");
+                                                if (userType === "warden" && await showConfirm("Are you sure you want to approve this permission?")) handleStatusChange(permission._id, "allowed");
                                               }}
                                               disabled={userType !== "warden" || permission.deanStatus !== "pending" || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')}
                                               className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
@@ -7640,7 +7654,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               </button>
               <button
                 onClick={async () => {
-                  if (!confirm("Are you sure you want to manually approve this attendance?")) return;
+                  if (!await showConfirm("Are you sure you want to manually approve this attendance?")) return;
                   try {
                     const res = await fetch("/api/admin/attendance/verify", {
                       method: "POST",
@@ -8010,8 +8024,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto sm:shrink-0 grid grid-cols-2 sm:flex">
                         <button
-                          onClick={() => {
-                            if (formBuilderFields.length > 0 && !confirm("This will replace your current form configuration with the 20+ standard registration fields. Continue?")) return;
+                          onClick={async () => {
+                            if (formBuilderFields.length > 0 && !await showConfirm("This will replace your current form configuration with the 20+ standard registration fields. Continue?")) return;
                             const defaults = [
                               { id: "profilePicture", label: "Profile Photo", type: "image", required: true, visible: true, section: "Personal" },
                               { id: "name", label: "Full Name", type: "text", required: true, visible: true, section: "Personal" },
@@ -8212,8 +8226,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
                                   </button>
                                   <button
-                                    onClick={() => {
-                                      if (confirm(`Delete field "${field.label}"?`)) {
+                                    onClick={async () => {
+                                      if (await showConfirm(`Delete field "${field.label}"?`)) {
                                         const updated = formBuilderFields.filter((_, i) => i !== index);
                                         handleUpdateFormBuilder(updated);
                                       }
@@ -8268,9 +8282,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   <div className="flex items-center gap-1 bg-gray-50 px-1.5 py-0.5 rounded-md">
                                     <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Options:</span>
                                     <button
-                                      onClick={() => {
+                                      onClick={async () => {
                                         const currentOptions = field.options?.join(", ") || "";
-                                        const opt = prompt("Enter options separated by comma:", currentOptions);
+                                        const opt = await showPrompt("Enter options separated by comma:", currentOptions);
                                         if (opt !== null) {
                                           const updated = [...formBuilderFields];
                                           updated[index].options = opt.split(",").map(o => o.trim()).filter(o => o !== "");
@@ -8410,9 +8424,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             </div>
                           </div>
                           <button
-                            onClick={() => {
-                              const bssid = prompt("Enter WIFI BSSID (e.g. 64:29:43:bb:78:60):");
-                              const name = prompt("Enter Label (e.g. Campus Area WiFi):");
+                            onClick={async () => {
+                              const bssid = await showPrompt("Enter WIFI BSSID (e.g. 64:29:43:bb:78:60):");
+                              if (!bssid) return; // User cancelled
+                              const name = await showPrompt("Enter Label (e.g. Campus Area WiFi):");
                               if (bssid && name) {
                                 // Save as a BSSID entry (using the bssids array format)
                                 const updated = [...wifiWhitelist, { name, bssids: [bssid.trim().toLowerCase()] }];
@@ -8467,9 +8482,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 <div className="flex items-center gap-1.5 ml-4">
                                   {(item.hostelName || item.bssids) && (
                                     <button
-                                      onClick={() => {
+                                      onClick={async () => {
                                         const current = item.bssids?.join(", ") || "";
-                                        const newVal = prompt(`Edit BSSIDs for ${item.hostelName || item.name} (comma separated):`, current);
+                                        const newVal = await showPrompt(`Edit BSSIDs for ${item.hostelName || item.name} (comma separated):`, current);
                                         if (newVal !== null) {
                                           const updatedBssids = newVal.split(",").map(s => s.trim()).filter(s => s !== "");
                                           const updatedWhitelist = [...wifiWhitelist];
@@ -8485,8 +8500,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     </button>
                                   )}
                                   <button
-                                    onClick={() => {
-                                      if (confirm(`Remove ${item.hostelName || item.name || 'this entry'}?`)) {
+                                    onClick={async () => {
+                                      if (await showConfirm(`Remove ${item.hostelName || item.name || 'this entry'}?`)) {
                                         const updated = wifiWhitelist.filter((_, i) => i !== idx);
                                         setWifiWhitelist(updated);
                                         handleUpdateSettings({ wifiWhitelist: updated });
@@ -8960,8 +8975,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 {activeSettingsTab === "form" && (
                   <div className="p-4 sm:p-8 border-t border-gray-100 bg-gray-50/50 flex items-center justify-end">
                     <button
-                      onClick={() => {
-                        if (confirm("This will overwrite your current form configuration with the standard template (including Floor Number). Are you sure?")) {
+                      onClick={async () => {
+                        if (await showConfirm("This will overwrite your current form configuration with the standard template (including Floor Number). Are you sure?")) {
                           const DEFAULT_CONFIG = [
                             { id: "profilePicture", label: "Profile Photo", type: "image", section: "Personal", required: true, visible: true },
                             { id: "name", label: "Full Name", type: "text", section: "Personal", required: true, visible: true },
@@ -9204,7 +9219,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           hostels={hostels}
           hostelsConfig={hostelsConfig}
           wardenAccounts={wardenAccounts}
-          globalWardenPassword={developerPassword}
+          globalWardenPassword={globalWardenPassword}
           onClose={() => setShowHostelSettingsModal(false)}
           updatingHostelId={updatingHostelId}
           formatHostelDisplay={formatHostelDisplay}

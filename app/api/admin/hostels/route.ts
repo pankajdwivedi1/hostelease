@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
     try {
         const hostels = await db.hostels.getAll();
+        console.log("=== API GET HOSTELS ===", hostels.length, JSON.stringify(hostels));
         const mappedHostels = hostels.map((h: any) => {
             const n = h.name.toUpperCase();
             if (n.includes("GUEST") || n.includes("GHB")) {
@@ -28,22 +29,24 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const { id, name, totalRooms, wardenUsername, wardenPassword, attendanceMode } = body;
+        const trimmedWardenUsername = typeof wardenUsername === 'string' ? wardenUsername.trim() : wardenUsername;
+        const trimmedWardenPassword = typeof wardenPassword === 'string' ? wardenPassword.trim() : wardenPassword;
 
         let hostel;
         if (id) {
             hostel = await db.hostels.update(id, {
                 name,
                 totalRooms,
-                wardenUsername,
-                wardenPassword,
+                wardenUsername: trimmedWardenUsername,
+                wardenPassword: trimmedWardenPassword,
                 attendanceMode
             });
         } else {
             hostel = await db.hostels.create({
                 name,
                 totalRooms,
-                wardenUsername,
-                wardenPassword,
+                wardenUsername: trimmedWardenUsername,
+                wardenPassword: trimmedWardenPassword,
                 attendanceMode
             });
         }

@@ -79,12 +79,12 @@ export async function POST(request: NextRequest) {
         if (isPaymentEnabled !== undefined) updateData.isPaymentEnabled = isPaymentEnabled;
         if (overlapRadius !== undefined) updateData.overlapRadius = overlapRadius;
         if (prioritizeAssignedHostel !== undefined) updateData.prioritizeAssignedHostel = prioritizeAssignedHostel;
-        if (getpassPassword !== undefined) updateData.getpassPassword = getpassPassword;
+        if (getpassPassword !== undefined) updateData.getpassPassword = typeof getpassPassword === 'string' ? getpassPassword.trim() : getpassPassword;
         if (wifiWhitelist !== undefined) updateData.wifiWhitelist = wifiWhitelist;
         if (enableManualAttendance !== undefined) updateData.enableManualAttendance = enableManualAttendance;
-        if (adminPassword !== undefined) updateData.adminPassword = adminPassword;
-        if (wardenPassword !== undefined) updateData.wardenPassword = wardenPassword;
-        if (developerPassword !== undefined) updateData.developerPassword = developerPassword;
+        if (adminPassword !== undefined) updateData.adminPassword = typeof adminPassword === 'string' ? adminPassword.trim() : adminPassword;
+        if (wardenPassword !== undefined) updateData.wardenPassword = typeof wardenPassword === 'string' ? wardenPassword.trim() : wardenPassword;
+        if (developerPassword !== undefined) updateData.developerPassword = typeof developerPassword === 'string' ? developerPassword.trim() : developerPassword;
 
         const settings = await db.settings.update(updateData);
 

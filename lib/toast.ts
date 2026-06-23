@@ -99,8 +99,16 @@ function getColors(type: ToastType) {
 export function showToast(message: string, type: ToastType = "info", options: ToastOptions = {}): void {
   if (typeof window === "undefined") return;
 
-  const duration = options.duration ?? (type === "error" ? 5000 : 4000);
+  // Prevent duplicate toast messages showing at the same time (e.g. from React StrictMode or rapid user clicks)
   const container = getOrCreateContainer();
+  const existingToasts = container.querySelectorAll(".hl-toast p");
+  for (let i = 0; i < existingToasts.length; i++) {
+    if (existingToasts[i].textContent === message) {
+      return;
+    }
+  }
+
+  const duration = options.duration ?? (type === "error" ? 5000 : 4000);
   const colors = getColors(type);
 
   // Create toast element
@@ -233,3 +241,331 @@ export function installToastSystem(): void {
 
   console.log("✅ [Hosteleaze] Native toast system installed — window.alert() is now beautiful!");
 }
+
+// ─── Premium Custom Confirm Dialog Modal ──────────────────────────────────────
+export function showConfirm(message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") {
+      resolve(false);
+      return;
+    }
+
+    // Create modal elements
+    const overlay = document.createElement("div");
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(5, 5, 15, 0.7);
+      backdrop-filter: blur(12px);
+      z-index: 9999999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    `;
+
+    const card = document.createElement("div");
+    card.style.cssText = `
+      background: #0f2d1f;
+      border: 1.5px solid rgba(0, 255, 136, 0.35);
+      border-radius: 24px;
+      padding: 24px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.04);
+      transform: translateY(20px) scale(0.95);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    `;
+
+    // Title / Warning Icon
+    const header = document.createElement("div");
+    header.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    `;
+    const icon = document.createElement("div");
+    icon.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+    const title = document.createElement("h3");
+    title.textContent = "Confirm Action";
+    title.style.cssText = `
+      margin: 0;
+      font-size: 16px;
+      font-weight: 800;
+      color: #e8fff5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    `;
+    header.appendChild(icon);
+    header.appendChild(title);
+
+    // Message
+    const msg = document.createElement("p");
+    msg.innerHTML = message.replace(/\n/g, "<br>");
+    msg.style.cssText = `
+      margin: 0 0 24px 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: #e8fff5;
+      opacity: 0.85;
+      line-height: 1.6;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    `;
+
+    // Buttons
+    const btnContainer = document.createElement("div");
+    btnContainer.style.cssText = `
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    `;
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.style.cssText = `
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 10px 18px;
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    `;
+    cancelBtn.onmouseenter = () => cancelBtn.style.background = "rgba(255, 255, 255, 0.1)";
+    cancelBtn.onmouseleave = () => cancelBtn.style.background = "rgba(255, 255, 255, 0.05)";
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.textContent = "Confirm";
+    confirmBtn.style.cssText = `
+      background: #00ff88;
+      border: none;
+      border-radius: 12px;
+      padding: 10px 18px;
+      color: #0f2d1f;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
+    `;
+    confirmBtn.onmouseenter = () => confirmBtn.style.background = "#33ffa6";
+    confirmBtn.onmouseleave = () => confirmBtn.style.background = "#00ff88";
+
+    btnContainer.appendChild(cancelBtn);
+    btnContainer.appendChild(confirmBtn);
+    card.appendChild(header);
+    card.appendChild(msg);
+    card.appendChild(btnContainer);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    // Fade in
+    requestAnimationFrame(() => {
+      overlay.style.opacity = "1";
+      card.style.transform = "translateY(0) scale(1)";
+    });
+
+    const cleanup = (value: boolean) => {
+      overlay.style.opacity = "0";
+      card.style.transform = "translateY(20px) scale(0.95)";
+      setTimeout(() => {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        resolve(value);
+      }, 250);
+    };
+
+    cancelBtn.addEventListener("click", () => cleanup(false));
+    confirmBtn.addEventListener("click", () => cleanup(true));
+  });
+}
+
+// ─── Premium Custom Prompt Dialog Modal ────────────────────────────────────────
+export function showPrompt(message: string, defaultValue: string = ""): Promise<string | null> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") {
+      resolve(null);
+      return;
+    }
+
+    // Create modal elements
+    const overlay = document.createElement("div");
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(5, 5, 15, 0.7);
+      backdrop-filter: blur(12px);
+      z-index: 9999999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    `;
+
+    const card = document.createElement("div");
+    card.style.cssText = `
+      background: #0f2d1f;
+      border: 1.5px solid rgba(0, 255, 136, 0.35);
+      border-radius: 24px;
+      padding: 24px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.04);
+      transform: translateY(20px) scale(0.95);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    `;
+
+    // Title / Edit Icon
+    const header = document.createElement("div");
+    header.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    `;
+    const icon = document.createElement("div");
+    icon.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>`;
+    const title = document.createElement("h3");
+    title.textContent = "Input Required";
+    title.style.cssText = `
+      margin: 0;
+      font-size: 16px;
+      font-weight: 800;
+      color: #e8fff5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    `;
+    header.appendChild(icon);
+    header.appendChild(title);
+
+    // Message
+    const msg = document.createElement("p");
+    msg.innerHTML = message.replace(/\n/g, "<br>");
+    msg.style.cssText = `
+      margin: 0 0 16px 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: #e8fff5;
+      opacity: 0.85;
+      line-height: 1.6;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    `;
+
+    // Input Field
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = defaultValue;
+    input.style.cssText = `
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1.5px solid rgba(0, 255, 136, 0.25);
+      border-radius: 12px;
+      padding: 12px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 24px;
+      outline: none;
+      transition: all 0.2s ease;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    `;
+    input.onfocus = () => {
+      input.style.borderColor = "#00ff88";
+      input.style.background = "rgba(255, 255, 255, 0.08)";
+    };
+    input.onblur = () => {
+      input.style.borderColor = "rgba(0, 255, 136, 0.25)";
+      input.style.background = "rgba(255, 255, 255, 0.05)";
+    };
+
+    // Buttons
+    const btnContainer = document.createElement("div");
+    btnContainer.style.cssText = `
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    `;
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.style.cssText = `
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 10px 18px;
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    `;
+    cancelBtn.onmouseenter = () => cancelBtn.style.background = "rgba(255, 255, 255, 0.1)";
+    cancelBtn.onmouseleave = () => cancelBtn.style.background = "rgba(255, 255, 255, 0.05)";
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.textContent = "Confirm";
+    confirmBtn.style.cssText = `
+      background: #00ff88;
+      border: none;
+      border-radius: 12px;
+      padding: 10px 18px;
+      color: #0f2d1f;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
+    `;
+    confirmBtn.onmouseenter = () => confirmBtn.style.background = "#33ffa6";
+    confirmBtn.onmouseleave = () => confirmBtn.style.background = "#00ff88";
+
+    btnContainer.appendChild(cancelBtn);
+    btnContainer.appendChild(confirmBtn);
+    card.appendChild(header);
+    card.appendChild(msg);
+    card.appendChild(input);
+    card.appendChild(btnContainer);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    // Focus input on load
+    setTimeout(() => {
+      input.focus();
+      // Move cursor to end of text
+      const len = input.value.length;
+      input.setSelectionRange(len, len);
+    }, 100);
+
+    // Fade in
+    requestAnimationFrame(() => {
+      overlay.style.opacity = "1";
+      card.style.transform = "translateY(0) scale(1)";
+    });
+
+    const cleanup = (value: string | null) => {
+      overlay.style.opacity = "0";
+      card.style.transform = "translateY(20px) scale(0.95)";
+      setTimeout(() => {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        resolve(value);
+      }, 250);
+    };
+
+    cancelBtn.addEventListener("click", () => cleanup(null));
+    confirmBtn.addEventListener("click", () => cleanup(input.value));
+    
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        cleanup(input.value);
+      } else if (e.key === "Escape") {
+        cleanup(null);
+      }
+    });
+  });
+}
+
+

@@ -8,6 +8,8 @@ import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
+import { showToast, showPrompt } from "@/lib/toast";
+
 
 
 function LoginForm() {
@@ -70,6 +72,7 @@ function LoginForm() {
     
     if (searchParams.get("logout") === "success") {
       setShowLogoutToast(true);
+      showToast("You have successfully logged out.", "success");
       setTimeout(() => setShowLogoutToast(false), 5000);
       // Clean up the URL
       window.history.replaceState({}, '', '/login');
@@ -159,7 +162,9 @@ function LoginForm() {
 
   const handleSendOtp = async () => {
     if (!parentPhone || parentPhone.length !== 10) {
-      setError("Please enter a valid 10-digit mobile number");
+      const errMsg = "Please enter a valid 10-digit mobile number";
+      setError(errMsg);
+      showToast(errMsg, "warning");
       return;
     }
 
@@ -186,7 +191,9 @@ function LoginForm() {
       }
     } catch (err: any) {
       console.error("Send OTP error:", err);
-      setError(err.message || "Something went wrong. Please try again.");
+      const errMsg = err.message || "Something went wrong. Please try again.";
+      setError(errMsg);
+      showToast(errMsg, "error");
     } finally {
       setParentLoading(false);
     }
@@ -212,7 +219,9 @@ function LoginForm() {
   const handleVerifyOtp = async (codeOverride?: any) => {
     const activeOtp = (typeof codeOverride === 'string') ? codeOverride : otp;
     if (!activeOtp || activeOtp.length !== 6) {
-      setError("Please enter the 6-digit OTP code");
+      const errMsg = "Please enter the 6-digit OTP code";
+      setError(errMsg);
+      showToast(errMsg, "warning");
       return;
     }
 
@@ -242,7 +251,9 @@ function LoginForm() {
       router.push("/");
     } catch (err: any) {
       console.error("Verify OTP error:", err);
-      setError(err.message || "Invalid OTP code. Please try again.");
+      const errMsg = err.message || "Invalid OTP code. Please try again.";
+      setError(errMsg);
+      showToast(errMsg, "error");
     } finally {
       setParentLoading(false);
     }
@@ -274,7 +285,9 @@ function LoginForm() {
       
     } catch (error: any) {
       console.error("Supabase Login error:", error);
-      setError(`Supabase Error: ${error.message || "Failed to initialize login"}`);
+      const errMsg = `Supabase Error: ${error.message || "Failed to initialize login"}`;
+      setError(errMsg);
+      showToast(errMsg, "error");
       setLoading(false);
     }
   };
@@ -290,7 +303,9 @@ function LoginForm() {
     }
 
     if (!adminPassword.trim()) {
-      setError("Please enter the admin password");
+      const errMsg = "Please enter the admin password";
+      setError(errMsg);
+      showToast(errMsg, "warning");
       return;
     }
 
@@ -318,7 +333,9 @@ function LoginForm() {
       }
     } catch (error: any) {
       console.error("Admin login error:", error);
-      setError(error.message || "Invalid password. Please try again.");
+      const errMsg = error.message || "Invalid password. Please try again.";
+      setError(errMsg);
+      showToast(errMsg, "error");
       setAdminPassword("");
     } finally {
       setAdminLoading(false);
@@ -335,12 +352,16 @@ function LoginForm() {
     }
 
     if (!selectedHostelId) {
-      setError("Please select a hostel first");
+      const errMsg = "Please select a hostel first";
+      setError(errMsg);
+      showToast(errMsg, "warning");
       return;
     }
 
     if (!wardenPassword.trim()) {
-      setError("Please enter the warden authentication key");
+      const errMsg = "Please enter the warden authentication key";
+      setError(errMsg);
+      showToast(errMsg, "warning");
       return;
     }
 
@@ -354,7 +375,7 @@ function LoginForm() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          password: wardenPassword,
+          password: wardenPassword.trim(),
           hostelId: selectedHostelId
         }),
       });
@@ -378,7 +399,9 @@ function LoginForm() {
       }
     } catch (error: any) {
       console.error("Warden login error:", error);
-      setError(error.message || "Invalid password. Please try again.");
+      const errMsg = error.message || "Invalid password. Please try again.";
+      setError(errMsg);
+      showToast(errMsg, "error");
       setWardenPassword("");
     } finally {
       setWardenLoading(false);
@@ -434,7 +457,9 @@ function LoginForm() {
       }
     } catch (error: any) {
       console.error("Developer login error:", error);
-      setError(error.message || "Invalid password. Please try again.");
+      const errMsg = error.message || "Invalid password. Please try again.";
+      setError(errMsg);
+      showToast(errMsg, "error");
       setDeveloperPassword("");
     } finally {
       setDeveloperLoading(false);
@@ -443,7 +468,9 @@ function LoginForm() {
 
   const handleSuperAdminRequestOtp = async () => {
     if (!superAdminResetPhone || superAdminResetPhone.length !== 10) {
-      setError("Please enter a valid 10-digit mobile number");
+      const errMsg = "Please enter a valid 10-digit mobile number";
+      setError(errMsg);
+      showToast(errMsg, "warning");
       return;
     }
 
@@ -466,7 +493,9 @@ function LoginForm() {
       setSuperAdminResetStep("otp");
     } catch (err: any) {
       console.error("Super Admin Reset OTP Request error:", err);
-      setError(err.message || "Something went wrong. Please try again.");
+      const errMsg = err.message || "Something went wrong. Please try again.";
+      setError(errMsg);
+      showToast(errMsg, "error");
     } finally {
       setSuperAdminResetLoading(false);
     }
@@ -474,17 +503,23 @@ function LoginForm() {
 
   const handleSuperAdminVerifyOtp = async () => {
     if (!superAdminResetOtp || superAdminResetOtp.length !== 6) {
-      setError("Please enter a 6-digit OTP code");
+      const errMsg = "Please enter a 6-digit OTP code";
+      setError(errMsg);
+      showToast(errMsg, "warning");
       return;
     }
 
     if (!superAdminNewPassword || superAdminNewPassword.length < 6) {
-      setError("Password must be at least 6 characters long");
+      const errMsg = "Password must be at least 6 characters long";
+      setError(errMsg);
+      showToast(errMsg, "warning");
       return;
     }
 
     if (superAdminNewPassword !== superAdminConfirmPassword) {
-      setError("New password and confirm password do not match");
+      const errMsg = "New password and confirm password do not match";
+      setError(errMsg);
+      showToast(errMsg, "warning");
       return;
     }
 
@@ -508,7 +543,7 @@ function LoginForm() {
       }
 
       // Reset successful!
-      alert("Super Admin password has been reset successfully. You can now login with your new password.");
+      showToast("Super Admin password has been reset successfully. You can now login with your new password.", "success");
       setSuperAdminResetStep("none");
       setSuperAdminResetPhone("");
       setSuperAdminResetOtp("");
@@ -517,7 +552,9 @@ function LoginForm() {
       setDeveloperPassword(""); // Clear entered password
     } catch (err: any) {
       console.error("Super Admin Reset Verify error:", err);
-      setError(err.message || "Invalid OTP code. Please try again.");
+      const errMsg = err.message || "Invalid OTP code. Please try again.";
+      setError(errMsg);
+      showToast(errMsg, "error");
     } finally {
       setSuperAdminResetLoading(false);
     }
@@ -646,8 +683,8 @@ function LoginForm() {
 
                     {tenantName === "Hosteleaze" && !showAdminPassword && !showWardenPassword && (
                       <button 
-                        onClick={() => {
-                          const slug = prompt("Enter your Campus Slug (e.g. oist):");
+                        onClick={async () => {
+                          const slug = await showPrompt("Enter your Campus Slug (e.g. oist):");
                           if (slug) window.location.href = `/login?tenant=${slug.toLowerCase()}`;
                         }}
                         className="text-[10px] font-bold text-blue-600 uppercase tracking-widest hover:underline"

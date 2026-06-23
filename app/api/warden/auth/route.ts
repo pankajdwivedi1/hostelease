@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
             const settings = await db.settings.get();
             const getpassPassword = settings?.getpassPassword || "GET456";
 
-            if (password === getpassPassword) {
+            if (password.trim() === getpassPassword.trim()) {
                 return NextResponse.json({
                     success: true,
                     type: 'getpass',
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
         // 4. Check for dedicated Multi-Hostel Account first
         const matchedAccount = wardenAccounts.find((acc: any) => {
             const hasHostel = acc.hostels && Array.isArray(acc.hostels) && acc.hostels.includes(hostel.name);
-            const passwordMatches = password === (acc.password || globalPassword);
+            const passwordMatches = password.trim() === (acc.password || globalPassword).trim();
             return hasHostel && passwordMatches;
         });
 
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
         // 5. Default Check (Priority: Hostel-specific > Global fallback)
         const validPassword = hostel.wardenPassword || globalPassword;
 
-        if (password === validPassword) {
+        if (password.trim() === validPassword.trim()) {
             return NextResponse.json({
                 success: true,
                 hostelName: hostel.name,
@@ -98,4 +98,3 @@ export async function POST(request: NextRequest) {
         );
     }
 }
-

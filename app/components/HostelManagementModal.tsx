@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { showConfirm, showPrompt, showToast } from "@/lib/toast";
 
 export default function HostelManagementModal({
   hostels,
@@ -61,8 +62,8 @@ export default function HostelManagementModal({
                 <h4 className="text-[#1A365D] font-bold text-sm tracking-wide mb-3 uppercase">HOW MODES WORK</h4>
                 <div className="space-y-2 text-[13px] text-[#2A4365]">
                   <p className="flex items-start gap-2">
-                    <span className="text-base">🔒</span>
-                    <span><strong className="text-[#1E40AF]">STRICT MODE (Camera):</strong> GPS + Live Camera Photo Match.</span>
+                    <span className="text-base">📸</span>
+                    <span><strong className="text-[#1E40AF]">CAMERA MODE:</strong> GPS + Live Camera Photo Match.</span>
                   </p>
                   <p className="flex items-start gap-2">
                     <span className="text-base">📍</span>
@@ -103,9 +104,16 @@ export default function HostelManagementModal({
                       </div>
                       <div className="flex items-center gap-3 w-full sm:w-auto">
                         <button
-                          onClick={() => {
-                            const newPass = prompt("Enter new password for " + hostel.name + ":", hostel.wardenPassword || "");
-                            if (newPass !== null) handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenPassword: newPass });
+                          onClick={async () => {
+                            const newPass = await showPrompt("Enter new password for " + hostel.name + ":", (hostel.wardenPassword || "").trim());
+                            if (newPass !== null) {
+                              handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenPassword: newPass.trim() });
+                              setVisiblePasswords(prev => {
+                                const newSet = new Set(prev);
+                                newSet.add(hostel._id);
+                                return newSet;
+                              });
+                            }
                           }}
                           className="flex-1 sm:flex-none px-4 py-2.5 bg-slate-100 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all text-center"
                         >
@@ -181,7 +189,7 @@ export default function HostelManagementModal({
                             <input
                               type="text"
                               defaultValue={hostel.wardenUsername || (hostel.name.toLowerCase().replace(/ /g, "_") + "_warden")}
-                              onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenUsername: e.target.value })}
+                              onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenUsername: e.target.value.trim() })}
                               className="font-black text-slate-700 text-sm bg-transparent border-none outline-none focus:ring-0 p-0 w-full"
                             />
                           </div>
@@ -370,8 +378,8 @@ export default function HostelManagementModal({
                       Edit
                     </button>
                     <button
-                      onClick={() => {
-                        if (confirm("Delete this account?")) handleManageWardenAccount("delete", { username: acc.username });
+                      onClick={async () => {
+                        if (await showConfirm("Delete this account?")) handleManageWardenAccount("delete", { username: acc.username });
                       }}
                       className="px-3 py-1.5 text-red-500 hover:bg-red-50 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors"
                     >

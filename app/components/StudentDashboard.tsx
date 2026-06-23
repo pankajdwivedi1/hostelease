@@ -7,7 +7,7 @@ import { auth as firebaseAuth } from "@/lib/firebase";
 import { supabase } from "@/lib/supabase";
 import Barcode from "react-barcode";
 import * as faceMatching from "@/lib/faceMatching";
-import { showToast } from "@/lib/toast";
+import { showToast, showConfirm } from "@/lib/toast";
 
 interface Permission {
     _id: string;
@@ -151,9 +151,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             if (res.ok) {
                 const data = await res.json();
                 setAttendanceHistory(data.history || []);
+            } else {
+                showToast("Failed to fetch attendance history.", "error");
             }
         } catch (error) {
             console.error("Failed to fetch attendance history", error);
+            showToast("Failed to fetch attendance history.", "error");
         } finally {
             setIsLoadingAttendanceHistory(false);
         }
@@ -233,12 +236,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         setLoadingGatePasses(true);
         try {
             const res = await fetch(`/api/getpass/history?studentId=${studentId}&limit=1000&populate=false${getTenantParam(false)}`);
-            const data = await res.json();
-            if (data.success && data.records) {
-                setGatePasses(data.records);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success && data.records) {
+                    setGatePasses(data.records);
+                } else {
+                    showToast("Failed to fetch outing history.", "error");
+                }
+            } else {
+                showToast("Failed to fetch outing history.", "error");
             }
         } catch (error) {
             console.error("Error fetching gatepass history:", error);
+            showToast("Failed to fetch outing history.", "error");
         } finally {
             setLoadingGatePasses(false);
         }
@@ -566,7 +576,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     };
 
     const handleDeletePayment = async (id: string) => {
-        if (!confirm("Are you sure you want to delete this payment claim?")) return;
+        if (!await showConfirm("Are you sure you want to delete this payment claim?")) return;
         try {
             const res = await fetch(`/api/students/payments?id=${id}&studentId=${studentProfile?._id}${getTenantParam(false)}`, {
                 method: "DELETE"
@@ -2056,7 +2066,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     // If it's something else, they might need to re-register if the key was deleted from phone
                     if (e.name === "NotAllowedError") return false;
 
-                    const retry = confirm("Biometric link verification failed. This might happen if you deleted the key from your phone security settings.\n\nWould you like to try re-linking this device?");
+                    const retry = await showConfirm("Biometric link verification failed. This might happen if you deleted the key from your phone security settings.\n\nWould you like to try re-linking this device?");
                     if (!retry) return false;
                     // Clear stale local ID to force re-registration
                     localStorage.removeItem("device_id_token");
@@ -2066,7 +2076,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             // 3. Registration (First time or Recovery)
             // Logic: If we are here, either there are no keys in DB, or the DB key failed and user wants to re-link.
 
-            const userAgreed = confirm("⚠️ LINK SECURE BIOMETRICS\n\nYour phone's Face ID or Fingerprint will be permanently linked to your hostel account in our database.\n\nThis works even if you clear your browser history.\n\nClick OK to link now.");
+            const userAgreed = await showConfirm("⚠️ LINK SECURE BIOMETRICS\n\nYour phone's Face ID or Fingerprint will be permanently linked to your hostel account in our database.\n\nThis works even if you clear your browser history.\n\nClick OK to link now.");
             if (!userAgreed) return false;
 
             const result: any = await navigator.credentials.create({
@@ -2116,10 +2126,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     storeDeviceId(idStr);
                     // Update local state with the full updated student profile
                     setStudentProfile(regData.student);
-                    alert("✅ Success! Your device is now securely linked in our database.");
+                    showToast("Success! Your device is now securely linked in our database.", "success");
                     return true;
                 } else {
-                    alert("Registration failed: " + (regData.error || "Unknown error"));
+                    showToast("Registration failed: " + (regData.error || "Unknown error"), "error");
                     return false;
                 }
             }
@@ -2129,7 +2139,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             console.error("Biometric Error:", error);
             // Don't alert if user just cancelled (NotAllowedError)
             if (error.name !== "NotAllowedError") {
-                alert("Biometric verification failed. Please try again or check your device settings.");
+                showToast("Biometric verification failed. Please try again or check your device settings.", "error");
             }
             return false;
         }
@@ -2156,12 +2166,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
         // 🛡️ SECURITY CHECK: Mandatory Check-In (QR scan) required
         if (studentProfile.studentStatus === 'out') {
-            alert("🔒 SECURITY RESTRICTION:\nYou are currently marked as 'OUT' of the campus in the gate pass system.\n\nPlease scan the entry QR code at the main gate to check-in first. You cannot mark attendance while you are formally outside the campus.");
+            showToast("🔒 SECURITY RESTRICTION: You are marked OUT. Please scan entry QR first.", "error");
             return;
         }
 
         if (!isAtHostel) {
-            alert("Please verify your location first.");
+            showToast("Please verify your location first.", "warning");
             return;
         }
 
@@ -2218,7 +2228,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         } catch (error: any) {
             console.error("Error in attendance flow:", error);
             setAttendanceStep('error');
-            alert("An error occurred. Please try again.");
+            showToast("An error occurred. Please try again.", "error");
             setIsMarkingAttendance(false);
         }
     };
@@ -2294,14 +2304,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     }, 800);
                 } else {
                     setAttendanceStep('error');
-                    alert(data.error || "Failed to mark attendance.");
+                    showToast(data.error || "Failed to mark attendance.", "error");
                     setIsMarkingAttendance(false);
                 }
 
             } catch (error) {
                 console.error("Location/Attendance Error:", error);
                 setAttendanceStep('error');
-                alert("Location failed. Please enable WiFi/Location services and try again.");
+                showToast("Location failed. Please enable WiFi/Location services and try again.", "warning");
                 setIsMarkingAttendance(false);
             }
 
