@@ -2796,8 +2796,13 @@ export const db = {
                 let query = supabase.from('attendance').delete();
                 query = query.eq('tenant_id', tenantId);
 
-                if (filter?.timestamp?.$lt) {
+                if (filter.beforeDate) {
+                    query = query.lte('timestamp', new Date(filter.beforeDate).toISOString());
+                } else if (filter?.timestamp?.$lt) {
                     query = query.lt('timestamp', filter.timestamp.$lt.toISOString());
+                }
+                if (filter.hostelName) {
+                    query = query.ilike('hostel_name', `%${filter.hostelName}%`);
                 }
 
                 const { error, data } = await query.select('_id');
@@ -2807,8 +2812,13 @@ export const db = {
                 const tenantId = await getTenantIdOrThrow();
                 const whereClause: any = { tenantId };
 
-                if (filter?.timestamp?.$lt) {
+                if (filter.beforeDate) {
+                    whereClause.timestamp = { lte: new Date(filter.beforeDate) };
+                } else if (filter?.timestamp?.$lt) {
                     whereClause.timestamp = { lt: new Date(filter.timestamp.$lt) };
+                }
+                if (filter.hostelName) {
+                    whereClause.hostelName = { contains: filter.hostelName, mode: 'insensitive' };
                 }
 
                 const result = await prisma.attendance.deleteMany({
@@ -2818,7 +2828,15 @@ export const db = {
             } else {
                 await connectDB();
                 const AttendanceModel = (await import('@/models/Attendance')).default;
-                const result = await AttendanceModel.deleteMany(filter);
+                let mongoQuery: any = { ...filter };
+                if (filter.beforeDate) {
+                    mongoQuery.timestamp = { $lte: new Date(filter.beforeDate) };
+                    delete mongoQuery.beforeDate;
+                }
+                if (filter.hostelName) {
+                    mongoQuery.hostelName = { $regex: filter.hostelName, $options: "i" };
+                }
+                const result = await AttendanceModel.deleteMany(mongoQuery);
                 return { count: result.deletedCount };
             }
         },
@@ -3461,23 +3479,33 @@ export const db = {
         deleteMany: async (filter: any = {}) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                let query = supabase.from('gate_passes').delete();
+                const tenantId = await getTenantIdOrThrow();
+                console.log(`[DB_ADAPTER_DELETE_GATEPASSES] tenantId=${tenantId}, filter=${JSON.stringify(filter)}`);
+                let query = supabase.from('gate_passes').delete().eq('tenant_id', tenantId);
                 if (filter.status) {
                     query = query.eq('status', filter.status);
-                } else {
-                    // Supabase requires a filter for delete. neq _id to empty string effectively selects all.
-                    return { deletedCount: 0 }; // Block accidental full table delete
                 }
-                const { error, count } = await query;
+                if (filter.beforeDate) {
+                    query = query.lte('check_out_time', new Date(filter.beforeDate).toISOString());
+                }
+                if (filter.hostelName) {
+                    query = query.ilike('hostel_name', `%${filter.hostelName}%`);
+                }
+                const { error, data } = await query.select('_id');
+                console.log(`[DB_ADAPTER_DELETE_GATEPASSES] Result error=${JSON.stringify(error)}, deletedCount=${data?.length || 0}`);
                 if (error) throw error;
-                return { deletedCount: count || 0 };
+                return { deletedCount: data?.length || 0 };
             } else if (source === 'PRISMA') {
                 const tenantId = await getTenantIdOrThrow();
                 const whereClause: any = { tenantId };
                 if (filter.status) {
                     whereClause.status = filter.status;
-                } else {
-                    return { deletedCount: 0 };
+                }
+                if (filter.beforeDate) {
+                    whereClause.checkOutTime = { lte: new Date(filter.beforeDate) };
+                }
+                if (filter.hostelName) {
+                    whereClause.hostelName = { contains: filter.hostelName, mode: 'insensitive' };
                 }
                 const result = await prisma.gatePass.deleteMany({
                     where: whereClause
@@ -3486,7 +3514,15 @@ export const db = {
             } else {
                 await connectDB();
                 const GatePassModel = (await import('@/models/GatePass')).default;
-                const result = await GatePassModel.deleteMany(filter);
+                let mongoQuery: any = { ...filter };
+                if (filter.beforeDate) {
+                    mongoQuery.checkOutTime = { $lte: new Date(filter.beforeDate) };
+                    delete mongoQuery.beforeDate;
+                }
+                if (filter.hostelName) {
+                    mongoQuery.hostelName = { $regex: filter.hostelName, $options: "i" };
+                }
+                const result = await GatePassModel.deleteMany(mongoQuery);
                 return { deletedCount: result.deletedCount };
             }
         }
@@ -3563,21 +3599,18 @@ export const db = {
             if (source === 'SUPABASE') {
                 let query = supabase.from('gate_pass_tokens').delete();
                 if (Object.keys(filter).length === 0) {
-                    // Supabase delete requires a filter. Block accidental full table delete.
-                    return { deletedCount: 0 };
+                    // Supabase delete requires a filter. Use a filter that matches all rows.
+                    query = query.neq('_id', '');
+                } else {
+                    // Apply filters for Supabase
+                    if (filter._id) query = query.eq('_id', filter._id);
+                    if (filter.token) query = query.eq('token', filter.token);
                 }
-                // Apply filters for Supabase
-                if (filter._id) query = query.eq('_id', filter._id);
-                if (filter.token) query = query.eq('token', filter.token);
-                // Add other filters as needed for Supabase
 
                 const { error, count } = await query;
                 if (error) throw error;
                 return { deletedCount: count || 0 };
             } else if (source === 'PRISMA') {
-                if (Object.keys(filter).length === 0) {
-                    return { deletedCount: 0 };
-                }
                 const whereClause: any = {};
                 if (filter._id || filter.id) whereClause.id = filter._id || filter.id;
                 if (filter.token) whereClause.token = filter.token;
@@ -4734,23 +4767,48 @@ export const db = {
                 const tenantId = await getTenantIdOrThrow();
                 let query = supabase.from('permissions').delete();
                 
-                // Only filter by tenant_id if we specify studentId or if we are sure it exists
-                // For safety on missing column, we wrap in try-catch or just allow studentId filter
                 if (filters.studentId) {
                     query = query.eq('student_id', filters.studentId);
+                    if (filters.beforeDate) {
+                        query = query.lte('from_date_time', new Date(filters.beforeDate).toISOString());
+                    }
+                    const { error } = await query;
+                    if (error) throw error;
                 } else {
-                    query = query.eq('tenant_id', tenantId);
+                    // Fetch all student IDs for this tenant
+                    let studentQuery = supabase
+                        .from('students')
+                        .select('_id')
+                        .eq('tenant_id', tenantId);
+                    
+                    if (filters.hostelName) {
+                        studentQuery = studentQuery.ilike('hostel_name', `%${filters.hostelName}%`);
+                    }
+                    
+                    const { data: students, error: studentError } = await studentQuery;
+                    
+                    if (studentError) throw studentError;
+                    const studentIds = (students || []).map(s => s._id);
+                    if (studentIds.length === 0) return true;
+                    
+                    // Batch delete in chunks of 100 to avoid Headers Overflow error
+                    const chunks = [];
+                    for (let i = 0; i < studentIds.length; i += 100) {
+                        chunks.push(studentIds.slice(i, i + 100));
+                    }
+                    
+                    const results = await Promise.all(chunks.map(chunk => {
+                        let q = supabase.from('permissions').delete().in('student_id', chunk);
+                        if (filters.beforeDate) {
+                            q = q.lte('from_date_time', new Date(filters.beforeDate).toISOString());
+                        }
+                        return q;
+                    }));
+                    
+                    const err = results.find(r => r.error)?.error;
+                    if (err) throw err;
                 }
 
-                const { error } = await query;
-                
-                // If column missing, retry without tenant filter if studentId is present
-                if (error && error.message?.includes('column "tenant_id" does not exist') && filters.studentId) {
-                    await supabase.from('permissions').delete().eq('student_id', filters.studentId);
-                    return true;
-                }
-
-                if (error) throw error;
                 return true;
             } else if (source === 'PRISMA') {
                 const tenantId = await getTenantIdOrThrow();
@@ -4759,6 +4817,12 @@ export const db = {
                     whereClause.studentId = filters.studentId;
                 } else {
                     whereClause.student = { tenantId };
+                    if (filters.hostelName) {
+                        whereClause.student.hostelName = { contains: filters.hostelName, mode: 'insensitive' };
+                    }
+                }
+                if (filters.beforeDate) {
+                    whereClause.fromDateTime = { lte: new Date(filters.beforeDate) };
                 }
                 await prisma.permission.deleteMany({
                     where: whereClause
@@ -4767,7 +4831,19 @@ export const db = {
             } else {
                 await connectDB();
                 const PermissionModel = (await import('@/models/Permission')).default;
-                await PermissionModel.deleteMany(filters);
+                let mongoQuery: any = { ...filters };
+                if (filters.hostelName) {
+                    const StudentModel = (await import('@/models/Student')).default;
+                    const students = await StudentModel.find({ hostelName: { $regex: filters.hostelName, $options: "i" } }).select('_id');
+                    const studentIds = students.map(s => s._id);
+                    mongoQuery.studentId = { $in: studentIds };
+                    delete mongoQuery.hostelName;
+                }
+                if (filters.beforeDate) {
+                    mongoQuery.fromDateTime = { $lte: new Date(filters.beforeDate) };
+                    delete mongoQuery.beforeDate;
+                }
+                await PermissionModel.deleteMany(mongoQuery);
                 return true;
             }
         }

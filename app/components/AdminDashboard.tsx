@@ -42,6 +42,16 @@ const DeveloperTools = ({ hostels, developerPassword }: { hostels: any[], develo
   const [isResetting, setIsResetting] = useState(false);
 
   const [isClearingLogs, setIsClearingLogs] = useState(false);
+  const [isClearingAttendance, setIsClearingAttendance] = useState(false);
+  const [isClearingPermissions, setIsClearingPermissions] = useState(false);
+
+  const [gatepassBeforeDate, setGatepassBeforeDate] = useState("");
+  const [attendanceBeforeDate, setAttendanceBeforeDate] = useState("");
+  const [permissionsBeforeDate, setPermissionsBeforeDate] = useState("");
+
+  const [gatepassHostel, setGatepassHostel] = useState("");
+  const [attendanceHostel, setAttendanceHostel] = useState("");
+  const [permissionsHostel, setPermissionsHostel] = useState("");
 
   const handleUnlock = () => {
     if (password === developerPassword) {
@@ -76,11 +86,14 @@ const DeveloperTools = ({ hostels, developerPassword }: { hostels: any[], develo
   };
 
   const handleClearGatepassLogs = async () => {
-    if (!await showConfirm("🚨 DANGER: This will permanently delete ALL Gatepass history and tokens for EVERY student. This is irreversible.\n\nAre you absolutely sure?")) return;
+    const dateSuffix = gatepassBeforeDate ? ` before or on ${gatepassBeforeDate}` : "";
+    const hostelSuffix = gatepassHostel ? ` in ${gatepassHostel}` : "";
+    const suffix = `${dateSuffix}${hostelSuffix}`;
+    if (!await showConfirm(`🚨 DANGER: This will permanently delete ALL Gatepass history and tokens${suffix} for EVERY student. This is irreversible.\n\nAre you absolutely sure?`)) return;
 
     setIsClearingLogs(true);
     try {
-      const res = await fetch("/api/admin/clear-logs", { method: "POST" });
+      const res = await fetch(`/api/admin/clear-logs?type=gatepass&beforeDate=${gatepassBeforeDate}&hostelName=${gatepassHostel}`, { method: "POST" });
       const data = await res.json();
       if (data.success) {
         alert(data.message);
@@ -91,6 +104,50 @@ const DeveloperTools = ({ hostels, developerPassword }: { hostels: any[], develo
       alert("Error clearing logs: " + e.message);
     } finally {
       setIsClearingLogs(false);
+    }
+  };
+
+  const handleClearAttendanceLogs = async () => {
+    const dateSuffix = attendanceBeforeDate ? ` before or on ${attendanceBeforeDate}` : "";
+    const hostelSuffix = attendanceHostel ? ` in ${attendanceHostel}` : "";
+    const suffix = `${dateSuffix}${hostelSuffix}`;
+    if (!await showConfirm(`🚨 DANGER: This will permanently delete ALL Night Attendance logs${suffix} for EVERY student. This is irreversible.\n\nAre you absolutely sure?`)) return;
+
+    setIsClearingAttendance(true);
+    try {
+      const res = await fetch(`/api/admin/clear-logs?type=attendance&beforeDate=${attendanceBeforeDate}&hostelName=${attendanceHostel}`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+      } else {
+        alert("Error: " + data.error);
+      }
+    } catch (e: any) {
+      alert("Error clearing attendance: " + e.message);
+    } finally {
+      setIsClearingAttendance(false);
+    }
+  };
+
+  const handleClearPermissions = async () => {
+    const dateSuffix = permissionsBeforeDate ? ` before or on ${permissionsBeforeDate}` : "";
+    const hostelSuffix = permissionsHostel ? ` in ${permissionsHostel}` : "";
+    const suffix = `${dateSuffix}${hostelSuffix}`;
+    if (!await showConfirm(`🚨 DANGER: This will permanently delete ALL Leave Permissions and requests${suffix} for EVERY student. This is irreversible.\n\nAre you absolutely sure?`)) return;
+
+    setIsClearingPermissions(true);
+    try {
+      const res = await fetch(`/api/admin/clear-logs?type=permissions&beforeDate=${permissionsBeforeDate}&hostelName=${permissionsHostel}`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+      } else {
+        alert("Error: " + data.error);
+      }
+    } catch (e: any) {
+      alert("Error clearing permissions: " + e.message);
+    } finally {
+      setIsClearingPermissions(false);
     }
   };
 
@@ -132,54 +189,176 @@ const DeveloperTools = ({ hostels, developerPassword }: { hostels: any[], develo
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white p-6 rounded-xl border border-indigo-200 shadow-sm space-y-4">
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Step 1: Select Hostel to Wipe</label>
-            <select
-              value={selectedHostel}
-              onChange={(e) => setSelectedHostel(e.target.value)}
-              className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
-            >
-              <option value="">Choose a hostel...</option>
-              {hostels.map(h => <option key={h._id} value={h.name}>{h.name}</option>)}
-            </select>
+        <div className="bg-white p-6 rounded-xl border border-indigo-200 shadow-sm space-y-4 flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Step 1: Select Hostel to Wipe</label>
+              <select
+                value={selectedHostel}
+                onChange={(e) => setSelectedHostel(e.target.value)}
+                className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+              >
+                <option value="">Choose a hostel...</option>
+                {hostels.map(h => <option key={h._id} value={h.name}>{h.name}</option>)}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Step 2: Trigger Bulk Reset (Supabase Only)</label>
+              <button
+                onClick={handleReset}
+                disabled={isResetting || !selectedHostel}
+                className="w-full py-4 bg-red-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-xl shadow-red-200 disabled:opacity-50"
+              >
+                {isResetting ? "⏳ WIPING DATA..." : "🚨 RESET ALL STUDENT DEVICES"}
+              </button>
+            </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Step 2: Trigger Bulk Reset (Supabase Only)</label>
-            <button
-              onClick={handleReset}
-              disabled={isResetting || !selectedHostel}
-              className="w-full py-4 bg-red-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-xl shadow-red-200 disabled:opacity-50"
-            >
-              {isResetting ? "⏳ WIPING DATA..." : "🚨 RESET ALL STUDENT DEVICES"}
-            </button>
-          </div>
-
-          <div className="p-4 bg-red-50 rounded-xl border border-red-100">
+          <div className="p-4 bg-red-50 rounded-xl border border-red-100 mt-4">
             <p className="text-[10px] text-red-600 font-black leading-relaxed">
               CRITICAL IMPACT: This will instantly clear Device IDs, Face Embeddings, and Biometric Keys for EVERY student in the selected hostel.
             </p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-amber-200 shadow-sm space-y-4">
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Gatepass Archive Cleanup</label>
-            <p className="text-[11px] text-gray-500 font-bold">Wipe movement history and active QR tokens across the entire campus.</p>
+        <div className="bg-white p-6 rounded-xl border border-amber-200 shadow-sm space-y-4 flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Gatepass Archive Cleanup</label>
+              <p className="text-[11px] text-gray-500 font-bold">Wipe movement history and active QR tokens across the entire campus.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Delete Records Before Date (Optional)</label>
+                <input
+                  type="date"
+                  value={gatepassBeforeDate}
+                  onChange={(e) => setGatepassBeforeDate(e.target.value)}
+                  className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-amber-500 outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Select Hostel (Optional)</label>
+                <select
+                  value={gatepassHostel}
+                  onChange={(e) => setGatepassHostel(e.target.value)}
+                  className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-amber-500 outline-none"
+                >
+                  <option value="">Choose a hostel...</option>
+                  {hostels.map(h => <option key={h._id} value={h.name}>{h.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <button
+              onClick={handleClearGatepassLogs}
+              disabled={isClearingLogs}
+              className="w-full py-4 bg-amber-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-amber-700 transition-all shadow-xl shadow-amber-200 disabled:opacity-50 text-xs"
+            >
+              {isClearingLogs ? "⏳ DELETING ARCHIVES..." : (gatepassBeforeDate || gatepassHostel ? "🗑️ CLEAR FILTERED GATEPASS LOGS" : "🗑️ CLEAR ALL GATEPASS LOGS")}
+            </button>
           </div>
 
-          <button
-            onClick={handleClearGatepassLogs}
-            disabled={isClearingLogs}
-            className="w-full py-4 bg-amber-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-amber-700 transition-all shadow-xl shadow-amber-200 disabled:opacity-50"
-          >
-            {isClearingLogs ? "⏳ DELETING ARCHIVES..." : "🗑️ CLEAR ALL GATEPASS LOGS"}
-          </button>
-
-          <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
+          <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 mt-4">
             <p className="text-[10px] text-amber-700 font-black leading-relaxed italic">
-              Use this before going Live to remove all test movement data.
+              Use this to remove test movement data (optional date/hostel filters).
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl border border-indigo-200 shadow-sm space-y-4 flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Night Attendance Cleanup</label>
+              <p className="text-[11px] text-gray-500 font-bold">Wipe student daily check-in and night attendance logs across the campus.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Delete Records Before Date (Optional)</label>
+                <input
+                  type="date"
+                  value={attendanceBeforeDate}
+                  onChange={(e) => setAttendanceBeforeDate(e.target.value)}
+                  className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Select Hostel (Optional)</label>
+                <select
+                  value={attendanceHostel}
+                  onChange={(e) => setAttendanceHostel(e.target.value)}
+                  className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                >
+                  <option value="">Choose a hostel...</option>
+                  {hostels.map(h => <option key={h._id} value={h.name}>{h.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <button
+              onClick={handleClearAttendanceLogs}
+              disabled={isClearingAttendance}
+              className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 disabled:opacity-50 text-xs"
+            >
+              {isClearingAttendance ? "⏳ DELETING ARCHIVES..." : (attendanceBeforeDate || attendanceHostel ? "🗑️ CLEAR FILTERED ATTENDANCE" : "🗑️ CLEAR ALL NIGHT ATTENDANCE")}
+            </button>
+          </div>
+
+          <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 mt-4">
+            <p className="text-[10px] text-indigo-700 font-black leading-relaxed italic">
+              Use this to remove test check-in data (optional date/hostel filters).
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl border border-emerald-200 shadow-sm space-y-4 flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Leave Permissions Cleanup</label>
+              <p className="text-[11px] text-gray-500 font-bold">Wipe student leave requests and warden/dean permissions history.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Delete Records Before Date (Optional)</label>
+                <input
+                  type="date"
+                  value={permissionsBeforeDate}
+                  onChange={(e) => setPermissionsBeforeDate(e.target.value)}
+                  className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-emerald-500 outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Select Hostel (Optional)</label>
+                <select
+                  value={permissionsHostel}
+                  onChange={(e) => setPermissionsHostel(e.target.value)}
+                  className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-emerald-500 outline-none"
+                >
+                  <option value="">Choose a hostel...</option>
+                  {hostels.map(h => <option key={h._id} value={h.name}>{h.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <button
+              onClick={handleClearPermissions}
+              disabled={isClearingPermissions}
+              className="w-full py-4 bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 disabled:opacity-50 text-xs"
+            >
+              {isClearingPermissions ? "⏳ DELETING ARCHIVES..." : (permissionsBeforeDate || permissionsHostel ? "🗑️ CLEAR FILTERED PERMISSIONS" : "🗑️ CLEAR ALL LEAVE PERMISSIONS")}
+            </button>
+          </div>
+
+          <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100 mt-4">
+            <p className="text-[10px] text-emerald-700 font-black leading-relaxed italic">
+              Use this to remove test permission logs (optional date/hostel filters).
             </p>
           </div>
         </div>
