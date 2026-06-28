@@ -603,10 +603,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       setGuideDismissed(!!localStorage.getItem("hosteleaze_setup_dismissed"));
     }
   }, []);
+
+
   
   // ⚡ DELETED auto-show Effect to follow user preference for manual button trigger
   
-  const [currentTab, setCurrentTab] = useState<"permissions" | "attendance" | "messaging" | "payments" | "settings">("permissions");
+  const [currentTab, setCurrentTab] = useState<"permissions" | "attendance" | "messaging" | "payments" | "settings" | "rooms" | "alerts">("permissions");
+  const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
+  const [selectedRoomStudents, setSelectedRoomStudents] = useState<StudentDetails[]>([]);
+  const [activeVisualHostel, setActiveVisualHostel] = useState<string>("");
+  const [alertsConsoleFilter, setAlertsConsoleFilter] = useState<"all" | "face" | "gps" | "device" | "curfew">("all");
   const [reviewingLog, setReviewingLog] = useState<AttendanceLog | null>(null);
   const [isEditCameraOpen, setIsEditCameraOpen] = useState(false);
   const editVideoRef = useRef<HTMLVideoElement>(null);
@@ -819,6 +825,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [authorizedHostels, setAuthorizedHostels] = useState<string[]>(initialWarden.authorized);
   const [isWarden, setIsWarden] = useState(initialWarden.isWarden);
   const [dashboardTitle, setDashboardTitle] = useState(title);
+
+  useEffect(() => {
+    if (hostels.length > 0 && !activeVisualHostel) {
+      if (isWarden && authorizedHostels.length > 0) {
+        setActiveVisualHostel(authorizedHostels[0]);
+      } else {
+        setActiveVisualHostel(hostels[0].name);
+      }
+    }
+  }, [hostels, isWarden, authorizedHostels, activeVisualHostel]);
   const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null); // ⚡ NEW: Subscription tracking
 
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]); // ⚡ NEW: Manual Selection
@@ -3638,7 +3654,221 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     };
   }, [students, dropdownFilteredStudents, hostelFilter, isWarden, authorizedHostels, dashboardStats]);
 
+  // 2. Roommate Status Helper
+  const getRoommateStatus = (student: StudentDetails) => {
+    const isPresent = presentStudentIds.includes(student.id);
+    if (isPresent || student.studentStatus === 'in') {
+      return 'present';
+    }
 
+    const now = new Date();
+    const hasApprovedLeave = student.permissions && student.permissions.some((p: any) => {
+      if (p.status !== 'allowed' && p.wardenStatus !== 'allowed' && p.deanStatus !== 'allowed') return false;
+      const from = new Date(p.fromDateTime);
+      const to = new Date(p.toDateTime);
+      return now >= from && now <= to;
+    });
+
+    if (hasApprovedLeave) {
+      return 'leave';
+    }
+
+    if (student.studentStatus === 'out') {
+      const nowTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false }).substring(0, 5);
+      const isPastCurfew = nowTimeStr > (attendanceTimeSettings.endTime || "22:30");
+      if (isPastCurfew && !hasApprovedLeave) {
+        return 'curfew';
+      }
+    }
+
+    return 'absent';
+  };
+
+  // 3. Room Card Style Resolver
+  const getRoomStatusClass = (roommates: StudentDetails[]) => {
+    const statuses = roommates.map(getRoommateStatus);
+    if (statuses.includes('absent')) return { bg: 'bg-red-50 border-red-200 hover:bg-red-100/50', border: 'border-red-400', text: 'text-red-700', badge: 'bg-red-500 text-white' };
+    if (statuses.includes('curfew')) return { bg: 'bg-amber-50 border-amber-200 hover:bg-amber-100/50', border: 'border-amber-400', text: 'text-amber-700', badge: 'bg-amber-500 text-white' };
+    if (statuses.includes('leave')) return { bg: 'bg-blue-50 border-blue-250 hover:bg-blue-100/50', border: 'border-blue-400', text: 'text-blue-700', badge: 'bg-blue-600 text-white' };
+    return { bg: 'bg-emerald-50 border-emerald-250 hover:bg-emerald-100/50', border: 'border-emerald-400', text: 'text-emerald-700', badge: 'bg-emerald-600 text-white' };
+  };
+
+  // 4. Room Data Grouping
+  const visualRoomsData = useMemo(() => {
+    if (!activeVisualHostel) return [];
+    
+    const hostelStudents = students.filter(s => {
+      const hName = (s.hostelName || "").toLowerCase().trim();
+      const targetName = activeVisualHostel.toLowerCase().trim();
+      return hName === targetName;
+    });
+
+    const roomGroups: Record<string, StudentDetails[]> = {};
+    
+    hostelStudents.forEach(student => {
+      const room = (student.roomNumber || "Unassigned").trim();
+      if (!roomGroups[room]) {
+        roomGroups[room] = [];
+      }
+      roomGroups[room].push(student);
+    });
+
+    const floorGroups: Record<string, { roomNumber: string; roommates: StudentDetails[] }[]> = {};
+    
+    Object.entries(roomGroups).forEach(([roomNumber, roommates]) => {
+      let floor = "Unknown Floor";
+      const firstRoommate = roommates[0];
+      if (firstRoommate.floorNumber) {
+        floor = `Floor ${firstRoommate.floorNumber}`;
+      } else {
+        const match = roomNumber.match(/^\d+/);
+        if (match) {
+          const roomDigits = match[0];
+          if (roomDigits.length >= 3) {
+            floor = `Floor ${roomDigits.substring(0, roomDigits.length - 2)}`;
+          } else {
+            floor = `Floor ${roomDigits.substring(0, 1)}`;
+          }
+        }
+      }
+      
+      if (!floorGroups[floor]) {
+        floorGroups[floor] = [];
+      }
+      floorGroups[floor].push({ roomNumber, roommates });
+    });
+
+    Object.keys(floorGroups).forEach(floor => {
+      floorGroups[floor].sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
+    });
+
+    return Object.entries(floorGroups)
+      .map(([floorName, rooms]) => ({ floorName, rooms }))
+      .sort((a, b) => a.floorName.localeCompare(b.floorName, undefined, { numeric: true }));
+  }, [students, activeVisualHostel]);
+
+  // 5. Disciplinary & Alerts Console Data
+  const disciplinaryAlerts = useMemo(() => {
+    const alertsList: {
+      type: "face" | "gps" | "device" | "curfew";
+      title: string;
+      description: string;
+      studentName: string;
+      hostelName: string;
+      roomNumber: string;
+      studentId: string;
+      date: string;
+      details: string;
+      isProfileLocked?: boolean;
+    }[] = [];
+
+    attendanceLogs.forEach(log => {
+      const sId = typeof log.studentId === 'object' ? log.studentId?._id : log.studentId;
+      const sName = log.name || (typeof log.studentId === 'object' ? log.studentId?.name : null) || "Unknown";
+      const hName = log.hostelName || (typeof log.studentId === 'object' ? log.studentId?.hostelName : null) || "Unknown";
+      const rNum = log.roomNumber || (typeof log.studentId === 'object' ? log.studentId?.roomNumber : null) || "Unknown";
+
+      if (log.needsReview || log.faceMatchStatus === "flagged" || (log.faceMatchPercentage !== undefined && log.faceMatchPercentage < 80)) {
+        alertsList.push({
+          type: "face",
+          title: "Failed Face Matching",
+          description: `Selfie matched at only ${log.faceMatchPercentage || 0}%. Needs manual visual audit.`,
+          studentName: sName,
+          hostelName: hName,
+          roomNumber: rNum,
+          studentId: sId || "",
+          date: log.istDate || "Today",
+          details: log.flaggedPhotoUrl || ""
+        });
+      }
+
+      if (log.location && typeof log.location === 'object') {
+        const loc: any = log.location;
+        if (loc.accuracy > 150) {
+          alertsList.push({
+            type: "gps",
+            title: "Poor GPS Location Accuracy",
+            description: `Check-in recorded with high GPS inaccuracy of ${Math.round(loc.accuracy)} meters. Possibility of location spoofing.`,
+            studentName: sName,
+            hostelName: hName,
+            roomNumber: rNum,
+            studentId: sId || "",
+            date: log.istDate || "Today",
+            details: `Accuracy: ${Math.round(loc.accuracy)}m`
+          });
+        }
+      }
+    });
+
+    students.forEach(student => {
+      if (student.deviceResetCount && student.deviceResetCount >= 3) {
+        alertsList.push({
+          type: "device",
+          title: "Excessive Device ID Resets",
+          description: `Account reset its device mapping ${student.deviceResetCount} times. Potential credential swapping.`,
+          studentName: student.name,
+          hostelName: student.hostelName,
+          roomNumber: student.roomNumber,
+          studentId: student.id,
+          date: "Ongoing",
+          details: `Reset Count: ${student.deviceResetCount}`,
+          isProfileLocked: student.isProfileLocked
+        });
+      }
+
+      if (student.studentStatus === 'out') {
+        const now = new Date();
+        const nowTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false }).substring(0, 5);
+        const isPastCurfew = nowTimeStr > (attendanceTimeSettings.endTime || "22:30");
+
+        if (isPastCurfew) {
+          const hasApprovedLeave = student.permissions && student.permissions.some((p: any) => {
+            if (p.status !== 'allowed' && p.wardenStatus !== 'allowed' && p.deanStatus !== 'allowed') return false;
+            const from = new Date(p.fromDateTime);
+            const to = new Date(p.toDateTime);
+            return now >= from && now <= to;
+          });
+
+          if (!hasApprovedLeave) {
+            alertsList.push({
+              type: "curfew",
+              title: "Overnight Curfew Violation",
+              description: `Student is physically marked OUT past curfew limit (${attendanceTimeSettings.endTime}) without active leave approval.`,
+              studentName: student.name,
+              hostelName: student.hostelName,
+              roomNumber: student.roomNumber,
+              studentId: student.id,
+              date: "Today",
+              details: `Out past curfew`,
+              isProfileLocked: student.isProfileLocked
+            });
+          }
+        }
+      }
+    });
+
+    return alertsList;
+  }, [attendanceLogs, students, attendanceTimeSettings.endTime]);
+
+  const handleLockStudentProfile = async (studentId: string, lock: boolean) => {
+    if (!await showConfirm(`Are you sure you want to ${lock ? "lock" : "unlock"} this student's profile?`)) return;
+    try {
+      const res = await fetch(`/api/students/${studentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isProfileLocked: lock })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Profile ${lock ? "locked" : "unlocked"} successfully!`, "success");
+        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, isProfileLocked: lock } : s));
+      } else {
+        showToast("Error updating profile lock: " + data.error, "error");
+      }
+    } catch (e: any) {
+      showToast("Error locking profile: " + e.message, "error");
+    }
+  };
 
   const userType = typeof window !== "undefined" ? localStorage.getItem("userType") : null;
 
@@ -4213,6 +4443,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 >
                   Attendance
                 </button>
+                <button
+                  onClick={() => setCurrentTab('rooms')}
+                  className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'rooms' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                >
+                  Visual Rooms
+                </button>
+                {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
+                  <button
+                    onClick={() => setCurrentTab('alerts')}
+                    className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'alerts' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                  >
+                    Security Alerts
+                  </button>
+                )}
                 <button
                   onClick={() => setCurrentTab('messaging')}
                   className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'messaging' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
@@ -5777,6 +6021,302 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {currentTab === 'rooms' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-lg font-bold text-foreground">Warden Visual Room Grid</h2>
+                      <p className="text-sm text-secondary">Monitor room occupancy and roommate statuses visually</p>
+                    </div>
+                    {/* Hostel Filter Dropdown */}
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Select Hostel:</label>
+                      <select
+                        value={activeVisualHostel}
+                        onChange={e => setActiveVisualHostel(e.target.value)}
+                        className="h-9 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-xs focus:outline-none focus:border-blue-500 font-bold"
+                      >
+                        {isWarden ? (
+                          authorizedHostels.map(h => <option key={h} value={h}>{h}</option>)
+                        ) : (
+                          hostels.map(h => <option key={h.name} value={h.name}>{h.name}</option>)
+                        )}
+                      </select>
+                    </div>
+                  </div>
+
+                  {visualRoomsData.length === 0 ? (
+                    <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-100 font-bold text-slate-400">
+                      No rooms found for {activeVisualHostel}. Make sure students are registered in this hostel.
+                    </div>
+                  ) : (
+                    <div className="space-y-8">
+                      {visualRoomsData.map(({ floorName, rooms }) => (
+                        <div key={floorName} className="space-y-3">
+                          <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <span>🏢 {floorName}</span>
+                            <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">
+                              {rooms.length} {rooms.length === 1 ? 'Room' : 'Rooms'}
+                            </span>
+                          </h3>
+
+                          <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-6 gap-1.5 md:gap-3">
+                            {rooms.map(({ roomNumber, roommates }) => {
+                              const style = getRoomStatusClass(roommates);
+                              return (
+                                <button
+                                  key={roomNumber}
+                                  onClick={() => {
+                                    setSelectedRoom(roomNumber);
+                                    setSelectedRoomStudents(roommates);
+                                  }}
+                                  className={`p-1 md:p-2 rounded-lg border md:border-2 text-left transition-all ${style.bg} ${style.border} active:scale-95 flex items-center justify-between min-h-[36px] md:min-h-[48px] shadow-sm relative overflow-hidden`}
+                                >
+                                  {/* Color bar indicator on top */}
+                                  <div className="absolute top-0 left-0 right-0 h-0.5 md:h-1 bg-current" style={{ color: style.badge.includes('500') ? '#ef4444' : style.badge.includes('600') ? '#10b981' : '#2563eb' }} />
+                                  
+                                  <div className="flex items-center justify-between w-full mt-0.5 gap-1 min-w-0">
+                                    <div className="flex items-center gap-1 min-w-0 flex-1">
+                                      <span className={`text-[8px] sm:text-xs md:text-sm font-black truncate shrink-0 ${style.text}`} title={roomNumber}>
+                                        {roomNumber}
+                                      </span>
+                                      <div className="flex flex-wrap items-center gap-0.5 shrink-0">
+                                        {roommates.map((r, i) => {
+                                          const rStatus = getRoommateStatus(r);
+                                          return (
+                                            <div
+                                              key={r.id || i}
+                                              className={`w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full flex items-center justify-center border border-white text-[5px] md:text-[7px] font-black text-white shrink-0 ${
+                                                rStatus === 'present' ? 'bg-green-500' :
+                                                rStatus === 'leave' ? 'bg-blue-500' :
+                                                rStatus === 'curfew' ? 'bg-amber-500' : 'bg-red-500'
+                                              }`}
+                                              title={`${r.name}: ${rStatus.toUpperCase()}`}
+                                            >
+                                              {r.name.slice(0, 1).toUpperCase()}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                    <span className="text-[8px] sm:text-xs md:text-sm font-black text-slate-500 shrink-0">
+                                      {roommates.length}BED
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Room Details Modal */}
+                  {selectedRoom && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+                      <div className="bg-white w-full max-w-lg rounded-3xl p-6 md:p-8 shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-100">
+                        <button
+                          onClick={() => setSelectedRoom(null)}
+                          className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                        >
+                          ✕
+                        </button>
+
+                        <div className="mb-6">
+                          <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                            <span>🔑 Room {selectedRoom}</span>
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">({activeVisualHostel})</span>
+                          </h3>
+                          <p className="text-xs text-slate-500 font-bold mt-1">Occupancy Details & Roommate Contact Cards</p>
+                        </div>
+
+                        <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1 no-scrollbar">
+                          {selectedRoomStudents.map(student => {
+                            const rStatus = getRoommateStatus(student);
+                            return (
+                              <div key={student.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-200 transition-all">
+                                <div className="flex items-center gap-3.5">
+                                  {/* Avatar or Profile Image */}
+                                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-sm shadow-md overflow-hidden shrink-0 border border-slate-100">
+                                    {student.profilePicture ? (
+                                      <img src={student.profilePicture} alt={student.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                      student.name.slice(0, 2).toUpperCase()
+                                    )}
+                                  </div>
+                                  <div>
+                                    <h4 className="font-bold text-slate-800 text-sm leading-snug">{student.name}</h4>
+                                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
+                                      Reg ID: {student.registrationId || "N/A"}
+                                    </p>
+                                    <div className="flex items-center gap-1.5 mt-1.5">
+                                      <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${
+                                        rStatus === 'present' ? 'bg-green-100 text-green-700' :
+                                        rStatus === 'leave' ? 'bg-blue-100 text-blue-700' :
+                                        rStatus === 'curfew' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                                      }`}>
+                                        {rStatus === 'present' ? '🟢 Present' :
+                                         rStatus === 'leave' ? '🔵 On Leave' :
+                                         rStatus === 'curfew' ? '🟡 Curfew Out' : '🔴 Absent'}
+                                      </span>
+                                      {student.isProfileLocked && (
+                                        <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider">🔒 Locked</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 self-end sm:self-auto">
+                                  <a
+                                    href={`tel:${student.phoneNumber}`}
+                                    className="p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors shadow-sm text-sm"
+                                    title="Call Student"
+                                  >
+                                    📞
+                                  </a>
+                                  {student.fatherNumber && (
+                                    <a
+                                      href={`tel:${student.fatherNumber}`}
+                                      className="p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors shadow-sm text-sm"
+                                      title={`Call Parent: ${student.fatherName || "Father"}`}
+                                    >
+                                      👨‍👩‍👦
+                                    </a>
+                                  )}
+                                  <a
+                                    href={`https://wa.me/${student.phoneNumber}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-2.5 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-100/50 transition-colors shadow-sm text-sm"
+                                    title="WhatsApp Student"
+                                  >
+                                    💬
+                                  </a>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {currentTab === 'alerts' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  <div>
+                    <h2 className="text-lg font-bold text-foreground">Dean Disciplinary & Security Alerts Console</h2>
+                    <p className="text-sm text-secondary">Audit system-wide security alerts, failed face matches, and device resets</p>
+                  </div>
+
+                  {/* Summary Metric widgets */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex flex-col justify-between shadow-sm">
+                      <span className="text-lg">🚨</span>
+                      <span className="text-2xl font-black text-slate-800 leading-none mt-2">{disciplinaryAlerts.length}</span>
+                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mt-1">Total Alerts</span>
+                    </div>
+                    <div className="p-4 bg-red-50/50 border border-red-100 rounded-2xl flex flex-col justify-between shadow-sm">
+                      <span className="text-lg">👤</span>
+                      <span className="text-2xl font-black text-red-600 leading-none mt-2">{disciplinaryAlerts.filter(a => a.type === 'face').length}</span>
+                      <span className="text-[9px] font-black uppercase tracking-wider text-red-400 mt-1">Face Failures</span>
+                    </div>
+                    <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl flex flex-col justify-between shadow-sm">
+                      <span className="text-lg">📡</span>
+                      <span className="text-2xl font-black text-indigo-600 leading-none mt-2">{disciplinaryAlerts.filter(a => a.type === 'gps').length}</span>
+                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mt-1">GPS Inaccuracies</span>
+                    </div>
+                    <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-2xl flex flex-col justify-between shadow-sm">
+                      <span className="text-lg">⏳</span>
+                      <span className="text-2xl font-black text-amber-600 leading-none mt-2">{disciplinaryAlerts.filter(a => a.type === 'curfew').length}</span>
+                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mt-1">Curfew Violations</span>
+                    </div>
+                  </div>
+
+                  {/* Filter Toolbar */}
+                  <div className="flex bg-[#F3F4F6] p-1 rounded-xl w-full max-w-lg">
+                    {(["all", "face", "gps", "device", "curfew"] as const).map(tab => (
+                      <button
+                        key={tab}
+                        onClick={() => setAlertsConsoleFilter(tab)}
+                        className={`flex-1 py-2 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                          alertsConsoleFilter === tab ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        {tab === 'all' ? 'All' : tab === 'face' ? 'Face Match' : tab === 'gps' ? 'GPS' : tab === 'device' ? 'Device' : 'Curfew'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Alerts List container */}
+                  <div className="space-y-4">
+                    {disciplinaryAlerts.filter(a => alertsConsoleFilter === 'all' || a.type === alertsConsoleFilter).length === 0 ? (
+                      <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-100 font-bold text-slate-400">
+                        No security alerts flagged under this filter! Active security looks clean.
+                      </div>
+                    ) : (
+                      disciplinaryAlerts
+                        .filter(a => alertsConsoleFilter === 'all' || a.type === alertsConsoleFilter)
+                        .map((alert, idx) => (
+                          <div key={idx} className="p-5 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-md hover:border-slate-200 transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                            <div className="flex items-start gap-4">
+                              {/* Icon Indicator */}
+                              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-lg border ${
+                                alert.type === 'face' ? 'bg-red-50 border-red-100 text-red-500' :
+                                alert.type === 'gps' ? 'bg-indigo-50 border-indigo-100 text-indigo-500' :
+                                alert.type === 'device' ? 'bg-amber-50 border-amber-100 text-amber-500' : 'bg-rose-50 border-rose-100 text-rose-500'
+                              }`}>
+                                {alert.type === 'face' ? '👤' : alert.type === 'gps' ? '📡' : alert.type === 'device' ? '📱' : '⏳'}
+                              </div>
+
+                              <div className="space-y-1 text-left">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h4 className="font-bold text-slate-800 text-sm leading-none">{alert.title}</h4>
+                                  <span className="text-[9px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-black uppercase tracking-wider">{alert.date}</span>
+                                </div>
+                                <p className="text-xs text-slate-500 font-semibold leading-relaxed max-w-xl">
+                                  {alert.description}
+                                </p>
+                                <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-slate-400 mt-2">
+                                  <span className="text-slate-800 font-extrabold">{alert.studentName}</span>
+                                  <span>•</span>
+                                  <span className="uppercase">{alert.hostelName} (Room {alert.roomNumber})</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-2 self-end md:self-auto">
+                              {alert.type === 'face' && alert.details && (
+                                <a
+                                  href={alert.details}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-3 py-2 bg-slate-50 text-slate-700 hover:bg-slate-100 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all border border-slate-200"
+                                >
+                                  View Selfie
+                                </a>
+                              )}
+                              <button
+                                onClick={() => handleLockStudentProfile(alert.studentId, !alert.isProfileLocked)}
+                                className={`px-3 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all border ${
+                                  alert.isProfileLocked
+                                    ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
+                                    : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+                                }`}
+                              >
+                                {alert.isProfileLocked ? "Unlock Profile" : "Lock Profile"}
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                    )}
                   </div>
                 </div>
               )}

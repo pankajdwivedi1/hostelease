@@ -495,6 +495,72 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         };
     }, [mounted, fetchLiveData]);
 
+    // ===================== Audio Synth & Speech Synthesis Helpers =====================
+    const playSuccessChime = () => {
+        try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const now = ctx.currentTime;
+            const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+            notes.forEach((freq, index) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(freq, now + index * 0.08);
+                gain.gain.setValueAtTime(0.12, now + index * 0.08);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + index * 0.08 + 0.25);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + index * 0.08);
+                osc.stop(now + index * 0.08 + 0.3);
+            });
+        } catch (e) {
+            console.error("Audio chime error:", e);
+        }
+    };
+
+    const playWarningBuzz = () => {
+        try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(120, now);
+            osc.frequency.linearRampToValueAtTime(70, now + 0.35);
+            gain.gain.setValueAtTime(0.18, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.38);
+        } catch (e) {
+            console.error("Audio buzzer error:", e);
+        }
+    };
+
+    const speakStatus = (text: string) => {
+        try {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.05;
+                utterance.volume = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+        } catch (e) {
+            console.error("Speech synthesis error:", e);
+        }
+    };
+
+    // ===================== Trigger audio feedback on new scan results =====================
+    useEffect(() => {
+        if (lastScanResult) {
+            playSuccessChime();
+            const actionText = lastScanResult.action === 'checkout' ? 'checked out' : 'checked in';
+            speakStatus(`${lastScanResult.studentName}. ${actionText}.`);
+        }
+    }, [lastScanResult]);
+
     // Cleanup: Heartbeat fetcher and timer removed as they are no longer needed
     // fetchActivityHeartbeat was here - removed to save 200MB/day bandwidth.
 
@@ -596,9 +662,13 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                 setShowProfileCard(true);
             } else {
                 setManualError(data.error || "No information exists in the database for the entered details.");
+                playWarningBuzz();
+                speakStatus("Search failed.");
             }
         } catch (err) {
             setManualError("Network error. Try again.");
+            playWarningBuzz();
+            speakStatus("Network error.");
         } finally {
             setIsProcessingManual(false);
         }
@@ -625,6 +695,9 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
             if (data.success) {
                 setManualSuccess(data.message);
+                playSuccessChime();
+                const directionText = foundStudent.studentStatus === 'out' ? 'checked in' : 'checked out';
+                speakStatus(`${foundStudent.name}. Manual ${directionText}.`);
                 // Refresh data
                 fetchLiveData();
 
@@ -638,6 +711,8 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                 }, 2500);
             } else {
                 setManualError(data.error || "Failed to toggle status");
+                playWarningBuzz();
+                speakStatus("Access Denied.");
             }
         } catch (err) {
             setManualError("Network error. Try again.");
@@ -1312,6 +1387,59 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                 </button>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {lastScanResult && (
+                <div className={`fixed inset-0 z-[200] flex flex-col items-center justify-center p-6 backdrop-blur-md animate-in fade-in duration-300 ${
+                    lastScanResult.action === 'checkout'
+                        ? 'bg-emerald-950/90'
+                        : 'bg-indigo-950/90'
+                }`}>
+                    <div className="bg-[#0f172a] border-2 border-white/10 rounded-3xl p-8 md:p-12 w-full max-w-2xl text-center shadow-[0_0_100px_rgba(0,0,0,0.8)] relative animate-in zoom-in-95 duration-200">
+                        {/* Status Icon */}
+                        <div className={`w-24 h-24 rounded-full mx-auto flex items-center justify-center text-4xl shadow-lg border-4 ${
+                            lastScanResult.action === 'checkout'
+                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
+                                : 'bg-blue-500/20 border-blue-500 text-blue-400'
+                        }`}>
+                            {lastScanResult.action === 'checkout' ? '🚶' : '🏠'}
+                        </div>
+
+                        {/* Title */}
+                        <h2 className="text-3xl md:text-4xl font-black mt-6 tracking-wider bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+                            ACCESS APPROVED
+                        </h2>
+
+                        <p className={`text-sm font-black uppercase tracking-[0.2em] mt-2 ${
+                            lastScanResult.action === 'checkout' ? 'text-emerald-400' : 'text-blue-400'
+                        }`}>
+                            {lastScanResult.action === 'checkout' ? 'Check-Out (Exiting)' : 'Check-In (Entering)'}
+                        </p>
+
+                        <div className="mt-8 py-6 px-8 bg-white/5 rounded-2xl border border-white/5">
+                            <h3 className="text-2xl md:text-3xl font-black text-white leading-tight">
+                                {lastScanResult.studentName}
+                            </h3>
+                            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-2">
+                                {lastScanResult.message}
+                            </p>
+                        </div>
+
+                        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 text-xs font-bold text-slate-400">
+                            <span>🕒 {lastScanResult.timestamp.toLocaleTimeString()}</span>
+                            <span className="hidden sm:inline">•</span>
+                            <span>📅 {lastScanResult.timestamp.toLocaleDateString()}</span>
+                        </div>
+
+                        {/* Direct dismiss */}
+                        <button
+                            onClick={() => setLastScanResult(null)}
+                            className="mt-8 px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all active:scale-95"
+                        >
+                            Dismiss Window
+                        </button>
                     </div>
                 </div>
             )}

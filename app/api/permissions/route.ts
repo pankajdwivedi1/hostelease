@@ -44,8 +44,16 @@ export async function POST(request: NextRequest) {
     // Determine the phone number to call
     const parentPhone = student.fatherNumber || student.motherNumber || student.phoneNumber;
     
-    // Trigger MSG91 Voice Call
-    if (parentPhone) {
+    // Fetch leave approval settings to determine if voice call is required
+    const { data: settings } = await db.supabase
+      .from('admin_settings')
+      .select('leave_approval_method')
+      .eq('tenant_id', student.tenantId)
+      .maybeSingle();
+    const leaveApprovalMethod = settings?.leave_approval_method || 'app';
+
+    // Trigger MSG91 Voice Call only if configured to use IVR Call method
+    if (leaveApprovalMethod === 'ivr' && parentPhone) {
       try {
         await triggerLeaveVoiceCall({
           phoneNumber: parentPhone,

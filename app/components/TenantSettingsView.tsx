@@ -247,8 +247,13 @@ export default function TenantSettingsView() {
                                 >
                                     <option value="app">APP (Parent must approve via App)</option>
                                     <option value="ivr">IVR Call (Automated Voice Call)</option>
+                                    <option value="none">None (Bypass Parent Approval)</option>
                                 </select>
-                                <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 mt-1">If set to APP, wardens cannot approve until the parent gives consent.</p>
+                                <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 mt-1">
+                                    {leaveApprovalMethod === "app" && "If set to APP, wardens cannot approve until the parent gives consent via the parent portal."}
+                                    {leaveApprovalMethod === "ivr" && "If set to IVR, the system will trigger an automated IVR voice call to the parent."}
+                                    {leaveApprovalMethod === "none" && "If set to None, parent consent is bypassed, and wardens can approve requests immediately."}
+                                </p>
                             </div>
                         </div>
 

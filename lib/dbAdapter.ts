@@ -4788,7 +4788,7 @@ export const db = {
                     const { data: students, error: studentError } = await studentQuery;
                     
                     if (studentError) throw studentError;
-                    const studentIds = (students || []).map(s => s._id);
+                    const studentIds = (students || []).map((s: any) => s._id);
                     if (studentIds.length === 0) return true;
                     
                     // Batch delete in chunks of 100 to avoid Headers Overflow error
