@@ -234,6 +234,7 @@ interface LiveData {
 // ===================== Main Component =====================
 export default function GatepassView({ onClose }: { onClose?: () => void }) {
     const router = useRouter();
+    const lastSpokenScanIdRef = useRef<string | null>(null);
     const [qrData, setQrData] = useState<string>("");
     const [qrToken, setQrToken] = useState<string>("");
     const [qrExpiry, setQrExpiry] = useState<Date | null>(null);
@@ -249,13 +250,6 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [gateName] = useState("Main Gate");
     const [isFullscreen, setIsFullscreen] = useState(false);
-    const [lastScanResult, setLastScanResult] = useState<{
-        studentId?: string;
-        studentName: string;
-        action: "checkin" | "checkout";
-        message: string;
-        timestamp: Date;
-    } | null>(null);
     const [mounted, setMounted] = useState(false);
     const [isManualModalOpen, setIsManualModalOpen] = useState(false);
     const [manualSearchId, setManualSearchId] = useState("");
@@ -413,6 +407,26 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                 },
                 (payload: any) => {
                     console.log('⚡ Scan Detected via Realtime:', payload.eventType, payload.new);
+                    const raw = payload.new;
+                    if (raw) {
+                        const recordId = raw._id || raw.id;
+                        const recordStatus = raw.status;
+                        const eventKey = `${recordId}-${recordStatus}`;
+
+                        if (recordId && (recordStatus === 'in' || recordStatus === 'out' || recordStatus === 'auto-resolved')) {
+                            // Only play sound and speak if we haven't spoken this scan event yet
+                            if (lastSpokenScanIdRef.current !== eventKey) {
+                                lastSpokenScanIdRef.current = eventKey;
+                                
+                                // Only trigger audio for active checkins/checkouts (ignore system auto-resolves)
+                                if (recordStatus === 'in' || recordStatus === 'out') {
+                                    playSuccessChime();
+                                    const actionText = recordStatus === 'out' ? 'Check out' : 'Check in';
+                                    speakStatus(actionText);
+                                }
+                            }
+                        }
+                    }
 
                     // ⚡ INSTANT FEEDBACK: Update local state immediately from the Realtime payload
                     setLiveData((prev: any) => {
@@ -551,15 +565,6 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         }
     };
 
-    // ===================== Trigger audio feedback on new scan results =====================
-    useEffect(() => {
-        if (lastScanResult) {
-            playSuccessChime();
-            const actionText = lastScanResult.action === 'checkout' ? 'Check out' : 'Check in';
-            speakStatus(actionText);
-        }
-    }, [lastScanResult]);
-
     // Cleanup: Heartbeat fetcher and timer removed as they are no longer needed
     // fetchActivityHeartbeat was here - removed to save 200MB/day bandwidth.
 
@@ -574,32 +579,6 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         }, 1000);
         return () => clearInterval(countdownInterval);
     }, []);
-
-    // ===================== Auto-Banner logic for new scans =====================
-    useEffect(() => {
-        if (liveData?.recentActivity && liveData.recentActivity.length > 0) {
-            const latest = liveData.recentActivity[0];
-            const timeStr = latest.status === 'out' ? latest.checkOutTime : (latest.checkInTime || new Date().toISOString());
-            const activityTime = new Date(timeStr).getTime();
-            const now = new Date().getTime();
-
-            // If activity happened in the last 15 seconds, show the banner
-            if (now - activityTime < 15000) {
-                setLastScanResult({
-                    studentId: latest.studentId,
-                    studentName: latest.studentName,
-                    action: latest.status === 'out' ? 'checkout' : 'checkin',
-                    message: latest.status === 'out' ? 'Checked out of campus' : 'Returned to hostel',
-                    timestamp: new Date(activityTime)
-                });
-
-                const clearTimer = setTimeout(() => {
-                    setLastScanResult(null);
-                }, 10000);
-                return () => clearTimeout(clearTimer);
-            }
-        }
-    }, [liveData?.recentActivity]);
 
     // ===================== Fullscreen toggle =====================
     useEffect(() => {
