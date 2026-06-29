@@ -146,17 +146,66 @@ export async function POST(request: NextRequest) {
 
         const now = new Date();
         const { istTime, istDate } = getISTStrings(now);
-
+        
         // Check student's current campus status
         const currentStatus = student.studentStatus || "in";
+
+        // ⚡ SPEED OPTIMIZATION: Run all database checks in parallel to minimize gate scanning delay
+        const studentIdStr = student._id.toString();
+        const [activityResult, openPassesResult, activePermissionsResult, consumedPassesResult] = await Promise.all([
+            // 1. Double scan guard check (recent activity)
+            db.gatePasses.list(
+                { firebaseUID: student.firebaseUID },
+                { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc' }
+            ).catch(err => {
+                console.warn("⚠️ Scan guard query failed:", err);
+                return { records: [] };
+            }),
+            
+            // 2. Open passes check (for resolving duplicates/stale passes)
+            db.gatePasses.list(
+                { studentId: studentIdStr, status: "out" }
+            ).catch(err => {
+                console.warn("⚠️ Open passes query failed:", err);
+                return { records: [] };
+            }),
+            
+            // 3. Permissions check (for active approved leaves)
+            db.permissions.list(
+                { studentId: studentIdStr }
+            ).catch(err => {
+                console.warn("⚠️ Active permissions query failed:", err);
+                return { records: [] };
+            }),
+            
+            // 4. Consumed permissions check
+            supabase
+                .from('gate_passes')
+                .select('permission_id')
+                .eq('student_id', studentIdStr)
+                .not('permission_id', 'is', null)
+                .catch((err: any) => {
+                    console.warn("⚠️ Consumed passes query failed:", err);
+                    return { data: null, error: err };
+                })
+        ]);
+
+        const activity = activityResult?.records || [];
+        const openPasses = openPassesResult?.records || [];
+        const activePermissions = activePermissionsResult?.records || [];
+        
+        const alreadyConsumedPermIds = new Set<string>();
+        if (consumedPassesResult && 'data' in consumedPassesResult && consumedPassesResult.data) {
+            consumedPassesResult.data.forEach((gp: any) => {
+                if (gp.permission_id) {
+                    alreadyConsumedPermIds.add(gp.permission_id.toString());
+                }
+            });
+        }
 
         // 🔥 DOUBLE SCAN GUARD: Prevent duplicate entries from double-tapping or network lag
         // We block any scan action (Outing or Return) if the student did something within the last 8 seconds
         try {
-            const { records: activity } = await db.gatePasses.list({
-                firebaseUID: student.firebaseUID
-            }, { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc' });
-
             if (activity && activity.length > 0 && activity[0]) {
                 const last = activity[0] as any;
                 const nowMs = Date.now();
@@ -217,11 +266,6 @@ export async function POST(request: NextRequest) {
         if (currentStatus === "in") {
             // STUDENT IS GOING OUT (CHECK-OUT)
             // ⚡ FIX: Find ALL open passes and close them before starting a new one
-            const { records: openPasses } = await db.gatePasses.list({
-                studentId: student._id.toString(),
-                status: "out",
-            });
-
             if (openPasses && openPasses.length > 0) {
                 console.log(`[SCAN_OUT] Found ${openPasses.length} stale passes for ${student.name}. Resolving...`);
                 for (const oldPass of openPasses) {
@@ -236,32 +280,6 @@ export async function POST(request: NextRequest) {
                         qrTokenUsedIn: "SYSTEM_AUTO_CLOSE_ON_NEW_OUTING"
                     });
                 }
-            }
-
-            // ⚡ CHECK FOR PERMISSIONS: Is this an approved "Leave" or just a regular Outing?
-            const { records: activePermissions } = await db.permissions.list({
-                studentId: student._id.toString()
-            });
-
-            // ✅ DEFINITIVE GUARD: Build a set of permissionIds that were ALREADY consumed
-            // by a previous gate pass (any status — out or in). A permission can only be
-            // used ONCE. If a gate pass already exists with this permissionId, skip it.
-            const alreadyConsumedPermIds = new Set<string>();
-            try {
-                // 📡 BANDWIDTH OPTIMIZATION: Only select permission_id column to reduce data transfer
-                const { data: consumedPasses, error: gpErr } = await supabase
-                    .from('gate_passes')
-                    .select('permission_id')
-                    .eq('student_id', student._id.toString())
-                    .not('permission_id', 'is', null);
-
-                if (!gpErr && consumedPasses) {
-                    consumedPasses.forEach((gp: any) => {
-                        alreadyConsumedPermIds.add(gp.permission_id.toString());
-                    });
-                }
-            } catch (gpErr) {
-                console.warn("⚠️ Could not fetch prior gate passes for permission check:", gpErr);
             }
 
             // Find if any permission covers "NOW" and is approved (by dean OR fully allowed)
@@ -344,12 +362,6 @@ export async function POST(request: NextRequest) {
             });
         } else {
             // STUDENT IS COMING BACK (CHECK-IN)
-            // ⚡ FIX: Find ALL open gate passes for this student to resolve mismatches
-            const { records: openPasses } = await db.gatePasses.list({
-                studentId: student._id.toString(),
-                status: "out",
-            });
-
             if (!openPasses || openPasses.length === 0) {
                 // No open pass found but status is "out" - fix status
                 await db.students.update(student._id.toString(), { studentStatus: "in" });
