@@ -78,9 +78,9 @@ export async function POST(request: NextRequest) {
                 throw new Error("Invalid signature");
             }
 
-            // 2. Check if token is too old (25 seconds limit: 15s rotation + 10s network buffer)
+            // 2. Check if token is too old (60 seconds limit to accommodate minor clock drift and network lag)
             const nowMs = Date.now();
-            if (nowMs - timestamp > 25000) {
+            if (Math.abs(nowMs - timestamp) > 60000) {
                 return NextResponse.json(
                     { error: "QR code has expired. Please scan the new QR code displayed at the gate." },
                     { status: 410 }
