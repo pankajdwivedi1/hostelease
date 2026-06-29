@@ -150,13 +150,33 @@ export async function POST(request: NextRequest) {
         // Check student's current campus status
         const currentStatus = student.studentStatus || "in";
 
+        // ============================================================
+        // ⚡ SPEED OPTIMIZATION: Query all DB dependencies in parallel!
+        // ============================================================
+        let activity: any[] = [];
+        let openPasses: any[] = [];
+        let activePermissions: any[] = [];
+        let consumedPasses: any[] = [];
+
+        try {
+            const [activityRes, openPassesRes, permissionsRes, consumedRes] = await Promise.all([
+                db.gatePasses.list({ firebaseUID: student.firebaseUID }, { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc' }),
+                db.gatePasses.list({ studentId: student._id.toString(), status: "out" }),
+                db.permissions.list({ studentId: student._id.toString() }),
+                db.gatePasses.list({ studentId: student._id.toString() })
+            ]);
+
+            activity = activityRes?.records || [];
+            openPasses = openPassesRes?.records || [];
+            activePermissions = permissionsRes?.records || [];
+            consumedPasses = consumedRes?.records || [];
+        } catch (dbErr) {
+            console.error("⚠️ Failed to load scan database dependencies in parallel:", dbErr);
+        }
+
         // 🔥 DOUBLE SCAN GUARD: Prevent duplicate entries from double-tapping or network lag
         // We block any scan action (Outing or Return) if the student did something within the last 8 seconds
         try {
-            const { records: activity } = await db.gatePasses.list({
-                firebaseUID: student.firebaseUID
-            }, { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc' });
-
             if (activity && activity.length > 0 && activity[0]) {
                 const last = activity[0] as any;
                 const nowMs = Date.now();
@@ -217,11 +237,6 @@ export async function POST(request: NextRequest) {
         if (currentStatus === "in") {
             // STUDENT IS GOING OUT (CHECK-OUT)
             // ⚡ FIX: Find ALL open passes and close them before starting a new one
-            const { records: openPasses } = await db.gatePasses.list({
-                studentId: student._id.toString(),
-                status: "out",
-            });
-
             if (openPasses && openPasses.length > 0) {
                 console.log(`[SCAN_OUT] Found ${openPasses.length} stale passes for ${student.name}. Resolving...`);
                 for (const oldPass of openPasses) {
@@ -239,29 +254,18 @@ export async function POST(request: NextRequest) {
             }
 
             // ⚡ CHECK FOR PERMISSIONS: Is this an approved "Leave" or just a regular Outing?
-            const { records: activePermissions } = await db.permissions.list({
-                studentId: student._id.toString()
-            });
-
+            
             // ✅ DEFINITIVE GUARD: Build a set of permissionIds that were ALREADY consumed
             // by a previous gate pass (any status — out or in). A permission can only be
             // used ONCE. If a gate pass already exists with this permissionId, skip it.
             const alreadyConsumedPermIds = new Set<string>();
-            try {
-                const { records: consumedPasses } = await db.gatePasses.list({
-                    studentId: student._id.toString()
+            if (consumedPasses && consumedPasses.length > 0) {
+                consumedPasses.forEach((gp: any) => {
+                    const permId = gp.permissionId || gp.permission_id;
+                    if (permId) {
+                        alreadyConsumedPermIds.add(permId.toString());
+                    }
                 });
-
-                if (consumedPasses && consumedPasses.length > 0) {
-                    consumedPasses.forEach((gp: any) => {
-                        const permId = gp.permissionId || gp.permission_id;
-                        if (permId) {
-                            alreadyConsumedPermIds.add(permId.toString());
-                        }
-                    });
-                }
-            } catch (gpErr) {
-                console.warn("⚠️ Could not fetch prior gate passes for permission check:", gpErr);
             }
 
             // Find if any permission covers "NOW" and is approved (by dean OR fully allowed)
@@ -344,11 +348,7 @@ export async function POST(request: NextRequest) {
             });
         } else {
             // STUDENT IS COMING BACK (CHECK-IN)
-            // ⚡ FIX: Find ALL open gate passes for this student to resolve mismatches
-            const { records: openPasses } = await db.gatePasses.list({
-                studentId: student._id.toString(),
-                status: "out",
-            });
+            // ⚡ REUSE: openPasses is already fetched in parallel at the top!
 
             if (!openPasses || openPasses.length === 0) {
                 // No open pass found but status is "out" - fix status
