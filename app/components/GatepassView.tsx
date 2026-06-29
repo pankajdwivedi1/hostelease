@@ -543,7 +543,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(text);
-                utterance.rate = 1.05;
+                utterance.rate = 1.25;
                 utterance.volume = 1.0;
                 window.speechSynthesis.speak(utterance);
             }
@@ -696,8 +696,8 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
             if (data.success) {
                 setManualSuccess(data.message);
                 playSuccessChime();
-                const directionText = foundStudent.studentStatus === 'out' ? 'checked in' : 'checked out';
-                speakStatus(`${foundStudent.name}. Manual ${directionText}.`);
+                const directionText = foundStudent.studentStatus === 'out' ? 'Check in' : 'Check out';
+                speakStatus(directionText);
                 // Refresh data
                 fetchLiveData();
 
