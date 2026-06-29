@@ -2260,26 +2260,38 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const fetchStudents = async (forceRefresh = false) => {
     try {
-      if (!forceRefresh) {
-        const cached = localStorage.getItem(CACHE_KEYS.STUDENTS);
-        const timestamp = localStorage.getItem(CACHE_KEYS.TIMESTAMP);
+      // 1. Immediately read from cache first for instant display
+      const cached = localStorage.getItem(CACHE_KEYS.STUDENTS);
+      const timestamp = localStorage.getItem(CACHE_KEYS.TIMESTAMP);
+      let hasCache = false;
 
-        if (cached && timestamp) {
+      if (cached) {
+        try {
           const parsed = JSON.parse(cached);
-          const age = Date.now() - parseInt(timestamp);
-          const needsUpgrade = parsed.length > 0 && parsed[0].floorNumber === undefined;
-          // ⚡ FIX: Temporarily force a cache refresh by bypassing age check (or setting a very low duration)
-          // to ensure local students array has correct hostelName matching the DB.
-          const FORCE_REFRESH_DURATION = 5 * 60 * 1000; // 5 mins
-          if (!needsUpgrade && age < FORCE_REFRESH_DURATION && parsed.length > 0) {
+          if (parsed && parsed.length > 0) {
             setStudents(parsed);
-            setStudentsLoading(false);
-            return;
+            hasCache = true;
+            
+            // If cache is fresh and not forced, return immediately
+            if (!forceRefresh && timestamp) {
+              const age = Date.now() - parseInt(timestamp);
+              const needsUpgrade = parsed[0].floorNumber === undefined;
+              const CACHE_FRESH_DURATION = 5 * 60 * 1000; // 5 minutes
+              if (!needsUpgrade && age < CACHE_FRESH_DURATION) {
+                setStudentsLoading(false);
+                return;
+              }
+            }
           }
+        } catch (e) {
+          console.warn("Error parsing student cache", e);
         }
       }
 
-      setStudentsLoading(true);
+      // If we don't have cache, show loading spinner. Otherwise, fetch in the background silently.
+      if (!hasCache) {
+        setStudentsLoading(true);
+      }
       // ⚡ OPTIMIZED: Fetch lightweight data (no big images) to save bandwidth
       const url = new URL("/api/students?light=true", window.location.origin);
       const response = await fetch(url.href, { cache: "no-store" });
@@ -2726,9 +2738,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     // ⚡ INSTANT UPDATE: Always fetch summary when filters or date change
     fetchAttendanceSummary();
 
-    if (currentTab === "attendance") {
-      fetchAttendanceLogs();
-      if (students.length === 0) fetchStudents();
+    if (currentTab === "attendance" || currentTab === "rooms") {
+      if (currentTab === "attendance") fetchAttendanceLogs();
+      if (students.length === 0) {
+        fetchStudents();
+      } else {
+        // Silently revalidate in the background on tab switch
+        fetchStudents(true);
+      }
     }
     
     if (currentTab === 'payments' && (!payments || payments.length === 0)) {
@@ -2737,8 +2754,77 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   }, [selectedDate, attendanceHostelFilter, currentTab, paymentStatusFilter, paymentSearch]);
 
-  // ⚡ OPTIMIZATION: Supabase Realtime Subscription removed to save massive bandwidth. 
-  // Gatepass remains live, but other dashboards now use manual refresh.
+  // Load cached students list immediately on mount for zero-latency tab transitions
+  useEffect(() => {
+    const cached = localStorage.getItem(CACHE_KEYS.STUDENTS);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.length > 0) {
+          setStudents(parsed);
+        }
+      } catch (e) {
+        console.warn("Failed to load cached students on mount", e);
+      }
+    }
+  }, []);
+
+  // ⚡ Supabase Realtime subscription for Students table
+  // Keeps the dashboard student statuses updated instantly without full refetches!
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const channel = supabase
+      .channel('dashboard-students-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE', // We only care about status updates, locks, edits
+          schema: 'public',
+          table: 'students'
+        },
+        (payload: any) => {
+          console.log("⚡ Student Realtime Update:", payload.new);
+          const raw = payload.new;
+          if (!raw) return;
+
+          const updatedId = raw._id || raw.id;
+          
+          setStudents(prev => {
+            const nextStudents = prev.map(s => {
+              if (s.id === updatedId) {
+                return {
+                  ...s,
+                  name: raw.name !== undefined ? raw.name : s.name,
+                  email: raw.email !== undefined ? raw.email : s.email,
+                  phoneNumber: raw.phone_number !== undefined ? raw.phone_number : (raw.phoneNumber !== undefined ? raw.phoneNumber : s.phoneNumber),
+                  hostelName: raw.hostel_name !== undefined ? raw.hostel_name : (raw.hostelName !== undefined ? raw.hostelName : s.hostelName),
+                  roomNumber: raw.room_number !== undefined ? raw.room_number : (raw.roomNumber !== undefined ? raw.roomNumber : s.roomNumber),
+                  floorNumber: raw.floor_number !== undefined ? raw.floor_number : (raw.floorNumber !== undefined ? raw.floorNumber : s.floorNumber),
+                  studentStatus: raw.student_status !== undefined ? raw.student_status : (raw.studentStatus !== undefined ? raw.studentStatus : s.studentStatus),
+                  isProfileLocked: raw.is_profile_locked !== undefined ? raw.is_profile_locked : (raw.isProfileLocked !== undefined ? raw.isProfileLocked : s.isProfileLocked),
+                  deviceResetCount: raw.device_reset_count !== undefined ? raw.device_reset_count : (raw.deviceResetCount !== undefined ? raw.deviceResetCount : s.deviceResetCount)
+                };
+              }
+              return s;
+            });
+
+            try {
+              localStorage.setItem(CACHE_KEYS.STUDENTS, JSON.stringify(nextStudents));
+            } catch (e) {
+              console.warn("Failed to update student cache on realtime update", e);
+            }
+
+            return nextStudents;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Intercept Native Back Button for Gatepass Overlay
   useEffect(() => {
