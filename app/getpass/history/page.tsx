@@ -499,12 +499,21 @@ export default function OutingHistoryPage() {
                                             {record.studentName?.charAt(0).toUpperCase() || "?"}
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <p
-                                                onClick={() => fetchStudentProfile(record.studentId)}
-                                                className="text-sm font-bold text-white m-0 cursor-pointer hover:text-blue-400 transition-colors leading-tight truncate"
-                                            >
-                                                {record.studentName}
-                                            </p>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <p
+                                                    onClick={() => fetchStudentProfile(record.studentId)}
+                                                    className="text-sm font-bold text-white m-0 cursor-pointer hover:text-blue-400 transition-colors leading-tight truncate"
+                                                >
+                                                    {record.studentName}
+                                                </p>
+                                                <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${record.type === "leave"
+                                                    ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                                    : "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                                                    }`}>
+                                                    <span className="text-[9px]">{record.type === "leave" ? "🏠" : "🎫"}</span>
+                                                    <span>{record.type === "leave" ? "H-LEAVE" : "G-PASS"}</span>
+                                                </span>
+                                            </div>
                                             <p className="text-[10px] text-white/70 mt-1 font-medium truncate uppercase tracking-tighter">
                                                 {formatHostelDisplay(record.hostelName)} • Room {record.roomNumber}
                                             </p>
@@ -535,7 +544,7 @@ export default function OutingHistoryPage() {
                                                     </div>
                                                     {record.type === 'leave' && (
                                                         <div className="flex items-center gap-1 mt-1">
-                                                            <span className="text-[7px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20 font-black uppercase tracking-tighter">🏠 Home Leave</span>
+                                                            <span className="text-[7px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20 font-black uppercase tracking-tighter">🏠 H-LEAVE</span>
                                                         </div>
                                                     )}
                                                 </div>

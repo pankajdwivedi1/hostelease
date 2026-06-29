@@ -3744,39 +3744,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const getRoommateStatus = (student: StudentDetails) => {
     const isPresent = presentStudentIds.includes(student.id);
     if (isPresent || student.studentStatus === 'in') {
-      return 'present';
-    }
-
-    const now = new Date();
-    const hasApprovedLeave = student.permissions && student.permissions.some((p: any) => {
-      if (p.status !== 'allowed' && p.wardenStatus !== 'allowed' && p.deanStatus !== 'allowed') return false;
-      const from = new Date(p.fromDateTime);
-      const to = new Date(p.toDateTime);
-      return now >= from && now <= to;
-    });
-
-    if (hasApprovedLeave) {
-      return 'leave';
+      return 'in';
     }
 
     if (student.studentStatus === 'out') {
-      const nowTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false }).substring(0, 5);
-      const isPastCurfew = nowTimeStr > (attendanceTimeSettings.endTime || "22:30");
-      if (isPastCurfew && !hasApprovedLeave) {
-        return 'curfew';
+      if (student.outingType === 'leave') {
+        return 'hleave';
+      } else {
+        return 'gpass';
       }
     }
 
-    return 'absent';
+    return 'in';
   };
 
   // 3. Room Card Style Resolver
   const getRoomStatusClass = (roommates: StudentDetails[]) => {
     const statuses = roommates.map(getRoommateStatus);
-    if (statuses.includes('absent')) return { bg: 'bg-red-50 border-red-200 hover:bg-red-100/50', border: 'border-red-400', text: 'text-red-700', badge: 'bg-red-500 text-white' };
-    if (statuses.includes('curfew')) return { bg: 'bg-amber-50 border-amber-200 hover:bg-amber-100/50', border: 'border-amber-400', text: 'text-amber-700', badge: 'bg-amber-500 text-white' };
-    if (statuses.includes('leave')) return { bg: 'bg-blue-50 border-blue-250 hover:bg-blue-100/50', border: 'border-blue-400', text: 'text-blue-700', badge: 'bg-blue-600 text-white' };
-    return { bg: 'bg-emerald-50 border-emerald-250 hover:bg-emerald-100/50', border: 'border-emerald-400', text: 'text-emerald-700', badge: 'bg-emerald-600 text-white' };
+    if (statuses.includes('hleave')) return { bg: 'bg-blue-50 border-blue-250 hover:bg-blue-100/50', border: 'border-blue-400', text: 'text-blue-700', badge: 'bg-blue-600 text-white', color: '#2563eb' };
+    if (statuses.includes('gpass')) return { bg: 'bg-yellow-50/50 border-yellow-250 hover:bg-yellow-100/50', border: 'border-yellow-400', text: 'text-yellow-800', badge: 'bg-yellow-500 text-white', color: '#eab308' };
+    return { bg: 'bg-emerald-50 border-emerald-250 hover:bg-emerald-100/50', border: 'border-emerald-400', text: 'text-emerald-700', badge: 'bg-emerald-600 text-white', color: '#10b981' };
   };
 
   // 4. Room Data Grouping
@@ -6163,7 +6150,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   className={`p-1 md:p-2 rounded-lg border md:border-2 text-left transition-all ${style.bg} ${style.border} active:scale-95 flex items-center justify-between min-h-[36px] md:min-h-[48px] shadow-sm relative overflow-hidden`}
                                 >
                                   {/* Color bar indicator on top */}
-                                  <div className="absolute top-0 left-0 right-0 h-0.5 md:h-1 bg-current" style={{ color: style.badge.includes('500') ? '#ef4444' : style.badge.includes('600') ? '#10b981' : '#2563eb' }} />
+                                  <div className="absolute top-0 left-0 right-0 h-0.5 md:h-1" style={{ backgroundColor: style.color }} />
                                   
                                   <div className="flex items-center justify-between w-full mt-0.5 gap-1 min-w-0">
                                     <div className="flex items-center gap-1 min-w-0 flex-1">
@@ -6177,11 +6164,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             <div
                                               key={r.id || i}
                                               className={`w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full flex items-center justify-center border border-white text-[5px] md:text-[7px] font-black text-white shrink-0 ${
-                                                rStatus === 'present' ? 'bg-green-500' :
-                                                rStatus === 'leave' ? 'bg-blue-500' :
-                                                rStatus === 'curfew' ? 'bg-amber-500' : 'bg-red-500'
+                                                rStatus === 'in' ? 'bg-green-500' :
+                                                rStatus === 'hleave' ? 'bg-blue-500' : 'bg-yellow-500'
                                               }`}
-                                              title={`${r.name}: ${rStatus.toUpperCase()}`}
+                                              title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'H-LEAVE' : 'G-PASS'}`}
                                             >
                                               {r.name.slice(0, 1).toUpperCase()}
                                             </div>
@@ -6240,15 +6226,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
                                       Reg ID: {student.registrationId || "N/A"}
                                     </p>
+                                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
+                                      ERP ID: {student.erpInformation || "N/A"}
+                                    </p>
                                     <div className="flex items-center gap-1.5 mt-1.5">
                                       <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${
-                                        rStatus === 'present' ? 'bg-green-100 text-green-700' :
-                                        rStatus === 'leave' ? 'bg-blue-100 text-blue-700' :
-                                        rStatus === 'curfew' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                                        rStatus === 'in' ? 'bg-green-100 text-green-700' :
+                                        rStatus === 'hleave' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-800'
                                       }`}>
-                                        {rStatus === 'present' ? '🟢 Present' :
-                                         rStatus === 'leave' ? '🔵 On Leave' :
-                                         rStatus === 'curfew' ? '🟡 Curfew Out' : '🔴 Absent'}
+                                        {rStatus === 'in' ? '🟢 IN' :
+                                         rStatus === 'hleave' ? '🔵 H-LEAVE' : '🟡 G-PASS'}
                                       </span>
                                       {student.isProfileLocked && (
                                         <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider">🔒 Locked</span>
@@ -6671,7 +6658,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     {!studentsLoading && (
                       <div className="w-full flex items-center justify-center border-t border-[rgba(0,0,0,0.1)] mt-1 pt-1 text-[8px] uppercase tracking-tighter font-black">
                         <div className="flex-1 flex flex-col items-center border-r border-[rgba(0,0,0,0.05)]">
-                          <span className={statusFilter === "out" ? "text-white" : "text-[#7f8c8d]"}>Leave: {statusCounts.leave}</span>
+                          <span className={statusFilter === "out" ? "text-white" : "text-[#7f8c8d]"}>H-Leave: {statusCounts.leave}</span>
                         </div>
                         <div className="flex-1 flex flex-col items-center">
                           <span className={statusFilter === "out" ? "text-white" : "text-[#7f8c8d]"}>G-Pass: {statusCounts.pass}</span>

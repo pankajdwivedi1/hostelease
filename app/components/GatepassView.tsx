@@ -347,6 +347,17 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                 // to prevent the UI from "emptying" while background updates happen.
                 setLiveData(prev => {
                     if (data.minimal && prev) {
+                        const serverOutCount = data.summary?.studentsOut ?? 0;
+                        const localOutCount = prev.currentlyOut?.length ?? 0;
+
+                        // 🔄 SELF-HEALING: If the list is out of sync with the database counts,
+                        // trigger a full query in the background to sync the list correctly.
+                        if (serverOutCount !== localOutCount) {
+                            setTimeout(() => {
+                                fetchLiveData(false);
+                            }, 50);
+                        }
+
                         return {
                             ...prev,
                             summary: data.summary || prev.summary, // ⚡ Merge updated counts
@@ -455,7 +466,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                             if (payload.eventType === 'INSERT') {
                                 // STUDENT SCANNING OUT
                                 // Add to currentlyOut if not already there
-                                if (!newCurrentlyOut.some(r => r._id === mapped._id)) {
+                                if (!newCurrentlyOut.some(r => r._id === mapped._id || r.registrationId === mapped.registrationId)) {
                                     newCurrentlyOut.unshift({
                                         ...mapped,
                                         currentDurationText: 'Just now',
@@ -470,7 +481,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                             } else if (payload.eventType === 'UPDATE' && (mapped.status === 'in' || mapped.status === 'auto-resolved')) {
                                 // STUDENT SCANNING IN (Check-in)
                                 // Remove from currentlyOut if present
-                                const index = newCurrentlyOut.findIndex(r => r._id === mapped._id);
+                                const index = newCurrentlyOut.findIndex(r => r._id === mapped._id || r.registrationId === mapped.registrationId);
                                 if (index !== -1) {
                                     newCurrentlyOut.splice(index, 1);
                                     newSummary.studentsOut = Math.max(0, newSummary.studentsOut - 1);
@@ -480,7 +491,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                 }
 
                                 // ALWAYS add to Recent Activity (Returns Today) list instantly!
-                                if (!newRecent.some(r => r._id === mapped._id && (r.checkInTime || r.checkInISTTime))) {
+                                if (!newRecent.some(r => (r._id === mapped._id || r.registrationId === mapped.registrationId) && (r.checkInTime || r.checkInISTTime))) {
                                     newRecent.unshift(mapped);
                                 }
                             }
@@ -946,7 +957,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                 {liveData.summary.leaveCount || 0}
                                             </span>
                                             <span className="text-[8px] text-[rgba(255,255,255,0.45)] font-black uppercase tracking-widest mt-0.5">
-                                                LEAVE
+                                                H-LEAVE
                                             </span>
                                         </div>
                                         <div className="flex-1 flex flex-col items-center justify-center">
@@ -954,7 +965,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                 {liveData.summary.gatePassCount || 0}
                                             </span>
                                             <span className="text-[8px] text-[rgba(255,255,255,0.45)] font-black uppercase tracking-widest mt-0.5">
-                                                PASS
+                                                G-PASS
                                             </span>
                                         </div>
                                     </div>
@@ -1148,7 +1159,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                             : "bg-blue-500/20 text-blue-400 border-blue-500/30"
                                                             }`}>
                                                             <span className="text-[9px]">{record.type === "leave" ? "🏠" : "🎫"}</span>
-                                                            <span>{record.type === "leave" ? "LEAVE" : "PASS"}</span>
+                                                            <span>{record.type === "leave" ? "H-LEAVE" : "G-PASS"}</span>
                                                         </span>
                                                     </div>
                                                     <p className="text-[9px] text-[rgba(255,255,255,0.3)] tracking-tight uppercase m-0 mt-0.5 font-bold truncate">
