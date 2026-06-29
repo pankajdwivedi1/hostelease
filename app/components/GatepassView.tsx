@@ -556,8 +556,8 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
     useEffect(() => {
         if (lastScanResult) {
             playSuccessChime();
-            const actionText = lastScanResult.action === 'checkout' ? 'checked out' : 'checked in';
-            speakStatus(`${lastScanResult.studentName}. ${actionText}.`);
+            const actionText = lastScanResult.action === 'checkout' ? 'Check out' : 'Check in';
+            speakStatus(actionText);
         }
     }, [lastScanResult]);
 
@@ -1391,58 +1391,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                 </div>
             )}
 
-            {lastScanResult && (
-                <div className={`fixed inset-0 z-[200] flex flex-col items-center justify-center p-6 backdrop-blur-md animate-in fade-in duration-300 ${
-                    lastScanResult.action === 'checkout'
-                        ? 'bg-emerald-950/90'
-                        : 'bg-indigo-950/90'
-                }`}>
-                    <div className="bg-[#0f172a] border-2 border-white/10 rounded-3xl p-8 md:p-12 w-full max-w-2xl text-center shadow-[0_0_100px_rgba(0,0,0,0.8)] relative animate-in zoom-in-95 duration-200">
-                        {/* Status Icon */}
-                        <div className={`w-24 h-24 rounded-full mx-auto flex items-center justify-center text-4xl shadow-lg border-4 ${
-                            lastScanResult.action === 'checkout'
-                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
-                                : 'bg-blue-500/20 border-blue-500 text-blue-400'
-                        }`}>
-                            {lastScanResult.action === 'checkout' ? '🚶' : '🏠'}
-                        </div>
 
-                        {/* Title */}
-                        <h2 className="text-3xl md:text-4xl font-black mt-6 tracking-wider bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
-                            ACCESS APPROVED
-                        </h2>
-
-                        <p className={`text-sm font-black uppercase tracking-[0.2em] mt-2 ${
-                            lastScanResult.action === 'checkout' ? 'text-emerald-400' : 'text-blue-400'
-                        }`}>
-                            {lastScanResult.action === 'checkout' ? 'Check-Out (Exiting)' : 'Check-In (Entering)'}
-                        </p>
-
-                        <div className="mt-8 py-6 px-8 bg-white/5 rounded-2xl border border-white/5">
-                            <h3 className="text-2xl md:text-3xl font-black text-white leading-tight">
-                                {lastScanResult.studentName}
-                            </h3>
-                            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-2">
-                                {lastScanResult.message}
-                            </p>
-                        </div>
-
-                        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 text-xs font-bold text-slate-400">
-                            <span>🕒 {lastScanResult.timestamp.toLocaleTimeString()}</span>
-                            <span className="hidden sm:inline">•</span>
-                            <span>📅 {lastScanResult.timestamp.toLocaleDateString()}</span>
-                        </div>
-
-                        {/* Direct dismiss */}
-                        <button
-                            onClick={() => setLastScanResult(null)}
-                            className="mt-8 px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all active:scale-95"
-                        >
-                            Dismiss Window
-                        </button>
-                    </div>
-                </div>
-            )}
 
             <style jsx global>{`
                 input[type="date"]::-webkit-calendar-picker-indicator {
