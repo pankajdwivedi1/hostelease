@@ -146,48 +146,66 @@ export async function POST(request: NextRequest) {
 
         const now = new Date();
         const { istTime, istDate } = getISTStrings(now);
-        
+
         // Check student's current campus status
         const currentStatus = student.studentStatus || "in";
 
         // ⚡ SPEED OPTIMIZATION: Run all database checks in parallel to minimize gate scanning delay
         const studentIdStr = student._id.toString();
-        const [activityResult, openPassesResult, activePermissionsResult, consumedPassesResult] = await Promise.all([
-            // 1. Double scan guard check (recent activity)
-            db.gatePasses.list(
-                { firebaseUID: student.firebaseUID },
-                { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc' }
-            ).catch(err => {
+        
+        // Define async helpers to handle queries and catch errors cleanly
+        const fetchRecentActivity = async () => {
+            try {
+                return await db.gatePasses.list(
+                    { firebaseUID: student.firebaseUID },
+                    { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc' }
+                );
+            } catch (err) {
                 console.warn("⚠️ Scan guard query failed:", err);
                 return { records: [] };
-            }),
-            
-            // 2. Open passes check (for resolving duplicates/stale passes)
-            db.gatePasses.list(
-                { studentId: studentIdStr, status: "out" }
-            ).catch(err => {
+            }
+        };
+
+        const fetchOpenPasses = async () => {
+            try {
+                return await db.gatePasses.list(
+                    { studentId: studentIdStr, status: "out" }
+                );
+            } catch (err) {
                 console.warn("⚠️ Open passes query failed:", err);
                 return { records: [] };
-            }),
-            
-            // 3. Permissions check (for active approved leaves)
-            db.permissions.list(
-                { studentId: studentIdStr }
-            ).catch(err => {
+            }
+        };
+
+        const fetchActivePermissions = async () => {
+            try {
+                return await db.permissions.list(
+                    { studentId: studentIdStr }
+                );
+            } catch (err) {
                 console.warn("⚠️ Active permissions query failed:", err);
                 return { records: [] };
-            }),
-            
-            // 4. Consumed permissions check
-            supabase
-                .from('gate_passes')
-                .select('permission_id')
-                .eq('student_id', studentIdStr)
-                .not('permission_id', 'is', null)
-                .catch((err: any) => {
-                    console.warn("⚠️ Consumed passes query failed:", err);
-                    return { data: null, error: err };
-                })
+            }
+        };
+
+        const fetchConsumedPasses = async () => {
+            try {
+                return await supabase
+                    .from('gate_passes')
+                    .select('permission_id')
+                    .eq('student_id', studentIdStr)
+                    .not('permission_id', 'is', null);
+            } catch (err) {
+                console.warn("⚠️ Consumed passes query failed:", err);
+                return { data: null, error: err };
+            }
+        };
+
+        const [activityResult, openPassesResult, activePermissionsResult, consumedPassesResult] = await Promise.all([
+            fetchRecentActivity(),
+            fetchOpenPasses(),
+            fetchActivePermissions(),
+            fetchConsumedPasses()
         ]);
 
         const activity = activityResult?.records || [];
