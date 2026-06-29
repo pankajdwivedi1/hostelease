@@ -455,16 +455,18 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                 newRecent.unshift(mapped);
                             } else if (payload.eventType === 'UPDATE' && (mapped.status === 'in' || mapped.status === 'auto-resolved')) {
                                 // STUDENT SCANNING IN (Check-in)
-                                // Remove from currentlyOut
+                                // Remove from currentlyOut if present
                                 const index = newCurrentlyOut.findIndex(r => r._id === mapped._id);
                                 if (index !== -1) {
                                     newCurrentlyOut.splice(index, 1);
-                                    newSummary.studentsOut--;
+                                    newSummary.studentsOut = Math.max(0, newSummary.studentsOut - 1);
                                     newSummary.studentsIn++;
-                                    if (mapped.type === 'leave') newSummary.leaveCount--;
-                                    else newSummary.gatePassCount--;
+                                    if (mapped.type === 'leave') newSummary.leaveCount = Math.max(0, newSummary.leaveCount - 1);
+                                    else newSummary.gatePassCount = Math.max(0, newSummary.gatePassCount - 1);
+                                }
 
-                                    // Add to Recent Activity
+                                // ALWAYS add to Recent Activity (Returns Today) list instantly!
+                                if (!newRecent.some(r => r._id === mapped._id && (r.checkInTime || r.checkInISTTime))) {
                                     newRecent.unshift(mapped);
                                 }
                             }
@@ -479,13 +481,10 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                         };
                     });
 
-                    // 🔄 Background Refresh: Still do a fresh fetch to ensure server sync
-                    if (payload.eventType === 'INSERT') {
-                        fetchLiveData(false);
-                    } else {
+                    // 🔄 Background Refresh: Delay by 2.5 seconds to avoid DB query race conditions
+                    setTimeout(() => {
                         fetchLiveData(true);
-                        setTimeout(() => fetchLiveData(false), 2000);
-                    }
+                    }, 2500);
                 }
             )
             .subscribe();
