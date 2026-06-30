@@ -6211,8 +6211,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           {selectedRoomStudents.map(student => {
                             const rStatus = getRoommateStatus(student);
                             return (
-                              <div key={student.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-200 transition-all">
-                                <div className="flex items-center gap-3.5">
+                              <div key={student.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex flex-row items-center justify-between gap-3 hover:border-slate-200 transition-all">
+                                <div className="flex items-center gap-3.5 min-w-0">
                                   {/* Avatar or Profile Image */}
                                   <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-sm shadow-md overflow-hidden shrink-0 border border-slate-100">
                                     {student.profilePicture ? (
@@ -6221,15 +6221,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       student.name.slice(0, 2).toUpperCase()
                                     )}
                                   </div>
-                                  <div>
-                                    <h4 className="font-bold text-slate-800 text-sm leading-snug">{student.name}</h4>
+                                  <div className="min-w-0">
+                                    <h4 className="font-bold text-slate-800 text-sm leading-snug truncate">{student.name}</h4>
                                     <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
                                       Reg ID: {student.registrationId || "N/A"}
                                     </p>
                                     <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
                                       ERP ID: {student.erpInformation || "N/A"}
                                     </p>
-                                    <div className="flex items-center gap-1.5 mt-1.5">
+                                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                                       <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${
                                         rStatus === 'in' ? 'bg-green-100 text-green-700' :
                                         rStatus === 'hleave' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-800'
@@ -6244,10 +6244,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
                                 </div>
 
-                                <div className="flex flex-col items-center gap-2 self-end sm:self-auto">
+                                <div className="flex flex-col items-center gap-1.5 shrink-0">
                                   <a
                                     href={`tel:${student.phoneNumber}`}
-                                    className="p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors shadow-sm text-sm"
+                                    className="p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-xs"
                                     title="Call Student"
                                   >
                                     📞
@@ -6255,7 +6255,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   {student.fatherNumber && (
                                     <a
                                       href={`tel:${student.fatherNumber}`}
-                                      className="p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors shadow-sm text-sm"
+                                      className="p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-xs"
                                       title={`Call Parent: ${student.fatherName || "Father"}`}
                                     >
                                       👨‍👩‍👦
@@ -6265,7 +6265,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     href={`https://wa.me/${student.phoneNumber}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="p-2.5 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-100/50 transition-colors shadow-sm text-sm"
+                                    className="p-1.5 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-100/50 transition-colors shadow-sm text-xs"
                                     title="WhatsApp Student"
                                   >
                                     💬
