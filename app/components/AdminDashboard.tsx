@@ -6244,7 +6244,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
                                 </div>
 
-                                <div className="flex items-center gap-2 self-end sm:self-auto">
+                                <div className="flex flex-col items-center gap-2 self-end sm:self-auto">
                                   <a
                                     href={`tel:${student.phoneNumber}`}
                                     className="p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors shadow-sm text-sm"
