@@ -4713,6 +4713,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             Pending
                                           </span>
                                         )}
+                                        {permission.parentConsentUrl && (
+                                          <a
+                                            href={permission.parentConsentUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[6px] md:text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-150 px-1.5 py-0.5 rounded uppercase tracking-wider hover:bg-indigo-100 transition-all flex items-center gap-0.5 cursor-pointer ml-1"
+                                            title="Play Consent Video"
+                                          >
+                                            🎥 Play Video
+                                          </a>
+                                        )}
                                       </div>
                                       <div className="flex flex-col items-center gap-1 relative">
                                         <div className="flex items-center gap-1 md:gap-2.5 bg-white p-0.5 md:p-1 rounded-md border border-gray-100">

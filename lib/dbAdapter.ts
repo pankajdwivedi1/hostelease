@@ -714,6 +714,7 @@ const mapPermissionToCamelCase = (p: any) => {
         deanStatus: p.dean_status,
         parentStatus: p.parent_status,
         requestType: p.request_type,
+        parentConsentUrl: p.parent_consent_url,
         createdAt: p.created_at,
         updatedAt: p.updated_at
     };
@@ -744,7 +745,8 @@ const mapPermissionToSnakeCase = (p: any) => {
         wardenStatus: 'warden_status',
         deanStatus: 'dean_status',
         parentStatus: 'parent_status',
-        requestType: 'request_type'
+        requestType: 'request_type',
+        parentConsentUrl: 'parent_consent_url'
     };
 
     Object.keys(p).forEach(key => {
@@ -4729,12 +4731,13 @@ export const db = {
                     .single();
 
                 // 🔄 ROBUST FALLBACK: Handle missing columns in update
-                if (error && (error.message?.includes('tenant_id') || error.message?.includes('request_type') || error.code === 'PGRST204' || error.message?.includes('schema cache'))) {
+                if (error && (error.message?.includes('tenant_id') || error.message?.includes('request_type') || error.message?.includes('parent_consent_url') || error.code === 'PGRST204' || error.message?.includes('schema cache'))) {
                     console.warn(`⚠️ [DB] Permissions update schema mismatch ("${error.message}"). Retrying without new columns...`);
                     
                     const cleanUpdate = { ...snakeUpdate };
                     delete cleanUpdate.tenant_id;
                     delete cleanUpdate.request_type;
+                    delete cleanUpdate.parent_consent_url;
                     
                     const retry = await supabase.from('permissions').update(cleanUpdate).eq('_id', id).select().single();
                     data = retry.data;

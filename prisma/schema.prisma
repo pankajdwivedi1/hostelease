@@ -246,6 +246,7 @@ model Permission {
   deanStatus   String   @default("pending") @map("dean_status")
   requestType  String?  @map("request_type")
   parentStatus String?  @map("parent_status")
+  parentConsentUrl String? @map("parent_consent_url")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
