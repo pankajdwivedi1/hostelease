@@ -3598,6 +3598,23 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                                 Pending
                                                                                             </span>
                                                                                         )}
+                                                                                        {permission.parentConsentUrl && (
+                                                                                            <button
+                                                                                                onClick={(e) => {
+                                                                                                    e.preventDefault();
+                                                                                                    const fileIdMatch = permission.parentConsentUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || permission.parentConsentUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                                                                                                    const fileId = fileIdMatch ? fileIdMatch[1] : null;
+                                                                                                    const videoSrc = (fileId && prefetchedVideoUrls[fileId]) 
+                                                                                                        ? prefetchedVideoUrls[fileId] 
+                                                                                                        : getEmbedUrl(permission.parentConsentUrl);
+                                                                                                    setActiveConsentVideoUrl(videoSrc);
+                                                                                                }}
+                                                                                                className="text-[6px] md:text-[8px] font-black text-green-600 bg-green-50 border border-green-200 px-1 py-0.5 rounded uppercase tracking-wider hover:bg-green-100 transition-all flex items-center gap-0.5 cursor-pointer ml-1"
+                                                                                                title="Play Consent Video"
+                                                                                            >
+                                                                                                🎥 Play
+                                                                                            </button>
+                                                                                        )}
                                                                                     </div>
                                                                                     <div className="flex items-center gap-1.5 relative">
                                                                                         <div className="flex items-center gap-1 md:gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
