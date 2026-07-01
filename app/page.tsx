@@ -105,10 +105,18 @@ export default function Dashboard() {
         }
       }
 
-      // 1. ⚡ REGARDLESS of domain, Check Supabase Session First
-      const { data: { session: sbSession } } = await supabase.auth.getSession();
+      // 1. ⚡ REGARDLESS of domain, Check Supabase Session First (with a 2.5s fast timeout to prevent hangs)
+      let sbSession = null;
+      try {
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2500));
+        const res = await Promise.race([sessionPromise, timeoutPromise]) as any;
+        sbSession = res?.data?.session || null;
+      } catch (e) {
+        console.warn("⚠️ [Auth] Supabase session check timed out or failed:", e);
+      }
       
-      if (sbSession && sbSession.user.email) {
+      if (sbSession && sbSession.user?.email) {
         try {
           const response = await fetch(`/api/students?email=${encodeURIComponent(sbSession.user.email)}&supabaseId=${sbSession.user.id}&minimal=true`);
           if (response.status === 404) {

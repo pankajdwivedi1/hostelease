@@ -526,6 +526,32 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [statusFilter, setStatusFilter] = useState<"all" | "in" | "out">("all");
 
   const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [prefetchedVideoUrls, setPrefetchedVideoUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!permissions || permissions.length === 0) return;
+    permissions.forEach(async (permission) => {
+      if (permission.parentConsentUrl) {
+        const fileIdMatch = permission.parentConsentUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || permission.parentConsentUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+        if (fileIdMatch && fileIdMatch[1]) {
+          const fileId = fileIdMatch[1];
+          if (prefetchedVideoUrls[fileId]) return;
+          try {
+            const res = await fetch(`/api/parent-consent/stream?fileId=${fileId}`);
+            if (res.ok) {
+              const blob = await res.blob();
+              const blobUrl = URL.createObjectURL(blob);
+              setPrefetchedVideoUrls(prev => ({ ...prev, [fileId]: blobUrl }));
+              console.log(`[Prefetch] Successfully cached video ${fileId} in browser memory.`);
+            }
+          } catch (e) {
+            console.error("Failed to prefetch video:", e);
+          }
+        }
+      }
+    });
+  }, [permissions]);
+
   const [isShowingAllPermissions, setIsShowingAllPermissions] = useState(false);
   const [totalPermissionsCount, setTotalPermissionsCount] = useState(0);
   const [students, setStudents] = useState<StudentDetails[]>([]);
@@ -558,6 +584,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [attendanceLogsLoading, setAttendanceLogsLoading] = useState(false);
   const [adminNotifications, setAdminNotifications] = useState<DBNotification[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null); // ⚡ NEW: Tracking data freshness
+  const [activeConsentVideoUrl, setActiveConsentVideoUrl] = useState<string | null>(null);
+
+  const getEmbedUrl = (url: string) => {
+    if (!url) return "";
+    if (!url.includes("drive.google.com")) return url;
+    const fileIdMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (fileIdMatch && fileIdMatch[1]) {
+      return `/api/parent-consent/stream?fileId=${fileIdMatch[1]}`;
+    }
+    return url;
+  };
+
   const [editingNotificationId, setEditingNotificationId] = useState<string | null>(null);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [showEditStudentModal, setShowEditStudentModal] = useState(false);
@@ -4714,15 +4752,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           </span>
                                         )}
                                         {permission.parentConsentUrl && (
-                                          <a
-                                            href={permission.parentConsentUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
+                                          <button
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              const fileIdMatch = permission.parentConsentUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || permission.parentConsentUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                                              const fileId = fileIdMatch ? fileIdMatch[1] : null;
+                                              const videoSrc = (fileId && prefetchedVideoUrls[fileId]) 
+                                                ? prefetchedVideoUrls[fileId] 
+                                                : getEmbedUrl(permission.parentConsentUrl);
+                                              setActiveConsentVideoUrl(videoSrc);
+                                            }}
                                             className="text-[6px] md:text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-150 px-1.5 py-0.5 rounded uppercase tracking-wider hover:bg-indigo-100 transition-all flex items-center gap-0.5 cursor-pointer ml-1"
                                             title="Play Consent Video"
                                           >
                                             🎥 Play Video
-                                          </a>
+                                          </button>
                                         )}
                                       </div>
                                       <div className="flex flex-col items-center gap-1 relative">
@@ -10283,6 +10327,42 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       {showGatepassOverlay && (
         <div className="fixed inset-0 z-[9999] bg-[#0a0a1a] overflow-y-auto animate-in fade-in duration-300">
           <GatepassView onClose={() => window.history.back()} />
+        </div>
+      )}
+
+      {/* 🎥 PARENT CONSENT VIDEO OVERLAY MODAL */}
+      {activeConsentVideoUrl && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-2xl max-w-lg w-full border border-gray-100 dark:border-gray-700 relative animate-in fade-in zoom-in duration-200">
+            <button 
+              onClick={() => setActiveConsentVideoUrl(null)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white bg-gray-100 dark:bg-gray-700 w-9 h-9 rounded-full flex items-center justify-center transition-all z-10 cursor-pointer shadow-sm hover:scale-105 border-0"
+            >
+              ✕
+            </button>
+            <div className="p-5 border-b border-gray-100 dark:border-gray-700">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                🎥 Parent Consent Video
+              </h3>
+            </div>
+            <div className="py-6 px-4 flex justify-center bg-gray-50 dark:bg-gray-900">
+              <video 
+                src={activeConsentVideoUrl} 
+                controls 
+                autoPlay 
+                playsInline
+                className="w-full max-h-[50vh] rounded-xl shadow-inner bg-black border border-gray-200 dark:border-gray-800"
+              />
+            </div>
+            <div className="p-4 bg-gray-50 dark:bg-gray-850 flex justify-end gap-3 border-t border-gray-150 dark:border-gray-700">
+              <button
+                onClick={() => setActiveConsentVideoUrl(null)}
+                className="px-5 py-2 text-xs font-bold text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm cursor-pointer"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div >

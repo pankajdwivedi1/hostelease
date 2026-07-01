@@ -15,32 +15,28 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Missing leaveId or video file" }, { status: 400 });
         }
 
-        // 1. Verify environment variables
-        const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-        const privateKeyRaw = process.env.GOOGLE_PRIVATE_KEY;
+        // 1. Verify OAuth environment variables
+        const clientId = process.env.GOOGLE_CLIENT_ID;
+        const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+        const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
         const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-        if (!clientEmail || !privateKeyRaw || !folderId) {
-            console.error("❌ [Google Drive API] Missing service account configuration in env vars.");
+        if (!clientId || !clientSecret || !refreshToken || !folderId) {
+            console.error("❌ [Google Drive API] Missing OAuth2 configuration in env vars.");
             return NextResponse.json({ 
-                error: "Google Drive storage is not configured yet on this server. Please setup environment variables." 
+                error: "Google Drive OAuth2 is not configured yet on this server. Please setup Client ID, Client Secret, and Refresh Token in environment variables." 
             }, { status: 501 });
         }
 
-        // Format the private key correctly (handling potential escapes for newlines)
-        const privateKey = privateKeyRaw.replace(/\\n/g, "\n");
+        console.log(`[Google Drive API] Uploading parent consent video for Leave ID: ${leaveId} using OAuth2...`);
 
-        console.log(`[Google Drive API] Uploading parent consent video for Leave ID: ${leaveId}...`);
+        // 2. Initialize Google OAuth2 client using refresh token
+        const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
+        oauth2Client.setCredentials({
+            refresh_token: refreshToken
+        });
 
-        // 2. Initialize Google Auth client
-        const auth = new google.auth.JWT(
-            clientEmail,
-            null,
-            privateKey,
-            ["https://www.googleapis.com/auth/drive"]
-        );
-
-        const drive = google.drive({ version: "v3", auth });
+        const drive = google.drive({ version: "v3", auth: oauth2Client });
 
         // 3. Convert File to buffer and readable stream
         const arrayBuffer = await videoFile.arrayBuffer();
@@ -58,7 +54,7 @@ export async function POST(request: NextRequest) {
             body: stream
         };
 
-        // 5. Create file on Google Drive
+        // 5. Create file on Google Drive (this consumes your personal Gmail quota, not Service Account)
         const response = await drive.files.create({
             requestBody: fileMetadata,
             media: media,
@@ -72,9 +68,9 @@ export async function POST(request: NextRequest) {
             throw new Error("Failed to retrieve upload metadata from Google Drive");
         }
 
-        console.log(`[Google Drive API] Successfully uploaded file. File ID: ${fileId}. Link: ${webViewLink}`);
+        console.log(`[Google Drive API] Successfully uploaded file to Google Drive. File ID: ${fileId}. Link: ${webViewLink}`);
 
-        // 6. Make file viewable by anyone with the link (so Wardens & Deans can watch it)
+        // 6. Make file viewable by anyone with the link
         try {
             await drive.permissions.create({
                 fileId: fileId,
@@ -88,11 +84,10 @@ export async function POST(request: NextRequest) {
             console.warn(`⚠️ [Google Drive API] Could not set public permissions: ${permError.message}. Folder inheritance will apply.`);
         }
 
-        // 7. Update leave request (Permission table) in the database with the video link
-        // We will also update parentStatus to 'approved' or update the metadata
+        // 7. Update leave request in DB with the link
         await db.permissions.update(leaveId, {
             parentConsentUrl: webViewLink,
-            parentStatus: "approved" // Parent approved the leave by uploading video
+            parentStatus: "approved"
         });
 
         console.log(`[Google Drive API] Database updated for Leave ID: ${leaveId} with parentConsentUrl`);

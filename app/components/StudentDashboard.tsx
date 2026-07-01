@@ -98,6 +98,30 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(initialData || null);
     const [isFullProfileLoaded, setIsFullProfileLoaded] = useState(!!initialData?.collegeName || !!initialData?.joiningDate);
     const [permissions, setPermissions] = useState<Permission[]>([]);
+    const [prefetchedVideoUrls, setPrefetchedVideoUrls] = useState<Record<string, string>>({});
+
+    useEffect(() => {
+        if (!permissions || permissions.length === 0) return;
+        permissions.forEach(async (permission) => {
+            if (permission.parentConsentUrl) {
+                const fileIdMatch = permission.parentConsentUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || permission.parentConsentUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                if (fileIdMatch && fileIdMatch[1]) {
+                    const fileId = fileIdMatch[1];
+                    if (prefetchedVideoUrls[fileId]) return;
+                    try {
+                        const res = await fetch(`/api/parent-consent/stream?fileId=${fileId}`);
+                        if (res.ok) {
+                            const blob = await res.blob();
+                            const blobUrl = URL.createObjectURL(blob);
+                            setPrefetchedVideoUrls(prev => ({ ...prev, [fileId]: blobUrl }));
+                        }
+                    } catch (e) {
+                        console.error("Failed to prefetch video:", e);
+                    }
+                }
+            }
+        });
+    }, [permissions]);
     
     // Outing Calendar states
     const [gatePasses, setGatePasses] = useState<any[]>([]);
@@ -203,6 +227,18 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [mandatoryFormData, setMandatoryFormData] = useState({ dob: "", category: "", homeState: "", section: "" });
     const [updatingProfile, setUpdatingProfile] = useState(false);
     const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
+    const [activeConsentVideoUrl, setActiveConsentVideoUrl] = useState<string | null>(null);
+
+    const getEmbedUrl = (url: string) => {
+        if (!url) return "";
+        if (!url.includes("drive.google.com")) return url;
+        const fileIdMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+        if (fileIdMatch && fileIdMatch[1]) {
+            return `/api/parent-consent/stream?fileId=${fileIdMatch[1]}`;
+        }
+        return url;
+    };
+
     const [attendanceStep, setAttendanceStep] = useState<'idle' | 'gps' | 'accuracy' | 'saving' | 'done' | 'error' | 'face-match'>('idle');
     const [attendanceRetryCount, setAttendanceRetryCount] = useState(0);
     const [isWifiFallback, setIsWifiFallback] = useState(false);
@@ -2803,6 +2839,36 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                             Pending
                                                                         </span>
                                                                     )}
+                                                                    {latestPermission.requestType === 'leave' && (
+                                                                        <>
+                                                                            {latestPermission.parentConsentUrl ? (
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        const fileIdMatch = latestPermission.parentConsentUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || latestPermission.parentConsentUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                                                                                        const fileId = fileIdMatch ? fileIdMatch[1] : null;
+                                                                                        const videoSrc = (fileId && prefetchedVideoUrls[fileId]) 
+                                                                                            ? prefetchedVideoUrls[fileId] 
+                                                                                            : getEmbedUrl(latestPermission.parentConsentUrl);
+                                                                                        setActiveConsentVideoUrl(videoSrc);
+                                                                                    }}
+                                                                                    className="text-[5.5px] md:text-[7.5px] font-black text-green-600 bg-green-50 border border-green-200 px-1 py-0.5 rounded uppercase tracking-wider hover:bg-green-100 transition-all flex items-center gap-0.5 cursor-pointer ml-1"
+                                                                                    title="Play Consent Video"
+                                                                                >
+                                                                                    🎥 Play Consent
+                                                                                </button>
+                                                                            ) : (
+                                                                                isParentView && latestPermission.status === 'pending' && (
+                                                                                    <button
+                                                                                        onClick={() => window.open(`/parent-consent/${latestPermission._id}`, "_blank")}
+                                                                                        className="text-[5.5px] md:text-[7.5px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 px-1 py-0.5 rounded uppercase tracking-wider hover:bg-indigo-100 transition-all flex items-center gap-0.5 cursor-pointer ml-1"
+                                                                                    >
+                                                                                        🎥 Record Video
+                                                                                    </button>
+                                                                                )
+                                                                            )}
+                                                                        </>
+                                                                    )}
                                                                 </div>
                                                                 <div className="flex items-center gap-1.5 relative">
                                                                     <div className="flex items-center gap-1 md:gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
@@ -2907,12 +2973,27 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 <div className="hidden md:block w-[1px] md:w-[2px] bg-blue-100/50 my-1 rounded-full"></div>
 
                                                 {/* Right Side: Reason Message */}
-                                                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                                <div className="flex-1 min-w-0 flex flex-col justify-between gap-2">
                                                     <div className="bg-gray-50/50 p-2 md:p-4 rounded-xl border border-gray-100 h-full flex items-center justify-center">
                                                         <p className="text-[8.5px] md:text-xs text-gray-600 font-medium leading-relaxed italic text-justify">
                                                             "{latestPermission.reason}"
                                                         </p>
                                                     </div>
+                                                    
+                                                    {/* WhatsApp Consent Share Button for Students */}
+                                                    {!isParentView && latestPermission.requestType === 'leave' && latestPermission.parentStatus !== 'allowed' && (
+                                                        <button
+                                                            onClick={() => {
+                                                                const shareUrl = `${window.location.origin}/parent-consent/${latestPermission._id}`;
+                                                                const text = `नमस्कार पिताजी/माताजी, कृपया इस लिंक पर क्लिक करके मेरी छुट्टी (Leave) के लिए अपना सहमति वीडियो रिकॉर्ड करें:\n\n${shareUrl}`;
+                                                                const phone = studentProfile.parentPhone ? (studentProfile.parentPhone.startsWith('91') ? studentProfile.parentPhone : '91' + studentProfile.parentPhone) : '';
+                                                                window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}`, "_blank");
+                                                            }}
+                                                            className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-[9px] md:text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 border border-emerald-500/20"
+                                                        >
+                                                            <span>💬</span> Share WhatsApp Video Consent
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -4598,6 +4679,42 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     </div>
                 )
             }
+
+            {/* 🎥 PARENT CONSENT VIDEO OVERLAY MODAL */}
+            {activeConsentVideoUrl && (
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-2xl max-w-lg w-full border border-gray-100 dark:border-gray-700 relative animate-in fade-in zoom-in duration-200">
+                        <button 
+                            onClick={() => setActiveConsentVideoUrl(null)}
+                            className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white bg-gray-100 dark:bg-gray-700 w-9 h-9 rounded-full flex items-center justify-center transition-all z-10 cursor-pointer shadow-sm hover:scale-105 border-0"
+                        >
+                            ✕
+                        </button>
+                        <div className="p-5 border-b border-gray-100 dark:border-gray-700">
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                🎥 Parent Consent Video
+                            </h3>
+                        </div>
+                        <div className="py-6 px-4 flex justify-center bg-gray-50 dark:bg-gray-900">
+                            <video 
+                                src={activeConsentVideoUrl} 
+                                controls 
+                                autoPlay 
+                                playsInline
+                                className="w-full max-h-[50vh] rounded-xl shadow-inner bg-black border border-gray-200 dark:border-gray-800"
+                            />
+                        </div>
+                        <div className="p-4 bg-gray-50 dark:bg-gray-850 flex justify-end gap-3 border-t border-gray-150 dark:border-gray-700">
+                            <button
+                                onClick={() => setActiveConsentVideoUrl(null)}
+                                className="px-5 py-2 text-xs font-bold text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm cursor-pointer"
+                            >
+                                Close Preview
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <footer className="mt-2 py-6 border-t border-gray-100/50">
                 <div className="flex flex-col items-center gap-1.5 text-center px-4">

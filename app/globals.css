@@ -243,4 +243,9 @@ input[type="radio"] {
   height: calc(100% - 6px);
   background: #fffbeb; /* matches Tailwind bg-amber-50 */
   border-radius: 9px;
+}
+
+/* 🎥 Custom Video Player Accent Color (changes played filling timeline to blue) */
+video {
+  accent-color: #2563eb !important;
 }

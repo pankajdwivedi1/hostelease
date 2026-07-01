@@ -46,6 +46,16 @@ export default function ParentConsentClient({
         };
     }, [stream]);
 
+    // Sync the stream with the video element whenever stream or recordingState changes
+    useEffect(() => {
+        if (videoPreviewRef.current && stream && (recordingState === "idle" || recordingState === "recording")) {
+            videoPreviewRef.current.srcObject = stream;
+            videoPreviewRef.current.play().catch(err => {
+                console.warn("Failed to autoplay video preview:", err);
+            });
+        }
+    }, [stream, recordingState]);
+
     // Request camera permission and start preview
     const startCamera = async () => {
         try {
