@@ -17,8 +17,8 @@ export async function GET(request: NextRequest) {
         const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
 
         if (!clientId || !clientSecret || !refreshToken) {
-            console.error("❌ [Proxy Stream API] Missing OAuth2 configuration in env vars.");
-            return NextResponse.json({ error: "OAuth2 credentials not configured on server" }, { status: 500 });
+            console.error("❌ [Proxy Stream API] Missing OAuth2 configuration.");
+            return NextResponse.json({ error: "OAuth2 credentials not configured" }, { status: 500 });
         }
 
         const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
@@ -33,24 +33,57 @@ export async function GET(request: NextRequest) {
         });
         const mimeType = metadata.data.mimeType || "video/webm";
 
-        // 2. Fetch the file media directly as ArrayBuffer (super fast for 1-2 MB files!)
+        // 2. Fetch the file media as ArrayBuffer
         const response = await drive.files.get(
             { fileId: fileId, alt: "media" },
             { responseType: "arraybuffer" }
         );
 
-        const buffer = response.data as ArrayBuffer;
+        // Convert raw ArrayBuffer to Node.js Buffer
+        const buffer = Buffer.from(response.data as ArrayBuffer);
+        const totalSize = buffer.length;
 
-        // 3. Return the buffer directly
-        return new Response(buffer, {
-            status: 200,
-            headers: {
-                "Content-Type": mimeType,
-                "Content-Length": buffer.byteLength.toString(),
-                "Cache-Control": "public, max-age=31536000, immutable",
-                "Accept-Ranges": "bytes"
+        // 3. Handle Range requests (essential for iOS Safari and mobile Chrome)
+        const rangeHeader = request.headers.get("range");
+
+        if (rangeHeader) {
+            const parts = rangeHeader.replace(/bytes=/, "").split("-");
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+
+            if (start >= totalSize || end >= totalSize) {
+                return new Response(null, {
+                    status: 416,
+                    headers: {
+                        "Content-Range": `bytes */${totalSize}`
+                    }
+                });
             }
-        });
+
+            const chunk = buffer.subarray(start, end + 1);
+
+            return new Response(chunk, {
+                status: 206,
+                headers: {
+                    "Content-Type": mimeType,
+                    "Content-Range": `bytes ${start}-${end}/${totalSize}`,
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": chunk.length.toString(),
+                    "Cache-Control": "public, max-age=31536000, immutable"
+                }
+            });
+        } else {
+            // Standard full response (used for fetch prefetching)
+            return new Response(buffer, {
+                status: 200,
+                headers: {
+                    "Content-Type": mimeType,
+                    "Content-Length": totalSize.toString(),
+                    "Accept-Ranges": "bytes",
+                    "Cache-Control": "public, max-age=31536000, immutable"
+                }
+            });
+        }
 
     } catch (error: any) {
         console.error("❌ [Proxy Stream API] Error streaming file:", error);
