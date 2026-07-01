@@ -10367,8 +10367,29 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   src={activeConsentVideoUrl} 
                   autoPlay 
                   playsInline
-                  onTimeUpdate={(e) => setCurrentTime((e.target as HTMLVideoElement).currentTime)}
-                  onLoadedMetadata={(e) => setVideoDuration((e.target as HTMLVideoElement).duration)}
+                  onTimeUpdate={(e) => {
+                    const video = e.target as HTMLVideoElement;
+                    setCurrentTime(video.currentTime);
+                    if (isFinite(video.duration) && video.duration > 0 && video.duration !== videoDuration) {
+                      setVideoDuration(video.duration);
+                    }
+                  }}
+                  onLoadedMetadata={(e) => {
+                    const video = e.target as HTMLVideoElement;
+                    if (video.duration === Infinity) {
+                      // Workaround for WebM MediaRecorder duration bug
+                      video.currentTime = 1e9;
+                      video.onseeked = () => {
+                        video.onseeked = null;
+                        video.currentTime = 0;
+                        if (isFinite(video.duration)) {
+                          setVideoDuration(video.duration);
+                        }
+                      };
+                    } else if (isFinite(video.duration)) {
+                      setVideoDuration(video.duration);
+                    }
+                  }}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                   className="w-full max-h-[380px] sm:max-h-[450px] rounded-xl shadow-inner bg-black border border-gray-200 dark:border-gray-800 object-contain"
@@ -10379,8 +10400,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   {/* Timeline Row */}
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-[10px] text-slate-400 font-bold w-10 text-right">
-                      {Math.floor(currentTime / 60).toString().padStart(2, "0")}:
-                      {Math.floor(currentTime % 60).toString().padStart(2, "0")}
+                      {isFinite(currentTime) && !isNaN(currentTime) 
+                        ? `${Math.floor(currentTime / 60).toString().padStart(2, "0")}:${Math.floor(currentTime % 60).toString().padStart(2, "0")}` 
+                        : "00:00"}
                     </span>
                     <input
                       type="range"
@@ -10398,8 +10420,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       }}
                     />
                     <span className="text-[10px] text-slate-400 font-bold w-10 text-left">
-                      {Math.floor(videoDuration / 60).toString().padStart(2, "0")}:
-                      {Math.floor(videoDuration % 60).toString().padStart(2, "0")}
+                      {isFinite(videoDuration) && !isNaN(videoDuration) 
+                        ? `${Math.floor(videoDuration / 60).toString().padStart(2, "0")}:${Math.floor(videoDuration % 60).toString().padStart(2, "0")}` 
+                        : "00:00"}
                     </span>
                   </div>
 
@@ -10418,63 +10441,30 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       {playbackSpeed}x
                     </button>
 
-                    {/* Controls Center: Rewind, Play/Pause, Forward */}
-                    <div className="flex items-center gap-6">
-                      {/* Skip Backward 5s */}
-                      <button
-                        onClick={() => {
-                          if (consentVideoRef.current) {
-                            consentVideoRef.current.currentTime = Math.max(0, consentVideoRef.current.currentTime - 5);
+                    {/* Controls Center: Play/Pause */}
+                    <button
+                      onClick={() => {
+                        if (consentVideoRef.current) {
+                          if (isPlaying) {
+                            consentVideoRef.current.pause();
+                          } else {
+                            consentVideoRef.current.play().catch(err => console.log("Play failed:", err));
                           }
-                        }}
-                        className="text-slate-400 hover:text-white transition-colors bg-transparent border-0 cursor-pointer flex items-center p-1"
-                        title="Rewind 5s"
-                      >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
+                        }
+                      }}
+                      className="w-10 h-10 bg-white text-slate-900 rounded-full flex items-center justify-center transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md border-0"
+                      title={isPlaying ? "Pause" : "Play"}
+                    >
+                      {isPlaying ? (
+                        <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                         </svg>
-                      </button>
-
-                      {/* Play/Pause */}
-                      <button
-                        onClick={() => {
-                          if (consentVideoRef.current) {
-                            if (isPlaying) {
-                              consentVideoRef.current.pause();
-                            } else {
-                              consentVideoRef.current.play().catch(err => console.log("Play failed:", err));
-                            }
-                          }
-                        }}
-                        className="w-9 h-9 bg-white text-slate-900 rounded-full flex items-center justify-center transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md border-0"
-                        title={isPlaying ? "Pause" : "Play"}
-                      >
-                        {isPlaying ? (
-                          <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                          </svg>
-                        ) : (
-                          <svg className="w-4 h-4 fill-current ml-0.5" viewBox="0 0 24 24">
-                            <path d="M8 5v14l11-7z" />
-                          </svg>
-                        )}
-                      </button>
-
-                      {/* Skip Forward 5s */}
-                      <button
-                        onClick={() => {
-                          if (consentVideoRef.current) {
-                            consentVideoRef.current.currentTime = Math.min(videoDuration, consentVideoRef.current.currentTime + 5);
-                          }
-                        }}
-                        className="text-slate-400 hover:text-white transition-colors bg-transparent border-0 cursor-pointer flex items-center p-1"
-                        title="Forward 5s"
-                      >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M11.934 12.8a1 1 0 000-1.6l-5.334-4A1 1 0 005 8v8a1 1 0 001.6.8l5.334-4zM19.934 12.8a1 1 0 000-1.6l-5.334-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.334-4z" />
+                      ) : (
+                        <svg className="w-5 h-5 fill-current ml-0.5" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
                         </svg>
-                      </button>
-                    </div>
+                      )}
+                    </button>
 
                     {/* Mute Button */}
                     <button
