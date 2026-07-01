@@ -235,8 +235,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [playbackSpeed, setPlaybackSpeed] = useState(1);
     const [isMuted, setIsMuted] = useState(false);
 
-    const [showDownloadMenu, setShowDownloadMenu] = useState(false);
-
     const closeVideoPreview = () => {
         setActiveConsentVideoUrl(null);
         setIsPlaying(false);
@@ -244,7 +242,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         setVideoDuration(0);
         setPlaybackSpeed(1);
         setIsMuted(false);
-        setShowDownloadMenu(false);
     };
 
     const getEmbedUrl = (url: string) => {
@@ -4749,36 +4746,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         className="w-full max-h-[380px] sm:max-h-[450px] rounded-xl shadow-inner bg-black border border-gray-200 dark:border-gray-800 object-contain"
                                     />
                                     
-                                    {/* ⚡ OPTIONS MENU OVERLAY (THREE DOTS) */}
-                                    <div className="absolute bottom-4 right-4 z-20">
-                                        <button
-                                            onClick={() => setShowDownloadMenu(!showDownloadMenu)}
-                                            className="bg-slate-900/80 hover:bg-slate-900 text-white w-9 h-9 rounded-full transition-all cursor-pointer shadow-lg hover:scale-105 active:scale-95 border border-slate-700/50 flex items-center justify-center backdrop-blur-sm border-0"
-                                            title="Options"
-                                        >
-                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 5h.01M12 12h.01M12 19h.01" />
-                                            </svg>
-                                        </button>
-
-                                        {showDownloadMenu && (
-                                            <div className="absolute right-0 bottom-11 w-36 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                                                <a
-                                                    href={activeConsentVideoUrl || undefined}
-                                                    download="parent-consent-video.webm"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    onClick={() => setShowDownloadMenu(false)}
-                                                    className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-850 hover:text-white rounded-lg transition-colors cursor-pointer no-underline"
-                                                >
-                                                    <svg className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                                    </svg>
-                                                    Download Video
-                                                </a>
-                                            </div>
-                                        )}
-                                    </div>
+                                    {/* 📥 DOWNLOAD BUTTON OVERLAY */}
+                                    <a
+                                        href={activeConsentVideoUrl || undefined}
+                                        download="parent-consent-video.webm"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="absolute bottom-4 right-4 bg-slate-900/80 hover:bg-slate-900 text-white p-2.5 rounded-full transition-all cursor-pointer shadow-lg hover:scale-105 active:scale-95 border border-slate-700/50 flex items-center justify-center backdrop-blur-sm z-20"
+                                        title="Download Consent Video"
+                                    >
+                                        <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                        </svg>
+                                    </a>
                                 </div>
                                 
                                 {/* 🎨 CUSTOM PREMIUM VIDEO CONTROLS */}
