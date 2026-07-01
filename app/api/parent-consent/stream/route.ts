@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
-import { google } from "googleapis";
+import { NextRequest } from "next/server";
 
+export const runtime = "edge"; // ⚡ Bypasses Vercel's 4.5MB response size limit!
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
@@ -9,7 +9,10 @@ export async function GET(request: NextRequest) {
         const fileId = searchParams.get("fileId");
 
         if (!fileId) {
-            return NextResponse.json({ error: "Missing fileId" }, { status: 400 });
+            return new Response(JSON.stringify({ error: "Missing fileId" }), {
+                status: 400,
+                headers: { "Content-Type": "application/json" }
+            });
         }
 
         const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -18,75 +21,63 @@ export async function GET(request: NextRequest) {
 
         if (!clientId || !clientSecret || !refreshToken) {
             console.error("❌ [Proxy Stream API] Missing OAuth2 configuration.");
-            return NextResponse.json({ error: "OAuth2 credentials not configured" }, { status: 500 });
+            return new Response(JSON.stringify({ error: "OAuth2 credentials not configured" }), {
+                status: 500,
+                headers: { "Content-Type": "application/json" }
+            });
         }
 
-        const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
-        oauth2Client.setCredentials({ refresh_token: refreshToken });
-
-        const drive = google.drive({ version: "v3", auth: oauth2Client });
-
-        // 1. Fetch file metadata to get Content-Type
-        const metadata = await drive.files.get({
-            fileId: fileId,
-            fields: "mimeType"
+        // 1. Get access token dynamically via OAuth2 refresh token endpoint
+        const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+                client_id: clientId,
+                client_secret: clientSecret,
+                refresh_token: refreshToken,
+                grant_type: "refresh_token"
+            })
         });
-        const mimeType = metadata.data.mimeType || "video/webm";
 
-        // 2. Fetch the file media as ArrayBuffer
-        const response = await drive.files.get(
-            { fileId: fileId, alt: "media" },
-            { responseType: "arraybuffer" }
-        );
-
-        // Convert raw ArrayBuffer to Node.js Buffer
-        const buffer = Buffer.from(response.data as ArrayBuffer);
-        const totalSize = buffer.length;
-
-        // 3. Handle Range requests (essential for iOS Safari and mobile Chrome)
-        const rangeHeader = request.headers.get("range");
-
-        if (rangeHeader) {
-            const parts = rangeHeader.replace(/bytes=/, "").split("-");
-            const start = parseInt(parts[0], 10);
-            const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
-
-            if (start >= totalSize || end >= totalSize) {
-                return new Response(null, {
-                    status: 416,
-                    headers: {
-                        "Content-Range": `bytes */${totalSize}`
-                    }
-                });
-            }
-
-            const chunk = buffer.subarray(start, end + 1);
-
-            return new Response(chunk, {
-                status: 206,
-                headers: {
-                    "Content-Type": mimeType,
-                    "Content-Range": `bytes ${start}-${end}/${totalSize}`,
-                    "Accept-Ranges": "bytes",
-                    "Content-Length": chunk.length.toString(),
-                    "Cache-Control": "public, max-age=31536000, immutable"
-                }
-            });
-        } else {
-            // Standard full response (used for fetch prefetching)
-            return new Response(buffer, {
-                status: 200,
-                headers: {
-                    "Content-Type": mimeType,
-                    "Content-Length": totalSize.toString(),
-                    "Accept-Ranges": "bytes",
-                    "Cache-Control": "public, max-age=31536000, immutable"
-                }
-            });
+        const tokenData = await tokenResponse.json();
+        if (!tokenResponse.ok || !tokenData.access_token) {
+            throw new Error(tokenData.error_description || "Failed to refresh access token");
         }
+        const accessToken = tokenData.access_token;
+
+        // 2. Fetch the file media stream from Google Drive (passing browser's Range headers directly!)
+        const driveResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                Range: request.headers.get("range") || ""
+            }
+        });
+
+        // 3. Return Google's exact stream and headers to the browser (including range headers!)
+        const headers = new Headers();
+        headers.set("Content-Type", driveResponse.headers.get("content-type") || "video/webm");
+        
+        const contentRange = driveResponse.headers.get("content-range");
+        if (contentRange) headers.set("Content-Range", contentRange);
+
+        const contentLength = driveResponse.headers.get("content-length");
+        if (contentLength) headers.set("Content-Length", contentLength);
+
+        const acceptRanges = driveResponse.headers.get("accept-ranges");
+        if (acceptRanges) headers.set("Accept-Ranges", acceptRanges);
+
+        headers.set("Cache-Control", "public, max-age=31536000, immutable");
+
+        return new Response(driveResponse.body, {
+            status: driveResponse.status,
+            headers
+        });
 
     } catch (error: any) {
         console.error("❌ [Proxy Stream API] Error streaming file:", error);
-        return NextResponse.json({ error: error.message || "Failed to stream file" }, { status: 500 });
+        return new Response(JSON.stringify({ error: error.message || "Failed to stream file" }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" }
+        });
     }
 }

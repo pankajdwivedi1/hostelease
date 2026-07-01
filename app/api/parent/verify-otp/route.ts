@@ -9,7 +9,7 @@ import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
   try {
-    const { phoneNumber, otp } = await request.json();
+    const { phoneNumber, otp, reqId } = await request.json();
     if (!phoneNumber || !otp) {
       return NextResponse.json({ success: false, error: "Phone number and OTP are required" }, { status: 400 });
     }
@@ -18,6 +18,18 @@ export async function POST(request: NextRequest) {
     let cleaned = phoneNumber.replace(/\D/g, "");
     if (cleaned.length === 12 && cleaned.startsWith("91")) {
       cleaned = cleaned.substring(2);
+    }
+
+    // If client provided reqId, we can verify statelessly directly via MSG91!
+    if (reqId) {
+      const verification = await verifyMSG91_WidgetOTP(cleaned, reqId, otp);
+      if (!verification.success) {
+        return NextResponse.json({ success: false, error: verification.error || "Invalid OTP" }, { status: 400 });
+      }
+      
+      otpCache.delete(cleaned);
+      console.log(`[PARENT LOGIN] Stateless verification successful for phone: ${cleaned}`);
+      return NextResponse.json({ success: true, message: "OTP verified successfully" });
     }
 
     const cachedData = otpCache.get(cleaned);

@@ -113,7 +113,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "OTP sent successfully to registered mobile number"
+      message: "OTP sent successfully to registered mobile number",
+      reqId
     });
   } catch (error: any) {
     console.error("❌ Send OTP crash:", error);

@@ -36,6 +36,7 @@ function LoginForm() {
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [parentLoading, setParentLoading] = useState(false);
+  const [parentReqId, setParentReqId] = useState("");
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const [superAdminResetStep, setSuperAdminResetStep] = useState<"none" | "phone" | "otp" | "reset">("none");
   const [superAdminResetPhone, setSuperAdminResetPhone] = useState("");
@@ -184,6 +185,9 @@ function LoginForm() {
         throw new Error(data.error || "Failed to send OTP");
       }
 
+      if (data.reqId) {
+        setParentReqId(data.reqId);
+      }
       setOtpSent(true);
       
       if (data.developmentOtp) {
@@ -232,7 +236,7 @@ function LoginForm() {
       const response = await fetch("/api/parent/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: parentPhone, otp: activeOtp }),
+        body: JSON.stringify({ phoneNumber: parentPhone, otp: activeOtp, reqId: parentReqId }),
       });
 
       const data = await response.json();
