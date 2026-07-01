@@ -228,6 +228,21 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [updatingProfile, setUpdatingProfile] = useState(false);
     const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
     const [activeConsentVideoUrl, setActiveConsentVideoUrl] = useState<string | null>(null);
+    const consentVideoRef = useRef<HTMLVideoElement>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [videoDuration, setVideoDuration] = useState(0);
+    const [playbackSpeed, setPlaybackSpeed] = useState(1);
+    const [isMuted, setIsMuted] = useState(false);
+
+    const closeVideoPreview = () => {
+        setActiveConsentVideoUrl(null);
+        setIsPlaying(false);
+        setCurrentTime(0);
+        setVideoDuration(0);
+        setPlaybackSpeed(1);
+        setIsMuted(false);
+    };
 
     const getEmbedUrl = (url: string) => {
         if (!url) return "";
@@ -4685,7 +4700,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
                     <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-2xl max-w-lg w-full border border-gray-100 dark:border-gray-700 relative animate-in fade-in zoom-in duration-200">
                         <button 
-                            onClick={() => setActiveConsentVideoUrl(null)}
+                            onClick={closeVideoPreview}
                             className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white bg-gray-100 dark:bg-gray-700 w-9 h-9 rounded-full flex items-center justify-center transition-all z-10 cursor-pointer shadow-sm hover:scale-105 border-0"
                         >
                             ✕
@@ -4696,17 +4711,149 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             </h3>
                         </div>
                         <div className="py-6 px-4 flex justify-center bg-gray-50 dark:bg-gray-900">
-                            <video 
-                                src={activeConsentVideoUrl} 
-                                controls 
-                                autoPlay 
-                                playsInline
-                                className="w-full max-h-[50vh] rounded-xl shadow-inner bg-black border border-gray-200 dark:border-gray-800"
-                            />
+                            <div className="w-full flex flex-col items-center">
+                                <video 
+                                    ref={consentVideoRef}
+                                    src={activeConsentVideoUrl} 
+                                    autoPlay 
+                                    playsInline
+                                    onTimeUpdate={(e) => setCurrentTime((e.target as HTMLVideoElement).currentTime)}
+                                    onLoadedMetadata={(e) => setVideoDuration((e.target as HTMLVideoElement).duration)}
+                                    onPlay={() => setIsPlaying(true)}
+                                    onPause={() => setIsPlaying(false)}
+                                    className="w-full max-h-[380px] sm:max-h-[450px] rounded-xl shadow-inner bg-black border border-gray-200 dark:border-gray-800 object-contain"
+                                />
+                                
+                                {/* 🎨 CUSTOM PREMIUM VIDEO CONTROLS */}
+                                <div className="w-full flex flex-col bg-slate-900 text-white p-3 rounded-xl border border-slate-800 shadow-xl mt-3 select-none font-mono">
+                                    {/* Timeline Row */}
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className="text-[10px] text-slate-400 font-bold w-10 text-right">
+                                            {Math.floor(currentTime / 60).toString().padStart(2, "0")}:
+                                            {Math.floor(currentTime % 60).toString().padStart(2, "0")}
+                                        </span>
+                                        <input
+                                            type="range"
+                                            min={0}
+                                            max={videoDuration || 100}
+                                            value={currentTime}
+                                            onChange={(e) => {
+                                                const val = parseFloat(e.target.value);
+                                                setCurrentTime(val);
+                                                if (consentVideoRef.current) consentVideoRef.current.currentTime = val;
+                                            }}
+                                            className="flex-1 h-1 rounded-lg appearance-none cursor-pointer focus:outline-none accent-orange-500"
+                                            style={{
+                                                background: `linear-gradient(to right, #f97316 0%, #f97316 ${(currentTime / (videoDuration || 1)) * 100}%, #475569 ${(currentTime / (videoDuration || 1)) * 100}%, #475569 100%)`
+                                            }}
+                                        />
+                                        <span className="text-[10px] text-slate-400 font-bold w-10 text-left">
+                                            {Math.floor(videoDuration / 60).toString().padStart(2, "0")}:
+                                            {Math.floor(videoDuration % 60).toString().padStart(2, "0")}
+                                        </span>
+                                    </div>
+
+                                    {/* Buttons Row */}
+                                    <div className="flex items-center justify-between px-1">
+                                        {/* Playback speed */}
+                                        <button
+                                            onClick={() => {
+                                                const speeds = [1, 1.25, 1.5, 2];
+                                                const nextSpeed = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length];
+                                                setPlaybackSpeed(nextSpeed);
+                                                if (consentVideoRef.current) consentVideoRef.current.playbackRate = nextSpeed;
+                                            }}
+                                            className="text-xs font-black text-slate-400 hover:text-white transition-colors bg-transparent border-0 py-1 px-1.5 cursor-pointer flex items-center"
+                                        >
+                                            {playbackSpeed}x
+                                        </button>
+
+                                        {/* Controls Center: Rewind, Play/Pause, Forward */}
+                                        <div className="flex items-center gap-6">
+                                            {/* Skip Backward 5s */}
+                                            <button
+                                                onClick={() => {
+                                                    if (consentVideoRef.current) {
+                                                        consentVideoRef.current.currentTime = Math.max(0, consentVideoRef.current.currentTime - 5);
+                                                    }
+                                                }}
+                                                className="text-slate-400 hover:text-white transition-colors bg-transparent border-0 cursor-pointer flex items-center p-1"
+                                                title="Rewind 5s"
+                                            >
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
+                                                </svg>
+                                            </button>
+
+                                            {/* Play/Pause */}
+                                            <button
+                                                onClick={() => {
+                                                    if (consentVideoRef.current) {
+                                                        if (isPlaying) {
+                                                            consentVideoRef.current.pause();
+                                                        } else {
+                                                            consentVideoRef.current.play().catch(err => console.log("Play failed:", err));
+                                                        }
+                                                    }
+                                                }}
+                                                className="w-9 h-9 bg-white text-slate-900 rounded-full flex items-center justify-center transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-md border-0"
+                                                title={isPlaying ? "Pause" : "Play"}
+                                            >
+                                                {isPlaying ? (
+                                                    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                                                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                                                    </svg>
+                                                ) : (
+                                                    <svg className="w-4 h-4 fill-current ml-0.5" viewBox="0 0 24 24">
+                                                        <path d="M8 5v14l11-7z" />
+                                                    </svg>
+                                                )}
+                                            </button>
+
+                                            {/* Skip Forward 5s */}
+                                            <button
+                                                onClick={() => {
+                                                    if (consentVideoRef.current) {
+                                                        consentVideoRef.current.currentTime = Math.min(videoDuration, consentVideoRef.current.currentTime + 5);
+                                                    }
+                                                }}
+                                                className="text-slate-400 hover:text-white transition-colors bg-transparent border-0 cursor-pointer flex items-center p-1"
+                                                title="Forward 5s"
+                                            >
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M11.934 12.8a1 1 0 000-1.6l-5.334-4A1 1 0 005 8v8a1 1 0 001.6.8l5.334-4zM19.934 12.8a1 1 0 000-1.6l-5.334-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.334-4z" />
+                                                </svg>
+                                            </button>
+                                        </div>
+
+                                        {/* Mute Button */}
+                                        <button
+                                            onClick={() => {
+                                                if (consentVideoRef.current) {
+                                                    consentVideoRef.current.muted = !isMuted;
+                                                    setIsMuted(!isMuted);
+                                                }
+                                            }}
+                                            className="text-slate-400 hover:text-white transition-colors bg-transparent border-0 cursor-pointer flex items-center p-1"
+                                            title={isMuted ? "Unmute" : "Mute"}
+                                        >
+                                            {isMuted ? (
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                                </svg>
+                                            ) : (
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                                </svg>
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div className="p-4 bg-gray-50 dark:bg-gray-850 flex justify-end gap-3 border-t border-gray-150 dark:border-gray-700">
                             <button
-                                onClick={() => setActiveConsentVideoUrl(null)}
+                                onClick={closeVideoPreview}
                                 className="px-5 py-2 text-xs font-bold text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm cursor-pointer"
                             >
                                 Close Preview
