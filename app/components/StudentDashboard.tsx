@@ -2854,7 +2854,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                             ) : (
                                                                                 isParentView && latestPermission.status === 'pending' && (
                                                                                     <button
-                                                                                        onClick={() => window.open(`/parent-consent/${latestPermission._id}`, "_blank")}
+                                                                                        onClick={() => {
+                                                                                            const cleanName = studentProfile?.name ? studentProfile.name.trim().replace(/\s+/g, '_') : 'Student';
+                                                                                            const cleanErp = studentProfile?.registrationId ? studentProfile.registrationId.trim() : '';
+                                                                                            const slug = cleanErp ? `${cleanName}_${cleanErp}` : cleanName;
+                                                                                            window.open(`/parent-consent/${slug}--${latestPermission._id}`, "_blank");
+                                                                                        }}
                                                                                         className="text-[5.5px] md:text-[7.5px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 px-1 py-0.5 rounded uppercase tracking-wider hover:bg-indigo-100 transition-all flex items-center gap-0.5 cursor-pointer ml-1"
                                                                                     >
                                                                                         🎥 Record Video
@@ -2978,7 +2983,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     {!isParentView && latestPermission.requestType === 'leave' && latestPermission.parentStatus !== 'allowed' && (
                                                         <button
                                                             onClick={() => {
-                                                                const shareUrl = `https://www.hosteleaze.com/parent-consent/${latestPermission._id}`;
+                                                                const cleanName = studentProfile?.name ? studentProfile.name.trim().replace(/\s+/g, '_') : 'Student';
+                                                                const cleanErp = studentProfile?.registrationId ? studentProfile.registrationId.trim() : '';
+                                                                const slug = cleanErp ? `${cleanName}_${cleanErp}` : cleanName;
+                                                                const shareUrl = `https://www.hosteleaze.com/parent-consent/${slug}--${latestPermission._id}`;
                                                                 const text = `नमस्कार पिताजी/माताजी, कृपया इस लिंक पर क्लिक करके मेरी छुट्टी (Leave) के लिए अपना सहमति वीडियो रिकॉर्ड करें:\n\n${shareUrl}`;
                                                                 const phone = studentProfile.parentPhone ? (studentProfile.parentPhone.startsWith('91') ? studentProfile.parentPhone : '91' + studentProfile.parentPhone) : '';
                                                                 window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}`, "_blank");

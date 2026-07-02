@@ -28,7 +28,19 @@ export async function POST(request: NextRequest) {
             }, { status: 501 });
         }
 
-        console.log(`[Google Drive API] Uploading parent consent video for Leave ID: ${leaveId} using OAuth2...`);
+        // Fetch leave/permission request from database to get student details
+        const permission = await db.permissions.getById(leaveId, { populate: true });
+        let studentSlug = "";
+        if (permission) {
+            const student = typeof permission.studentId === 'object' ? permission.studentId : null;
+            if (student) {
+                const cleanName = student.name ? student.name.trim().replace(/\s+/g, '_') : 'Student';
+                const cleanErp = student.registrationId ? student.registrationId.trim() : '';
+                studentSlug = cleanErp ? `_${cleanName}_${cleanErp}` : `_${cleanName}`;
+            }
+        }
+
+        console.log(`[Google Drive API] Uploading parent consent video for Leave ID: ${leaveId} (${studentSlug.slice(1)}) using OAuth2...`);
 
         // 2. Initialize Google OAuth2 client using refresh token
         const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
@@ -48,7 +60,7 @@ export async function POST(request: NextRequest) {
 
         // 4. Upload file metadata
         const fileMetadata = {
-            name: `consent_${leaveId}_${Date.now()}.${fileExt}`,
+            name: `consent${studentSlug}_${leaveId}_${Date.now()}.${fileExt}`,
             parents: [folderId]
         };
 

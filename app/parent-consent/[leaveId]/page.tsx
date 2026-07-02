@@ -11,8 +11,15 @@ interface PageProps {
 export default async function ParentConsentPage({ params }: PageProps) {
     const { leaveId } = await params;
     
+    // Parse the actual permission ID from the slug
+    let permissionId = leaveId;
+    if (leaveId.includes("--")) {
+        const parts = leaveId.split("--");
+        permissionId = parts[parts.length - 1];
+    }
+    
     // Fetch leave/permission request from database (populated with student data)
-    const permission = await db.permissions.getById(leaveId, { populate: true });
+    const permission = await db.permissions.getById(permissionId, { populate: true });
     
     if (!permission) {
         return notFound();
@@ -43,7 +50,7 @@ export default async function ParentConsentPage({ params }: PageProps) {
     
     return (
         <ParentConsentClient
-            leaveId={leaveId}
+            leaveId={permissionId}
             studentName={studentName}
             parentName={parentName}
             startDate={startDate}

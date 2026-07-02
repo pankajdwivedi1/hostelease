@@ -404,7 +404,7 @@ export default function ParentConsentClient({
                                     <div className="flex flex-col items-center justify-center py-2 space-y-2">
                                         <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin" />
                                         <span className="text-xs text-indigo-400 font-bold uppercase tracking-wider">
-                                            Uploading video to Google Drive...
+                                            Uploading consent video...
                                         </span>
                                     </div>
                                 )}
