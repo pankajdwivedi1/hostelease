@@ -35,7 +35,7 @@ import TenantSettingsView from "./TenantSettingsView";
 import HostelManagementModal from "./HostelManagementModal";
 
 // ⚡ DEVELOPER TOOLS COMPONENT
-const DeveloperTools = ({ hostels, developerPassword }: { hostels: any[], developerPassword: string }) => {
+const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStudents }: { hostels: any[], developerPassword: string, students?: any[], refreshStudents?: (force?: boolean) => Promise<any> }) => {
   const [password, setPassword] = useState("");
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [selectedHostel, setSelectedHostel] = useState("");
@@ -52,6 +52,73 @@ const DeveloperTools = ({ hostels, developerPassword }: { hostels: any[], develo
   const [gatepassHostel, setGatepassHostel] = useState("");
   const [attendanceHostel, setAttendanceHostel] = useState("");
   const [permissionsHostel, setPermissionsHostel] = useState("");
+
+  const [selectedSemester, setSelectedSemester] = useState("");
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [isDeletingStudents, setIsDeletingStudents] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
+
+  useEffect(() => {
+    if (isUnlocked && students.length === 0 && refreshStudents) {
+      setLoadingData(true);
+      refreshStudents(true).finally(() => setLoadingData(false));
+    }
+  }, [isUnlocked, students.length, refreshStudents]);
+
+  const matchingStudents = useMemo(() => {
+    if (!selectedSemester || !students) return [];
+    return students.filter((s: any) => s.semester?.toUpperCase() === selectedSemester.toUpperCase());
+  }, [selectedSemester, students]);
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedStudentIds(matchingStudents.map((s: any) => s.id || s._id));
+    } else {
+      setSelectedStudentIds([]);
+    }
+  };
+
+  const handleSelectStudent = (studentId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedStudentIds(prev => [...prev, studentId]);
+    } else {
+      setSelectedStudentIds(prev => prev.filter(id => id !== studentId));
+    }
+  };
+
+  const handleBulkDeleteStudents = async () => {
+    if (selectedStudentIds.length === 0) {
+      alert("Please select at least one student to delete.");
+      return;
+    }
+
+    const message = `🚨 DANGER: You are about to permanently delete ${selectedStudentIds.length} students from the database and Firebase Auth.\n\nThis will wipe all their records, permissions, device IDs, and credentials. THIS CANNOT BE UNDONE.\n\nAre you absolutely sure you want to proceed?`;
+    if (!await showConfirm(message)) return;
+
+    setIsDeletingStudents(true);
+    try {
+      const res = await fetch("/api/admin/students/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentIds: selectedStudentIds })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Successfully deleted ${data.deletedCount} students.`);
+        setSelectedStudentIds([]);
+        setSelectedSemester("");
+        if (refreshStudents) {
+          await refreshStudents(true);
+        }
+      } else {
+        alert("Error: " + data.error);
+      }
+    } catch (e: any) {
+      alert("Error deleting students: " + e.message);
+    } finally {
+      setIsDeletingStudents(false);
+    }
+  };
 
   const handleUnlock = () => {
     if (password === developerPassword) {
@@ -362,6 +429,105 @@ const DeveloperTools = ({ hostels, developerPassword }: { hostels: any[], develo
             </p>
           </div>
         </div>
+
+        {/* 🚨 BULK STUDENT REMOVAL BY SEMESTER CARD */}
+        <div className="bg-white p-6 rounded-xl border border-red-200 shadow-sm space-y-4 flex flex-col justify-between lg:col-span-2">
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-red-600 uppercase tracking-widest">Bulk Student Removal by Semester</label>
+              <p className="text-[11px] text-gray-500 font-bold">Permanently delete students, their permissions, and accounts in Firebase Auth by selecting a semester.</p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Select Semester</label>
+                <select
+                  value={selectedSemester}
+                  disabled={loadingData}
+                  onChange={(e) => {
+                    setSelectedSemester(e.target.value);
+                    setSelectedStudentIds([]);
+                  }}
+                  className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-red-500 outline-none disabled:opacity-50"
+                >
+                  <option value="">Choose a semester...</option>
+                  {["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"].map(sem => (
+                    <option key={sem} value={sem}>{sem}</option>
+                  ))}
+                </select>
+                {loadingData && (
+                  <div className="text-[10px] text-red-600 font-black animate-pulse uppercase tracking-wider mt-1.5 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
+                    Syncing student database...
+                  </div>
+                )}
+              </div>
+
+              {selectedSemester && (
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center text-xs font-bold text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <span>Found {matchingStudents.length} students</span>
+                    {matchingStudents.length > 0 && (
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedStudentIds.length === matchingStudents.length && matchingStudents.length > 0}
+                          onChange={(e) => handleSelectAll(e.target.checked)}
+                          className="w-3.5 h-3.5 accent-red-600"
+                        />
+                        Select All
+                      </label>
+                    )}
+                  </div>
+
+                  {matchingStudents.length > 0 ? (
+                    <div className="max-h-[180px] overflow-y-auto border border-slate-100 rounded-xl divide-y divide-slate-50 bg-white p-2">
+                      {matchingStudents.map((student: any) => {
+                        const sId = student.id || student._id;
+                        return (
+                          <div key={sId} className="flex items-center justify-between py-2 px-1 text-xs">
+                            <label className="flex items-center gap-2 cursor-pointer min-w-0 flex-1">
+                              <input
+                                type="checkbox"
+                                checked={selectedStudentIds.includes(sId)}
+                                onChange={(e) => handleSelectStudent(sId, e.target.checked)}
+                                className="w-3.5 h-3.5 accent-red-600 shrink-0"
+                              />
+                              <div className="min-w-0">
+                                <p className="font-bold text-gray-800 truncate">{student.name}</p>
+                                <p className="text-[10px] text-gray-400 truncate">{student.hostelName} • Room {student.roomNumber}</p>
+                              </div>
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-xs text-gray-400 font-bold bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                      No students found in this semester.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {matchingStudents.length > 0 && selectedStudentIds.length > 0 && (
+              <button
+                onClick={handleBulkDeleteStudents}
+                disabled={isDeletingStudents}
+                className="w-full py-4 bg-red-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-xl shadow-red-200 disabled:opacity-50 text-xs"
+              >
+                {isDeletingStudents ? "⏳ DELETING SELECTED STUDENTS..." : `🚨 REMOVE ${selectedStudentIds.length} SELECTED STUDENTS`}
+              </button>
+            )}
+          </div>
+
+          <div className="p-4 bg-red-50 rounded-xl border border-red-100 mt-4">
+            <p className="text-[10px] text-red-600 font-black leading-relaxed">
+              ⚠️ WARNING: This is a destructive operation. Deleted student profiles and Firebase Authentication accounts cannot be recovered.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -519,6 +685,53 @@ const DEFAULT_UNDERTAKING_TEXT = `I, {name}, S/o / D/o {parent}, student of {col
 4. I will not indulge in ragging directly or indirectly.
 5. I shall abide by any other guidelines notified by the Institute/hostel authorities.
 6. In case of violation of rules by me, I shall abide by the decision taken by the Institute/hostel authorities.`;
+
+// Floor normalization helper function
+const normalizeFloorName = (floorVal: string | number | undefined, roomNum?: string): string => {
+  let val = String(floorVal || "").trim().toUpperCase();
+  
+  if (!val && roomNum) {
+    const match = roomNum.trim().match(/^\d+/);
+    if (match) {
+      const roomDigits = match[0];
+      if (roomDigits.length >= 3) {
+        const floorDigitVal = parseInt(roomDigits.substring(0, roomDigits.length - 2), 10);
+        if (floorDigitVal > 4 || isNaN(floorDigitVal)) {
+          val = "GND FLOOR";
+        } else {
+          val = String(floorDigitVal);
+        }
+      } else {
+        // Room numbers with 1 or 2 digits (e.g., room 50) default to GND FLOOR
+        val = "GND FLOOR";
+      }
+    }
+  }
+  
+  // Normalize variations to standard options
+  if (val.includes("GND") || val.includes("GROUND") || val === "0" || val === "00") {
+    return "GND FLOOR";
+  }
+  if (val.includes("1ST") || val === "1" || val === "01" || val.includes("FIRST")) {
+    return "1ST FLOOR";
+  }
+  if (val.includes("2ND") || val === "2" || val === "02" || val.includes("SECOND")) {
+    return "2ND FLOOR";
+  }
+  if (val.includes("3RD") || val === "3" || val === "03" || val.includes("THIRD")) {
+    return "3RD FLOOR";
+  }
+  if (val.includes("4TH") || val === "4" || val === "04" || val.includes("FOURTH")) {
+    return "4TH FLOOR";
+  }
+  
+  if (!val) return "UNKNOWN FLOOR";
+  
+  if (!val.endsWith(" FLOOR")) {
+    return `${val} FLOOR`;
+  }
+  return val;
+};
 
 export default function AdminDashboard({ title = "Admin Dashboard", showRemoveButton = false }: { title?: string; showRemoveButton?: boolean }) {
   const router = useRouter();
@@ -3617,7 +3830,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const matchesSemester = semesterFilter === "all" || student.semester?.toUpperCase() === semesterFilter.toUpperCase();
       const matchesBranch = branchFilter === "all" || student.branch === branchFilter;
       const matchesSection = sectionFilter === "all" || student.section?.toUpperCase() === sectionFilter.toUpperCase();
-      const matchesFloor = floorFilter === "all" || student.floorNumber === floorFilter;
+      const matchesFloor = floorFilter === "all" || normalizeFloorName(student.floorNumber) === floorFilter;
       const matchesRoom = roomFilter === "all" || student.roomNumber === roomFilter;
 
       if (!matchesStatus || !matchesSearch || !matchesHostel || !matchesCollege || !matchesSemester || !matchesBranch || !matchesSection || !matchesFloor || !matchesRoom) return false;
@@ -3640,10 +3853,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (!isAuthorized) return;
       }
       if (s.floorNumber) {
-        floorsSet.add(s.floorNumber.trim().toUpperCase());
+        floorsSet.add(normalizeFloorName(s.floorNumber));
       }
     });
-    return Array.from(floorsSet);
+
+    const floorOrder = ["GND FLOOR", "1ST FLOOR", "2ND FLOOR", "3RD FLOOR", "4TH FLOOR"];
+    const getFloorIndex = (name: string) => {
+      const idx = floorOrder.indexOf(name.toUpperCase());
+      return idx !== -1 ? idx : 999;
+    };
+
+    return Array.from(floorsSet).sort((a, b) => {
+      const idxA = getFloorIndex(a);
+      const idxB = getFloorIndex(b);
+      if (idxA !== idxB) {
+        return idxA - idxB;
+      }
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
   }, [students, isWarden, authorizedHostels]);
 
   const availableRooms = useMemo(() => {
@@ -3656,7 +3883,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         );
         if (!isAuthorized) return;
       }
-      if (floorFilter !== "all" && s.floorNumber !== floorFilter) {
+      if (floorFilter !== "all" && normalizeFloorName(s.floorNumber) !== floorFilter) {
         return;
       }
       if (s.roomNumber) {
@@ -3713,7 +3940,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const matchesSemester = semesterFilter === "all" || student.semester?.toUpperCase() === semesterFilter.toUpperCase();
       const matchesBranch = branchFilter === "all" || student.branch === branchFilter;
       const matchesSection = sectionFilter === "all" || student.section?.toUpperCase() === sectionFilter.toUpperCase();
-      const matchesFloor = floorFilter === "all" || student.floorNumber === floorFilter;
+      const matchesFloor = floorFilter === "all" || normalizeFloorName(student.floorNumber) === floorFilter;
       const matchesRoom = roomFilter === "all" || student.roomNumber === roomFilter;
 
       return matchesSearch && matchesCollege && matchesSemester && matchesBranch && matchesSection && matchesFloor && matchesRoom;
@@ -3820,21 +4047,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const floorGroups: Record<string, { roomNumber: string; roommates: StudentDetails[] }[]> = {};
     
     Object.entries(roomGroups).forEach(([roomNumber, roommates]) => {
-      let floor = "Unknown Floor";
       const firstRoommate = roommates[0];
-      if (firstRoommate.floorNumber) {
-        floor = `Floor ${firstRoommate.floorNumber}`;
-      } else {
-        const match = roomNumber.match(/^\d+/);
-        if (match) {
-          const roomDigits = match[0];
-          if (roomDigits.length >= 3) {
-            floor = `Floor ${roomDigits.substring(0, roomDigits.length - 2)}`;
-          } else {
-            floor = `Floor ${roomDigits.substring(0, 1)}`;
-          }
-        }
-      }
+      const floor = normalizeFloorName(firstRoommate.floorNumber, roomNumber);
       
       if (!floorGroups[floor]) {
         floorGroups[floor] = [];
@@ -3846,9 +4060,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       floorGroups[floor].sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
     });
 
+    const floorOrder = ["GND FLOOR", "1ST FLOOR", "2ND FLOOR", "3RD FLOOR", "4TH FLOOR"];
+    const getFloorIndex = (name: string) => {
+      const idx = floorOrder.indexOf(name.toUpperCase());
+      return idx !== -1 ? idx : 999;
+    };
+
     return Object.entries(floorGroups)
       .map(([floorName, rooms]) => ({ floorName, rooms }))
-      .sort((a, b) => a.floorName.localeCompare(b.floorName, undefined, { numeric: true }));
+      .sort((a, b) => {
+        const idxA = getFloorIndex(a.floorName);
+        const idxB = getFloorIndex(b.floorName);
+        if (idxA !== idxB) {
+          return idxA - idxB;
+        }
+        return a.floorName.localeCompare(b.floorName, undefined, { numeric: true });
+      });
   }, [students, activeVisualHostel]);
 
   // 5. Disciplinary & Alerts Console Data
@@ -5317,7 +5544,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <p className="text-[9px] font-bold text-foreground truncate">{s.name}</p>
-                                  <p className="text-[8px] text-secondary truncate uppercase">{s.roomNumber} • {s.floorNumber || s.hostelName}</p>
+                                  <p className="text-[8px] text-secondary truncate uppercase">{s.roomNumber} • {s.floorNumber ? normalizeFloorName(s.floorNumber) : s.hostelName}</p>
                                 </div>
                                 <a href={`tel:${s.phoneNumber}`} className="w-7 h-7 bg-green-50 text-green-600 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors flex-shrink-0">
                                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
@@ -6914,7 +7141,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         </span>
                                         {student.floorNumber && (
                                           <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">
-                                            {student.floorNumber}
+                                            {normalizeFloorName(student.floorNumber)}
                                           </span>
                                         )}
                                         <a
@@ -7143,7 +7370,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         {getHostelCategory(selectedStudent.hostelName) || selectedStudent.hostelName} <span className="text-gray-400 font-light mx-1">|</span> Room {selectedStudent.roomNumber}
                       </p>
                       {selectedStudent.floorNumber && (
-                        <p className="text-[10px] text-gray-500 mt-0.5 font-bold">Floor: <span className="text-gray-900">{selectedStudent.floorNumber}</span></p>
+                        <p className="text-[10px] text-gray-500 mt-0.5 font-bold">Floor: <span className="text-gray-900">{normalizeFloorName(selectedStudent.floorNumber)}</span></p>
                       )}
                       {selectedStudent.category && (
                         <p className="text-[10px] text-blue-600 font-bold mt-0.5 uppercase">Category: {selectedStudent.category}</p>
@@ -9807,7 +10034,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 )}
 
                 {activeSettingsTab === "superadmin" && (
-                  <DeveloperTools hostels={hostels} developerPassword={developerPassword} />
+                  <DeveloperTools hostels={hostels} developerPassword={developerPassword} students={students} refreshStudents={fetchStudents} />
                 )}
 
 
