@@ -306,6 +306,17 @@ export default function ParentConsentClient({
                                         src={videoUrl}
                                         controls
                                         playsInline
+                                        onLoadedMetadata={(e) => {
+                                            const video = e.target as HTMLVideoElement;
+                                            if (video.duration === Infinity) {
+                                                // Workaround for WebM MediaRecorder duration bug
+                                                video.currentTime = 1e9;
+                                                video.onseeked = () => {
+                                                    video.onseeked = null;
+                                                    video.currentTime = 0;
+                                                };
+                                            }
+                                        }}
                                         className="w-full h-full object-cover"
                                     />
                                 )}
