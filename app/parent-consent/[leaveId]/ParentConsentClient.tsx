@@ -95,9 +95,7 @@ export default function ParentConsentClient({
     }, []);
 
     // Start video recording
-    const startRecording = () => {
-        if (!stream) return;
-
+    const startRecording = async () => {
         chunksRef.current = [];
         let selectedMimeType = "video/mp4";
         if (MediaRecorder.isTypeSupported("video/mp4")) {
@@ -109,7 +107,28 @@ export default function ParentConsentClient({
         }
 
         try {
-            const mediaRecorder = new MediaRecorder(stream, {
+            // Stop existing preview stream so we can request a fresh zero-based stream
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+
+            // Obtain a fresh stream where audio/video tracks start exactly at timestamp 0
+            const freshStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: "user",
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    frameRate: { ideal: 15 }
+                },
+                audio: true
+            });
+
+            setStream(freshStream);
+            if (videoPreviewRef.current) {
+                videoPreviewRef.current.srcObject = freshStream;
+            }
+
+            const mediaRecorder = new MediaRecorder(freshStream, {
                 mimeType: selectedMimeType,
                 videoBitsPerSecond: 300000, // 300 kbps (low bitrate, clear enough for consent)
                 audioBitsPerSecond: 64000   // 64 kbps (clear mono audio)
@@ -127,11 +146,9 @@ export default function ParentConsentClient({
                 setVideoUrl(url);
                 setRecordingState("review");
                 
-                // Stop camera preview so camera indicator turns off
-                if (stream) {
-                    stream.getTracks().forEach(track => track.stop());
-                    setStream(null);
-                }
+                // Stop camera preview tracks completely
+                freshStream.getTracks().forEach(track => track.stop());
+                setStream(null);
             };
 
             mediaRecorderRef.current = mediaRecorder;
