@@ -108,7 +108,9 @@ export default function ParentConsentClient({
 
         try {
             const mediaRecorder = new MediaRecorder(stream, {
-                mimeType: selectedMimeType
+                mimeType: selectedMimeType,
+                videoBitsPerSecond: 300000, // 300 kbps (low bitrate, clear enough for consent)
+                audioBitsPerSecond: 64000   // 64 kbps (clear mono audio)
             });
 
             mediaRecorder.ondataavailable = (e) => {
@@ -204,9 +206,20 @@ export default function ParentConsentClient({
                 body: formData
             });
 
-            const data = await response.json();
+            let data: any = {};
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+                try {
+                    data = await response.json();
+                } catch (jsonErr) {
+                    console.error("JSON parsing failed:", jsonErr);
+                }
+            }
 
             if (!response.ok) {
+                if (response.status === 413) {
+                    throw new Error("वीडियो का आकार बहुत बड़ा है। कृपया छोटा वीडियो रिकॉर्ड करें। (Video is too large to upload. Please record a shorter video.)");
+                }
                 throw new Error(data.error || "Failed to upload video to Google Drive");
             }
 
