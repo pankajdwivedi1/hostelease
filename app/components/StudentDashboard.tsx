@@ -100,7 +100,28 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [permissions, setPermissions] = useState<Permission[]>([]);
     const [prefetchedVideoUrls, setPrefetchedVideoUrls] = useState<Record<string, string>>({});
 
-
+    useEffect(() => {
+        if (!permissions || permissions.length === 0) return;
+        permissions.forEach(async (permission) => {
+            if (permission.parentConsentUrl) {
+                const fileIdMatch = permission.parentConsentUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || permission.parentConsentUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                if (fileIdMatch && fileIdMatch[1]) {
+                    const fileId = fileIdMatch[1];
+                    if (prefetchedVideoUrls[fileId]) return;
+                    try {
+                        const res = await fetch(`/api/parent-consent/stream?fileId=${fileId}`);
+                        if (res.ok) {
+                            const blob = await res.blob();
+                            const blobUrl = URL.createObjectURL(blob);
+                            setPrefetchedVideoUrls(prev => ({ ...prev, [fileId]: blobUrl }));
+                        }
+                    } catch (e) {
+                        console.error("Failed to prefetch video:", e);
+                    }
+                }
+            }
+        });
+    }, [permissions]);
     
     // Outing Calendar states
     const [gatePasses, setGatePasses] = useState<any[]>([]);
@@ -2839,7 +2860,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                 <button
                                                                                     onClick={(e) => {
                                                                                         e.preventDefault();
-                                                                                        const videoSrc = getEmbedUrl(latestPermission.parentConsentUrl);
+                                                                                        const fileIdMatch = latestPermission.parentConsentUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || latestPermission.parentConsentUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                                                                                        const fileId = fileIdMatch ? fileIdMatch[1] : null;
+                                                                                        const videoSrc = (fileId && prefetchedVideoUrls[fileId]) 
+                                                                                            ? prefetchedVideoUrls[fileId] 
+                                                                                            : getEmbedUrl(latestPermission.parentConsentUrl);
                                                                                         setActiveConsentVideoUrl(videoSrc);
                                                                                     }}
                                                                                     className="text-[5.5px] md:text-[7.5px] font-black text-green-600 bg-green-50 border border-green-200 px-1 py-0.5 rounded uppercase tracking-wider hover:bg-green-100 transition-all flex items-center gap-0.5 cursor-pointer ml-1"
@@ -3577,7 +3602,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                             <button
                                                                                                 onClick={(e) => {
                                                                                                     e.preventDefault();
-                                                                                                    const videoSrc = getEmbedUrl(permission.parentConsentUrl);
+                                                                                                    const fileIdMatch = permission.parentConsentUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || permission.parentConsentUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                                                                                                    const fileId = fileIdMatch ? fileIdMatch[1] : null;
+                                                                                                    const videoSrc = (fileId && prefetchedVideoUrls[fileId]) 
+                                                                                                        ? prefetchedVideoUrls[fileId] 
+                                                                                                        : getEmbedUrl(permission.parentConsentUrl);
                                                                                                     setActiveConsentVideoUrl(videoSrc);
                                                                                                 }}
                                                                                                 className="text-[6px] md:text-[8px] font-black text-green-600 bg-green-50 border border-green-200 px-1 py-0.5 rounded uppercase tracking-wider hover:bg-green-100 transition-all flex items-center gap-0.5 cursor-pointer ml-1"
@@ -4706,16 +4735,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         src={activeConsentVideoUrl} 
                                         autoPlay 
                                         playsInline
-                                        controls
-                                        onClick={() => {
-                                            if (consentVideoRef.current) {
-                                                if (isPlaying) {
-                                                    consentVideoRef.current.pause();
-                                                } else {
-                                                    consentVideoRef.current.play().catch(err => console.log("Play failed:", err));
-                                                }
-                                            }
-                                        }}
                                         onTimeUpdate={(e) => {
                                             const video = e.target as HTMLVideoElement;
                                             setCurrentTime(video.currentTime);
@@ -4734,13 +4753,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     if (isFinite(video.duration)) {
                                                         setVideoDuration(video.duration);
                                                     }
-                                                    // Explicitly resume autoplay after seeking completes
-                                                    video.play().catch(err => console.log("Autoplay failed:", err));
                                                 };
                                             } else if (isFinite(video.duration)) {
                                                 setVideoDuration(video.duration);
-                                                // Explicitly resume autoplay
-                                                video.play().catch(err => console.log("Autoplay failed:", err));
                                             }
                                         }}
                                         onPlay={() => setIsPlaying(true)}
