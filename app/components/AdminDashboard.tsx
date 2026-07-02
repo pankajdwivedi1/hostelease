@@ -10356,15 +10356,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     onLoadedMetadata={(e) => {
                       const video = e.target as HTMLVideoElement;
                       if (video.duration === Infinity) {
-                        // Workaround for WebM MediaRecorder duration bug
-                        video.currentTime = 99.99;
-                        video.onseeked = () => {
-                          video.onseeked = null;
-                          video.currentTime = 0;
-                          if (isFinite(video.duration)) {
-                            setVideoDuration(video.duration);
-                          }
-                        };
+                        // Set standard 24s duration for WebM consent video to enable instant play without network seeks
+                        setVideoDuration(24);
                       } else if (isFinite(video.duration)) {
                         setVideoDuration(video.duration);
                       }
