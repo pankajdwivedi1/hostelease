@@ -100,28 +100,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [permissions, setPermissions] = useState<Permission[]>([]);
     const [prefetchedVideoUrls, setPrefetchedVideoUrls] = useState<Record<string, string>>({});
 
-    useEffect(() => {
-        if (!permissions || permissions.length === 0) return;
-        permissions.forEach(async (permission) => {
-            if (permission.parentConsentUrl) {
-                const fileIdMatch = permission.parentConsentUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || permission.parentConsentUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-                if (fileIdMatch && fileIdMatch[1]) {
-                    const fileId = fileIdMatch[1];
-                    if (prefetchedVideoUrls[fileId]) return;
-                    try {
-                        const res = await fetch(`/api/parent-consent/stream?fileId=${fileId}`);
-                        if (res.ok) {
-                            const blob = await res.blob();
-                            const blobUrl = URL.createObjectURL(blob);
-                            setPrefetchedVideoUrls(prev => ({ ...prev, [fileId]: blobUrl }));
-                        }
-                    } catch (e) {
-                        console.error("Failed to prefetch video:", e);
-                    }
-                }
-            }
-        });
-    }, [permissions]);
+
     
     // Outing Calendar states
     const [gatePasses, setGatePasses] = useState<any[]>([]);
