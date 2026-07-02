@@ -2999,7 +2999,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     {!isParentView && latestPermission.requestType === 'leave' && latestPermission.parentStatus !== 'allowed' && (
                                                         <button
                                                             onClick={() => {
-                                                                const shareUrl = `${window.location.origin}/parent-consent/${latestPermission._id}`;
+                                                                const shareUrl = `https://www.hosteleaze.com/parent-consent/${latestPermission._id}`;
                                                                 const text = `नमस्कार पिताजी/माताजी, कृपया इस लिंक पर क्लिक करके मेरी छुट्टी (Leave) के लिए अपना सहमति वीडियो रिकॉर्ड करें:\n\n${shareUrl}`;
                                                                 const phone = studentProfile.parentPhone ? (studentProfile.parentPhone.startsWith('91') ? studentProfile.parentPhone : '91' + studentProfile.parentPhone) : '';
                                                                 window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}`, "_blank");
@@ -4746,7 +4746,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                             const video = e.target as HTMLVideoElement;
                                             if (video.duration === Infinity) {
                                                 // Workaround for WebM MediaRecorder duration bug
-                                                video.currentTime = 1e9;
+                                                video.currentTime = 99.99;
                                                 video.onseeked = () => {
                                                     video.onseeked = null;
                                                     video.currentTime = 0;

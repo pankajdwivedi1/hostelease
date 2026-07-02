@@ -310,7 +310,7 @@ export default function ParentConsentClient({
                                             const video = e.target as HTMLVideoElement;
                                             if (video.duration === Infinity) {
                                                 // Workaround for WebM MediaRecorder duration bug
-                                                video.currentTime = 1e9;
+                                                video.currentTime = 99.99;
                                                 video.onseeked = () => {
                                                     video.onseeked = null;
                                                     video.currentTime = 0;
