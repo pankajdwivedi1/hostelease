@@ -10370,9 +10370,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           if (isFinite(video.duration)) {
                             setVideoDuration(video.duration);
                           }
+                          // Explicitly resume autoplay after seeking completes
+                          video.play().catch(err => console.log("Autoplay failed:", err));
                         };
                       } else if (isFinite(video.duration)) {
                         setVideoDuration(video.duration);
+                        // Explicitly resume autoplay
+                        video.play().catch(err => console.log("Autoplay failed:", err));
                       }
                     }}
                     onPlay={() => setIsPlaying(true)}

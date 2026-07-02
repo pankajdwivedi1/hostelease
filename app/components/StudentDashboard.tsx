@@ -4734,9 +4734,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     if (isFinite(video.duration)) {
                                                         setVideoDuration(video.duration);
                                                     }
+                                                    // Explicitly resume autoplay after seeking completes
+                                                    video.play().catch(err => console.log("Autoplay failed:", err));
                                                 };
                                             } else if (isFinite(video.duration)) {
                                                 setVideoDuration(video.duration);
+                                                // Explicitly resume autoplay
+                                                video.play().catch(err => console.log("Autoplay failed:", err));
                                             }
                                         }}
                                         onPlay={() => setIsPlaying(true)}
