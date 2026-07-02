@@ -10368,6 +10368,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     src={activeConsentVideoUrl} 
                     autoPlay 
                     playsInline
+                    controls
+                    onClick={() => {
+                      if (consentVideoRef.current) {
+                        if (isPlaying) {
+                          consentVideoRef.current.pause();
+                        } else {
+                          consentVideoRef.current.play().catch(err => console.log("Play failed:", err));
+                        }
+                      }
+                    }}
                     onTimeUpdate={(e) => {
                       const video = e.target as HTMLVideoElement;
                       setCurrentTime(video.currentTime);

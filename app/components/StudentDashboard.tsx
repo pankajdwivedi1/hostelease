@@ -4735,6 +4735,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         src={activeConsentVideoUrl} 
                                         autoPlay 
                                         playsInline
+                                        controls
+                                        onClick={() => {
+                                            if (consentVideoRef.current) {
+                                                if (isPlaying) {
+                                                    consentVideoRef.current.pause();
+                                                } else {
+                                                    consentVideoRef.current.play().catch(err => console.log("Play failed:", err));
+                                                }
+                                            }
+                                        }}
                                         onTimeUpdate={(e) => {
                                             const video = e.target as HTMLVideoElement;
                                             setCurrentTime(video.currentTime);
