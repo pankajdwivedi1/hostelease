@@ -43,9 +43,12 @@ export async function POST(request: NextRequest) {
         const buffer = Buffer.from(arrayBuffer);
         const stream = Readable.from(buffer);
 
+        const originalName = videoFile.name || "";
+        const fileExt = originalName.endsWith(".mp4") ? "mp4" : "webm";
+
         // 4. Upload file metadata
         const fileMetadata = {
-            name: `consent_${leaveId}_${Date.now()}.webm`,
+            name: `consent_${leaveId}_${Date.now()}.${fileExt}`,
             parents: [folderId]
         };
 

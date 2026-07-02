@@ -99,18 +99,20 @@ export default function ParentConsentClient({
         if (!stream) return;
 
         chunksRef.current = [];
-        let selectedMimeType = "video/webm";
-        if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")) {
-            selectedMimeType = "video/webm;codecs=vp8,opus";
-        } else if (MediaRecorder.isTypeSupported("video/mp4")) {
+        let selectedMimeType = "video/mp4";
+        if (MediaRecorder.isTypeSupported("video/mp4")) {
             selectedMimeType = "video/mp4";
+        } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")) {
+            selectedMimeType = "video/webm;codecs=vp8,opus";
+        } else {
+            selectedMimeType = "video/webm";
         }
 
         try {
             const mediaRecorder = new MediaRecorder(stream, {
                 mimeType: selectedMimeType,
-                videoBitsPerSecond: 1000000, // 1 Mbps (high quality, but keeps max file size under 3.5 MB for 25s)
-                audioBitsPerSecond: 128000   // 128 kbps (high quality stereo/mono audio)
+                videoBitsPerSecond: 300000, // 300 kbps (low bitrate, clear enough for consent)
+                audioBitsPerSecond: 64000   // 64 kbps (clear mono audio)
             });
 
             mediaRecorder.ondataavailable = (e) => {
@@ -183,13 +185,17 @@ export default function ParentConsentClient({
 
         try {
             // Find correct mime type
-            let fileExt = "webm";
-            let mimeType = "video/webm";
-            if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")) {
-                mimeType = "video/webm;codecs=vp8,opus";
-            } else if (MediaRecorder.isTypeSupported("video/mp4")) {
+            let fileExt = "mp4";
+            let mimeType = "video/mp4";
+            if (MediaRecorder.isTypeSupported("video/mp4")) {
                 mimeType = "video/mp4";
                 fileExt = "mp4";
+            } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")) {
+                mimeType = "video/webm;codecs=vp8,opus";
+                fileExt = "webm";
+            } else {
+                mimeType = "video/webm";
+                fileExt = "webm";
             }
 
             const videoBlob = new Blob(chunksRef.current, { type: mimeType });
