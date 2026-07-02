@@ -109,8 +109,8 @@ export default function ParentConsentClient({
         try {
             const mediaRecorder = new MediaRecorder(stream, {
                 mimeType: selectedMimeType,
-                videoBitsPerSecond: 300000, // 300 kbps (low bitrate, clear enough for consent)
-                audioBitsPerSecond: 64000   // 64 kbps (clear mono audio)
+                videoBitsPerSecond: 1000000, // 1 Mbps (high quality, but keeps max file size under 3.5 MB for 25s)
+                audioBitsPerSecond: 128000   // 128 kbps (high quality stereo/mono audio)
             });
 
             mediaRecorder.ondataavailable = (e) => {
