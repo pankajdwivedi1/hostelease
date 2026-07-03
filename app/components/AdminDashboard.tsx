@@ -9490,22 +9490,40 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Enable 100% reliable tracking via Network IP</p>
                             </div>
                           </div>
-                          <button
-                            onClick={async () => {
-                              const bssid = await showPrompt("Enter WIFI BSSID (e.g. 64:29:43:bb:78:60):");
-                              if (!bssid) return; // User cancelled
-                              const name = await showPrompt("Enter Label (e.g. Campus Area WiFi):");
-                              if (bssid && name) {
-                                // Save as a BSSID entry (using the bssids array format)
-                                const updated = [...wifiWhitelist, { name, bssids: [bssid.trim().toLowerCase()] }];
-                                setWifiWhitelist(updated);
-                                handleUpdateSettings({ wifiWhitelist: updated });
-                              }
-                            }}
-                            className="px-4 py-2 bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all opacity-100"
-                          >
-                            + ADD WIFI BSSID
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={async () => {
+                                const bssid = await showPrompt("Enter WIFI BSSID (e.g. 64:29:43:bb:78:60):");
+                                if (!bssid) return; // User cancelled
+                                const name = await showPrompt("Enter Label (e.g. Campus Area WiFi):");
+                                if (bssid && name) {
+                                  // Save as a BSSID entry (using the bssids array format)
+                                  const updated = [...wifiWhitelist, { name, bssids: [bssid.trim().toLowerCase()] }];
+                                  setWifiWhitelist(updated);
+                                  handleUpdateSettings({ wifiWhitelist: updated });
+                                }
+                              }}
+                              className="px-4 py-2 bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all opacity-100 cursor-pointer"
+                            >
+                              + ADD WIFI BSSID
+                            </button>
+                            <button
+                              onClick={async () => {
+                                const ipVal = await showPrompt("Enter Campus Network Public IP (e.g. 115.243.80.12):");
+                                if (!ipVal) return; // User cancelled
+                                const name = await showPrompt("Enter Label (e.g. College Main Router IP):");
+                                if (ipVal && name) {
+                                  // Save as an IP entry
+                                  const updated = [...wifiWhitelist, { name, ip: ipVal.trim() }];
+                                  setWifiWhitelist(updated);
+                                  handleUpdateSettings({ wifiWhitelist: updated });
+                                }
+                              }}
+                              className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all opacity-100 cursor-pointer"
+                            >
+                              + ADD CAMPUS IP
+                            </button>
+                          </div>
                         </div>
 
                         <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
