@@ -8351,6 +8351,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     </div>
 
                     <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Gender</label>
+                      <select
+                        value={editStudentForm.gender || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, gender: e.target.value }))}
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 uppercase"
+                      >
+                        <option value="">SELECT GENDER</option>
+                        {["MALE", "FEMALE", "OTHER"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
                       <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Date of Birth</label>
                       <input
                         type="date"
@@ -8463,7 +8475,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </select>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 col-span-full">
                       <div>
                         <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Room No</label>
                         <input
@@ -8472,6 +8484,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           onChange={(e) => setEditStudentForm(prev => ({ ...prev, roomNumber: e.target.value.toUpperCase() }))}
                           className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
                         />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Floor Number</label>
+                        <select
+                          value={editStudentForm.floorNumber || ""}
+                          onChange={(e) => setEditStudentForm(prev => ({ ...prev, floorNumber: e.target.value }))}
+                          className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
+                        >
+                          <option value="">SELECT FLOOR</option>
+                          {["GND FLOOR", "1ST FLOOR", "2ND FLOOR", "3RD FLOOR", "4TH FLOOR"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
                       </div>
                       <div>
                         <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Joining Date</label>
