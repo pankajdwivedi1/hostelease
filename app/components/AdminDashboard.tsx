@@ -4952,7 +4952,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 
                                 {/* Permissions Block under name */}
                                 <div className="pl-0 md:pl-8 lg:pl-[52px] w-[50%] md:w-full">
-                                  <div className="flex flex-col items-start gap-0.5 md:gap-1 origin-top-left border border-gray-200 rounded-md p-1 md:p-2 bg-white/30 shadow-sm w-full max-w-full md:max-w-[320px]">
+                                  <div className="flex flex-col items-start gap-0.5 md:gap-1 origin-top-left border border-gray-200 rounded-md p-1 md:p-2 bg-white/30 shadow-sm w-full max-w-full md:max-w-[245px]">
                                     <div className="flex items-center justify-between w-full">
                                       <div className="flex items-center gap-1 md:gap-2">
                                         <span className="text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Parent</span>
