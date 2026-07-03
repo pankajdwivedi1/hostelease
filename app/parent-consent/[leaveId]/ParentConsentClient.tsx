@@ -27,7 +27,6 @@ export default function ParentConsentClient({
     const [errorMessage, setErrorMessage] = useState("");
     const [videoUrl, setVideoUrl] = useState<string | null>(null);
     const [stream, setStream] = useState<MediaStream | null>(null);
-    const [isPreviewMuted, setIsPreviewMuted] = useState(true);
 
     const videoPreviewRef = useRef<HTMLVideoElement>(null);
     const videoPlaybackRef = useRef<HTMLVideoElement>(null);
@@ -57,6 +56,18 @@ export default function ParentConsentClient({
         }
     }, [stream, recordingState]);
 
+    // Auto-play review video with audio when it loads
+    useEffect(() => {
+        if (recordingState === "review" && videoPlaybackRef.current) {
+            const video = videoPlaybackRef.current;
+            video.muted = false;
+            video.volume = 1.0;
+            video.play().catch(err => {
+                console.warn("Review auto-play failed/blocked:", err);
+            });
+        }
+    }, [recordingState, videoUrl]);
+
     // Request camera permission and start preview
     const startCamera = async () => {
         try {
@@ -65,15 +76,19 @@ export default function ParentConsentClient({
                 stream.getTracks().forEach(track => track.stop());
             }
 
-            // Constraints optimized for small file size (low resolution, lower framerate)
+            // Constraints optimized for HD clear video and high quality clear audio (targeting 3MB-4MB for 24s)
             const mediaStream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     facingMode: "user",
-                    width: { ideal: 640 },
-                    height: { ideal: 480 },
-                    frameRate: { ideal: 15 }
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    frameRate: { ideal: 24 }
                 },
-                audio: true
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
             });
 
             setStream(mediaStream);
@@ -112,8 +127,8 @@ export default function ParentConsentClient({
         try {
             const mediaRecorder = new MediaRecorder(stream, {
                 mimeType: selectedMimeType,
-                videoBitsPerSecond: 300000, // 300 kbps (low bitrate, clear enough for consent)
-                audioBitsPerSecond: 64000   // 64 kbps (clear mono audio)
+                videoBitsPerSecond: 1200000, // 1.2 Mbps (high quality clear HD video)
+                audioBitsPerSecond: 128000   // 128 kbps (crystal clear CD-quality audio)
             });
 
             mediaRecorder.ondataavailable = (e) => {
@@ -310,22 +325,13 @@ export default function ParentConsentClient({
                                 
                                 {/* 1. Active Camera Preview */}
                                 {(recordingState === "idle" || recordingState === "recording") && (
-                                    <>
-                                        <video
-                                            ref={videoPreviewRef}
-                                            autoPlay
-                                            playsInline
-                                            muted={isPreviewMuted}
-                                            className="w-full h-full object-cover scale-x-[-1]"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsPreviewMuted(!isPreviewMuted)}
-                                            className="absolute top-4 right-4 bg-slate-900/80 hover:bg-slate-900 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md border-0 z-20 cursor-pointer"
-                                        >
-                                            {isPreviewMuted ? "🔇 Unmute Mic Preview" : "🔊 Mute Mic Preview"}
-                                        </button>
-                                    </>
+                                    <video
+                                        ref={videoPreviewRef}
+                                        autoPlay
+                                        playsInline
+                                        muted
+                                        className="w-full h-full object-cover scale-x-[-1]"
+                                    />
                                 )}
 
                                 {/* 2. Playback / Review Video */}
@@ -334,16 +340,22 @@ export default function ParentConsentClient({
                                         ref={videoPlaybackRef}
                                         src={videoUrl}
                                         controls
+                                        autoPlay
                                         playsInline
                                         onLoadedMetadata={(e) => {
                                             const video = e.target as HTMLVideoElement;
+                                            video.muted = false; // ensure sound is enabled
+                                            video.volume = 1.0;
                                             if (video.duration === Infinity) {
                                                 // Workaround for WebM MediaRecorder duration bug
                                                 video.currentTime = 99.99;
                                                 video.onseeked = () => {
                                                     video.onseeked = null;
                                                     video.currentTime = 0;
+                                                    video.play().catch(err => console.log("Auto-play failed:", err));
                                                 };
+                                            } else {
+                                                video.play().catch(err => console.log("Auto-play failed:", err));
                                             }
                                         }}
                                         className="w-full h-full object-cover"
