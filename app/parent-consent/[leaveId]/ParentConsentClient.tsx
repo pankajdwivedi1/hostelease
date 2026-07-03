@@ -75,6 +75,11 @@ export default function ParentConsentClient({
                 audio: true
             });
 
+            // Force unmute/enable all audio tracks on start
+            mediaStream.getAudioTracks().forEach(track => {
+                track.enabled = true;
+            });
+
             setStream(mediaStream);
             if (videoPreviewRef.current) {
                 videoPreviewRef.current.srcObject = mediaStream;
@@ -97,6 +102,11 @@ export default function ParentConsentClient({
     // Start video recording
     const startRecording = () => {
         if (!stream) return;
+
+        // Force unmute/enable all audio tracks in stream
+        stream.getAudioTracks().forEach(track => {
+            track.enabled = true;
+        });
 
         chunksRef.current = [];
         let selectedMimeType = "video/mp4";
@@ -307,16 +317,15 @@ export default function ParentConsentClient({
                             {/* Video Viewport Container */}
                             <div className="relative aspect-video rounded-3xl bg-slate-900 border border-slate-800/80 overflow-hidden shadow-inner flex items-center justify-center">
                                 
-                                {/* 1. Active Camera Preview */}
+                                {/* 1. Active Camera Preview - unmuted for video recording verification */}
                                 {(recordingState === "idle" || recordingState === "recording") && (
-                                    <video
-                                        ref={videoPreviewRef}
-                                        autoPlay
-                                        playsInline
-                                        muted
-                                        className="w-full h-full object-cover scale-x-[-1]"
-                                    />
-                                )}
+                                     <video
+                                         ref={videoPreviewRef}
+                                         autoPlay
+                                         playsInline
+                                         className="w-full h-full object-cover scale-x-[-1]"
+                                     />
+                                 )}
 
                                 {/* 2. Playback / Review Video */}
                                 {recordingState === "review" && videoUrl && (
@@ -348,13 +357,13 @@ export default function ParentConsentClient({
                                     </div>
                                 )}
 
-                                {/* 4. Recording Overlay */}
+                                {/* 4. Recording Overlay (Shows elapsed count-up and remaining count-down) */}
                                 {recordingState === "recording" && (
-                                    <div className="absolute top-4 left-4 bg-red-600 border border-red-500/30 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 animate-pulse shadow-md">
-                                        <span className="w-2 h-2 rounded-full bg-white"></span>
-                                        Recording ({countdown}s)
-                                    </div>
-                                )}
+                                     <div className="absolute top-4 left-4 bg-red-600 border border-red-500/30 px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 animate-pulse shadow-md">
+                                         <span className="w-2 h-2 rounded-full bg-white"></span>
+                                         REC {24 - countdown}s / 24s (Left: {countdown}s)
+                                     </div>
+                                 )}
                             </div>
 
                             {/* Controls Panel */}
