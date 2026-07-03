@@ -4928,7 +4928,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <div key={permission._id} className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-2 md:p-3">
                             <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-stretch">
                               {/* Left Side: Student Info & Approvals */}
-                              <div className="w-full md:w-[55%] lg:w-[50%] shrink-0 flex flex-row md:flex-col gap-1 md:gap-2.5">
+                              <div className="w-full md:w-[340px] shrink-0 flex flex-row md:flex-col gap-1 md:gap-2.5">
                                 <div className="flex items-start gap-2 md:gap-4 w-[50%] md:w-full">
                                   <button
                                     onClick={() => handleProfileClick(student._id)}
