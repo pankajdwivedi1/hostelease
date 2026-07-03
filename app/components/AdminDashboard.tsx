@@ -10664,6 +10664,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     onPause={() => setIsPlaying(false)}
                     className="w-full max-h-[380px] sm:max-h-[450px] rounded-xl shadow-inner bg-black border border-gray-200 dark:border-gray-800 object-contain"
                   />
+
+                  {isMuted && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (consentVideoRef.current) {
+                          consentVideoRef.current.muted = false;
+                          setIsMuted(false);
+                        }
+                      }}
+                      className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-blue-600/90 hover:bg-blue-600 text-white px-5 py-3 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-2xl animate-bounce cursor-pointer z-30 border-0"
+                    >
+                      <svg className="w-4 h-4 fill-none stroke-currentColor viewBox="0 0 24 24" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+                      </svg>
+                      🔊 Click to Unmute / आवाज चालू करें
+                    </button>
+                  )}
                   
                   {/* 📥 DOWNLOAD BUTTON OVERLAY */}
                   <a
