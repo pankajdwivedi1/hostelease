@@ -58,9 +58,6 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
   const [isDeletingStudents, setIsDeletingStudents] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
 
-  const [selectedConsentStudentId, setSelectedConsentStudentId] = useState("");
-  const [isClearingConsentVideos, setIsClearingConsentVideos] = useState(false);
-
   useEffect(() => {
     if (isUnlocked && students.length === 0 && refreshStudents) {
       setLoadingData(true);
@@ -218,37 +215,6 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
       alert("Error clearing permissions: " + e.message);
     } finally {
       setIsClearingPermissions(false);
-    }
-  };
-
-  const handleClearConsentVideos = async () => {
-    if (!selectedConsentStudentId) return alert("Please select a student first.");
-    
-    // Sort students by name for simple lookup
-    const studentObj = students.find((s: any) => (s.id || s._id) === selectedConsentStudentId);
-    const studentName = studentObj ? studentObj.name : "the student";
-
-    const confirmMsg = `🚨 WARNING: This will permanently delete ALL Parent Consent Videos for ${studentName} from Google Drive and remove their link references from the database.\n\nAre you absolutely sure you want to proceed?`;
-    if (!await showConfirm(confirmMsg)) return;
-
-    setIsClearingConsentVideos(true);
-    try {
-      const res = await fetch("/api/admin/clean-consent-videos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId: selectedConsentStudentId })
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert(data.message);
-        setSelectedConsentStudentId("");
-      } else {
-        alert("Error: " + data.error);
-      }
-    } catch (e: any) {
-      alert("Error clearing consent videos: " + e.message);
-    } finally {
-      setIsClearingConsentVideos(false);
     }
   };
 
@@ -460,46 +426,6 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
           <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100 mt-4">
             <p className="text-[10px] text-emerald-700 font-black leading-relaxed italic">
               Use this to remove test permission logs (optional date/hostel filters).
-            </p>
-          </div>
-        </div>
-
-        {/* Parent Consent Video Cleanup */}
-        <div className="bg-white p-6 rounded-xl border border-indigo-200 shadow-sm space-y-4 flex flex-col justify-between">
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Parent Consent Video Cleanup</label>
-              <p className="text-[11px] text-gray-500 font-bold">Permanently delete a student's parent consent videos from Google Drive and database records.</p>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Select Student</label>
-              <select
-                value={selectedConsentStudentId}
-                onChange={(e) => setSelectedConsentStudentId(e.target.value)}
-                className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
-              >
-                <option value="">Choose a student...</option>
-                {students.map((s: any) => (
-                  <option key={s.id || s._id} value={s.id || s._id}>
-                    {s.name} ({s.hostelName || 'No Hostel'} • {s.roomNumber || 'No Room'})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              onClick={handleClearConsentVideos}
-              disabled={isClearingConsentVideos || !selectedConsentStudentId}
-              className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 disabled:opacity-50 text-xs cursor-pointer"
-            >
-              {isClearingConsentVideos ? "⏳ DELETING CONSENT VIDEOS..." : "🗑️ DELETE PARENT CONSENT VIDEOS"}
-            </button>
-          </div>
-
-          <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 mt-4">
-            <p className="text-[10px] text-indigo-700 font-black leading-relaxed italic">
-              Use this to remove test/obsolete consent video recordings from Google Drive and DB.
             </p>
           </div>
         </div>
@@ -865,6 +791,34 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     setPlaybackSpeed(1);
     setIsMuted(false);
   };
+
+  useEffect(() => {
+    if (activeConsentVideoUrl) {
+      const playVideo = async () => {
+        // Wait briefly for the DOM ref to be set
+        await new Promise(r => setTimeout(r, 150));
+        if (consentVideoRef.current) {
+          try {
+            await consentVideoRef.current.play();
+            setIsPlaying(true);
+          } catch (err) {
+            console.warn("Autoplay with sound blocked on mobile, retrying muted...", err);
+            if (consentVideoRef.current) {
+              consentVideoRef.current.muted = true;
+              setIsMuted(true);
+              try {
+                await consentVideoRef.current.play();
+                setIsPlaying(true);
+              } catch (err2) {
+                console.error("Muted autoplay failed:", err2);
+              }
+            }
+          }
+        }
+      };
+      playVideo();
+    }
+  }, [activeConsentVideoUrl]);
 
   const getEmbedUrl = (url: string) => {
     if (!url) return "";
@@ -10686,9 +10640,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   <video 
                     ref={consentVideoRef}
                     src={activeConsentVideoUrl} 
-                    preload="auto"
                     autoPlay 
                     playsInline
+                    preload="auto"
+                    muted={isMuted}
                     onTimeUpdate={(e) => {
                       const video = e.target as HTMLVideoElement;
                       setCurrentTime(video.currentTime);
