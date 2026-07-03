@@ -3,6 +3,10 @@ import { NextRequest } from "next/server";
 export const runtime = "edge"; // ⚡ Bypasses Vercel's 4.5MB response size limit!
 export const dynamic = "force-dynamic";
 
+// Global cache variables for Google OAuth token
+let cachedToken: string | null = null;
+let tokenExpiry = 0; // Epoch timestamp in ms
+
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
@@ -27,23 +31,33 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        // 1. Get access token dynamically via OAuth2 refresh token endpoint
-        const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-                client_id: clientId,
-                client_secret: clientSecret,
-                refresh_token: refreshToken,
-                grant_type: "refresh_token"
-            })
-        });
+        let accessToken = cachedToken;
+        const now = Date.now();
 
-        const tokenData = await tokenResponse.json();
-        if (!tokenResponse.ok || !tokenData.access_token) {
-            throw new Error(tokenData.error_description || "Failed to refresh access token");
+        // 1. Get access token dynamically via OAuth2 refresh token endpoint if not cached or near expiry (5 mins buffer)
+        if (!accessToken || now > tokenExpiry - 5 * 60 * 1000) {
+            console.log("🔑 [Proxy Stream API] Fetching new Google Drive access token...");
+            const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                    client_id: clientId,
+                    client_secret: clientSecret,
+                    refresh_token: refreshToken,
+                    grant_type: "refresh_token"
+                })
+            });
+
+            const tokenData = await tokenResponse.json();
+            if (!tokenResponse.ok || !tokenData.access_token) {
+                throw new Error(tokenData.error_description || "Failed to refresh access token");
+            }
+            accessToken = tokenData.access_token;
+            cachedToken = accessToken;
+            const expiresIn = (tokenData.expires_in || 3600) * 1000;
+            tokenExpiry = now + expiresIn;
+            console.log(`🔑 [Proxy Stream API] Cached access token refreshed. Expires in ${tokenData.expires_in}s.`);
         }
-        const accessToken = tokenData.access_token;
 
         // 2. Fetch the file media stream from Google Drive (passing browser's Range headers directly!)
         const driveResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {

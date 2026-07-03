@@ -10686,6 +10686,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   <video 
                     ref={consentVideoRef}
                     src={activeConsentVideoUrl} 
+                    preload="auto"
                     autoPlay 
                     playsInline
                     onTimeUpdate={(e) => {
