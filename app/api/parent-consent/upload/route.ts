@@ -12,20 +12,24 @@ async function uploadToGoogleDrive(
   leaveId: string,
   studentSlug: string
 ): Promise<string> {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKeyRaw = process.env.GOOGLE_PRIVATE_KEY;
   const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-  if (!clientId || !clientSecret || !refreshToken || !folderId) {
+  if (!clientEmail || !privateKeyRaw || !folderId) {
     throw new Error(
-      "Google Drive OAuth2 is not configured. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, and GOOGLE_DRIVE_FOLDER_ID."
+      "Google Drive Service Account is not configured. Set GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, and GOOGLE_DRIVE_FOLDER_ID."
     );
   }
 
-  const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
-  oauth2Client.setCredentials({ refresh_token: refreshToken });
-  const drive = google.drive({ version: "v3", auth: oauth2Client });
+  const privateKey = privateKeyRaw.replace(/\\n/g, "\n");
+  const auth = new google.auth.JWT(
+    clientEmail,
+    null,
+    privateKey,
+    ["https://www.googleapis.com/auth/drive"]
+  );
+  const drive = google.drive({ version: "v3", auth });
 
   const originalName = videoFile.name || "";
   const fileExt = originalName.endsWith(".mp4") ? "mp4" : "webm";

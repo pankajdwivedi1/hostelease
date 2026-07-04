@@ -1,43 +1,45 @@
 import { NextRequest } from "next/server";
+import { google } from "googleapis";
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 let cachedAccessToken: { token: string; expiresAt: number } | null = null;
 
-async function getAccessToken(
-  clientId: string,
-  clientSecret: string,
-  refreshToken: string
-): Promise<string> {
+async function getAccessToken(): Promise<string> {
   const now = Date.now();
   if (cachedAccessToken && cachedAccessToken.expiresAt > now + 60_000) {
     return cachedAccessToken.token;
   }
 
-  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: "refresh_token",
-    }),
-  });
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKeyRaw = process.env.GOOGLE_PRIVATE_KEY;
 
-  const tokenData = await tokenResponse.json();
-  if (!tokenResponse.ok || !tokenData.access_token) {
-    throw new Error(tokenData.error_description || "Failed to refresh access token");
+  if (!clientEmail || !privateKeyRaw) {
+    throw new Error("Missing Google Service Account environment variables.");
   }
 
-  const expiresInMs = (tokenData.expires_in ?? 3600) * 1000;
+  const privateKey = privateKeyRaw.replace(/\\n/g, "\n");
+  const auth = new google.auth.JWT(
+    clientEmail,
+    null,
+    privateKey,
+    ["https://www.googleapis.com/auth/drive"]
+  );
+
+  const credentials = await auth.authorize();
+  const accessToken = credentials.access_token;
+
+  if (!accessToken) {
+    throw new Error("Failed to generate access token for Google Service Account");
+  }
+
+  // Token expires in 3600 seconds typically. Let's cache it for 50 minutes.
   cachedAccessToken = {
-    token: tokenData.access_token,
-    expiresAt: now + expiresInMs,
+    token: accessToken,
+    expiresAt: now + 50 * 60 * 1000,
   };
 
-  return tokenData.access_token;
+  return accessToken;
 }
 
 export async function GET(request: NextRequest) {
@@ -52,19 +54,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
-
-    if (!clientId || !clientSecret || !refreshToken) {
-      console.error("❌ [Proxy Stream API] Missing OAuth2 configuration.");
-      return new Response(JSON.stringify({ error: "OAuth2 credentials not configured" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const accessToken = await getAccessToken(clientId, clientSecret, refreshToken);
+    const accessToken = await getAccessToken();
 
     const rangeHeader = request.headers.get("range");
     const driveHeaders: Record<string, string> = {
