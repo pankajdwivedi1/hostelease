@@ -283,25 +283,30 @@ export default function ParentConsentClient({
                     </div>
                 ) : (
                     <>
-                        {/* Dynamic bilingual text card */}
-                        {/* Dynamic bilingual text card */}
-                        <div className="bg-slate-900/60 border border-slate-800/50 rounded-2xl p-5 space-y-4">
-                            <div className="text-[10px] font-black uppercase tracking-wider text-indigo-400 flex justify-between items-center gap-4 border-b border-slate-800/40 pb-3">
-                                <span>📜 Read script aloud / जोर से पढ़ें</span>
-                                <span className="text-slate-400 whitespace-nowrap text-right shrink-0">Leave ID: {leaveId.slice(0, 8)}</span>
+                        {/* Dynamic bilingual text container (no outer card border/bg) */}
+                        <div className="space-y-4 py-2">
+                            <div className="text-[11px] uppercase tracking-wider text-slate-300 flex justify-between items-center gap-4">
+                                <span className="font-extrabold text-indigo-400 flex items-center gap-1.5">
+                                    📜 Read script aloud / जोर से पढ़ें
+                                </span>
+                                <span className="bg-slate-900/60 border border-slate-800/80 px-3 py-1 rounded-full text-[10px] text-slate-400 font-bold font-mono whitespace-nowrap shrink-0 shadow-sm">
+                                    Leave ID: <span className="text-indigo-300 font-black">{leaveId.slice(0, 8)}</span>
+                                </span>
                             </div>
+
+                            <div className="h-px bg-slate-800/60" />
 
                             {/* Hindi Script */}
                             <div className="leading-relaxed text-sm text-slate-100 text-justify">
-                                <span className="text-xs font-bold text-indigo-400 block mb-1">हिंदी में:</span>
+                                <span className="text-xs font-black text-indigo-400 block mb-1">हिंदी में:</span>
                                 "नमस्कार। मेरा नाम <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{parentName}</span> है। मैं अपने पुत्र/पुत्री <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{studentName}</span> को दिनांक <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{startDate}</span> से दिनांक <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{endDate}</span> तक अवकाश लेने की अनुमति देता/देती हूँ। इस अवधि के दौरान मेरे बच्चे की जिम्मेदारी मेरी होगी। कृपया मेरे बच्चे का अवकाश स्वीकृत करने की कृपा करें। धन्यवाद।"
                             </div>
 
-                            <hr className="border-slate-800/40" />
+                            <div className="h-px bg-slate-800/30" />
 
                             {/* English Script */}
                             <div className="leading-relaxed text-sm text-slate-300 text-justify">
-                                <span className="text-xs font-bold text-indigo-400 block mb-1">In English:</span>
+                                <span className="text-xs font-black text-indigo-400 block mb-1">In English:</span>
                                 "Namaskar. My name is <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{parentName}</span>. I grant permission for my son/daughter <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{studentName}</span> to take leave from <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{startDate}</span> to <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{endDate}</span>. I will be responsible for my child during this period. Please kindly approve my child's leave. Thank you."
                             </div>
                         </div>
