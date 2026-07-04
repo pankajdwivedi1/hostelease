@@ -22,13 +22,12 @@ async function uploadToGoogleDrive(
     );
   }
 
-  const privateKey = privateKeyRaw.replace(/\\n/g, "\n");
-  const auth = new google.auth.JWT(
-    clientEmail,
-    null,
-    privateKey,
-    ["https://www.googleapis.com/auth/drive"]
-  );
+  const privateKey = privateKeyRaw.replace(/\\n/g, "\n").replace(/^"|"$/g, "");
+  const auth = new google.auth.JWT({
+    email: clientEmail,
+    key: privateKey,
+    scopes: ["https://www.googleapis.com/auth/drive"]
+  });
   const drive = google.drive({ version: "v3", auth });
 
   const originalName = videoFile.name || "";
