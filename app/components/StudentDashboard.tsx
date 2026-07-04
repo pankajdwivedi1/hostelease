@@ -2971,7 +2971,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 const cleanName = studentProfile?.name ? studentProfile.name.trim().replace(/\s+/g, '_') : 'Student';
                                                                 const cleanErp = studentProfile?.registrationId ? studentProfile.registrationId.trim() : '';
                                                                 const slug = cleanErp ? `${cleanName}_${cleanErp}` : cleanName;
-                                                                const shareUrl = `https://www.hosteleaze.com/parent-consent/${slug}--${latestPermission._id}`;
+                                                                const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.hosteleaze.com';
+                                                                const shareUrl = `${origin}/parent-consent/${slug}--${latestPermission._id}`;
                                                                 const text = `नमस्कार पिताजी/माताजी, कृपया इस लिंक पर क्लिक करके मेरी छुट्टी (Leave) के लिए अपना सहमति वीडियो रिकॉर्ड करें:\n\n${shareUrl}`;
                                                                 const phone = studentProfile.parentPhone ? (studentProfile.parentPhone.startsWith('91') ? studentProfile.parentPhone : '91' + studentProfile.parentPhone) : '';
                                                                 window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}`, "_blank");
