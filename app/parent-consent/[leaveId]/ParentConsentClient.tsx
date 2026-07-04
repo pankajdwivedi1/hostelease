@@ -285,11 +285,11 @@ export default function ParentConsentClient({
                     <>
                         {/* Dynamic bilingual text container (no outer card border/bg) */}
                         <div className="space-y-4 py-2">
-                            <div className="text-[11px] uppercase tracking-wider text-slate-300 flex justify-between items-center gap-4">
-                                <span className="font-extrabold text-indigo-400 flex items-center gap-1.5">
+                            <div className="text-[11px] uppercase tracking-wider text-slate-300 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                                <span className="font-extrabold text-indigo-400 whitespace-nowrap">
                                     📜 Read script aloud / जोर से पढ़ें
                                 </span>
-                                <span className="bg-slate-900/60 border border-slate-800/80 px-3 py-1 rounded-full text-[10px] text-slate-400 font-bold font-mono whitespace-nowrap shrink-0 shadow-sm">
+                                <span className="bg-slate-900/60 border border-slate-800/80 px-3 py-1 rounded-full text-[10px] text-slate-400 font-bold font-mono whitespace-nowrap self-end sm:self-auto shadow-sm">
                                     Leave ID: <span className="text-indigo-300 font-black">{leaveId.slice(0, 8)}</span>
                                 </span>
                             </div>
