@@ -3,6 +3,58 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Camera, Video, Square, RefreshCw, UploadCloud, CheckCircle2, AlertTriangle, ShieldCheck, Play, Pause } from "lucide-react";
 
+const CONSENT_MIME_TYPES = [
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+    "video/mp4",
+];
+
+function pickConsentMimeType(): { mimeType: string; fileExt: string } {
+    for (const mimeType of CONSENT_MIME_TYPES) {
+        if (MediaRecorder.isTypeSupported(mimeType)) {
+            return {
+                mimeType,
+                fileExt: mimeType.startsWith("video/mp4") ? "mp4" : "webm",
+            };
+        }
+    }
+    return { mimeType: "video/webm", fileExt: "webm" };
+}
+
+function isMobileDevice(): boolean {
+    if (typeof window === "undefined") return false;
+    return (
+        window.matchMedia("(max-width: 767px)").matches ||
+        /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)
+    );
+}
+
+function getCameraConstraints(isMobile: boolean): MediaStreamConstraints {
+    if (isMobile) {
+        return {
+            video: {
+                facingMode: "user",
+                width: { ideal: 720 },
+                height: { ideal: 1280 },
+                aspectRatio: { ideal: 9 / 16 },
+                frameRate: { ideal: 24 },
+            },
+            audio: true,
+        };
+    }
+
+    return {
+        video: {
+            facingMode: "user",
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 15 },
+        },
+        audio: true,
+    };
+}
+
 interface ParentConsentClientProps {
     leaveId: string;
     studentName: string;
@@ -27,6 +79,7 @@ export default function ParentConsentClient({
     const [errorMessage, setErrorMessage] = useState("");
     const [videoUrl, setVideoUrl] = useState<string | null>(null);
     const [stream, setStream] = useState<MediaStream | null>(null);
+    const [isMobile, setIsMobile] = useState(false);
 
     const videoPreviewRef = useRef<HTMLVideoElement>(null);
     const videoPlaybackRef = useRef<HTMLVideoElement>(null);
@@ -36,6 +89,7 @@ export default function ParentConsentClient({
 
     // Clean up streams on unmount
     useEffect(() => {
+        setIsMobile(isMobileDevice());
         return () => {
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
@@ -56,18 +110,6 @@ export default function ParentConsentClient({
         }
     }, [stream, recordingState]);
 
-    // Auto-play review video with audio when it loads
-    useEffect(() => {
-        if (recordingState === "review" && videoPlaybackRef.current) {
-            const video = videoPlaybackRef.current;
-            video.muted = false;
-            video.volume = 1.0;
-            video.play().catch(err => {
-                console.warn("Review auto-play failed/blocked:", err);
-            });
-        }
-    }, [recordingState, videoUrl]);
-
     // Request camera permission and start preview
     const startCamera = async () => {
         try {
@@ -76,20 +118,10 @@ export default function ParentConsentClient({
                 stream.getTracks().forEach(track => track.stop());
             }
 
-            // Constraints optimized for HD clear video and high quality clear audio (targeting 3MB-4MB for 24s)
-            const mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: "user",
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                    frameRate: { ideal: 24 }
-                },
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
-            });
+            // Portrait on mobile, landscape on desktop — avoids black side bars
+            const mediaStream = await navigator.mediaDevices.getUserMedia(
+                getCameraConstraints(isMobileDevice())
+            );
 
             setStream(mediaStream);
             if (videoPreviewRef.current) {
@@ -115,20 +147,13 @@ export default function ParentConsentClient({
         if (!stream) return;
 
         chunksRef.current = [];
-        let selectedMimeType = "video/mp4";
-        if (MediaRecorder.isTypeSupported("video/mp4")) {
-            selectedMimeType = "video/mp4";
-        } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")) {
-            selectedMimeType = "video/webm;codecs=vp8,opus";
-        } else {
-            selectedMimeType = "video/webm";
-        }
+        const { mimeType: selectedMimeType } = pickConsentMimeType();
 
         try {
             const mediaRecorder = new MediaRecorder(stream, {
                 mimeType: selectedMimeType,
-                videoBitsPerSecond: 1200000, // 1.2 Mbps (high quality clear HD video)
-                audioBitsPerSecond: 128000   // 128 kbps (crystal clear CD-quality audio)
+                videoBitsPerSecond: 300000, // 300 kbps (low bitrate, clear enough for consent)
+                audioBitsPerSecond: 64000   // 64 kbps (clear mono audio)
             });
 
             mediaRecorder.ondataavailable = (e) => {
@@ -200,19 +225,7 @@ export default function ParentConsentClient({
         setErrorMessage("");
 
         try {
-            // Find correct mime type
-            let fileExt = "mp4";
-            let mimeType = "video/mp4";
-            if (MediaRecorder.isTypeSupported("video/mp4")) {
-                mimeType = "video/mp4";
-                fileExt = "mp4";
-            } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")) {
-                mimeType = "video/webm;codecs=vp8,opus";
-                fileExt = "webm";
-            } else {
-                mimeType = "video/webm";
-                fileExt = "webm";
-            }
+            const { mimeType, fileExt } = pickConsentMimeType();
 
             const videoBlob = new Blob(chunksRef.current, { type: mimeType });
             const videoFile = new File([videoBlob], `consent_${leaveId}.${fileExt}`, { type: mimeType });
@@ -320,8 +333,14 @@ export default function ParentConsentClient({
                         {/* Camera Recorder Section */}
                         <div className="space-y-4">
                             
-                            {/* Video Viewport Container */}
-                            <div className="relative aspect-video rounded-3xl bg-slate-900 border border-slate-800/80 overflow-hidden shadow-inner flex items-center justify-center">
+                            {/* Video Viewport Container — portrait on mobile */}
+                            <div
+                                className={`relative rounded-3xl bg-slate-900 border border-slate-800/80 overflow-hidden shadow-inner flex items-center justify-center mx-auto w-full ${
+                                    isMobile
+                                        ? "aspect-[9/16] max-w-[340px]"
+                                        : "aspect-video max-w-full"
+                                }`}
+                            >
                                 
                                 {/* 1. Active Camera Preview */}
                                 {(recordingState === "idle" || recordingState === "recording") && (
@@ -340,22 +359,16 @@ export default function ParentConsentClient({
                                         ref={videoPlaybackRef}
                                         src={videoUrl}
                                         controls
-                                        autoPlay
                                         playsInline
                                         onLoadedMetadata={(e) => {
                                             const video = e.target as HTMLVideoElement;
-                                            video.muted = false; // ensure sound is enabled
-                                            video.volume = 1.0;
                                             if (video.duration === Infinity) {
                                                 // Workaround for WebM MediaRecorder duration bug
                                                 video.currentTime = 99.99;
                                                 video.onseeked = () => {
                                                     video.onseeked = null;
                                                     video.currentTime = 0;
-                                                    video.play().catch(err => console.log("Auto-play failed:", err));
                                                 };
-                                            } else {
-                                                video.play().catch(err => console.log("Auto-play failed:", err));
                                             }
                                         }}
                                         className="w-full h-full object-cover"
