@@ -97,7 +97,13 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
     const originalName = videoFile.name || "";
     const fileExt = originalName.endsWith(".mp4") ? "mp4" : "webm";
-    const contentType = videoFile.type || "video/webm";
+    let contentType = videoFile.type || "video/webm";
+    // Normalize Content-Type to avoid issues with codec parameters in AVPlayer/Safari (e.g. video/webm;codecs=vp9,opus)
+    if (contentType.includes("webm")) {
+      contentType = "video/webm";
+    } else if (contentType.includes("mp4")) {
+      contentType = "video/mp4";
+    }
 
     let consentUrl: string;
     let storage: "r2" | "google_drive";

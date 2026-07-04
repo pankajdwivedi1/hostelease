@@ -113,7 +113,7 @@ export default function ParentConsentClient({
     }, [stream, recordingState]);
 
     // Request camera permission and start preview
-    const startCamera = async () => {
+    const startCamera = async (): Promise<MediaStream | null> => {
         try {
             setErrorMessage("");
             if (stream) {
@@ -142,29 +142,30 @@ export default function ParentConsentClient({
 
             setReviewAspectRatio(null);
             setRecordingState("idle");
+            return mediaStream;
         } catch (err: any) {
             console.error("Camera access failed:", err);
             setErrorMessage("असुविधा के लिए खेद है। कैमरा और माइक्रोफ़ोन एक्सेस की अनुमति नहीं मिली। कृपया अपने ब्राउज़र सेटिंग्स में कैमरा अनुमति की जांच करें। (Camera or Microphone permission denied. Please allow camera access in browser settings.)");
             setRecordingState("error");
+            return null;
         }
     };
 
-    // Trigger start camera on load if not already submitted
+    // Trigger start camera logic handled via user action to avoid mount lag
     useEffect(() => {
-        if (!parentConsentUrl) {
-            startCamera();
-        }
+        // Camera will be set up when user taps button
     }, []);
 
     // Start video recording
-    const startRecording = () => {
-        if (!stream) return;
+    const startRecording = (activeStream?: MediaStream) => {
+        const currentStream = activeStream || stream;
+        if (!currentStream) return;
 
         chunksRef.current = [];
         const { mimeType: selectedMimeType } = pickConsentMimeType();
 
         try {
-            const mediaRecorder = new MediaRecorder(stream, {
+            const mediaRecorder = new MediaRecorder(currentStream, {
                 mimeType: selectedMimeType,
                 videoBitsPerSecond: 300000, // 300 kbps (low bitrate, clear enough for consent)
                 audioBitsPerSecond: 64000   // 64 kbps (clear mono audio)
@@ -210,6 +211,17 @@ export default function ParentConsentClient({
             console.error("Recorder initialization failed:", err);
             setErrorMessage("वीडियो रिकॉर्डर शुरू करने में विफल। (Failed to initialize video recorder.)");
             setRecordingState("error");
+        }
+    };
+
+    // Auto-recording helper on click
+    const handleStartClick = async () => {
+        const mediaStream = await startCamera();
+        if (mediaStream) {
+            // Tiny timeout to warm up the camera hardware
+            setTimeout(() => {
+                startRecording(mediaStream);
+            }, 300);
         }
     };
 
@@ -335,7 +347,7 @@ export default function ParentConsentClient({
                                     aspectRatio: reviewAspectRatio ?? previewAspectRatio ?? undefined
                                 }}
                             >
-                                {(recordingState === "idle" || recordingState === "recording") && (
+                                {(recordingState === "idle" || recordingState === "recording") && stream && (
                                     <video
                                         ref={videoPreviewRef}
                                         autoPlay
@@ -368,9 +380,19 @@ export default function ParentConsentClient({
                                     />
                                 )}
 
-                                {(recordingState === "error" || (!stream && recordingState !== "review")) && (
+                                {recordingState === "error" && (
+                                    <div className="text-center p-6 text-slate-400 space-y-2">
+                                        <AlertTriangle className="w-12 h-12 mx-auto stroke-[1.5] text-rose-500" />
+                                        <p className="text-xs font-bold uppercase tracking-wider text-rose-400">कैमरा/माइक त्रुटि (Camera/Mic Error)</p>
+                                        <p className="text-[11px] leading-relaxed max-w-xs mx-auto">
+                                            कैमरा या माइक्रोफ़ोन कनेक्ट करने में समस्या हुई। कृपया अपने ब्राउज़र की अनुमति जांचें।
+                                        </p>
+                                    </div>
+                                )}
+
+                                {recordingState === "idle" && !stream && (
                                     <div className="text-center p-6 text-slate-500">
-                                        <Camera className="w-12 h-12 mx-auto stroke-[1.5] mb-2 text-slate-600" />
+                                        <Camera className="w-12 h-12 mx-auto stroke-[1.5] mb-2 text-slate-600 animate-pulse" />
                                         <p className="text-xs font-semibold">कैमरा सक्रिय नहीं है (Camera is offline)</p>
                                     </div>
                                 )}
@@ -386,10 +408,19 @@ export default function ParentConsentClient({
                             <div className="flex flex-col items-center justify-center gap-3">
                                 {recordingState === "idle" && stream && (
                                     <button
-                                        onClick={startRecording}
+                                        onClick={() => startRecording()}
                                         className="w-full max-w-md px-8 py-3.5 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg shadow-red-500/20 hover:shadow-red-500/30 transition-all flex items-center justify-center gap-2 border border-red-500/20"
                                     >
-                                        <Video className="w-4 h-4" /> Start Consent Recording
+                                        <Video className="w-4 h-4" /> Start Recording
+                                    </button>
+                                )}
+
+                                {recordingState === "idle" && !stream && (
+                                    <button
+                                        onClick={handleStartClick}
+                                        className="w-full max-w-md px-8 py-3.5 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg shadow-red-500/20 hover:shadow-red-500/30 transition-all flex items-center justify-center gap-2 border border-red-500/20 hover:scale-[1.01] active:scale-[0.99]"
+                                    >
+                                        <Video className="w-4 h-4 animate-pulse" /> Start Recording
                                     </button>
                                 )}
 

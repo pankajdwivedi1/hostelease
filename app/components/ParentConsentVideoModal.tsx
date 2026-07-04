@@ -83,7 +83,7 @@ export default function ParentConsentVideoModal({
 
     const handleCanPlay = () => {
       setIsLoading(false);
-      video.muted = false;
+      video.muted = isMuted;
       video.volume = 1;
     };
 
@@ -92,13 +92,19 @@ export default function ParentConsentVideoModal({
       setLoadError("Failed to load consent video. Please try again.");
     };
 
+    const handleVolumeChange = () => {
+      setIsMuted(video.muted || video.volume === 0);
+    };
+
     video.addEventListener("canplay", handleCanPlay, { once: true });
     video.addEventListener("error", handleError, { once: true });
+    video.addEventListener("volumechange", handleVolumeChange);
     video.load();
 
     return () => {
       video.removeEventListener("canplay", handleCanPlay);
       video.removeEventListener("error", handleError);
+      video.removeEventListener("volumechange", handleVolumeChange);
       video.pause();
     };
   }, [url]);
@@ -208,7 +214,7 @@ export default function ParentConsentVideoModal({
 
               <a
                 href={url}
-                download="parent-consent-video.webm"
+                download={url.includes(".mp4") ? "parent-consent-video.mp4" : "parent-consent-video.webm"}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="absolute bottom-4 right-4 bg-slate-900/80 hover:bg-slate-900 text-white p-2.5 rounded-full transition-all cursor-pointer shadow-lg hover:scale-105 active:scale-95 border border-slate-700/50 flex items-center justify-center backdrop-blur-sm z-20"
@@ -288,11 +294,24 @@ export default function ParentConsentVideoModal({
                       if (isPlaying) {
                         videoRef.current.pause();
                       } else {
+                        // Attempt to play with user's desired volume/mute setting
+                        videoRef.current.muted = isMuted;
                         videoRef.current
                           .play()
-                          .catch(() =>
-                            setLoadError("Unable to play video. Please try again.")
-                          );
+                          .catch((err) => {
+                            console.warn("Playback failed or blocked:", err);
+                            // Fallback to muted playback if blocked by browser policies
+                            if (videoRef.current && !isMuted) {
+                              videoRef.current.muted = true;
+                              setIsMuted(true);
+                              videoRef.current.play().catch((playErr) => {
+                                console.error("Muted playback failed too:", playErr);
+                                setLoadError("Unable to play video. Please try again.");
+                              });
+                            } else {
+                              setLoadError("Unable to play video. Please try again.");
+                            }
+                          });
                       }
                     }
                   }}

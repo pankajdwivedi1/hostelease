@@ -80,12 +80,17 @@ export async function GET(request: NextRequest) {
     );
 
     const headers = new Headers();
-    const contentType = driveResponse.headers.get("content-type") || "";
-    if (contentType.includes("video") || contentType.includes("octet-stream")) {
-      headers.set("Content-Type", contentType);
+    let contentType = driveResponse.headers.get("content-type") || "";
+    if (contentType.includes("mp4")) {
+      contentType = "video/mp4";
+    } else if (contentType.includes("webm")) {
+      contentType = "video/webm";
+    } else if (contentType.includes("quicktime") || contentType.includes("mov")) {
+      contentType = "video/mp4";
     } else {
-      headers.set("Content-Type", "video/webm");
+      contentType = "video/webm";
     }
+    headers.set("Content-Type", contentType);
 
     const contentRange = driveResponse.headers.get("content-range");
     if (contentRange) headers.set("Content-Range", contentRange);
