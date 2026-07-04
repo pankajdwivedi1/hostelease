@@ -247,6 +247,15 @@ export default function ParentConsentClient({
         }
     };
 
+    // Close window / browser tab handler
+    const handleCloseWindow = () => {
+        if (typeof window !== "undefined") {
+            window.close();
+            // Fallback in case window.close() is blocked by browser security rules
+            alert("सहमति सुरक्षित रूप से स्वीकृत हो चुकी है। अब आप इस ब्राउज़र टैब को बंद कर सकते हैं। (Consent submitted successfully. You can now close this tab/browser.)");
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gradient-to-tr from-slate-900 via-indigo-950 to-slate-900 text-slate-100 flex flex-col items-center justify-center p-4">
             
@@ -267,19 +276,27 @@ export default function ParentConsentClient({
             <div className="bg-slate-950/40 backdrop-blur-md border border-slate-800/80 w-full max-w-xl rounded-3xl p-5 md:p-6 shadow-2xl space-y-6">
 
                 {recordingState === "success" ? (
-                    <div className="text-center py-10 space-y-4">
-                        <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto shadow-md">
-                            <CheckCircle2 className="w-10 h-10" />
+                    <div className="text-center py-10 space-y-6 flex flex-col items-center">
+                        <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shadow-md">
+                            <CheckCircle2 className="w-10 h-10 animate-bounce" />
                         </div>
-                        <div>
-                            <h2 className="text-xl font-bold text-white">सहमति स्वीकृत! (Consent Submitted!)</h2>
-                            <p className="text-xs text-slate-400 mt-2 max-w-md mx-auto leading-relaxed">
-                                आपका सहमति वीडियो सुरक्षित रूप से अपलोड कर दिया गया है। हॉस्टल वार्डन को सूचित कर दिया गया है और छुट्टी जल्द ही स्वीकृत कर दी जाएगी। धन्यवाद।
+                        <div className="space-y-3 w-full">
+                            <h2 className="text-[13px] min-[375px]:text-[15px] sm:text-lg md:text-xl font-black text-white whitespace-nowrap tracking-tight">
+                                सहमति स्वीकृत! (Consent Submitted!)
+                            </h2>
+                            <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed px-2 text-justify min-[480px]:text-center">
+                                आपका सहमति वीडियो सुरक्षित रूप से दर्ज कर लिया गया है। हॉस्टल वार्डन को सत्यापन के लिए सूचित कर दिया गया है और आपकी अवकाश अनुमति जल्द ही स्वीकृत कर दी जाएगी। धन्यवाद।
                             </p>
-                            <p className="text-[11px] text-slate-500 mt-1">
-                                (Your video has been uploaded. The hostel warden is notified and will review it shortly. You can close this window now.)
+                            <p className="text-[11px] text-slate-500 max-w-sm mx-auto leading-relaxed px-4">
+                                (Your consent video has been securely uploaded. The hostel warden has been notified for verification and your leave request will be processed shortly.)
                             </p>
                         </div>
+                        <button
+                            onClick={handleCloseWindow}
+                            className="w-full max-w-xs px-6 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all flex items-center justify-center gap-2 border border-emerald-500/20 hover:scale-[1.01] active:scale-[0.99] mt-2"
+                        >
+                            Close Tab / विंडो बंद करें
+                        </button>
                     </div>
                 ) : (
                     <>
