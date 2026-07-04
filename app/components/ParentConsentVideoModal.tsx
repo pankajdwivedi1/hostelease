@@ -81,21 +81,12 @@ export default function ParentConsentVideoModal({
     setPlaybackSpeed(1);
     setIsMuted(false);
 
-    const tryPlayWithSound = () => {
+    const handleCanPlay = () => {
       setIsLoading(false);
-      video.volume = 1;
       video.muted = false;
-      setIsMuted(false);
-      video.play().catch(() => {
-        video.muted = true;
-        setIsMuted(true);
-        video.play().catch(() => {
-          setLoadError("Tap play to start the video.");
-        });
-      });
+      video.volume = 1;
     };
 
-    const handleCanPlay = () => tryPlayWithSound();
     const handleError = () => {
       setIsLoading(false);
       setLoadError("Failed to load consent video. Please try again.");
