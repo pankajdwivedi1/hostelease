@@ -2663,7 +2663,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const fetchAttendanceLogs = async () => {
     try {
       setAttendanceLogsLoading(true);
-      const url = new URL(`/api/admin/attendance?date=${selectedDate}&hostelName=${attendanceHostelFilter}&_t=${Date.now()}`, window.location.origin);
+      const activeFilter = currentTab === "rooms" ? "all" : attendanceHostelFilter;
+      const url = new URL(`/api/admin/attendance?date=${selectedDate}&hostelName=${activeFilter}&_t=${Date.now()}`, window.location.origin);
       const response = await fetch(url.href);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
@@ -2954,9 +2955,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
     loadData();
 
+    fetchAttendanceTimeSettings();
+
     if (title === "Super Admin Dashboard") {
       fetchHostelLocations();
-      fetchAttendanceTimeSettings();
       fetchSystemSettings();
     }
   }, [title]);
@@ -2966,7 +2968,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     fetchAttendanceSummary();
 
     if (currentTab === "attendance" || currentTab === "rooms") {
-      if (currentTab === "attendance") fetchAttendanceLogs();
+      fetchAttendanceLogs();
       if (students.length === 0) {
         fetchStudents();
       } else {
@@ -4006,6 +4008,33 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     if (statuses.includes('gpass')) return { bg: 'bg-yellow-50/50 border-yellow-250 hover:bg-yellow-100/50', border: 'border-yellow-400', text: 'text-yellow-800', badge: 'bg-yellow-500 text-white', color: '#eab308' };
     return { bg: 'bg-emerald-50 border-emerald-250 hover:bg-emerald-100/50', border: 'border-emerald-400', text: 'text-emerald-700', badge: 'bg-emerald-600 text-white', color: '#10b981' };
   };
+
+  // Present students today check for visual room dot indicators
+  const presentStudentIdsToday = useMemo(() => {
+    const ids = new Set<string>();
+    attendanceLogs.forEach((log: any) => {
+      if (log.status === "present") {
+        const sId = typeof log.studentId === "string" ? log.studentId : log.studentId?._id || log.studentId?.id;
+        if (sId) ids.add(sId.toString());
+      }
+    });
+    return ids;
+  }, [attendanceLogs]);
+
+  // Attendance timing window check
+  const isWithinAttendanceTime = useMemo(() => {
+    const start = attendanceTimeSettings.startTime || "21:00";
+    const end = attendanceTimeSettings.endTime || "22:30";
+    
+    const now = new Date();
+    // Offset by +5:30 for Indian Standard Time (IST)
+    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    const hours = istTime.getUTCHours().toString().padStart(2, '0');
+    const minutes = istTime.getUTCMinutes().toString().padStart(2, '0');
+    const currentTimeStr = `${hours}:${minutes}`;
+    
+    return currentTimeStr >= start && currentTimeStr <= end;
+  }, [attendanceTimeSettings]);
 
   // 4. Room Data Grouping
   const visualRoomsData = useMemo(() => {
@@ -6348,20 +6377,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
                                 </td>
                               </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {currentTab === 'rooms' && (
+                {currentTab === 'rooms' && (
                 <div className="space-y-6 animate-in fade-in duration-300">
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                     <div>
-                      <h2 className="text-lg font-bold text-foreground">Warden Visual Room Grid</h2>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-bold text-foreground">Warden Visual Room Grid</h2>
+                        {isWithinAttendanceTime && (
+                          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-bold animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                            Live Night Attendance
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-secondary">Monitor room occupancy and roommate statuses visually</p>
                     </div>
                     {/* Hostel Filter Dropdown */}
@@ -6387,63 +6424,78 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     </div>
                   ) : (
                     <div className="space-y-8">
-                      {visualRoomsData.map(({ floorName, rooms }) => (
-                        <div key={floorName} className="space-y-3">
-                          <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2">
-                            <span>🏢 {floorName}</span>
-                            <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">
-                              {rooms.length} {rooms.length === 1 ? 'Room' : 'Rooms'}
-                            </span>
-                          </h3>
+                      {visualRoomsData.map(({ floorName, rooms }) => {
+                        const totalStudentsOnFloor = rooms.reduce((acc, r) => acc + r.roommates.length, 0);
+                        return (
+                          <div key={floorName} className="space-y-3">
+                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2">
+                              <span>🏢 {floorName}</span>
+                              <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">
+                                {rooms.length} {rooms.length === 1 ? 'Room' : 'Rooms'}
+                              </span>
+                              <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold">
+                                {totalStudentsOnFloor} {totalStudentsOnFloor === 1 ? 'Student' : 'Students'}
+                              </span>
+                            </h3>
 
-                          <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-6 gap-1.5 md:gap-3">
-                            {rooms.map(({ roomNumber, roommates }) => {
-                              const style = getRoomStatusClass(roommates);
-                              return (
-                                <button
-                                  key={roomNumber}
-                                  onClick={() => {
-                                    setSelectedRoom(roomNumber);
-                                    setSelectedRoomStudents(roommates);
-                                  }}
-                                  className={`p-1 md:p-2 rounded-lg border md:border-2 text-left transition-all ${style.bg} ${style.border} active:scale-95 flex items-center justify-between min-h-[36px] md:min-h-[48px] shadow-sm relative overflow-hidden`}
-                                >
-                                  {/* Color bar indicator on top */}
-                                  <div className="absolute top-0 left-0 right-0 h-0.5 md:h-1" style={{ backgroundColor: style.color }} />
-                                  
-                                  <div className="flex items-center justify-between w-full mt-0.5 gap-1 min-w-0">
-                                    <div className="flex items-center gap-1 min-w-0 flex-1">
-                                      <span className={`text-[8px] sm:text-xs md:text-sm font-black truncate shrink-0 ${style.text}`} title={roomNumber}>
-                                        {roomNumber}
-                                      </span>
-                                      <div className="flex flex-wrap items-center gap-0.5 shrink-0">
-                                        {roommates.map((r, i) => {
-                                          const rStatus = getRoommateStatus(r);
-                                          return (
-                                            <div
-                                              key={r.id || i}
-                                              className={`w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full flex items-center justify-center border border-white text-[5px] md:text-[7px] font-black text-white shrink-0 ${
-                                                rStatus === 'in' ? 'bg-green-500' :
-                                                rStatus === 'hleave' ? 'bg-blue-500' : 'bg-yellow-500'
-                                              }`}
-                                              title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'H-LEAVE' : 'G-PASS'}`}
-                                            >
-                                              {r.name.slice(0, 1).toUpperCase()}
-                                            </div>
-                                          );
-                                        })}
+                            <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-6 gap-1.5 md:gap-3">
+                              {rooms.map(({ roomNumber, roommates }) => {
+                                const style = getRoomStatusClass(roommates);
+                                return (
+                                  <button
+                                    key={roomNumber}
+                                    onClick={() => {
+                                      setSelectedRoom(roomNumber);
+                                      setSelectedRoomStudents(roommates);
+                                    }}
+                                    className={`p-1 md:p-2 rounded-lg border md:border-2 text-left transition-all ${style.bg} ${style.border} active:scale-95 flex items-center justify-between min-h-[36px] md:min-h-[48px] shadow-sm relative overflow-hidden`}
+                                  >
+                                    {/* Color bar indicator on top */}
+                                    <div className="absolute top-0 left-0 right-0 h-0.5 md:h-1" style={{ backgroundColor: style.color }} />
+                                    
+                                    <div className="flex items-center justify-between w-full mt-0.5 gap-1 min-w-0">
+                                      <div className="flex items-center gap-1 min-w-0 flex-1">
+                                        <span className={`text-[8px] sm:text-xs md:text-sm font-black truncate shrink-0 ${style.text}`} title={roomNumber}>
+                                          {roomNumber}
+                                        </span>
+                                        <div className="flex flex-wrap items-end gap-0.5 shrink-0">
+                                          {roommates.map((r, i) => {
+                                            const rStatus = getRoommateStatus(r);
+                                            const studentIdStr = r.id || r._id;
+                                            const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString());
+                                            return (
+                                              <div key={r.id || i} className="flex flex-col items-center gap-0.5 shrink-0 relative">
+                                                <div
+                                                  className={`w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full flex items-center justify-center border border-white text-[5px] md:text-[7px] font-black text-white shrink-0 ${
+                                                    rStatus === 'in' ? 'bg-green-500' :
+                                                    rStatus === 'hleave' ? 'bg-blue-500' : 'bg-yellow-500'
+                                                  }`}
+                                                  title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'H-LEAVE' : 'G-PASS'}`}
+                                                >
+                                                  {r.name.slice(0, 1).toUpperCase()}
+                                                </div>
+                                                {hasMarkedAttendance && isWithinAttendanceTime && (
+                                                  <span 
+                                                    className="w-1 h-1 md:w-1.5 md:h-1.5 bg-blue-600 rounded-full animate-pulse shrink-0"
+                                                    title="Night Attendance Marked"
+                                                  />
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
                                       </div>
+                                      <span className="text-[8px] sm:text-xs md:text-sm font-black text-slate-500 shrink-0">
+                                        {roommates.length}BED
+                                      </span>
                                     </div>
-                                    <span className="text-[8px] sm:text-xs md:text-sm font-black text-slate-500 shrink-0">
-                                      {roommates.length}BED
-                                    </span>
-                                  </div>
-                                </button>
-                              );
-                            })}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 
