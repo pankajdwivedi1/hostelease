@@ -72,6 +72,7 @@ function LoginForm() {
     checkDeveloperSetup();
     
     if (searchParams.get("logout") === "success") {
+      document.cookie = "userType=; path=/; max-age=0; SameSite=Lax";
       setShowLogoutToast(true);
       showToast("You have successfully logged out.", "success");
       setTimeout(() => setShowLogoutToast(false), 5000);
@@ -332,6 +333,7 @@ function LoginForm() {
       }
 
       if (data.success) {
+        document.cookie = "userType=admin; path=/; max-age=86400; SameSite=Lax";
         localStorage.setItem("userType", "admin");
         router.push("/");
       }
@@ -392,10 +394,12 @@ function LoginForm() {
 
       if (data.success) {
         if (data.type === 'getpass') {
+          document.cookie = "userType=getpass; path=/; max-age=86400; SameSite=Lax";
           localStorage.setItem("userType", "getpass");
           router.push("/getpass");
           return;
         }
+        document.cookie = "userType=warden; path=/; max-age=86400; SameSite=Lax";
         localStorage.setItem("userType", "warden");
         localStorage.setItem("wardenHostelName", data.hostelName);
         localStorage.setItem("authorizedHostels", JSON.stringify(data.authorizedHostels));
@@ -436,6 +440,7 @@ function LoginForm() {
         if (!response.ok) throw new Error(data.error);
         
         // After successful init, login automatically
+        document.cookie = "userType=superadmin; path=/; max-age=86400; SameSite=Lax";
         localStorage.setItem("userType", "superadmin");
         router.push("/");
         return;
@@ -456,6 +461,7 @@ function LoginForm() {
       }
 
       if (data.success) {
+        document.cookie = "userType=superadmin; path=/; max-age=86400; SameSite=Lax";
         localStorage.setItem("userType", "superadmin");
         router.push("/");
       }

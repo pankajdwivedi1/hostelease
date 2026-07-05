@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
     try {
         const settings = await db.settings.get();
+        const cookieStore = await cookies();
+        const userType = cookieStore.get("userType")?.value;
+        const isAdmin = userType === "admin" || userType === "superadmin";
 
         return NextResponse.json({
             success: true,
@@ -18,12 +22,12 @@ export async function GET(request: NextRequest) {
             hostelFeeAmount: settings?.hostelFeeAmount || 0,
             paymentInstructions: settings?.paymentInstructions || "",
             isPaymentEnabled: settings?.isPaymentEnabled || false,
-            wardenPassword: settings?.wardenPassword || "warden456",
-            adminPassword: settings?.adminPassword || "pankajdwivedi81",
-            developerPassword: settings?.developerPassword || "Pankaj852963",
+            wardenPassword: isAdmin ? (settings?.wardenPassword || "warden456") : "••••••••",
+            adminPassword: isAdmin ? (settings?.adminPassword || "pankajdwivedi81") : "••••••••",
+            developerPassword: isAdmin ? (settings?.developerPassword || "Pankaj852963") : "••••••••",
             overlapRadius: settings?.overlapRadius || false,
             prioritizeAssignedHostel: settings?.prioritizeAssignedHostel || false,
-            getpassPassword: settings?.getpassPassword || "GET456",
+            getpassPassword: isAdmin ? (settings?.getpassPassword || "GET456") : "••••••••",
             wifiWhitelist: settings?.wifiWhitelist || [],
             enableManualAttendance: settings?.enableManualAttendance ?? false
         });

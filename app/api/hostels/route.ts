@@ -34,11 +34,13 @@ export async function GET(request: NextRequest) {
             }
 
             const newHostels = await db.hostels.getAll();
-            return NextResponse.json({ hostels: newHostels }, { status: 200 });
+            const sanitizedNewHostels = newHostels.map(({ wardenPassword, wardenUsername, ...h }: any) => h);
+            return NextResponse.json({ hostels: sanitizedNewHostels }, { status: 200 });
         }
 
         console.log(`🏨 [API/hostels] Returning ${hostels.length} hostels.`);
-        return NextResponse.json({ hostels }, { status: 200 });
+        const sanitizedHostels = hostels.map(({ wardenPassword, wardenUsername, ...h }: any) => h);
+        return NextResponse.json({ hostels: sanitizedHostels }, { status: 200 });
     } catch (error: any) {
         console.error("❌ [API/hostels] Error:", error);
         return NextResponse.json(
