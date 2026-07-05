@@ -18,18 +18,19 @@ import {
  */
 export function isR2Configured(): boolean {
   return !!(
-    process.env.R2_ACCOUNT_ID &&
     process.env.R2_ACCESS_KEY_ID &&
     process.env.R2_SECRET_ACCESS_KEY &&
     process.env.R2_BUCKET_NAME &&
+    (process.env.R2_ENDPOINT || process.env.R2_ACCOUNT_ID) &&
     process.env.R2_PUBLIC_URL
   );
 }
 
 function getR2Client(): S3Client {
+  const endpoint = process.env.R2_ENDPOINT || `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
   return new S3Client({
     region: "auto",
-    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    endpoint: endpoint,
     credentials: {
       accessKeyId: process.env.R2_ACCESS_KEY_ID!,
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
