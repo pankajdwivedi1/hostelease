@@ -6458,13 +6458,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <span className={`text-[8px] sm:text-xs md:text-sm font-black truncate shrink-0 ${style.text}`} title={roomNumber}>
                                           {roomNumber}
                                         </span>
-                                        <div className="flex flex-wrap items-end gap-0.5 shrink-0">
+                                        <div className="flex flex-wrap items-center gap-0.5 shrink-0">
                                           {roommates.map((r, i) => {
                                             const rStatus = getRoommateStatus(r);
                                             const studentIdStr = r.id || r._id;
                                             const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString());
                                             return (
-                                              <div key={r.id || i} className="flex flex-col items-center gap-0.5 shrink-0 relative">
+                                              <div key={r.id || i} className="relative shrink-0">
                                                 <div
                                                   className={`w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full flex items-center justify-center border border-white text-[5px] md:text-[7px] font-black text-white shrink-0 ${
                                                     rStatus === 'in' ? 'bg-green-500' :
@@ -6476,7 +6476,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                 </div>
                                                 {hasMarkedAttendance && isWithinAttendanceTime && (
                                                   <span 
-                                                    className="w-1 h-1 md:w-1.5 md:h-1.5 bg-blue-600 rounded-full animate-pulse shrink-0"
+                                                    className="absolute -top-0.5 -right-0.5 w-1 h-1 md:w-1.5 md:h-1.5 bg-blue-600 rounded-full border border-white animate-pulse"
                                                     title="Night Attendance Marked"
                                                   />
                                                 )}
