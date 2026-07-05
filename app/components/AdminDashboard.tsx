@@ -6448,46 +6448,51 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       setSelectedRoom(roomNumber);
                                       setSelectedRoomStudents(roommates);
                                     }}
-                                    className={`p-1 md:p-2 rounded-lg border md:border-2 text-left transition-all ${style.bg} ${style.border} active:scale-95 flex items-center justify-between min-h-[36px] md:min-h-[48px] shadow-sm relative overflow-hidden`}
+                                    className={`p-1 md:p-1.5 rounded-lg border md:border-2 text-left transition-all ${style.bg} ${style.border} active:scale-95 flex items-center min-h-[36px] md:min-h-[48px] shadow-sm relative overflow-hidden`}
                                   >
                                     {/* Color bar indicator on top */}
                                     <div className="absolute top-0 left-0 right-0 h-0.5 md:h-1" style={{ backgroundColor: style.color }} />
                                     
-                                    <div className="flex items-center justify-between w-full mt-0.5 gap-1 min-w-0">
-                                      <div className="flex items-center gap-1 min-w-0 flex-1">
-                                        <span className={`text-[8px] sm:text-xs md:text-sm font-black truncate shrink-0 ${style.text}`} title={roomNumber}>
-                                          {roomNumber}
-                                        </span>
-                                        <div className="flex flex-wrap items-center gap-0.5 shrink-0">
-                                          {roommates.map((r, i) => {
-                                            const rStatus = getRoommateStatus(r);
-                                            const studentIdStr = r.id || r._id;
-                                            const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString());
-                                            return (
-                                              <div key={r.id || i} className="relative shrink-0">
-                                                <div
-                                                  className={`w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full flex items-center justify-center border border-white text-[5px] md:text-[7px] font-black text-white shrink-0 ${
-                                                    rStatus === 'in' ? 'bg-green-500' :
-                                                    rStatus === 'hleave' ? 'bg-blue-500' : 'bg-yellow-500'
-                                                  }`}
-                                                  title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'H-LEAVE' : 'G-PASS'}`}
-                                                >
-                                                  {r.name.slice(0, 1).toUpperCase()}
-                                                </div>
-                                                {hasMarkedAttendance && isWithinAttendanceTime && (
-                                                  <span 
-                                                    className="absolute -top-0.5 -right-0.5 w-1 h-1 md:w-1.5 md:h-1.5 bg-blue-600 rounded-full border border-white animate-pulse"
-                                                    title="Night Attendance Marked"
-                                                  />
-                                                )}
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                      <span className="text-[8px] sm:text-xs md:text-sm font-black text-slate-500 shrink-0">
+                                    {/* Left Side: Room number & Bed count */}
+                                    <div className="flex flex-col shrink-0 pr-1.5 md:pr-2.5 border-r border-slate-200/80 min-w-[28px] md:min-w-[40px] text-center justify-center">
+                                      <span className={`text-[9px] sm:text-xs md:text-sm font-black truncate leading-none ${style.text}`} title={roomNumber}>
+                                        {roomNumber}
+                                      </span>
+                                      <span className="text-[6.5px] sm:text-[9px] md:text-[10px] text-slate-400 font-extrabold tracking-tight mt-0.5 md:mt-1 leading-none uppercase">
                                         {roommates.length}BED
                                       </span>
+                                    </div>
+
+                                    {/* Right Side: Circular Avatars & Attendance Dot */}
+                                    <div className="flex-1 pl-1.5 md:pl-2.5 flex flex-wrap items-center gap-0.5 md:gap-1 min-w-0">
+                                      {roommates.map((r, i) => {
+                                        const rStatus = getRoommateStatus(r);
+                                        const studentIdStr = r.id || r._id;
+                                        const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString());
+                                        return (
+                                          <div key={r.id || i} className="flex flex-col items-center gap-0.5 shrink-0 relative">
+                                            <div
+                                              className={`w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full flex items-center justify-center border border-white text-[5px] md:text-[7px] font-black text-white shrink-0 ${
+                                                rStatus === 'in' ? 'bg-green-500' :
+                                                rStatus === 'hleave' ? 'bg-blue-500' : 'bg-yellow-500'
+                                              }`}
+                                              title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'H-LEAVE' : 'G-PASS'}`}
+                                            >
+                                              {r.name.slice(0, 1).toUpperCase()}
+                                            </div>
+                                            {/* Blinking attendance dot */}
+                                            {hasMarkedAttendance && isWithinAttendanceTime ? (
+                                              <span 
+                                                className="w-1 h-1 md:w-1.5 md:h-1.5 bg-blue-600 rounded-full animate-pulse shrink-0 shadow-sm"
+                                                title="Night Attendance Marked"
+                                              />
+                                            ) : (
+                                              // Spacer dot to prevent text alignment shifts
+                                              <span className="w-1 h-1 md:w-1.5 md:h-1.5 bg-transparent shrink-0" />
+                                            )}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   </button>
                                 );
