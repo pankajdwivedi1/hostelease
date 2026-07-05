@@ -321,13 +321,31 @@ export async function POST(request: NextRequest) {
             // Update student status to "out"
             await db.students.update(student._id.toString(), { studentStatus: "out" });
 
-            // 🔥 Send MSG91 Gatepass Alert (Fire & Forget)
-            const parentPhone = student.fatherNumber || student.motherNumber || student.localGuardianPhoneNumber;
-            if (parentPhone) {
-                const collegeBranding = student.collegeName || student.hostelName || "Campus";
-                sendMSG91_GatepassAlert(parentPhone, student.name, gateName, istTime, "out", collegeBranding).catch(err => {
-                    console.error("Background SMS send failed:", err);
-                });
+            // 🔥 Send MSG91 Gatepass Alert & In-App Notification (Fire & Forget)
+            try {
+                const adminSettings = await db.settings.get();
+                const bankDetails = adminSettings?.universityBankDetails || {};
+                const enableParentNotif = bankDetails.enableParentGatepassNotifications ?? true;
+                if (enableParentNotif) {
+                    // 1. Send SMS Alert
+                    const parentPhone = student.fatherNumber || student.motherNumber || student.localGuardianPhoneNumber;
+                    if (parentPhone) {
+                        const collegeBranding = student.collegeName || student.hostelName || "Campus";
+                        sendMSG91_GatepassAlert(parentPhone, student.name, gateName, istTime, "out", collegeBranding).catch(err => {
+                            console.error("Background SMS send failed:", err);
+                        });
+                    }
+                    // 2. Create In-App Notification for Parent Portal / Student Feed
+                    await db.notifications.create({
+                        senderId: "SYSTEM",
+                        targetType: "individual",
+                        targetStudentId: student._id.toString(),
+                        message: `Your ward ${student.name} has checked OUT from campus at ${istTime} via ${gateName}.`,
+                        priority: "normal",
+                    });
+                }
+            } catch (err) {
+                console.error("Failed to process gatepass checkout notifications:", err);
             }
 
             return NextResponse.json({
@@ -397,12 +415,32 @@ export async function POST(request: NextRequest) {
             await db.students.update(student._id.toString(), { studentStatus: "in" });
 
             // 🔥 Send MSG91 Gatepass Alert (Fire & Forget)
-            const parentPhone = student.fatherNumber || student.motherNumber || student.localGuardianPhoneNumber;
-            if (parentPhone && lastUpdatedPass) {
-                const collegeBranding = student.collegeName || student.hostelName || "Campus";
-                sendMSG91_GatepassAlert(parentPhone, student.name, lastUpdatedPass.gateName || "Main Gate", istTime, "in", collegeBranding).catch(err => {
-                    console.error("Background SMS send failed:", err);
-                });
+            try {
+            // 🔥 Send MSG91 Gatepass Alert & In-App Notification (Fire & Forget)
+            try {
+                const adminSettings = await db.settings.get();
+                const bankDetails = adminSettings?.universityBankDetails || {};
+                const enableParentNotif = bankDetails.enableParentGatepassNotifications ?? true;
+                if (enableParentNotif) {
+                    // 1. Send SMS Alert
+                    const parentPhone = student.fatherNumber || student.motherNumber || student.localGuardianPhoneNumber;
+                    if (parentPhone && lastUpdatedPass) {
+                        const collegeBranding = student.collegeName || student.hostelName || "Campus";
+                        sendMSG91_GatepassAlert(parentPhone, student.name, lastUpdatedPass.gateName || "Main Gate", istTime, "in", collegeBranding).catch(err => {
+                            console.error("Background SMS send failed:", err);
+                        });
+                    }
+                    // 2. Create In-App Notification for Parent Portal / Student Feed
+                    await db.notifications.create({
+                        senderId: "SYSTEM",
+                        targetType: "individual",
+                        targetStudentId: student._id.toString(),
+                        message: `Your ward ${student.name} has checked IN to campus at ${istTime} via ${lastUpdatedPass?.gateName || "Main Gate"}.`,
+                        priority: "normal",
+                    });
+                }
+            } catch (err) {
+                console.error("Failed to process gatepass checkin notifications:", err);
             }
 
             // ✅ FIX: Mark the used leave permission as "completed" so it does NOT

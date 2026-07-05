@@ -44,13 +44,30 @@ export async function POST(request: NextRequest) {
     // Determine the phone number to call
     const parentPhone = student.fatherNumber || student.motherNumber || student.phoneNumber;
     
-    // Fetch leave approval settings to determine if voice call is required
+    // Fetch leave approval settings to determine if voice call & notifications are required
     const { data: settings } = await db.supabase
       .from('admin_settings')
-      .select('leave_approval_method')
+      .select('leave_approval_method, university_bank_details')
       .eq('tenant_id', student.tenantId)
       .maybeSingle();
     const leaveApprovalMethod = settings?.leave_approval_method || 'app';
+    const bankDetails = settings?.university_bank_details || {};
+    const enableWardenLeaveNotifications = bankDetails.enableWardenLeaveNotifications ?? true;
+
+    if (enableWardenLeaveNotifications) {
+      try {
+        await db.notifications.create({
+          senderId: studentId,
+          targetType: "admin",
+          targetHostel: student.hostelName,
+          targetStudentId: studentId,
+          message: `${student.name} (Room ${student.roomNumber || 'N/A'}) has applied for leave from ${fromDate.toLocaleDateString('en-IN')} to ${toDate.toLocaleDateString('en-IN')}. Reason: ${reason}`,
+          priority: "normal",
+        });
+      } catch (err) {
+        console.error("Error creating leave notification for warden:", err);
+      }
+    }
 
     // Trigger MSG91 Voice Call only if configured to use IVR Call method
     if (leaveApprovalMethod === 'ivr' && parentPhone) {
