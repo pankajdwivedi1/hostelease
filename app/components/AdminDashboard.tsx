@@ -6480,15 +6480,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             >
                                               {r.name.slice(0, 1).toUpperCase()}
                                             </div>
-                                            {/* Blinking attendance dot */}
+                                            {/* Blinking attendance dot - same size as status dot */}
                                             {hasMarkedAttendance && isWithinAttendanceTime ? (
                                               <span 
-                                                className="w-1 h-1 md:w-1.5 md:h-1.5 bg-blue-600 rounded-full animate-pulse shrink-0 shadow-sm"
+                                                className="w-2 h-2 md:w-2.5 md:h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 shadow-sm"
                                                 title="Night Attendance Marked"
                                               />
                                             ) : (
                                               // Spacer dot to prevent text alignment shifts
-                                              <span className="w-1 h-1 md:w-1.5 md:h-1.5 bg-transparent shrink-0" />
+                                              <span className="w-2 h-2 md:w-2.5 md:h-2.5 bg-transparent shrink-0" />
                                             )}
                                           </div>
                                         );
@@ -6526,6 +6526,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1 no-scrollbar">
                           {selectedRoomStudents.map(student => {
                             const rStatus = getRoommateStatus(student);
+                            const studentIdStr = student.id || student._id;
+                            const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString());
                             return (
                               <div key={student.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex flex-row items-center justify-between gap-3 hover:border-slate-200 transition-all">
                                 <div className="flex items-center gap-3.5 min-w-0">
@@ -6538,7 +6540,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     )}
                                   </div>
                                   <div className="min-w-0">
-                                    <h4 className="font-bold text-slate-800 text-sm leading-snug truncate">{student.name}</h4>
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="font-bold text-slate-800 text-sm leading-snug truncate">{student.name}</h4>
+                                      {hasMarkedAttendance && isWithinAttendanceTime && (
+                                        <span 
+                                          className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 shadow-sm"
+                                          title="Night Attendance Marked"
+                                        />
+                                      )}
+                                    </div>
                                     <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
                                       Reg ID: {student.registrationId || "N/A"}
                                     </p>
