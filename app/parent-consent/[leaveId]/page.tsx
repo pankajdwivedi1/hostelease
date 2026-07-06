@@ -48,6 +48,8 @@ export default async function ParentConsentPage({ params }: PageProps) {
     const startDate = formatDate(permission.fromDateTime);
     const endDate = formatDate(permission.toDateTime);
     
+    const parentUserId = student?.fatherNumber || ((student?.id || student?._id || "").toString() + "_parent");
+    
     return (
         <ParentConsentClient
             leaveId={permissionId}
@@ -56,6 +58,7 @@ export default async function ParentConsentPage({ params }: PageProps) {
             startDate={startDate}
             endDate={endDate}
             parentConsentUrl={permission.parentConsentUrl}
+            parentUserId={parentUserId}
         />
     );
 }

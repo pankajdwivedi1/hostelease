@@ -62,6 +62,7 @@ interface ParentConsentClientProps {
     startDate: string;
     endDate: string;
     parentConsentUrl?: string | null;
+    parentUserId?: string;
 }
 
 export default function ParentConsentClient({
@@ -70,7 +71,8 @@ export default function ParentConsentClient({
     parentName,
     startDate,
     endDate,
-    parentConsentUrl
+    parentConsentUrl,
+    parentUserId
 }: ParentConsentClientProps) {
     const [recordingState, setRecordingState] = useState<"idle" | "recording" | "review" | "uploading" | "success" | "error">(
         parentConsentUrl ? "success" : "idle"
@@ -82,6 +84,21 @@ export default function ParentConsentClient({
     const [isMobile, setIsMobile] = useState(false);
     const [previewAspectRatio, setPreviewAspectRatio] = useState<number | null>(null);
     const [reviewAspectRatio, setReviewAspectRatio] = useState<number | null>(null);
+
+    // Register parent for Web Push notifications on mount
+    useEffect(() => {
+        const initParentPush = async () => {
+            try {
+                if (parentUserId) {
+                    const { registerPushNotifications } = await import("@/lib/pushRegister");
+                    await registerPushNotifications(parentUserId, "parent");
+                }
+            } catch (e) {
+                console.error("Failed to register parent push notifications:", e);
+            }
+        };
+        initParentPush();
+    }, [parentUserId]);
 
     const videoPreviewRef = useRef<HTMLVideoElement>(null);
     const videoPlaybackRef = useRef<HTMLVideoElement>(null);
