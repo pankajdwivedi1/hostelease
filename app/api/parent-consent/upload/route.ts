@@ -82,9 +82,9 @@ export async function POST(request: NextRequest) {
 
     const permission = await db.permissions.getById(leaveId, { populate: true });
     let studentSlug = "";
+    let student: any = null;
     if (permission) {
-      const student =
-        typeof permission.studentId === "object" ? permission.studentId : null;
+      student = typeof permission.studentId === "object" ? permission.studentId : null;
       if (student) {
         const cleanName = student.name
           ? student.name.trim().replace(/\s+/g, "_")
@@ -135,6 +135,49 @@ export async function POST(request: NextRequest) {
       parentConsentUrl: consentUrl,
       parentStatus: "approved",
     });
+
+    // Send push notifications (Fire & Forget)
+    try {
+      import("@/lib/pushNotification").then(async ({ sendPushNotification }) => {
+        if (student) {
+          const studentIdStr = student.id || student._id || "";
+          
+          // 1. Notify Warden if hostelName is set
+          if (student.hostelName) {
+            const { data: hostelData } = await db.supabase
+              .from("hostels")
+              .select("warden_username")
+              .eq("name", student.hostelName)
+              .maybeSingle();
+
+            const wardenId = hostelData?.warden_username;
+            if (wardenId) {
+              sendPushNotification(wardenId, "warden", "parentConsentVideoUploaded", {
+                title: "Parent Consent Video Uploaded",
+                body: `${student.name}'s parent uploaded a leave consent video.`,
+                url: "/"
+              }).catch(err => console.error("Warden parent consent video upload push failed:", err));
+            }
+          }
+
+          // 2. Notify Dean (always "admin" / "dean" type)
+          sendPushNotification("admin", "dean", "parentConsentVideoUploaded", {
+            title: "Parent Consent Video Uploaded",
+            body: `Consent video uploaded for student ${student.name}.`,
+            url: "/"
+          }).catch(err => console.error("Dean parent consent video upload push failed:", err));
+
+          // 3. Notify Student
+          sendPushNotification(studentIdStr.toString(), "student", "parentConsentVideoUploaded", {
+            title: "Parent Consent Video Received",
+            body: "Your parent has successfully uploaded the leave consent video.",
+            url: "/"
+          }).catch(err => console.error("Student parent consent video upload push failed:", err));
+        }
+      });
+    } catch (e) {
+      console.error("Failed to trigger parent consent video push notifications:", e);
+    }
 
     return NextResponse.json(
       {

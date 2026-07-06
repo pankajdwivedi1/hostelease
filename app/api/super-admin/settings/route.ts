@@ -26,7 +26,22 @@ export async function GET(request: NextRequest) {
                     razorpayKeyId: "",
                     razorpayKeySecret: "",
                     pricePerStudentPerMonth: 30,
-                    customQrCodeUrl: ""
+                    customQrCodeUrl: "",
+                    globalPushEnabled: true,
+                    parentCurfewAbsentEnabled: true,
+                    parentGateScanInOutEnabled: true,
+                    wardenLeaveRequestEnabled: true,
+                    deanLeaveRequestEnabled: true,
+                    studentLeaveDecisionEnabled: true,
+                    curfewStart: "21:30",
+                    curfewEnd: "22:30",
+                    gracePeriodMinutes: 15,
+                    parentConsentVideoUploadedEnabled: true,
+                    outingOverdueEnabled: true,
+                    paymentVerifiedEnabled: true,
+                    leaveDecisionEnabled: true,
+                    outingGracePeriod: 30,
+                    absoluteOutingCutoff: "20:30"
                 }
             });
         }

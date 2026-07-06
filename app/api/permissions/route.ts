@@ -41,33 +41,49 @@ export async function POST(request: NextRequest) {
       status: "pending",
     });
 
+    // Send Web Push Notification to Warden (Fire & Forget)
+    try {
+      import("@/lib/pushNotification").then(({ sendPushNotification }) => {
+        // If there's a warden for the student's hostel, notify them
+        if (student.hostelName) {
+          // Fetch warden account username for this hostel
+          db.supabase.from("hostels")
+            .select("warden_username")
+            .eq("name", student.hostelName)
+            .maybeSingle()
+            .then(({ data }) => {
+              const wardenId = data?.warden_username;
+              if (wardenId) {
+                sendPushNotification(wardenId, "warden", "wardenNewLeaveRequest", {
+                  title: "New Leave Application",
+                  body: `${student.name} applied for ${requestType || "outing"}: "${reason}".`,
+                  url: "/"
+                }).catch(err => console.error("Warden new leave push failed:", err));
+              }
+            });
+        }
+
+        // Also notify the Dean (master user: "admin", userType: "dean")
+        sendPushNotification("admin", "dean", "deanLeaveRequest", {
+          title: "New Leave Application",
+          body: `${student.name} applied for ${requestType || "outing"}: "${reason}".`,
+          url: "/"
+        }).catch(err => console.error("Dean new leave push failed:", err));
+      });
+    } catch (e) {
+      console.error("Failed to trigger warden leave push:", e);
+    }
+
     // Determine the phone number to call
     const parentPhone = student.fatherNumber || student.motherNumber || student.phoneNumber;
     
-    // Fetch leave approval settings to determine if voice call & notifications are required
+    // Fetch leave approval settings to determine if voice call is required
     const { data: settings } = await db.supabase
       .from('admin_settings')
-      .select('leave_approval_method, university_bank_details')
+      .select('leave_approval_method')
       .eq('tenant_id', student.tenantId)
       .maybeSingle();
     const leaveApprovalMethod = settings?.leave_approval_method || 'app';
-    const bankDetails = settings?.university_bank_details || {};
-    const enableWardenLeaveNotifications = bankDetails.enableWardenLeaveNotifications ?? true;
-
-    if (enableWardenLeaveNotifications) {
-      try {
-        await db.notifications.create({
-          senderId: studentId,
-          targetType: "admin",
-          targetHostel: student.hostelName,
-          targetStudentId: studentId,
-          message: `${student.name} (Room ${student.roomNumber || 'N/A'}) has applied for leave from ${fromDate.toLocaleDateString('en-IN')} to ${toDate.toLocaleDateString('en-IN')}. Reason: ${reason}`,
-          priority: "normal",
-        });
-      } catch (err) {
-        console.error("Error creating leave notification for warden:", err);
-      }
-    }
 
     // Trigger MSG91 Voice Call only if configured to use IVR Call method
     if (leaveApprovalMethod === 'ivr' && parentPhone) {
@@ -176,17 +192,41 @@ export async function PATCH(request: NextRequest) {
 
     await db.permissions.update(permissionId, update);
 
-    // ✅ FIXED: Do NOT auto-update studentStatus here.
-    // Approving or rejecting a leave permission does NOT mean the student has physically
-    // left campus. studentStatus must ONLY change when the student scans the gate QR.
-    // Setting it here caused:
-    //   - Student app showing "Scan to Check IN" before they even left
-    //   - Gatepass screen showing OUTSIDE: 0 (no gate pass record) vs student showing "Outside"
-    //   - Manual Entry showing contradiction with live counter
     const populatedPermission = await db.permissions.getById(permissionId, { populate: true });
 
     if (!populatedPermission) {
       return NextResponse.json({ error: "Permission not found" }, { status: 404 });
+    }
+
+    // 🔥 Send Web Push Notifications for Decisions (Fire & Forget)
+    try {
+      import("@/lib/pushNotification").then(({ sendPushNotification }) => {
+        const studentObj = (populatedPermission as any).student;
+        if (studentObj) {
+          const studentId = studentObj.id || studentObj._id;
+          const statusText = update.status === "allowed" ? "APPROVED" : update.status === "rejected" ? "REJECTED" : "UPDATED";
+          const requestTypeLabel = populatedPermission.requestType === "leave" ? "Leave" : "Outing";
+
+          // 1. Notify Student
+          sendPushNotification(studentId.toString(), "student", "studentLeaveStatus", {
+            title: `Gatepass Request ${statusText}`,
+            body: `Your gatepass request for ${requestTypeLabel} has been ${statusText.toLowerCase()} by admin.`,
+            url: "/"
+          }).catch(err => console.error("Student decision push failed:", err));
+
+          // 2. Notify Parent if Approved
+          if (update.status === "allowed" && studentObj.fatherNumber) {
+            const parentUserId = studentObj.fatherNumber || (studentId.toString() + "_parent");
+            sendPushNotification(parentUserId, "parent", "parentLeaveApproval", {
+              title: "Leave Approval Notification",
+              body: `Your ward ${studentObj.name}'s leave request has been APPROVED by the campus warden.`,
+              url: "/"
+            }).catch(err => console.error("Parent decision push failed:", err));
+          }
+        }
+      });
+    } catch (e) {
+      console.error("Failed to trigger permission status decision push:", e);
     }
 
     return NextResponse.json({ success: true, permission: populatedPermission }, { status: 200 });

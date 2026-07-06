@@ -29,7 +29,9 @@ export async function GET(request: NextRequest) {
             prioritizeAssignedHostel: settings?.prioritizeAssignedHostel || false,
             getpassPassword: isAdmin ? (settings?.getpassPassword || "GET456") : "••••••••",
             wifiWhitelist: settings?.wifiWhitelist || [],
-            enableManualAttendance: settings?.enableManualAttendance ?? false
+            enableManualAttendance: settings?.enableManualAttendance ?? false,
+            notificationSettings: settings?.notificationSettings || {},
+            leaveApprovalMethod: settings?.leaveApprovalMethod || 'app'
         });
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);
@@ -61,7 +63,9 @@ export async function POST(request: NextRequest) {
             enableManualAttendance,
             adminPassword,
             wardenPassword,
-            developerPassword
+            developerPassword,
+            notificationSettings,
+            leaveApprovalMethod
         } = body;
 
         const updateData: any = {};
@@ -89,6 +93,8 @@ export async function POST(request: NextRequest) {
         if (adminPassword !== undefined) updateData.adminPassword = typeof adminPassword === 'string' ? adminPassword.trim() : adminPassword;
         if (wardenPassword !== undefined) updateData.wardenPassword = typeof wardenPassword === 'string' ? wardenPassword.trim() : wardenPassword;
         if (developerPassword !== undefined) updateData.developerPassword = typeof developerPassword === 'string' ? developerPassword.trim() : developerPassword;
+        if (notificationSettings !== undefined) updateData.notificationSettings = notificationSettings;
+        if (leaveApprovalMethod !== undefined) updateData.leaveApprovalMethod = leaveApprovalMethod;
 
         const settings = await db.settings.update(updateData);
 

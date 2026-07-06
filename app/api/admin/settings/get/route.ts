@@ -36,9 +36,7 @@ export async function GET(request: Request) {
                 contactName: bankDetails.contactName || '',
                 contactPhone: bankDetails.contactPhone || '',
                 totalHostelars: bankDetails.totalHostelars || '',
-                leaveApprovalMethod: settings?.leave_approval_method || 'app',
-                enableParentGatepassNotifications: bankDetails.enableParentGatepassNotifications ?? true,
-                enableWardenLeaveNotifications: bankDetails.enableWardenLeaveNotifications ?? true
+                leaveApprovalMethod: settings?.leave_approval_method || 'app'
             }
         });
     } catch (error: any) {

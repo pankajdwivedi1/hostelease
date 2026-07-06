@@ -211,7 +211,22 @@ export default function SuperAdminDashboard() {
         razorpayKeyId: "",
         razorpayKeySecret: "",
         pricePerStudentPerMonth: 30,
-        customQrCodeUrl: ""
+        customQrCodeUrl: "",
+        globalPushEnabled: true,
+        parentCurfewAbsentEnabled: true,
+        parentGateScanInOutEnabled: true,
+        wardenLeaveRequestEnabled: true,
+        deanLeaveRequestEnabled: true,
+        studentLeaveDecisionEnabled: true,
+        curfewStart: "21:30",
+        curfewEnd: "22:30",
+        gracePeriodMinutes: 15,
+        parentConsentVideoUploadedEnabled: true,
+        outingOverdueEnabled: true,
+        paymentVerifiedEnabled: true,
+        leaveDecisionEnabled: true,
+        outingGracePeriod: 30,
+        absoluteOutingCutoff: "20:30"
     });
 
     const [newTenant, setNewTenant] = useState({
@@ -353,7 +368,22 @@ export default function SuperAdminDashboard() {
                     razorpayKeyId: data.settings.razorpayKeyId || "",
                     razorpayKeySecret: data.settings.razorpayKeySecret || "",
                     pricePerStudentPerMonth: data.settings.pricePerStudentPerMonth || 30,
-                    customQrCodeUrl: data.settings.customQrCodeUrl || ""
+                    customQrCodeUrl: data.settings.customQrCodeUrl || "",
+                    globalPushEnabled: data.settings.globalPushEnabled !== false,
+                    parentCurfewAbsentEnabled: data.settings.parentCurfewAbsentEnabled !== false,
+                    parentGateScanInOutEnabled: data.settings.parentGateScanInOutEnabled !== false,
+                    wardenLeaveRequestEnabled: data.settings.wardenLeaveRequestEnabled !== false,
+                    deanLeaveRequestEnabled: data.settings.deanLeaveRequestEnabled !== false,
+                    studentLeaveDecisionEnabled: data.settings.studentLeaveDecisionEnabled !== false,
+                    curfewStart: data.settings.curfewStart || "21:30",
+                    curfewEnd: data.settings.curfewEnd || "22:30",
+                    gracePeriodMinutes: data.settings.gracePeriodMinutes ?? 15,
+                    parentConsentVideoUploadedEnabled: data.settings.parentConsentVideoUploadedEnabled !== false,
+                    outingOverdueEnabled: data.settings.outingOverdueEnabled !== false,
+                    paymentVerifiedEnabled: data.settings.paymentVerifiedEnabled !== false,
+                    leaveDecisionEnabled: data.settings.leaveDecisionEnabled !== false,
+                    outingGracePeriod: data.settings.outingGracePeriod ?? 30,
+                    absoluteOutingCutoff: data.settings.absoluteOutingCutoff || "20:30"
                 }));
             }
         } catch (error) {
@@ -1960,14 +1990,14 @@ export default function SuperAdminDashboard() {
                                             </h4>
                                             <p className="text-xs text-indigo-700/70 font-medium">Enable to allow colleges to pay instantly via Razorpay.</p>
                                         </div>
-                                        <label className="relative inline-flex items-center cursor-pointer">
+                                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
                                             <input 
                                                 type="checkbox" 
                                                 className="sr-only peer"
                                                 checked={paymentSettings.enableRazorpay}
                                                 onChange={e => setPaymentSettings({...paymentSettings, enableRazorpay: e.target.checked})}
                                             />
-                                            <div className="w-14 h-7 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-indigo-600 shadow-inner"></div>
+                                            <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600 shadow-inner"></div>
                                         </label>
                                     </div>
                                     
@@ -2015,6 +2045,187 @@ export default function SuperAdminDashboard() {
                                                 </div>
                                                 <p className="text-[10px] text-indigo-600 mt-2 font-medium">This will be multiplied by the college's student count and automatically billed via Razorpay Orders.</p>
                                             </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Global Notification & Scheduler Rules Section */}
+                                <div className="bg-amber-50/40 border border-amber-100 rounded-2xl p-6 relative overflow-hidden space-y-4">
+                                    <div>
+                                        <h4 className="font-black text-amber-900 text-sm uppercase tracking-wider mb-1 flex items-center gap-2">
+                                            🔔 Global Notification & Scheduler Rules
+                                        </h4>
+                                        <p className="text-xs text-amber-850/70 font-medium">Configure global push notification rules and curfew scheduling options.</p>
+                                    </div>
+
+                                    {/* Master Push Toggle */}
+                                    <div className="flex items-center justify-between border-b border-amber-100/50 pb-4">
+                                        <div>
+                                            <p className="text-xs font-black text-amber-950 uppercase tracking-wide">Master Push Notifications</p>
+                                            <p className="text-[10px] text-amber-700 font-medium">Turn ON/OFF all Web Push alerts across the entire system.</p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                            <input 
+                                                type="checkbox" 
+                                                className="sr-only peer"
+                                                checked={paymentSettings.globalPushEnabled}
+                                                onChange={e => setPaymentSettings({...paymentSettings, globalPushEnabled: e.target.checked})}
+                                            />
+                                            <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600 shadow-inner"></div>
+                                        </label>
+                                    </div>
+
+                                    {paymentSettings.globalPushEnabled && (
+                                        <div className="space-y-4 pt-2 animate-in fade-in">
+                                            {/* Curfew Timer Configuration */}
+                                            <div className="bg-white p-4 rounded-xl border border-amber-200/50 space-y-4">
+                                                <p className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Curfew Scheduler Timings</p>
+                                                <div className="grid grid-cols-3 gap-2.5">
+                                                    <div>
+                                                        <div className="min-h-[22px] flex items-end mb-1.5">
+                                                            <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Curfew Start</label>
+                                                        </div>
+                                                        <input 
+                                                            type="time" 
+                                                            value={paymentSettings.curfewStart}
+                                                            onChange={e => setPaymentSettings({...paymentSettings, curfewStart: e.target.value})}
+                                                            className="w-full h-9 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none bg-white text-slate-800"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <div className="min-h-[22px] flex items-end mb-1.5">
+                                                            <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Curfew End</label>
+                                                        </div>
+                                                        <input 
+                                                            type="time" 
+                                                            value={paymentSettings.curfewEnd}
+                                                            onChange={e => setPaymentSettings({...paymentSettings, curfewEnd: e.target.value})}
+                                                            className="w-full h-9 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none bg-white text-slate-800"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <div className="min-h-[22px] flex items-end mb-1.5">
+                                                            <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Grace Mins</label>
+                                                        </div>
+                                                        <input 
+                                                            type="number" 
+                                                            min="0"
+                                                            value={paymentSettings.gracePeriodMinutes}
+                                                            onChange={e => setPaymentSettings({...paymentSettings, gracePeriodMinutes: Number(e.target.value) || 0})}
+                                                            className="w-full h-9 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none bg-white text-slate-800"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <p className="text-[9px] text-amber-700 font-medium">The system automatically calculates the alert time as <strong>Curfew End + Grace Period</strong> (e.g., {paymentSettings.curfewEnd} + {paymentSettings.gracePeriodMinutes} mins).</p>
+                                            </div>
+
+                                            {/* Sub Toggles */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                {/* Parent Curfew Absent */}
+                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
+                                                    <div>
+                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Parent Curfew Alerts</span>
+                                                        <span className="text-[8px] text-slate-500 font-medium block">Send auto push to parents at cutoff</span>
+                                                    </div>
+                                                    <input type="checkbox" checked={paymentSettings.parentCurfewAbsentEnabled} onChange={e => setPaymentSettings({...paymentSettings, parentCurfewAbsentEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
+                                                </label>
+
+                                                {/* Parent Gate Scan */}
+                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
+                                                    <div>
+                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Parent Gate Alerts</span>
+                                                        <span className="text-[8px] text-slate-500 font-medium block">Notify parents on gate pass scan</span>
+                                                    </div>
+                                                    <input type="checkbox" checked={paymentSettings.parentGateScanInOutEnabled} onChange={e => setPaymentSettings({...paymentSettings, parentGateScanInOutEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
+                                                </label>
+
+                                                {/* Warden Leave Request */}
+                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
+                                                    <div>
+                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Warden Leave Alerts</span>
+                                                        <span className="text-[8px] text-slate-500 font-medium block">Notify wardens on leave request</span>
+                                                    </div>
+                                                    <input type="checkbox" checked={paymentSettings.wardenLeaveRequestEnabled} onChange={e => setPaymentSettings({...paymentSettings, wardenLeaveRequestEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
+                                                </label>
+
+                                                {/* Dean Leave Request */}
+                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
+                                                    <div>
+                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Dean Leave Alerts</span>
+                                                        <span className="text-[8px] text-slate-500 font-medium block">Notify deans on leave request</span>
+                                                    </div>
+                                                    <input type="checkbox" checked={paymentSettings.deanLeaveRequestEnabled} onChange={e => setPaymentSettings({...paymentSettings, deanLeaveRequestEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
+                                                </label>
+
+                                                {/* Student Leave Decision */}
+                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
+                                                    <div>
+                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Leave Decision Alerts</span>
+                                                        <span className="text-[8px] text-slate-500 font-medium block">Notify students/parents when leave is decided</span>
+                                                    </div>
+                                                    <input type="checkbox" checked={paymentSettings.leaveDecisionEnabled} onChange={e => setPaymentSettings({...paymentSettings, leaveDecisionEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
+                                                </label>
+
+                                                {/* Parent Consent Video Uploaded */}
+                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
+                                                    <div>
+                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Parent Video Consent Alerts</span>
+                                                        <span className="text-[8px] text-slate-500 font-medium block">Notify warden/dean on video upload</span>
+                                                    </div>
+                                                    <input type="checkbox" checked={paymentSettings.parentConsentVideoUploadedEnabled} onChange={e => setPaymentSettings({...paymentSettings, parentConsentVideoUploadedEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
+                                                </label>
+
+                                                {/* Outing Overdue Alerts */}
+                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
+                                                    <div>
+                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Outing Overdue Alerts</span>
+                                                        <span className="text-[8px] text-slate-500 font-medium block">Notify when student is late returning</span>
+                                                    </div>
+                                                    <input type="checkbox" checked={paymentSettings.outingOverdueEnabled} onChange={e => setPaymentSettings({...paymentSettings, outingOverdueEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
+                                                </label>
+
+                                                {/* Payment Verification Alerts */}
+                                                <label className="flex items-center justify-between p-3 rounded-xl border border-solid border-amber-200/50 bg-white cursor-pointer hover:bg-amber-50/20 transition-all">
+                                                    <div>
+                                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide block">Payment Verified Alerts</span>
+                                                        <span className="text-[8px] text-slate-500 font-medium block">Notify student when fee is verified</span>
+                                                    </div>
+                                                    <input type="checkbox" checked={paymentSettings.paymentVerifiedEnabled} onChange={e => setPaymentSettings({...paymentSettings, paymentVerifiedEnabled: e.target.checked})} className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500" />
+                                                </label>
+                                            </div>
+
+                                            {/* Outing Overdue Timings */}
+                                            {paymentSettings.outingOverdueEnabled && (
+                                                <div className="bg-white p-4 rounded-xl border border-amber-200/50 space-y-4 animate-in slide-in-from-top-2">
+                                                    <p className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Outing Overdue Config</p>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div>
+                                                            <div className="min-h-[22px] flex items-end mb-1.5">
+                                                                <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Grace Mins</label>
+                                                            </div>
+                                                            <input 
+                                                                type="number" 
+                                                                min="0"
+                                                                value={paymentSettings.outingGracePeriod}
+                                                                onChange={e => setPaymentSettings({...paymentSettings, outingGracePeriod: Number(e.target.value) || 0})}
+                                                                className="w-full h-9 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none bg-white text-slate-800"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <div className="min-h-[22px] flex items-end mb-1.5">
+                                                                <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Cutoff Time</label>
+                                                            </div>
+                                                            <input 
+                                                                type="time" 
+                                                                value={paymentSettings.absoluteOutingCutoff}
+                                                                onChange={e => setPaymentSettings({...paymentSettings, absoluteOutingCutoff: e.target.value})}
+                                                                className="w-full h-9 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none bg-white text-slate-800"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-[9px] text-amber-700 font-medium">Outing alert triggers if student is overdue by more than <strong>{paymentSettings.outingGracePeriod} mins</strong> or is out past <strong>{paymentSettings.absoluteOutingCutoff}</strong> (IST).</p>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -2118,11 +2329,11 @@ export default function SuperAdminDashboard() {
                             </form>
                         </div>
 
-                        <div className="p-4 sm:p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 shrink-0">
+                        <div className="p-4 sm:p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-2.5 shrink-0">
                             <button
                                 type="button"
                                 onClick={() => setShowPaymentSettingsModal(false)}
-                                className="px-6 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-black text-xs uppercase tracking-widest hover:bg-gray-100 transition-all"
+                                className="px-4 py-2.5 sm:px-6 sm:py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-gray-100 transition-all"
                             >
                                 Cancel
                             </button>
@@ -2130,9 +2341,9 @@ export default function SuperAdminDashboard() {
                                 type="submit"
                                 form="payment-settings-form"
                                 disabled={isSavingPaymentSettings}
-                                className="px-8 py-3 rounded-xl bg-blue-600 text-white font-black text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
+                                className="px-5 py-2.5 sm:px-8 sm:py-3 rounded-xl bg-blue-600 text-white font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
                             >
-                                {isSavingPaymentSettings ? 'Saving...' : 'Save Configuration'}
+                                {isSavingPaymentSettings ? 'Saving...' : 'Save Settings'}
                             </button>
                         </div>
                     </div>

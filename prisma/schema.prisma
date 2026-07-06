@@ -164,6 +164,7 @@ model AdminSettings {
   tenant                   Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   developerPassword        String?  @map("developer_password")
   leaveApprovalMethod      String   @default("app") @map("leave_approval_method")
+  notificationSettings     Json?    @default("{}") @map("notification_settings")
   createdAt                DateTime @default(now()) @map("created_at")
   updatedAt                DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -242,8 +243,8 @@ model Permission {
   toDateTime   DateTime @map("to_date_time")
   reason       String
   status       String   @default("pending")
-  wardenStatus String   @default("pending") @map("warden_status")
-  deanStatus   String   @default("pending") @map("dean_status")
+  wardenStatus String?  @default("pending") @map("warden_status")
+  deanStatus   String?  @default("pending") @map("dean_status")
   requestType  String?  @map("request_type")
   parentStatus String?  @map("parent_status")
   parentConsentUrl String? @map("parent_consent_url")
@@ -348,4 +349,16 @@ model PlatformSetting {
   updatedAt DateTime @default(now()) @map("updated_at")
 
   @@map("platform_settings")
+}
+
+// 15. push_subscriptions
+model PushSubscription {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @map("_id")
+  userId       String   @map("user_id")
+  userType     String   @map("user_type")
+  subscription Json     @map("subscription")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("push_subscriptions")
 }

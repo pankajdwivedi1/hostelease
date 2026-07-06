@@ -62,6 +62,16 @@ export interface IAdminSettings {
   activeDatabaseSource?: 'MONGODB' | 'SUPABASE'; // ⚡ LIVE SWITCH: Controls which DB is active
   getpassPassword?: string; // ⚡ NEW: Independent password for GETPASS access
   leaveApprovalMethod?: 'ivr' | 'app'; // ⚡ NEW: Parent leave approval method
+  notificationSettings?: {
+    parentNightAbsent?: boolean;
+    parentScanInOut?: boolean;
+    parentLeaveApproval?: boolean;
+    studentLeaveStatus?: boolean;
+    studentAttendanceReminder?: boolean;
+    wardenNewLeaveRequest?: boolean;
+    wardenScanFailure?: boolean;
+    deanSecurityAlert?: boolean;
+  };
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -249,6 +259,20 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
       type: String,
       enum: ['ivr', 'app'],
       default: 'app'
+    },
+    notificationSettings: {
+      type: Map,
+      of: Boolean,
+      default: {
+        parentNightAbsent: true,
+        parentScanInOut: true,
+        parentLeaveApproval: true,
+        studentLeaveStatus: true,
+        studentAttendanceReminder: true,
+        wardenNewLeaveRequest: true,
+        wardenScanFailure: true,
+        deanSecurityAlert: true
+      }
     },
   },
   {

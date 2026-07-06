@@ -944,7 +944,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [requireUndertaking, setRequireUndertaking] = useState(false);
   const [undertakingText, setUndertakingText] = useState("");
   const [savedFormBuilderConfig, setSavedFormBuilderConfig] = useState<any[]>([]); // ⚡ NEW: Reference for Diff
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"general" | "rooms" | "form" | "password" | "bank" | "system" | "audit" | "superadmin" | "subscription">("general");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"general" | "rooms" | "form" | "password" | "bank" | "system" | "audit" | "superadmin" | "subscription" | "notification">("general");
   const [tenantFormData, setTenantFormData] = useState({
     name: "",
     logo: "",
@@ -962,6 +962,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [wifiWhitelist, setWifiWhitelist] = useState<any[]>([]); // ⚡ NEW: Global IP Whitelist
   const [enableManualAttendance, setEnableManualAttendance] = useState(false); // ⚡ NEW: Toggle for Manual Marking Toolbar
   const [leaveApprovalMethod, setLeaveApprovalMethod] = useState("app"); // ⚡ NEW: Leave Approval Method
+  const [notificationSettings, setNotificationSettings] = useState<Record<string, boolean>>({
+    parentNightAbsent: true,
+    parentScanInOut: true,
+    parentLeaveApproval: true,
+    studentLeaveStatus: true,
+    studentAttendanceReminder: true,
+    wardenNewLeaveRequest: true,
+    wardenScanFailure: true,
+    deanSecurityAlert: true
+  });
 
 
   // Audit States
@@ -1313,6 +1323,33 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     checkSubscription();
   }, []);
 
+  // Register Web Push notifications on mount
+  useEffect(() => {
+    const initPush = async () => {
+      try {
+        const type = localStorage.getItem("userType");
+        const userId = localStorage.getItem("wardenUsername") || localStorage.getItem("userId") || "admin";
+        
+        let mappedType: "student" | "parent" | "warden" | "dean" | null = null;
+        if (type === "warden") {
+          mappedType = "warden";
+        } else if (type === "dean" || title === "Dean Dashboard") {
+          mappedType = "dean";
+        } else if (title === "Super Admin Dashboard" || type === "admin" || type === "super_admin") {
+          mappedType = "dean";
+        }
+
+        if (mappedType && userId) {
+          const { registerPushNotifications } = await import("@/lib/pushRegister");
+          await registerPushNotifications(userId, mappedType);
+        }
+      } catch (e) {
+        console.error("Failed to register admin push notifications:", e);
+      }
+    };
+    initPush();
+  }, [isWarden, title]);
+
   // Initialize messaging defaults for wardens
   useEffect(() => {
     if (isWarden && wardenHostelName) {
@@ -1534,6 +1571,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (settingsData.leaveApprovalMethod) setLeaveApprovalMethod(settingsData.leaveApprovalMethod);
         if (settingsData.wifiWhitelist) setWifiWhitelist(settingsData.wifiWhitelist);
         if (settingsData.enableManualAttendance !== undefined) setEnableManualAttendance(settingsData.enableManualAttendance);
+        if (settingsData.notificationSettings) {
+          setNotificationSettings(prev => ({ ...prev, ...settingsData.notificationSettings }));
+        }
       }
 
       // Fetch Hostels (with warden/room info)
@@ -1575,6 +1615,58 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       alert("Error: " + (e.message || "Network error"));
     } finally {
       setIsUpdatingSettings(false);
+    }
+  };
+
+  const handleToggleNotificationSetting = async (key: string, value: boolean) => {
+    try {
+      setIsUpdatingSettings(true);
+      const updated = { ...notificationSettings, [key]: value };
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notificationSettings: updated })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNotificationSettings(updated);
+      } else {
+        alert("Failed to update setting: " + (data.error || "Unknown error"));
+      }
+    } catch (e: any) {
+      console.error("Failed to update notification setting", e);
+      alert("Error: " + (e.message || "Network error"));
+    } finally {
+      setIsUpdatingSettings(false);
+    }
+  };
+
+  const [isNotifyingAbsentees, setIsNotifyingAbsentees] = useState(false);
+  const handleNotifyAbsentees = async () => {
+    if (displayedAbsentees.length === 0) return;
+    if (!await showConfirm(`Are you sure you want to send Web Push Alerts to parents of all ${displayedAbsentees.length} absent students?`)) return;
+
+    try {
+      setIsNotifyingAbsentees(true);
+      const res = await fetch("/api/admin/notify-absentees", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentIds: displayedAbsentees.map(s => s.id),
+          date: selectedDate
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Web Push Alerts sent to ${data.notifiedCount} registered parents!`, "success");
+      } else {
+        alert("Failed to send alerts: " + (data.error || "Unknown error"));
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert("Error: " + (e.message || "Network error"));
+    } finally {
+      setIsNotifyingAbsentees(false);
     }
   };
 
@@ -4036,6 +4128,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     return currentTimeStr >= start && currentTimeStr <= end;
   }, [attendanceTimeSettings]);
 
+  // Shows blue dot from attendance start time until 11:59 PM (23:59 IST)
+  const showFlashingBlueDot = useMemo(() => {
+    const start = attendanceTimeSettings.startTime || "21:00";
+    const end = "23:59";
+    
+    const now = new Date();
+    // Offset by +5:30 for Indian Standard Time (IST)
+    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    const hours = istTime.getUTCHours().toString().padStart(2, '0');
+    const minutes = istTime.getUTCMinutes().toString().padStart(2, '0');
+    const currentTimeStr = `${hours}:${minutes}`;
+    
+    return currentTimeStr >= start && currentTimeStr <= end;
+  }, [attendanceTimeSettings]);
+
   // 4. Room Data Grouping
   const visualRoomsData = useMemo(() => {
     if (!activeVisualHostel) return [];
@@ -5544,9 +5651,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                       {/* Absentee List */}
                       <div ref={absenteesRef} className="bg-red-50/30 rounded-xl border border-red-100 p-4">
-                        <h3 className="text-sm font-bold text-red-900 mb-3 flex items-center gap-2">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-{selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? "Today's" : selectedDate} Absentee List ({displayedAbsentees.length} students)
+                        <h3 className="text-sm font-bold text-red-900 mb-3 flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-2">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                            {selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? "Today's" : selectedDate} Absentee List ({displayedAbsentees.length} students)
+                          </span>
+                          {displayedAbsentees.length > 0 && (
+                            <button
+                              onClick={handleNotifyAbsentees}
+                              disabled={isNotifyingAbsentees}
+                              className="px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-[9px] font-black uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                            >
+                              <span>🔔</span>
+                              {isNotifyingAbsentees ? "Notifying..." : "Notify Parents"}
+                            </button>
+                          )}
                         </h3>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                           {(showAllAbsentees ? displayedAbsentees : displayedAbsentees.slice(0, 9)).map(s => (
@@ -6481,7 +6600,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                               {r.name.slice(0, 1).toUpperCase()}
                                             </div>
                                             {/* Blinking attendance dot - same size as status dot */}
-                                            {hasMarkedAttendance && isWithinAttendanceTime ? (
+                                            {hasMarkedAttendance && showFlashingBlueDot ? (
                                               <span 
                                                 className="w-2 h-2 md:w-2.5 md:h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 shadow-sm"
                                                 title="Night Attendance Marked"
@@ -6523,16 +6642,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <p className="text-xs text-slate-500 font-bold mt-1">Occupancy Details & Roommate Contact Cards</p>
                         </div>
 
-                        <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1 no-scrollbar">
+                        <div className="space-y-3 max-h-[60vh] sm:max-h-[380px] overflow-y-auto pr-1 no-scrollbar">
                           {selectedRoomStudents.map(student => {
                             const rStatus = getRoommateStatus(student);
                             const studentIdStr = student.id || student._id;
                             const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString());
                             return (
-                              <div key={student.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex flex-row items-center justify-between gap-3 hover:border-slate-200 transition-all">
+                              <div key={student.id} className="p-2 sm:p-3 bg-slate-50 rounded-2xl border border-slate-100 flex flex-row items-center justify-between gap-3 hover:border-slate-200 transition-all">
                                 <div className="flex items-center gap-3.5 min-w-0">
                                   {/* Avatar or Profile Image */}
-                                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-sm shadow-md overflow-hidden shrink-0 border border-slate-100">
+                                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-xs sm:text-sm shadow-md overflow-hidden shrink-0 border border-slate-100">
                                     {student.profilePicture ? (
                                       <img src={student.profilePicture} alt={student.name} className="w-full h-full object-cover" />
                                     ) : (
@@ -6542,17 +6661,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-2">
                                       <h4 className="font-bold text-slate-800 text-sm leading-snug truncate">{student.name}</h4>
-                                      {hasMarkedAttendance && isWithinAttendanceTime && (
+                                      {hasMarkedAttendance && showFlashingBlueDot && (
                                         <span 
                                           className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 shadow-sm"
                                           title="Night Attendance Marked"
                                         />
                                       )}
                                     </div>
-                                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
+                                    <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
                                       Reg ID: {student.registrationId || "N/A"}
                                     </p>
-                                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
+                                    <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
                                       ERP ID: {student.erpInformation || "N/A"}
                                     </p>
                                     <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
@@ -6570,10 +6689,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
                                 </div>
 
-                                <div className="flex flex-col items-center gap-1.5 shrink-0">
+                                <div className="flex flex-row sm:flex-col items-center gap-1 sm:gap-1.5 shrink-0">
                                   <a
                                     href={`tel:${student.phoneNumber}`}
-                                    className="p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-xs"
+                                    className="p-1 sm:p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-[10px] sm:text-xs"
                                     title="Call Student"
                                   >
                                     📞
@@ -6581,7 +6700,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   {student.fatherNumber && (
                                     <a
                                       href={`tel:${student.fatherNumber}`}
-                                      className="p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-xs"
+                                      className="p-1 sm:p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-[10px] sm:text-xs"
                                       title={`Call Parent: ${student.fatherName || "Father"}`}
                                     >
                                       👨‍👩‍👦
@@ -6591,7 +6710,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     href={`https://wa.me/${student.phoneNumber}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="p-1.5 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-100/50 transition-colors shadow-sm text-xs"
+                                    className="p-1 sm:p-1.5 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-100/50 transition-colors shadow-sm text-[10px] sm:text-xs"
                                     title="WhatsApp Student"
                                   >
                                     💬
@@ -8995,6 +9114,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   { id: "general", label: "General", icon: "🏛️" },
                   { id: "form", label: "Form", icon: "📝" },
                   { id: "password", label: "Pass", icon: "🔑" },
+                  { id: "notification", label: "Push", icon: "🔔" },
                   { id: "system", label: "System", icon: "⚙️" },
                   { id: "audit", label: "Audit", icon: "🔍" },
                   ...(title !== "Campus Dashboard" ? [{ id: "superadmin", label: "Super Admin", icon: "⚡" }] : [])
@@ -9449,6 +9569,172 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           {/* Hidden anchor for the footer button if needed, but we'll just remove it from here */}
                         </div>
                       )}
+                    </div>
+                  </div>
+                )}
+
+                {activeSettingsTab === "notification" && (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="bg-indigo-50 border-2 border-indigo-100 p-4 rounded-2xl flex items-start gap-4">
+                      <span className="text-xl sm:text-2xl">🔔</span>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-black text-indigo-900 uppercase tracking-wide">Web Push Notifications</h4>
+                        <p className="text-xs text-indigo-700 font-bold mt-0.5 uppercase tracking-tight">Configure which instant lockscreen alerts are sent to parents, students, wardens, and deans.</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      {/* Parent Alerts */}
+                      <div className="bg-gray-50/50 p-4 rounded-[20px] border border-gray-100 space-y-3">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Parent Alerts</h4>
+                        <div className="space-y-3">
+                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                            <div>
+                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">Night Attendance Absentee Alert</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Vibrate & sound parents when a student misses night curfew</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.parentNightAbsent !== false}
+                                onChange={(e) => handleToggleNotificationSetting('parentNightAbsent', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+
+                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                            <div>
+                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">Gate Scan Entry/Exit Alerts</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Instant push notification when student checks out or checks in at the gate</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.parentScanInOut !== false}
+                                onChange={(e) => handleToggleNotificationSetting('parentScanInOut', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+
+                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                            <div>
+                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">Gatepass / Leave Decisions</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Notify parents immediately upon approval/rejection of out-pass requests</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.parentLeaveApproval !== false}
+                                onChange={(e) => handleToggleNotificationSetting('parentLeaveApproval', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Student Alerts */}
+                      <div className="bg-gray-50/50 p-4 rounded-[20px] border border-gray-100 space-y-3">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Student Alerts</h4>
+                        <div className="space-y-3">
+                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                            <div>
+                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">Gatepass Approval Alerts</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Push updates directly to student when leave is approved/rejected</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.studentLeaveStatus !== false}
+                                onChange={(e) => handleToggleNotificationSetting('studentLeaveStatus', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+
+                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                            <div>
+                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">Curfew Attendance Reminders</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Daily background reminder to mark attendance before curfew hour closes</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.studentAttendanceReminder !== false}
+                                onChange={(e) => handleToggleNotificationSetting('studentAttendanceReminder', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Warden Alerts */}
+                      <div className="bg-gray-50/50 p-4 rounded-[20px] border border-gray-100 space-y-3">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Warden Alerts</h4>
+                        <div className="space-y-3">
+                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                            <div>
+                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">New Leave Request Alerts</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Notify wardens instantly when a student submits a new gatepass request</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.wardenNewLeaveRequest !== false}
+                                onChange={(e) => handleToggleNotificationSetting('wardenNewLeaveRequest', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+
+                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                            <div>
+                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">Emergency Scan Failure Alerts</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Push alert when device locks out or checks in with GPS/biometric failures</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.wardenScanFailure !== false}
+                                onChange={(e) => handleToggleNotificationSetting('wardenScanFailure', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Dean & Admin Alerts */}
+                      <div className="bg-gray-50/50 p-4 rounded-[20px] border border-gray-100 space-y-3">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Dean & Super Admin Alerts</h4>
+                        <div className="space-y-3">
+                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                            <div>
+                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">High Security & Lockout Alerts</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Notify deans instantly upon student device resets or locks</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={notificationSettings.deanSecurityAlert !== false}
+                                onChange={(e) => handleToggleNotificationSetting('deanSecurityAlert', e.target.checked)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}

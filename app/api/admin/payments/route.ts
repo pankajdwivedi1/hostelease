@@ -52,12 +52,23 @@ export async function POST(request: NextRequest) {
 
             if (payment) {
                 // Update via adapter
-                await db.transactions.update(payment._id, {
+                const updatedPayment = await db.transactions.update(payment._id, {
                     status: "verified",
                     reconciledViaCSV: true,
                     verifiedAt: new Date(),
                     adminRemarks: "Automatically verified via Bank CSV reconciliation."
                 });
+
+                if (updatedPayment) {
+                    import("@/lib/pushNotification").then(({ sendPushNotification }) => {
+                        sendPushNotification(updatedPayment.studentId, "student", "paymentVerified", {
+                            title: "Fee Payment Verified",
+                            body: `Your fee payment of ₹${updatedPayment.amount} has been verified automatically.`,
+                            url: "/"
+                        }).catch(err => console.error("Payment CSV verified push failed:", err));
+                    }).catch(err => console.log("pushNotification import failed in CSV verify:", err));
+                }
+
                 verifiedCount++;
                 results.push({ utr, status: "verified", registrationId: payment.registrationId });
             } else {
@@ -100,6 +111,21 @@ export async function PATCH(request: NextRequest) {
 
         if (!payment) {
             return NextResponse.json({ error: "Payment record not found" }, { status: 404 });
+        }
+
+        // Trigger Push Notification if status is verified
+        if (status === "verified") {
+            try {
+                import("@/lib/pushNotification").then(({ sendPushNotification }) => {
+                    sendPushNotification(payment.studentId, "student", "paymentVerified", {
+                        title: "Fee Payment Verified",
+                        body: `Your fee payment of ₹${payment.amount} has been verified by the administrator.`,
+                        url: "/"
+                    }).catch(err => console.error("Payment manual verified push failed:", err));
+                });
+            } catch (e) {
+                console.error("Failed to trigger payment verification push:", e);
+            }
         }
 
         return NextResponse.json({

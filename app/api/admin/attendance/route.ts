@@ -40,6 +40,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
+
 export async function POST(request: Request) {
     try {
         const body = await request.json();
@@ -67,12 +68,21 @@ export async function POST(request: Request) {
         const cookieStore = await cookies();
         const userType = cookieStore.get('userType')?.value || 'admin';
 
-        // ⚡ BATCH OPTIMIZATION: Fetch all students in one single query instead of a loop
         const currentTenantId = await db.getTenantIdOrThrow();
-        const students = await db.students.list({ 
-            _id: { $in: studentIds },
-            tenant_id: currentTenantId 
-        }, { limit: studentIds.length });
+        
+        // Fetch students in batches of 100 to avoid Supabase URL size limits
+        const BATCH_SIZE = 100;
+        const students: any[] = [];
+        for (let i = 0; i < studentIds.length; i += BATCH_SIZE) {
+            const batchIds = studentIds.slice(i, i + BATCH_SIZE);
+            const batchStudents = await db.students.list({
+                _id: { $in: batchIds },
+                tenant_id: currentTenantId
+            }, { limit: batchIds.length });
+            if (Array.isArray(batchStudents)) {
+                students.push(...batchStudents);
+            }
+        }
 
         const attendanceRecords: any[] = [];
         

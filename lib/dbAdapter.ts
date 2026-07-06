@@ -64,7 +64,7 @@ const filterSettingsForPrisma = (data: any) => {
         'prioritizeAssignedHostel', 'hostelLocations', 'wardenAccounts',
         'registrationFieldsConfig', 'formBuilderConfig', 'universityBankDetails',
         'wifiWhitelist', 'hostelPrefixMap', 'enableManualAttendance', 'tenantId',
-        'developerPassword', 'leaveApprovalMethod'
+        'developerPassword', 'leaveApprovalMethod', 'notificationSettings'
     ];
     const filtered: any = {};
     for (const key of settingsFields) {
@@ -501,6 +501,7 @@ const mapSettingsToCamelCase = (s: any) => {
         enableManualAttendance: s.enable_manual_attendance || s.enableManualAttendance,
         developerPassword: s.developer_password || s.developerPassword,
         leaveApprovalMethod: s.leave_approval_method || s.leaveApprovalMethod || 'app',
+        notificationSettings: s.notification_settings || s.notificationSettings || {},
         createdAt: s.created_at || s.createdAt,
         updatedAt: s.updated_at || s.updatedAt
     };
@@ -533,7 +534,8 @@ const mapSettingsToSnakeCase = (s: any) => {
         getpassPassword: 'getpass_password',
         enableManualAttendance: 'enable_manual_attendance',
         developerPassword: 'developer_password',
-        leaveApprovalMethod: 'leave_approval_method'
+        leaveApprovalMethod: 'leave_approval_method',
+        notificationSettings: 'notification_settings'
     };
 
     Object.keys(s).forEach(key => {
@@ -1009,6 +1011,91 @@ const getDbSource = async () => {
 export const db = {
     // Returns which database currently active
     getSource: getDbSource,
+
+    pushSubscription: {
+        create: async (subData: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const { data, error } = await supabase
+                    .from('push_subscriptions')
+                    .insert([{
+                        user_id: subData.userId,
+                        user_type: subData.userType,
+                        subscription: subData.subscription
+                    }])
+                    .select()
+                    .single();
+                if (error) throw error;
+                return {
+                    id: data._id || data.id,
+                    userId: data.user_id,
+                    userType: data.user_type,
+                    subscription: data.subscription
+                };
+            } else if (source === 'PRISMA') {
+                const data = await prisma.pushSubscription.create({
+                    data: {
+                        userId: subData.userId,
+                        userType: subData.userType,
+                        subscription: subData.subscription
+                    }
+                });
+                return data;
+            } else {
+                await connectDB();
+                const PushSubscription = (await import('@/models/PushSubscription')).default;
+                const subscription = await PushSubscription.create(subData);
+                return JSON.parse(JSON.stringify(subscription));
+            }
+        },
+        findMany: async (query: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let sQuery = supabase.from('push_subscriptions').select('*');
+                if (query.userId) sQuery = sQuery.eq('user_id', query.userId);
+                if (query.userType) sQuery = sQuery.eq('user_type', query.userType);
+                const { data, error } = await sQuery;
+                if (error) throw error;
+                return (data || []).map(d => ({
+                    id: d._id || d.id,
+                    userId: d.user_id,
+                    userType: d.user_type,
+                    subscription: d.subscription
+                }));
+            } else if (source === 'PRISMA') {
+                const data = await prisma.pushSubscription.findMany({
+                    where: query
+                });
+                return data;
+            } else {
+                await connectDB();
+                const PushSubscription = (await import('@/models/PushSubscription')).default;
+                const subs = await PushSubscription.find(query).lean();
+                return JSON.parse(JSON.stringify(subs));
+            }
+        },
+        deleteMany: async (query: any) => {
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                let sQuery = supabase.from('push_subscriptions').delete();
+                if (query.userId) sQuery = sQuery.eq('user_id', query.userId);
+                if (query.userType) sQuery = sQuery.eq('user_type', query.userType);
+                const { error } = await sQuery;
+                if (error) throw error;
+                return { success: true };
+            } else if (source === 'PRISMA') {
+                await prisma.pushSubscription.deleteMany({
+                    where: query
+                });
+                return { success: true };
+            } else {
+                await connectDB();
+                const PushSubscription = (await import('@/models/PushSubscription')).default;
+                await PushSubscription.deleteMany(query);
+                return { success: true };
+            }
+        }
+    },
 
     // ⚡ EXPOSED FOR BULK OPERATIONS
     supabase,

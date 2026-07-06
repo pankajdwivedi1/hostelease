@@ -9,6 +9,7 @@ import Barcode from "react-barcode";
 import * as faceMatching from "@/lib/faceMatching";
 import { showToast, showConfirm } from "@/lib/toast";
 import ParentConsentVideoModal from "./ParentConsentVideoModal";
+import { registerPushNotifications } from "@/lib/pushRegister";
 import {
     resolveConsentVideoSrc,
     useParentConsentVideoPrefetch,
@@ -154,6 +155,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [isAttendanceMarked, setIsAttendanceMarked] = useState(false);
     const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
     const [attendanceWindow, setAttendanceWindow] = useState({ start: "21:00", end: "23:00" });
+
+    const [showSoundBanner, setShowSoundBanner] = useState(false);
+    useEffect(() => {
+        if (typeof window !== "undefined" && isParentView) {
+            const dismissed = localStorage.getItem("dismissedNotificationSoundBanner");
+            if (!dismissed) {
+                setShowSoundBanner(true);
+            }
+        }
+    }, [isParentView]);
 
     const fetchAttendanceHistory = async () => {
         if (!studentProfile) return;
@@ -977,6 +988,24 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             syncDeviceId();
         }
     }, [isFullProfileLoaded, studentProfile?._id, isParentView]);
+
+    // Register Web Push notifications on mount/profile load
+    useEffect(() => {
+        if (studentProfile && studentProfile._id) {
+            const initPush = async () => {
+                try {
+                    const isParent = localStorage.getItem("userType") === "parent" || isParentView;
+                    const userId = isParent ? (studentProfile.fatherNumber || studentProfile._id + "_parent") : studentProfile._id;
+                    const userType = isParent ? "parent" : "student";
+                    
+                    await registerPushNotifications(userId, userType);
+                } catch (e) {
+                    console.error("Failed to register student/parent push notifications:", e);
+                }
+            };
+            initPush();
+        }
+    }, [studentProfile?._id, isParentView]);
 
     // ⚡ OPTIMIZATION: Lazy-load notification images ONLY when the popup is shown
     useEffect(() => {
@@ -2363,6 +2392,34 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 <div className="p-4 md:p-6 space-y-4 md:space-y-6">
                     {!showProfile ? (
                         <>
+                            {isParentView && showSoundBanner && (
+                                <div className="relative overflow-hidden bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-3xl p-4 md:p-5 shadow-sm transition-all animate-fade-in flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4" style={{ fontFamily: 'var(--font-lora), Cambria' }}>
+                                    <div className="flex items-start gap-3.5">
+                                        <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0 shadow-sm">
+                                            <span className="text-xl">🔔</span>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-xs md:text-sm font-black text-amber-900 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                                                Curfew Sound Alerts Configured?
+                                            </h3>
+                                            <p className="text-xs text-amber-800 leading-relaxed max-w-2xl font-medium">
+                                                To receive emergency curfew sound alerts, please ensure your phone is set to <strong className="text-amber-950 font-bold">Ring mode</strong> and Chrome notification settings allow sound. (Silent/Vibrate mode or generic browser settings will mute critical safety alerts).
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 md:self-center shrink-0">
+                                        <button
+                                            onClick={() => {
+                                                localStorage.setItem("dismissedNotificationSoundBanner", "true");
+                                                setShowSoundBanner(false);
+                                            }}
+                                            className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-[10px] md:text-xs font-black uppercase tracking-wider shadow-sm transition-all active:scale-95"
+                                        >
+                                            Got it, thanks!
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                             {/* Header section: Profile @ Top-Right, Logout next to Name */}
                             <div className="flex items-start justify-between gap-4 mb-6">
                                 <div className="flex-1 min-w-0">

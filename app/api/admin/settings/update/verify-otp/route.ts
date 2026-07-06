@@ -8,7 +8,7 @@ import { otpCache } from "@/lib/otpCache";
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { otp, contactName, contactPhone, totalHostelars, leaveApprovalMethod, enableParentGatepassNotifications, enableWardenLeaveNotifications } = body;
+        const { otp, contactName, contactPhone, totalHostelars, leaveApprovalMethod } = body;
 
         if (!otp || otp.length !== 6) {
             return NextResponse.json({ success: false, error: "A valid 6-digit OTP is required." }, { status: 400 });
@@ -52,8 +52,6 @@ export async function POST(request: Request) {
         if (contactName !== undefined) bankDetails.contactName = contactName;
         if (contactPhone !== undefined) bankDetails.contactPhone = contactPhone;
         if (totalHostelars !== undefined) bankDetails.totalHostelars = totalHostelars;
-        if (enableParentGatepassNotifications !== undefined) bankDetails.enableParentGatepassNotifications = enableParentGatepassNotifications;
-        if (enableWardenLeaveNotifications !== undefined) bankDetails.enableWardenLeaveNotifications = enableWardenLeaveNotifications;
 
         if (settings) {
             const { error } = await db.supabase

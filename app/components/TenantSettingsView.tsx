@@ -15,8 +15,6 @@ export default function TenantSettingsView() {
     const [contactPhone, setContactPhone] = useState(cachedSettings?.contactPhone || "");
     const [totalHostelars, setTotalHostelars] = useState(cachedSettings?.totalHostelars || "");
     const [leaveApprovalMethod, setLeaveApprovalMethod] = useState(cachedSettings?.leaveApprovalMethod || "app");
-    const [enableParentGatepassNotifications, setEnableParentGatepassNotifications] = useState(cachedSettings?.enableParentGatepassNotifications ?? true);
-    const [enableWardenLeaveNotifications, setEnableWardenLeaveNotifications] = useState(cachedSettings?.enableWardenLeaveNotifications ?? true);
 
     // OTP Modal state
     const [showOtpModal, setShowOtpModal] = useState(false);
@@ -37,8 +35,6 @@ export default function TenantSettingsView() {
                 setContactPhone(data.settings.contactPhone || "");
                 setTotalHostelars(data.settings.totalHostelars || "");
                 setLeaveApprovalMethod(data.settings.leaveApprovalMethod || "app");
-                setEnableParentGatepassNotifications(data.settings.enableParentGatepassNotifications ?? true);
-                setEnableWardenLeaveNotifications(data.settings.enableWardenLeaveNotifications ?? true);
             }
         } catch (e: any) {
             console.error("Error loading settings:", e);
@@ -89,9 +85,7 @@ export default function TenantSettingsView() {
                     contactName,
                     contactPhone,
                     totalHostelars,
-                    leaveApprovalMethod,
-                    enableParentGatepassNotifications,
-                    enableWardenLeaveNotifications
+                    leaveApprovalMethod
                 })
             });
             const data = await res.json();
@@ -260,39 +254,6 @@ export default function TenantSettingsView() {
                                     {leaveApprovalMethod === "ivr" && "If set to IVR, the system will trigger an automated IVR voice call to the parent."}
                                     {leaveApprovalMethod === "none" && "If set to None, parent consent is bypassed, and wardens can approve requests immediately."}
                                 </p>
-                            </div>
-                            
-                            <div className="h-px bg-slate-100 col-span-3 w-full my-6"></div>
-
-                            <div className="space-y-4 col-span-3">
-                                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4">Notification Preferences</h3>
-                                <div className="space-y-4">
-                                    <label className="flex items-center gap-3.5 cursor-pointer select-none">
-                                        <input
-                                            type="checkbox"
-                                            checked={enableParentGatepassNotifications}
-                                            onChange={e => setEnableParentGatepassNotifications(e.target.checked)}
-                                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 transition-all cursor-pointer"
-                                        />
-                                        <div>
-                                            <p className="text-xs font-black text-slate-700 uppercase tracking-tight">Parent Gatepass Notifications</p>
-                                            <p className="text-[10px] text-slate-400 font-bold mt-0.5">Send instant background push notifications to parents when their student scans checkout/checkin QR codes.</p>
-                                        </div>
-                                    </label>
-
-                                    <label className="flex items-center gap-3.5 cursor-pointer select-none mt-2">
-                                        <input
-                                            type="checkbox"
-                                            checked={enableWardenLeaveNotifications}
-                                            onChange={e => setEnableWardenLeaveNotifications(e.target.checked)}
-                                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 transition-all cursor-pointer"
-                                        />
-                                        <div>
-                                            <p className="text-xs font-black text-slate-700 uppercase tracking-tight">Warden & Dean Leave Notifications</p>
-                                            <p className="text-[10px] text-slate-400 font-bold mt-0.5">Send instant background push notifications to Wardens and Deans whenever a student submits a leave request.</p>
-                                        </div>
-                                    </label>
-                                </div>
                             </div>
                         </div>
 
