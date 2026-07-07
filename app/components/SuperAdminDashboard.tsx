@@ -62,7 +62,20 @@ const LiveDbSwitch = () => {
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        fetch('/api/admin/active-db').then(res => res.json()).then(data => setSource(data.source));
+        fetch('/api/admin/active-db')
+            .then(res => {
+                if (!res.ok) throw new Error("Server returned error");
+                const contentType = res.headers.get("content-type");
+                if (!contentType || !contentType.includes("application/json")) {
+                    throw new Error("Server returned non-JSON response");
+                }
+                return res.json();
+            })
+            .then(data => setSource(data.source))
+            .catch(err => {
+                console.error("Failed to load active db source, falling back to SUPABASE:", err);
+                setSource('SUPABASE');
+            });
     }, []);
 
     const toggle = async () => {

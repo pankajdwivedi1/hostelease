@@ -1073,6 +1073,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   }, [hostels, isWarden, authorizedHostels, activeVisualHostel]);
   const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null); // ⚡ NEW: Subscription tracking
+  const [billingHistory, setBillingHistory] = useState<any[]>([]); // ⚡ Billing history state
+  const [loadingBillingHistory, setLoadingBillingHistory] = useState(false); // ⚡ Billing history loading
 
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]); // ⚡ NEW: Manual Selection
   const [isBulkMarking, setIsBulkMarking] = useState(false); // ⚡ NEW: Loading State
@@ -1322,6 +1324,271 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     };
     checkSubscription();
   }, []);
+
+  const fetchBillingHistory = async () => {
+    setLoadingBillingHistory(true);
+    try {
+      const res = await fetch("/api/admin/billing-history");
+      const data = await res.json();
+      if (data.success) {
+        setBillingHistory(data.logs || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch billing history:", e);
+    } finally {
+      setLoadingBillingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSettingsTab === "subscription") {
+      fetchBillingHistory();
+    }
+  }, [activeSettingsTab]);
+
+  const generateInvoicePDF = (tx: any, collegeName: string) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert("Popup blocker prevented opening invoice. Please allow popups for this site.");
+      return;
+    }
+    
+    const formattedDate = new Date(tx.date).toLocaleDateString("en-IN", { dateStyle: "long" });
+    const invoiceNo = tx.id.replace('tx_', 'INV-').toUpperCase();
+    
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Invoice ${invoiceNo}</title>
+          <style>
+            body {
+              font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+              margin: 0;
+              padding: 40px;
+              color: #333;
+              line-height: 1.5;
+            }
+            .invoice-box {
+              max-width: 800px;
+              margin: auto;
+              background: #fff;
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 2px solid #f3f4f6;
+              padding-bottom: 20px;
+              margin-bottom: 30px;
+            }
+            .logo {
+              font-size: 28px;
+              font-weight: 900;
+              color: #4f46e5;
+              text-transform: uppercase;
+              letter-spacing: -0.5px;
+            }
+            .title {
+              text-align: right;
+            }
+            .title h1 {
+              margin: 0;
+              font-size: 24px;
+              font-weight: 900;
+              color: #1f2937;
+              letter-spacing: -0.5px;
+            }
+            .details {
+              display: grid;
+              grid-template-cols: 1fr 1fr;
+              gap: 20px;
+              margin-bottom: 40px;
+            }
+            .details h3 {
+              margin: 0 0 8px 0;
+              font-size: 11px;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+              color: #9ca3af;
+              font-weight: 800;
+            }
+            .details p {
+              margin: 0;
+              font-size: 14px;
+              font-weight: 700;
+              color: #4b5563;
+            }
+            .table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 40px;
+            }
+            .table th {
+              background: #f9fafb;
+              border-bottom: 2px solid #e5e7eb;
+              color: #4b5563;
+              font-size: 11px;
+              font-weight: 800;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              padding: 12px 16px;
+              text-align: left;
+            }
+            .table td {
+              padding: 16px;
+              border-bottom: 1px solid #f3f4f6;
+              font-size: 14px;
+              font-weight: 600;
+              color: #1f2937;
+            }
+            .table tr:last-child td {
+              border-bottom: none;
+            }
+            .total-box {
+              display: flex;
+              justify-content: flex-end;
+              margin-bottom: 50px;
+            }
+            .total-table {
+              width: 250px;
+              font-size: 14px;
+            }
+            .total-table tr td {
+              padding: 8px 0;
+            }
+            .total-table tr td:last-child {
+              text-align: right;
+              font-weight: 700;
+            }
+            .grand-total {
+              font-size: 18px;
+              font-weight: 900;
+              color: #111827;
+              border-top: 2px solid #e5e7eb;
+              padding-top: 12px;
+            }
+            .footer {
+              border-top: 2px solid #f3f4f6;
+              padding-top: 20px;
+              text-align: center;
+              font-size: 12px;
+              color: #9ca3af;
+              font-weight: 600;
+              margin-top: 50px;
+            }
+            @media print {
+              body { padding: 0; }
+              .no-print { display: none; }
+            }
+            .print-btn {
+              background: #4f46e5;
+              color: #fff;
+              border: none;
+              padding: 12px 24px;
+              border-radius: 8px;
+              font-weight: 700;
+              font-size: 14px;
+              cursor: pointer;
+              box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1), 0 2px 4px -1px rgba(79, 70, 229, 0.06);
+              transition: all 0.2s;
+              margin-bottom: 20px;
+            }
+            .print-btn:hover {
+              background: #4338ca;
+            }
+          </style>
+        </head>
+        <body>
+          <div style="max-width: 800px; margin: auto;" class="no-print">
+            <button onclick="window.print()" class="print-btn">Print / Save as PDF</button>
+          </div>
+          <div class="invoice-box">
+            <div class="header">
+              <div class="logo">Hosteleaze</div>
+              <div class="title">
+                <h1>TAX INVOICE</h1>
+                <p style="margin: 4px 0 0 0; font-size: 12px; font-weight: 700; color: #6b7280;">No: ${invoiceNo}</p>
+              </div>
+            </div>
+            
+            <div class="details">
+              <div>
+                <h3>Billed To</h3>
+                <p style="font-size: 16px; color: #111827; margin-bottom: 4px;">${collegeName || "Partner College"}</p>
+                <p style="font-size: 12px; font-weight: 500; color: #9ca3af;">Subscription Client</p>
+              </div>
+              <div style="text-align: right;">
+                <h3>Billed From</h3>
+                <p style="font-size: 16px; color: #111827; margin-bottom: 4px;">Hosteleaze Inc.</p>
+                <p style="font-size: 12px; font-weight: 500; color: #9ca3af; margin-bottom: 2px;">Developer Account: DR. PANKAJ DWIVEDI</p>
+                <p style="font-size: 12px; font-weight: 500; color: #9ca3af;">Email: support@hosteleaze.com</p>
+              </div>
+            </div>
+
+            <div class="details" style="margin-bottom: 30px;">
+              <div>
+                <h3>Invoice Date</h3>
+                <p>${formattedDate}</p>
+              </div>
+              <div style="text-align: right;">
+                <h3>Payment Method</h3>
+                <p>Razorpay (Instant Online Renewal)</p>
+              </div>
+            </div>
+
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Item Description</th>
+                  <th style="text-align: right;">Billing Period</th>
+                  <th style="text-align: right;">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <div style="font-weight: 700; color: #111827;">Hosteleaze Campus Management Software License</div>
+                    <div style="font-size: 12px; color: #6b7280; font-weight: 500; margin-top: 4px;">Full Administrative & Warden Gatepass Portals Access</div>
+                  </td>
+                  <td style="text-align: right;">${tx.billingPeriod || "1 Year"}</td>
+                  <td style="text-align: right;">₹${tx.amount?.toLocaleString("en-IN") || 0}.00</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="total-box">
+              <table class="total-table">
+                <tr>
+                  <td>Subtotal</td>
+                  <td>₹${tx.amount?.toLocaleString("en-IN") || 0}.00</td>
+                </tr>
+                <tr>
+                  <td>Tax (0%)</td>
+                  <td>₹0.00</td>
+                </tr>
+                <tr class="grand-total">
+                  <td>Total Paid</td>
+                  <td style="color: #4f46e5;">₹${tx.amount?.toLocaleString("en-IN") || 0}.00</td>
+                </tr>
+              </table>
+            </div>
+
+            <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 12px; margin-bottom: 40px;">
+              <p style="margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 800; margin-bottom: 6px;">Payment Verification Proof</p>
+              <p style="margin: 0; font-family: monospace; font-size: 13px; font-weight: 700; color: #1f2937;">Transaction / Payment ID: ${tx.utr || "N/A"}</p>
+              <p style="margin: 4px 0 0 0; font-size: 12px; font-weight: 500; color: #10b981;">✓ Paid Successfully & Verified</p>
+            </div>
+
+            <div class="footer">
+              <p style="margin: 0; font-size: 14px; font-weight: 800; color: #4b5563; margin-bottom: 6px;">Thank you for using Hosteleaze!</p>
+              <p style="margin: 0;">This is a computer-generated tax invoice receipt. No signature is required.</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   // Register Web Push notifications on mount
   useEffect(() => {
@@ -8774,6 +9041,76 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       />
                     </div>
 
+                    {/* Dynamic Custom Onboarding Fields */}
+                    {(() => {
+                      const standardFieldIds = new Set([
+                        'name', 'email', 'phoneNumber', 'gender', 'dob', 'category', 'erpInformation',
+                        'registrationId', 'collegeName', 'branch', 'year', 'semester', 'hostelName',
+                        'roomNumber', 'floorNumber', 'joiningDate', 'fatherName', 'fatherNumber',
+                        'motherName', 'motherNumber', 'homePinCode', 'homeState',
+                        'localGuardianAddress', 'localGuardianPhoneNumber', 'profilePicture'
+                      ]);
+                      const customFields = savedFormBuilderConfig.filter(f => !standardFieldIds.has(f.id) && f.visible);
+                      if (customFields.length === 0) return null;
+                      return (
+                        <>
+                          <div className="col-span-full border-b pb-2 pt-4">
+                            <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest">Custom Onboarding Fields</h4>
+                          </div>
+                          {customFields.map((field) => (
+                            <div key={field.id} className={field.type === 'textarea' ? 'col-span-full' : ''}>
+                              <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">
+                                {field.label}
+                              </label>
+                              {field.type === 'select' ? (
+                                <select
+                                  value={editStudentForm.dynamicFields?.[field.id] || ""}
+                                  onChange={(e) => setEditStudentForm(prev => ({
+                                    ...prev,
+                                    dynamicFields: {
+                                      ...(prev.dynamicFields || {}),
+                                      [field.id]: e.target.value
+                                    }
+                                  }))}
+                                  className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 uppercase"
+                                >
+                                  <option value="">SELECT {field.label.toUpperCase()}</option>
+                                  {field.options?.map((opt: string) => (
+                                    <option key={opt} value={opt.toUpperCase()}>{opt.toUpperCase()}</option>
+                                  ))}
+                                </select>
+                              ) : field.type === 'textarea' ? (
+                                <textarea
+                                  value={editStudentForm.dynamicFields?.[field.id] || ""}
+                                  onChange={(e) => setEditStudentForm(prev => ({
+                                    ...prev,
+                                    dynamicFields: {
+                                      ...(prev.dynamicFields || {}),
+                                      [field.id]: e.target.value.toUpperCase()
+                                    }
+                                  }))}
+                                  className="w-full p-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 text-xs uppercase min-h-[80px]"
+                                />
+                              ) : (
+                                <input
+                                  type={field.type === 'number' ? 'number' : 'text'}
+                                  value={editStudentForm.dynamicFields?.[field.id] || ""}
+                                  onChange={(e) => setEditStudentForm(prev => ({
+                                    ...prev,
+                                    dynamicFields: {
+                                      ...(prev.dynamicFields || {}),
+                                      [field.id]: field.type === 'number' ? e.target.value : e.target.value.toUpperCase()
+                                    }
+                                  }))}
+                                  className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 uppercase"
+                                />
+                              )}
+                            </div>
+                          ))}
+                        </>
+                      );
+                    })()}
+
                   </div>
                 </form>
               </div>
@@ -9117,7 +9454,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   { id: "notification", label: "Push", icon: "🔔" },
                   { id: "system", label: "System", icon: "⚙️" },
                   { id: "audit", label: "Audit", icon: "🔍" },
-                  ...(title !== "Campus Dashboard" ? [{ id: "superadmin", label: "Super Admin", icon: "⚡" }] : [])
+                  ...(title !== "Campus Dashboard" ? [
+                    { id: "subscription", label: "Billing", icon: "💳" },
+                    { id: "superadmin", label: "Super Admin", icon: "⚡" }
+                  ] : [])
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -10413,6 +10753,96 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                 {activeSettingsTab === "superadmin" && (
                   <DeveloperTools hostels={hostels} developerPassword={developerPassword} students={students} refreshStudents={fetchStudents} />
+                )}
+
+                {activeSettingsTab === "subscription" && (
+                  <div className="space-y-6">
+                    <div className="bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl flex items-start gap-4 mb-4">
+                      <span className="text-xl sm:text-2xl">💳</span>
+                      <div className="flex-1">
+                        <p className="text-xs sm:text-sm text-blue-800 font-bold uppercase tracking-tight">Subscription Plan</p>
+                        <p className="text-[10px] sm:text-xs text-blue-600 font-medium mt-1">
+                          View details about your current college license plan and download invoice proofs of past payments.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Subscription status card */}
+                    {subscriptionStatus && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="bg-slate-50 border border-slate-100 p-5 rounded-2xl">
+                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Plan Status</p>
+                          <div className="flex items-center gap-2">
+                            <span className={`w-3.5 h-3.5 rounded-full ${subscriptionStatus.isExpired ? 'bg-red-500' : 'bg-green-500'}`}></span>
+                            <p className="text-lg font-black text-slate-800 uppercase">
+                              {subscriptionStatus.status || "Active"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="bg-slate-50 border border-slate-100 p-5 rounded-2xl">
+                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Days Remaining</p>
+                          <p className="text-lg font-black text-slate-800">
+                            {subscriptionStatus.daysRemaining !== null ? `${subscriptionStatus.daysRemaining} Days` : "Lifetime / N/A"}
+                          </p>
+                        </div>
+                        <div className="bg-slate-50 border border-slate-100 p-5 rounded-2xl">
+                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Expires On</p>
+                          <p className="text-lg font-black text-slate-800">
+                            {subscriptionStatus.endDate ? new Date(subscriptionStatus.endDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "Lifetime / N/A"}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Ledger Logs Table */}
+                    <div className="space-y-3 pt-4">
+                      <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest px-1">Payment History & Invoices</h3>
+                      {loadingBillingHistory ? (
+                        <div className="flex items-center justify-center p-8 text-slate-400 text-xs">
+                          <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin mr-2" />
+                          Fetching logs...
+                        </div>
+                      ) : billingHistory.length === 0 ? (
+                        <div className="text-center py-8 bg-slate-50 border border-slate-100 rounded-2xl text-slate-400 text-xs font-bold uppercase">
+                          No transactions found
+                        </div>
+                      ) : (
+                        <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs border-collapse">
+                              <thead>
+                                <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-black uppercase tracking-wider text-[10px]">
+                                  <th className="py-3.5 px-5">Date</th>
+                                  <th className="py-3.5 px-5">Period</th>
+                                  <th className="py-3.5 px-5">Reference ID</th>
+                                  <th className="py-3.5 px-5">Amount</th>
+                                  <th className="py-3.5 px-5 text-right">Invoice</th>
+                                </tr>
+                              </thead>
+                              <tbody className="font-bold text-slate-700">
+                                {billingHistory.map((tx: any) => (
+                                  <tr key={tx.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                                    <td className="py-3.5 px-5">{new Date(tx.date).toLocaleDateString("en-IN")}</td>
+                                    <td className="py-3.5 px-5">{tx.billingPeriod || "1 Year"}</td>
+                                    <td className="py-3.5 px-5 font-mono select-all text-slate-500">{tx.utr || "N/A"}</td>
+                                    <td className="py-3.5 px-5 text-emerald-600">₹{tx.amount?.toLocaleString("en-IN") || 0}</td>
+                                    <td className="py-3.5 px-5 text-right">
+                                      <button
+                                        onClick={() => generateInvoicePDF(tx, subscriptionStatus?.name)}
+                                        className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-lg transition-all text-[10px] uppercase tracking-wider active:scale-95 shadow-md shadow-blue-500/10"
+                                      >
+                                        📥 Invoice
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
 
 

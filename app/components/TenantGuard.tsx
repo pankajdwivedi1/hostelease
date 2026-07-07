@@ -35,7 +35,7 @@ function QRCodeCanvas({ data, size = 120 }: { data: string; size?: number }) {
     );
 }
 
-function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, error, setError, successMsg, isResubmitting, setIsResubmitting, handleRenewalSubmit, handleRazorpayPayment }: any) {
+function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, error, setError, successMsg, isResubmitting, setIsResubmitting, handleRenewalSubmit, handleRazorpayPayment, billingHistory, loadingBillingHistory, generateInvoicePDF }: any) {
     const [view, setView] = useState<"suspended" | "history" | "renew">("suspended");
 
     if (view === "suspended") {
@@ -129,6 +129,46 @@ function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, err
                                     {status.endDate ? new Date(status.endDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}
                                 </p>
                             </div>
+                        </div>
+
+                        {/* Invoice & Payment History */}
+                        <div className="space-y-3 pt-2">
+                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest px-1">Payment History & Invoices</p>
+                            {loadingBillingHistory ? (
+                                <div className="text-center py-4 text-xs text-gray-400">
+                                    <div className="inline-block w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin mr-2" />
+                                    Loading history...
+                                </div>
+                            ) : !billingHistory || billingHistory.length === 0 ? (
+                                <div className="text-center py-4 bg-white/5 rounded-2xl text-xs text-gray-500 font-bold uppercase">
+                                    No transaction logs found
+                                </div>
+                            ) : (
+                                <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                                    {billingHistory.map((tx: any) => (
+                                        <div key={tx.id} className="bg-white/5 border border-white/5 p-3 rounded-2xl flex items-center justify-between text-xs font-bold">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-white">₹{tx.amount?.toLocaleString("en-IN")}</span>
+                                                    <span className="text-[9px] text-gray-500 font-medium">({tx.billingPeriod || "1 Year"})</span>
+                                                </div>
+                                                <div className="text-[10px] text-gray-400 font-medium font-mono select-all">
+                                                    ID: {tx.utr || "N/A"}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-[9px] text-gray-500">{new Date(tx.date).toLocaleDateString("en-IN")}</span>
+                                                <button
+                                                    onClick={() => generateInvoicePDF(tx, status.name)}
+                                                    className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl transition-all text-[9px] uppercase tracking-wider"
+                                                >
+                                                    Invoice
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex gap-4 pt-4 border-t border-white/10">
@@ -423,11 +463,279 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
     const [successMsg, setSuccessMsg] = useState("");
     const [isResubmitting, setIsResubmitting] = useState(false);
 
+    const [billingHistory, setBillingHistory] = useState<any[]>([]);
+    const [loadingBillingHistory, setLoadingBillingHistory] = useState(false);
+
     useEffect(() => {
         if (typeof window !== "undefined") {
             setUserType(localStorage.getItem("userType"));
         }
     }, [status]);
+
+    const fetchBillingHistory = async () => {
+        setLoadingBillingHistory(true);
+        try {
+            const res = await fetch("/api/admin/billing-history");
+            const data = await res.json();
+            if (data.success) {
+                setBillingHistory(data.logs || []);
+            }
+        } catch (e) {
+            console.error("Failed to fetch billing history:", e);
+        } finally {
+            setLoadingBillingHistory(false);
+        }
+    };
+
+    useEffect(() => {
+        if (status?.isExpired) {
+            fetchBillingHistory();
+        }
+    }, [status?.isExpired]);
+
+    const generateInvoicePDF = (tx: any, collegeName: string) => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            alert("Popup blocker prevented opening invoice. Please allow popups for this site.");
+            return;
+        }
+        
+        const formattedDate = new Date(tx.date).toLocaleDateString("en-IN", { dateStyle: "long" });
+        const invoiceNo = tx.id.replace('tx_', 'INV-').toUpperCase();
+        
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Invoice ${invoiceNo}</title>
+                    <style>
+                        body {
+                            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                            margin: 0;
+                            padding: 40px;
+                            color: #333;
+                            line-height: 1.5;
+                        }
+                        .invoice-box {
+                            max-width: 800px;
+                            margin: auto;
+                            background: #fff;
+                        }
+                        .header {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            border-bottom: 2px solid #f3f4f6;
+                            padding-bottom: 20px;
+                            margin-bottom: 30px;
+                        }
+                        .logo {
+                            font-size: 28px;
+                            font-weight: 900;
+                            color: #4f46e5;
+                            text-transform: uppercase;
+                            letter-spacing: -0.5px;
+                        }
+                        .title {
+                            text-align: right;
+                        }
+                        .title h1 {
+                            margin: 0;
+                            font-size: 24px;
+                            font-weight: 900;
+                            color: #1f2937;
+                            letter-spacing: -0.5px;
+                        }
+                        .details {
+                            display: grid;
+                            grid-template-cols: 1fr 1fr;
+                            gap: 20px;
+                            margin-bottom: 40px;
+                        }
+                        .details h3 {
+                            margin: 0 0 8px 0;
+                            font-size: 11px;
+                            text-transform: uppercase;
+                            letter-spacing: 1px;
+                            color: #9ca3af;
+                            font-weight: 800;
+                        }
+                        .details p {
+                            margin: 0;
+                            font-size: 14px;
+                            font-weight: 700;
+                            color: #4b5563;
+                        }
+                        .table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin-bottom: 40px;
+                        }
+                        .table th {
+                            background: #f9fafb;
+                            border-bottom: 2px solid #e5e7eb;
+                            color: #4b5563;
+                            font-size: 11px;
+                            font-weight: 800;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                            padding: 12px 16px;
+                            text-align: left;
+                        }
+                        .table td {
+                            padding: 16px;
+                            border-bottom: 1px solid #f3f4f6;
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: #1f2937;
+                        }
+                        .table tr:last-child td {
+                            border-bottom: none;
+                        }
+                        .total-box {
+                            display: flex;
+                            justify-content: flex-end;
+                            margin-bottom: 50px;
+                        }
+                        .total-table {
+                            width: 250px;
+                            font-size: 14px;
+                        }
+                        .total-table tr td {
+                            padding: 8px 0;
+                        }
+                        .total-table tr td:last-child {
+                            text-align: right;
+                            font-weight: 700;
+                        }
+                        .grand-total {
+                            font-size: 18px;
+                            font-weight: 900;
+                            color: #111827;
+                            border-top: 2px solid #e5e7eb;
+                            padding-top: 12px;
+                        }
+                        .footer {
+                            border-top: 2px solid #f3f4f6;
+                            padding-top: 20px;
+                            text-align: center;
+                            font-size: 12px;
+                            color: #9ca3af;
+                            font-weight: 600;
+                            margin-top: 50px;
+                        }
+                        @media print {
+                            body { padding: 0; }
+                            .no-print { display: none; }
+                        }
+                        .print-btn {
+                            background: #4f46e5;
+                            color: #fff;
+                            border: none;
+                            padding: 12px 24px;
+                            border-radius: 8px;
+                            font-weight: 700;
+                            font-size: 14px;
+                            cursor: pointer;
+                            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1), 0 2px 4px -1px rgba(79, 70, 229, 0.06);
+                            transition: all 0.2s;
+                            margin-bottom: 20px;
+                        }
+                        .print-btn:hover {
+                            background: #4338ca;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div style="max-width: 800px; margin: auto;" class="no-print">
+                        <button onclick="window.print()" class="print-btn">Print / Save as PDF</button>
+                    </div>
+                    <div class="invoice-box">
+                        <div class="header">
+                            <div class="logo">Hosteleaze</div>
+                            <div class="title">
+                                <h1>TAX INVOICE</h1>
+                                <p style="margin: 4px 0 0 0; font-size: 12px; font-weight: 700; color: #6b7280;">No: ${invoiceNo}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="details">
+                            <div>
+                                <h3>Billed To</h3>
+                                <p style="font-size: 16px; color: #111827; margin-bottom: 4px;">${collegeName || "Partner College"}</p>
+                                <p style="font-size: 12px; font-weight: 500; color: #9ca3af;">Subscription Client</p>
+                            </div>
+                            <div style="text-align: right;">
+                                <h3>Billed From</h3>
+                                <p style="font-size: 16px; color: #111827; margin-bottom: 4px;">Hosteleaze Inc.</p>
+                                <p style="font-size: 12px; font-weight: 500; color: #9ca3af; margin-bottom: 2px;">Developer Account: DR. PANKAJ DWIVEDI</p>
+                                <p style="font-size: 12px; font-weight: 500; color: #9ca3af;">Email: support@hosteleaze.com</p>
+                            </div>
+                        </div>
+
+                        <div class="details" style="margin-bottom: 30px;">
+                            <div>
+                                <h3>Invoice Date</h3>
+                                <p>${formattedDate}</p>
+                            </div>
+                            <div style="text-align: right;">
+                                <h3>Payment Method</h3>
+                                <p>Razorpay (Instant Online Renewal)</p>
+                            </div>
+                        </div>
+
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Item Description</th>
+                                    <th style="text-align: right;">Billing Period</th>
+                                    <th style="text-align: right;">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>
+                                        <div style="font-weight: 700; color: #111827;">Hosteleaze Campus Management Software License</div>
+                                        <div style="font-size: 12px; color: #6b7280; font-weight: 500; margin-top: 4px;">Full Administrative & Warden Gatepass Portals Access</div>
+                                    </td>
+                                    <td style="text-align: right;">${tx.billingPeriod || "1 Year"}</td>
+                                    <td style="text-align: right;">₹${tx.amount?.toLocaleString("en-IN") || 0}.00</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div class="total-box">
+                            <table class="total-table">
+                                <tr>
+                                    <td>Subtotal</td>
+                                    <td>₹${tx.amount?.toLocaleString("en-IN") || 0}.00</td>
+                                </tr>
+                                <tr>
+                                    <td>Tax (0%)</td>
+                                    <td>₹0.00</td>
+                                </tr>
+                                <tr class="grand-total">
+                                    <td>Total Paid</td>
+                                    <td style="color: #4f46e5;">₹${tx.amount?.toLocaleString("en-IN") || 0}.00</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 12px; margin-bottom: 40px;">
+                            <p style="margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 800; margin-bottom: 6px;">Payment Verification Proof</p>
+                            <p style="margin: 0; font-family: monospace; font-size: 13px; font-weight: 700; color: #1f2937;">Transaction / Payment ID: ${tx.utr || "N/A"}</p>
+                            <p style="margin: 4px 0 0 0; font-size: 12px; font-weight: 500; color: #10b981;">✓ Paid Successfully & Verified</p>
+                        </div>
+
+                        <div class="footer">
+                            <p style="margin: 0; font-size: 14px; font-weight: 800; color: #4b5563; margin-bottom: 6px;">Thank you for using Hosteleaze!</p>
+                            <p style="margin: 0;">This is a computer-generated tax invoice receipt. No signature is required.</p>
+                        </div>
+                    </div>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+    };
 
     const handleRenewalSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -656,6 +964,9 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
                 setIsResubmitting={setIsResubmitting} 
                 handleRenewalSubmit={handleRenewalSubmit} 
                 handleRazorpayPayment={handleRazorpayPayment}
+                billingHistory={billingHistory}
+                loadingBillingHistory={loadingBillingHistory}
+                generateInvoicePDF={generateInvoicePDF}
             />
         );
     }

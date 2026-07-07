@@ -66,10 +66,12 @@ export async function POST(request: NextRequest) {
         });
 
         // 5. Create Order
+        // Shorten tenantId and use seconds-level timestamp to stay under Razorpay's 40-character limit
+        const shortTenantId = String(tenantId).replace(/[^a-zA-Z0-9]/g, '').slice(-12);
         const options = {
             amount: amountInPaise,
             currency: "INR",
-            receipt: `rcpt_${tenantId}_${Date.now()}`
+            receipt: `rcpt_${shortTenantId}_${Math.floor(Date.now() / 1000)}`
         };
 
         const order = await razorpay.orders.create(options);

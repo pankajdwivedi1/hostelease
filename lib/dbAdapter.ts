@@ -255,6 +255,7 @@ const mapStudentToCamelCase = (s: any) => {
         createdAt: s.created_at || s.createdAt,
         updatedAt: s.updated_at || s.updatedAt,
         tenantId: s.tenant_id || s.tenantId,
+        gender: s.gender || profile?.gender || s.dynamic_fields?.gender || s.dynamicFields?.gender || security?.dynamic_fields?.gender || security?.dynamicFields?.gender || "",
 
         // Profile Table fields or fallback
         dob: profile?.dob !== undefined ? profile.dob : s.dob,
