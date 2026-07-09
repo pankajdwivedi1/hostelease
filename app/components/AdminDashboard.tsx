@@ -3005,10 +3005,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         try {
           const parsed = JSON.parse(cached);
           if (parsed && parsed.length > 0) {
-            // Invalidate cache if it contains mixed-case hostel names (has any lowercase letter)
+            // Invalidate cache if it contains mixed-case hostel names or stale student schema (missing gender/dynamicFields)
             const hasMixedCase = parsed.some((s: any) => s.hostelName && /[a-z]/.test(s.hostelName));
-            if (hasMixedCase) {
-              console.log("Invalidating student cache due to mixed-case hostel names");
+            const isStaleSchema = parsed.some((s: any) => s.gender === undefined || s.dynamicFields === undefined);
+            if (hasMixedCase || isStaleSchema) {
+              console.log("Invalidating student cache due to mixed-case hostel names or stale student schema");
               localStorage.removeItem(CACHE_KEYS.STUDENTS);
               localStorage.removeItem(CACHE_KEYS.TIMESTAMP);
             } else {
