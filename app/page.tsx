@@ -137,9 +137,12 @@ export default function Dashboard() {
               if (data.tenantSubscription) {
                 data.student.tenantSubscription = data.tenantSubscription;
               }
-              // ⚡ Cache student data for instant load next time
-              localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
-              setStudentData(data.student);
+              // ⚡ Cache student data for instant load next time (merge with existing cache to preserve security/lock status)
+              const cached = localStorage.getItem("cachedStudentData");
+              const existing = cached ? JSON.parse(cached) : {};
+              const merged = { ...existing, ...data.student };
+              localStorage.setItem("cachedStudentData", JSON.stringify(merged));
+              setStudentData(merged);
               setUserType("student");
               localStorage.setItem("userType", "student");
               setLoading(false);
@@ -185,8 +188,11 @@ export default function Dashboard() {
                   if (data.tenantSubscription) {
                     data.student.tenantSubscription = data.tenantSubscription;
                   }
-                  localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
-                  setStudentData(data.student);
+                  const cached = localStorage.getItem("cachedStudentData");
+                  const existing = cached ? JSON.parse(cached) : {};
+                  const merged = { ...existing, ...data.student };
+                  localStorage.setItem("cachedStudentData", JSON.stringify(merged));
+                  setStudentData(merged);
                   setUserType("student");
                   setLoading(false);
                 } else {

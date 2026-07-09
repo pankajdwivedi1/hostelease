@@ -1122,6 +1122,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             };
                             setStudentProfile(fullStudentData);
                             setIsFullProfileLoaded(true);
+                            localStorage.setItem("cachedStudentData", JSON.stringify(fullStudentData));
 
                             // ⚡ NEW: Check for Missing Required Fields (Strict Mode)
                             if (formBuilderConfig && formBuilderConfig.length > 0) {

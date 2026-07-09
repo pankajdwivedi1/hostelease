@@ -3077,7 +3077,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           deviceHistory: s.deviceHistory || [],
           attendanceMode: s.attendanceMode || "default",
           outingType: s.outingType,
-          permissions: []
+          permissions: [],
+          gender: s.gender || "",
+          dynamicFields: s.dynamicFields || {}
         }));
         setStudents(formattedStudents);
         setLastUpdated(new Date());
@@ -6926,7 +6928,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                 deviceHistory: s.deviceHistory || [],
                                                 attendanceMode: s.attendanceMode || "default",
                                                 outingType: s.outingType,
-                                                permissions: []
+                                                permissions: [],
+                                                gender: s.gender || "",
+                                                dynamicFields: s.dynamicFields || {}
                                               });
                                               return;
                                             }
