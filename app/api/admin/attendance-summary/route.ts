@@ -70,10 +70,10 @@ export async function GET(request: NextRequest) {
             if (exactMatch) return exactMatch;
 
             // Priority 2: Fuzzy matching for known categories
-            if (name.includes("GUEST") || name.includes("GHB")) return "GHB Hostel";
-            if (name.includes("GANGOTRI")) return "Gangotri Hostel";
-            if (name.includes("GAYATRI") || name.includes("GAYTRI")) return "Gaytri Hostel";
-            if (name.includes("BOYS")) return "Boys Hostel";
+            if (name.includes("GUEST") || name.includes("GHB")) return "GHB HOSTEL";
+            if (name.includes("GANGOTRI")) return "GANGOTRI HOSTEL";
+            if (name.includes("GAYATRI") || name.includes("GAYTRI")) return "GAYTRI HOSTEL";
+            if (name.includes("BOYS")) return "BOYS HOSTEL";
 
             return rawName; // Fallback to raw name if no category matches
         };

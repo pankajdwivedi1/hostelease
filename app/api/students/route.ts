@@ -147,6 +147,34 @@ export async function POST(request: NextRequest) {
 
     const student = await db.students.save(firebaseUID, updateData);
 
+    // ✅ NEW: Auto-complete active field enforcements for newly registered/onboarded students
+    try {
+      const studentHostel = (hostelName || "").trim();
+      if (studentHostel && student) {
+        const rules = await db.fieldEnforcement.find({
+          hostelName: { $regex: `^${studentHostel}$`, $options: "i" },
+        });
+        const enforcement = rules.find((r: any) => r.isActive);
+        if (enforcement) {
+          const enabledFields = enforcement.enforcedFields.filter((f: any) => f.isEnabled);
+          for (const field of enabledFields) {
+            await db.studentFieldProgress.upsert({
+              studentId: student._id || student.id,
+              firebaseUID: student.firebaseUID,
+              hostelName: studentHostel,
+              fieldId: field.fieldId,
+              fieldLabel: field.fieldLabel,
+              isCompleted: true,
+              completedAt: new Date(),
+            });
+          }
+          console.log(`[Field Enforcement] Auto-initialized ${enabledFields.length} rules as completed for new student: ${student.name}`);
+        }
+      }
+    } catch (enforceError) {
+      console.warn("⚠️ [Field Enforcement] Failed to auto-initialize progress for new onboarding student:", enforceError);
+    }
+
     return NextResponse.json({ success: true, student }, { status: 200 });
   } catch (error: any) {
     console.error("Error creating/updating student:", error);

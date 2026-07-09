@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
         const studentHostel = (student.hostelName || "").trim();
 
         const rules = await db.fieldEnforcement.find({
-            hostelName: { $regex: `^${studentHostel}$` },
+            hostelName: { $regex: `^${studentHostel}$`, $options: 'i' },
         });
 
         const enforcement = rules.find((r: any) => r.isActive);

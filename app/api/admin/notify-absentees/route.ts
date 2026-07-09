@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { studentIds, date } = body;
+    const { studentIds, date, customMessage } = body;
 
     if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
       return NextResponse.json(
@@ -46,8 +46,10 @@ export async function POST(request: NextRequest) {
       const parentUserId = student.fatherNumber || (student._id.toString() + "_parent");
       
       const res = await sendPushNotification(parentUserId, "parent", "parentNightAbsent", {
-        title: "Night Attendance Alert",
-        body: `Your ward ${student.name} has NOT marked night curfew attendance for today ${date || 'today'}.`,
+        title: customMessage ? "⚠️ Urgent Parent Alert" : "Night Attendance Alert",
+        body: customMessage 
+          ? customMessage.replace("{name}", student.name) 
+          : `Your ward ${student.name} has NOT marked night curfew attendance for today ${date || 'today'}.`,
         url: "/"
       });
 
@@ -70,3 +72,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

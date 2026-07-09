@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase-admin";
 import { db } from "@/lib/dbAdapter";
+import { writeAdminAuditLog } from "@/lib/auditLog";
 
 export async function DELETE(
   request: NextRequest,
@@ -39,6 +40,23 @@ export async function DELETE(
 
     // Perform database-aware deletion
     await db.students.delete(studentId);
+
+    // 📝 AUDIT LOG: Record this sensitive action
+    const adminEmail = request.headers.get("x-admin-email") || "admin";
+    writeAdminAuditLog({
+      action: "STUDENT_DELETED",
+      entityType: "student",
+      entityId: studentId,
+      entityName: student.name || "Unknown Student",
+      details: {
+        studentName: student.name,
+        studentPhone: student.phoneNumber,
+        hostelName: student.hostelName,
+        roomNumber: student.roomNumber,
+        deletedAt: new Date().toISOString(),
+      },
+      performedBy: adminEmail,
+    }).catch(console.error); // fire-and-forget
 
     return NextResponse.json(
       { success: true, message: "Student deleted successfully" },
@@ -105,12 +123,16 @@ export async function PATCH(
     ]);
 
     const customKeys = Object.keys(body).filter(key => !standardFields.has(key));
-    if (customKeys.length > 0) {
+    if (customKeys.length > 0 || body.dynamicFields) {
       try {
-        console.log(`[DynamicFields] Processing custom keys: ${customKeys.join(', ')}`);
+        console.log(`[DynamicFields] Processing dynamic fields updates. Custom keys: ${customKeys.join(', ')}`);
         const student = await db.students.getById(studentId);
         const currentDynamicFields = student?.dynamicFields || {};
-        const mergedDynamicFields = { ...currentDynamicFields };
+        const clientDynamicFields = body.dynamicFields || {};
+        const mergedDynamicFields = { 
+          ...currentDynamicFields, 
+          ...clientDynamicFields 
+        };
         
         customKeys.forEach(key => {
           mergedDynamicFields[key] = body[key];
@@ -148,6 +170,8 @@ export async function PATCH(
 
     const response = NextResponse.json({ success: true, student: updatedStudent }, { status: 200 });
 
+    const adminEmail = request.headers.get("x-admin-email") || "admin";
+
     // 🔓 DEVICE RESET: If admin resets a student's device, we MUST also clear the
     // browser-side 'trusted_device_owner' cookie so the student can re-register freely.
     if (body.action === "resetDevice") {
@@ -170,6 +194,16 @@ export async function PATCH(
       await db.students.update(studentId, updateData);
       console.log(`🔓 [DEVICE_RESET] Cleared device mapping for student: ${studentId}`);
 
+      // 📝 AUDIT LOG: device reset
+      writeAdminAuditLog({
+        action: "STUDENT_DEVICE_RESET",
+        entityType: "student",
+        entityId: studentId,
+        entityName: updatedStudent?.name || "Unknown",
+        details: { resetAt: new Date().toISOString() },
+        performedBy: adminEmail,
+      }).catch(console.error);
+
       response.cookies.set('trusted_device_owner', '', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
@@ -177,9 +211,30 @@ export async function PATCH(
         maxAge: 0, // Immediately expire the cookie → browser deletes it
         path: '/'
       });
+    } else if (body.isProfileLocked !== undefined) {
+      // 📝 AUDIT LOG: profile lock/unlock
+      writeAdminAuditLog({
+        action: body.isProfileLocked ? "STUDENT_PROFILE_LOCKED" : "STUDENT_PROFILE_UNLOCKED",
+        entityType: "student",
+        entityId: studentId,
+        entityName: updatedStudent?.name || "Unknown",
+        details: { changedAt: new Date().toISOString() },
+        performedBy: adminEmail,
+      }).catch(console.error);
+    } else if (body.studentStatus) {
+      // 📝 AUDIT LOG: status change
+      writeAdminAuditLog({
+        action: "STUDENT_STATUS_CHANGED",
+        entityType: "student",
+        entityId: studentId,
+        entityName: updatedStudent?.name || "Unknown",
+        details: { newStatus: body.studentStatus, changedAt: new Date().toISOString() },
+        performedBy: adminEmail,
+      }).catch(console.error);
     }
 
     return response;
+
   } catch (error: any) {
     console.error("❌ BACKEND PATCH ERROR:", error);
     return NextResponse.json(

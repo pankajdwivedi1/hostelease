@@ -13,10 +13,10 @@ export async function GET(request: NextRequest) {
         if (!hostels || hostels.length === 0) {
             console.log("🏨 [API/hostels] No hostels found for this tenant, creating defaults...");
             const defaultHostels = [
-                { name: "Gangotri Hostel" },
-                { name: "Gaytri Hostel" },
-                { name: "Boys Hostel" },
-                { name: "GHB Hostel" },
+                { name: "GANGOTRI HOSTEL" },
+                { name: "GAYTRI HOSTEL" },
+                { name: "BOYS HOSTEL" },
+                { name: "GHB HOSTEL" },
             ];
 
             for (const h of defaultHostels) {
@@ -63,7 +63,8 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const existingHostel = await db.hostels.findOne({ name: name.trim() });
+        const formattedName = name.trim().toUpperCase();
+        const existingHostel = await db.hostels.findOne({ name: formattedName });
         if (existingHostel) {
             return NextResponse.json(
                 { error: "Hostel with this name already exists" },
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const hostel = await db.hostels.create({ name: name.trim() });
+        const hostel = await db.hostels.create({ name: formattedName });
 
         return NextResponse.json(
             { success: true, hostel },

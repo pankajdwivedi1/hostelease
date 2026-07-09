@@ -77,6 +77,8 @@ export default function OnboardingPage() {
   const [tempConfig, setTempConfig] = useState<any[]>([]);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [agreeUndertaking, setAgreeUndertaking] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0); // Multi-step wizard step index
+  const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
 
 
 
@@ -773,16 +775,39 @@ export default function OnboardingPage() {
   };
 
   const handleChange = (field: string, value: string) => {
-    // Automatically convert to uppercase except for email and joiningDate
-    // Also handle select fields carefully
     let formattedValue = value;
+    const lowerId = String(field || "").toLowerCase();
+    
+    // ⚡ REAL-TIME TYPING RESTRICTIONS
+    const fieldConfig = formBuilderConfig.find(f => f.id === field);
+    if (fieldConfig) {
+      const isPhone = 
+        fieldConfig.type === "tel" || 
+        lowerId.includes("phone") || 
+        lowerId.includes("mobile") ||
+        ["phonenumber", "fathernumber", "mothernumber", "localguardianphonenumber"].includes(lowerId);
+
+      if (isPhone) {
+        // Allow only digits in phone number fields
+        formattedValue = value.replace(/\D/g, "");
+      } else if (fieldConfig.type === "text" && lowerId.includes("name")) {
+        // Prevent numbers inside name fields
+        formattedValue = value.replace(/[0-9]/g, "");
+      }
+    }
+
+    // Automatically convert to uppercase except for email and joiningDate
     if (field !== "email" && field !== "joiningDate") {
-      formattedValue = value.toUpperCase();
+      formattedValue = formattedValue.toUpperCase();
     }
 
     setFormData((prev) => ({ ...prev, [field]: formattedValue }));
+    
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }));
+    }
+    if (stepErrors[field]) {
+      setStepErrors((prev) => ({ ...prev, [field]: "" }));
     }
   };
 
@@ -821,9 +846,108 @@ export default function OnboardingPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
 
+            {/* ===== MULTI-STEP WIZARD ===== */}
+            {formBuilderConfig.length > 0 && (() => {
+              // Group visible fields by section
+              const visibleFields = formBuilderConfig.filter((f: any) => f.visible);
+              const sectionNames = Array.from(new Set(visibleFields.map((f: any) => f.section || 'General'))) as string[];
+              // Add final "Review & Submit" step
+              const allSteps = [...sectionNames, '__submit__'];
+              const totalSteps = allSteps.length;
+              const currentSection = allSteps[currentStep];
+              const isLastStep = currentStep === totalSteps - 1;
+              const progressPercent = Math.round((currentStep / (totalSteps - 1)) * 100);
 
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-              {formBuilderConfig.filter(f => f.visible).map((field) => (
+              const validateStep = () => {
+                const stepFields = visibleFields.filter((f: any) => (f.section || 'General') === currentSection);
+                const newErrors: Record<string, string> = {};
+                stepFields.forEach((field: any) => {
+                  const val = field.type === 'image' ? (capturedImage || '') : (formData[field.id] || '');
+                  // 1. Required check
+                  if (field.required && !val) {
+                    newErrors[field.id] = `${field.label} is required`;
+                    return;
+                  }
+                  // 2. Validation rules (only if there's a value)
+                  if (val) {
+                    const lowerId = String(field.id || "").toLowerCase();
+                    
+                    // Name fields check: Names should not contain numbers
+                    if (field.type === "text" && lowerId.includes("name") && /[0-9]/.test(val)) {
+                      newErrors[field.id] = "Name should not contain numbers";
+                      return;
+                    }
+
+                    const v = { ...field.validation };
+                    // Auto fallbacks for older configurations without validation settings
+                    if (!field.validation) {
+                      const lowerId = String(field.id || "").toLowerCase();
+                      const isPhoneField = 
+                        field.type === "tel" || 
+                        lowerId.includes("phone") || 
+                        lowerId.includes("mobile") ||
+                        lowerId.includes("contact") ||
+                        ["phonenumber", "fathernumber", "mothernumber", "localguardianphonenumber"].includes(lowerId);
+
+                      if (isPhoneField) {
+                        v.pattern = "^[6-9][0-9]{9}$";
+                        v.patternMessage = "Please enter a valid 10-digit mobile number";
+                      } else if (field.type === "email" || lowerId === "email") {
+                        v.pattern = "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$";
+                        v.patternMessage = "Please enter a valid email address";
+                      } else if (field.type === "text" && lowerId.includes("name")) {
+                        v.minLength = 3;
+                        v.patternMessage = "Minimum 3 characters required";
+                      }
+                    }
+
+                    if (v.minLength && val.length < v.minLength) {
+                      newErrors[field.id] = v.patternMessage || `Minimum ${v.minLength} characters required`;
+                      return;
+                    }
+                    if (v.maxLength && val.length > v.maxLength) {
+                      newErrors[field.id] = `Maximum ${v.maxLength} characters allowed`;
+                      return;
+                    }
+                    if (v.pattern) {
+                      try {
+                        const re = new RegExp(v.pattern);
+                        // For phone/tel fields, strip spaces before testing
+                        const testVal = (field.type === "tel" || (v.patternMessage && v.patternMessage.includes("10-digit")))
+                          ? val.replace(/\s/g, "")
+                          : val;
+                        console.log("VALIDATION DEBUG:", { id: field.id, label: field.label, type: field.type, val, testVal, pattern: v.pattern, regex: re.toString(), matches: re.test(testVal) });
+                        if (!re.test(testVal)) {
+                          newErrors[field.id] = v.patternMessage || `Invalid format`;
+                          return;
+                        }
+                      } catch (err) { console.error("Regex build error:", err); }
+                    }
+                  }
+                });
+                // Special: photo step
+                if (stepFields.some((f: any) => f.type === 'image') && !capturedImage) {
+                  const imgField = stepFields.find((f: any) => f.type === 'image');
+                  if (imgField?.required) newErrors[imgField.id] = 'Profile photo is required';
+                }
+                setStepErrors(newErrors);
+                return Object.keys(newErrors).length === 0;
+              };
+
+
+              const goNext = () => {
+                if (validateStep()) {
+                  setCurrentStep(s => Math.min(s + 1, totalSteps - 1));
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              };
+              const goBack = () => {
+                setCurrentStep(s => Math.max(s - 1, 0));
+                setStepErrors({});
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              };
+
+              const renderField = (field: any) => (
                 <div key={field.id} className={field.type === 'image' || field.type === 'textarea' ? 'col-span-2' : ''}>
                   <label htmlFor={field.id} className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 px-1">
                     {field.label} {field.required && <span className="text-red-500">*</span>}
@@ -995,14 +1119,135 @@ export default function OnboardingPage() {
                       className={`w-full h-11 px-4 rounded-xl border-2 transition-all font-bold text-xs uppercase ${errors[field.id] ? "border-red-500 bg-red-50 font-medium" : "border-gray-100 bg-gray-50/50 focus:border-blue-500 focus:bg-white"} outline-none`}
                     />
                   )}
-                  {errors[field.id] && (
-                    <p className="mt-1 text-[10px] text-red-600 font-black uppercase tracking-widest">{errors[field.id]}</p>
+                  {(stepErrors[field.id] || errors[field.id]) && (
+                    <p className="mt-1 text-[10px] text-red-600 font-black uppercase tracking-widest">{stepErrors[field.id] || errors[field.id]}</p>
                   )}
                 </div>
-              ))}
-            </div>
+              );
 
-            {/* If formBuilderConfig is empty, show a dynamic progress bar */}
+              return (
+                <div className="space-y-5">
+                  {/* ── PROGRESS BAR ── */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Step {currentStep + 1} of {totalSteps}</span>
+                      <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest">{isLastStep ? '📋 Review & Submit' : currentSection}</span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                      <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500 ease-out" style={{ width: `${progressPercent}%` }}></div>
+                    </div>
+                    <div className="flex items-center gap-1 justify-center flex-wrap">
+                      {allSteps.map((_s: any, i: number) => (
+                        <div key={i} className={`transition-all duration-300 rounded-full ${i === currentStep ? 'w-5 h-2 bg-blue-600' : i < currentStep ? 'w-2 h-2 bg-blue-300' : 'w-2 h-2 bg-gray-200'}`}></div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ── STEP HEADER ── */}
+                  {!isLastStep && (
+                    <div className="flex items-center gap-2 pb-1 border-b border-gray-100">
+                      <div className="w-7 h-7 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                        <span className="text-[11px] font-black text-blue-600">{currentStep + 1}</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-gray-900 uppercase tracking-tight">{currentSection}</p>
+                        <p className="text-[9px] text-gray-400 font-medium">
+                          {visibleFields.filter((f: any) => (f.section || 'General') === currentSection).length} fields
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── STEP FIELDS ── */}
+                  {!isLastStep ? (
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                      {visibleFields.filter((f: any) => (f.section || 'General') === currentSection).map((field: any) => renderField(field))}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="p-4 bg-green-50 rounded-2xl border border-green-100">
+                        <p className="text-xs font-black text-green-800 uppercase tracking-widest mb-3">✅ Review Summary</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {visibleFields.filter((f: any) => f.type !== 'image').slice(0, 8).map((f: any) => (
+                            <div key={f.id} className="min-w-0">
+                              <p className="text-[8px] text-gray-400 uppercase tracking-widest truncate">{f.label}</p>
+                              <p className="text-[10px] font-black text-gray-800 truncate">{formData[f.id] || '—'}</p>
+                            </div>
+                          ))}
+                        </div>
+                        {capturedImage && (
+                          <div className="mt-3 flex items-center gap-2">
+                            <img src={capturedImage} className="w-10 h-12 rounded-lg object-cover border-2 border-white shadow" alt="profile" />
+                            <div>
+                              <p className="text-[8px] text-gray-400 uppercase tracking-widest">Profile Photo</p>
+                              <p className="text-[10px] font-black text-green-700">✅ Captured</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {formConfig.requireUndertaking && (
+                        <div className="p-4 sm:p-5 rounded-2xl bg-indigo-50/50 border-2 border-indigo-100/80 space-y-3.5">
+                          <div className="flex items-center gap-2"><span className="text-lg">📜</span><h3 className="text-xs font-black text-indigo-900 uppercase tracking-widest">Undertaking by Student</h3></div>
+                          <div className="text-[11px] text-indigo-950 font-bold leading-relaxed max-h-[220px] overflow-y-auto pr-1 select-none">
+                            <p className="whitespace-pre-line text-left">{formatUndertakingText(formConfig.undertakingText || DEFAULT_UNDERTAKING_TEXT)}</p>
+                          </div>
+                          <div className="pt-2.5 border-t border-indigo-100 flex items-start gap-2.5">
+                            <input type="checkbox" id="undertaking-agreement" checked={agreeUndertaking}
+                              onChange={(e) => { setAgreeUndertaking(e.target.checked); if (errors["undertaking"]) setErrors(prev => ({ ...prev, undertaking: "" })); }}
+                              className="mt-0.5 h-4 w-4 rounded border-indigo-300 text-indigo-600 cursor-pointer" />
+                            <label htmlFor="undertaking-agreement" className="text-[10px] font-black text-indigo-900 uppercase tracking-wide cursor-pointer select-none leading-tight">
+                              I solemnly agree to all the undertaking points mentioned above <span className="text-red-500">*</span>
+                            </label>
+                          </div>
+                          {errors["undertaking"] && (<p className="text-[9px] text-red-600 font-black uppercase tracking-widest animate-pulse">⚠️ {errors["undertaking"]}</p>)}
+                        </div>
+                      )}
+
+                      {Object.keys(errors).length > 0 && (
+                        <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+                          {errors.submit ? (<p className="text-sm text-red-800 font-bold text-center">⚠️ {errors.submit}</p>) : (<p className="text-sm text-red-800 font-bold text-center">⚠️ Please fill all required fields.</p>)}
+                        </div>
+                      )}
+
+                      {isSuccess && (
+                        <div className="p-4 rounded-xl bg-green-50 border border-green-200 flex items-center gap-3 animate-in fade-in duration-300">
+                          <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-green-800 uppercase tracking-tight">Success</p>
+                            <p className="text-[11px] text-green-600 font-medium">{isExistingStudent ? "Your profile updated successfully" : "Congratulations! Your profile has been generated successfully."}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── NAVIGATION ── */}
+                  <div className="flex gap-3 mt-4">
+                    {currentStep > 0 ? (
+                      <button type="button" onClick={goBack}
+                        className="flex-1 h-12 rounded-xl border-2 border-gray-200 text-gray-600 font-black text-xs uppercase tracking-widest hover:bg-gray-50 active:scale-95 transition-all">← Back</button>
+                    ) : (
+                      <button type="button" onClick={handleBack}
+                        className="flex-1 h-12 rounded-xl border border-gray-200 text-gray-500 font-medium text-sm hover:bg-gray-50 transition-all">Cancel</button>
+                    )}
+                    {!isLastStep ? (
+                      <button type="button" onClick={goNext}
+                        className="flex-[2] h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-blue-500/20">Next →</button>
+                    ) : !isProfileLocked && (
+                      <button type="submit" disabled={loading || isSavingDB || isFaceProcessing || isSuccess}
+                        className={`flex-[2] h-12 rounded-xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 ${isSuccess ? 'bg-green-600 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20'} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                        {isSuccess ? (isExistingStudent ? '✅ Updated!' : '✅ Registered!') : isSavingDB ? 'Verifying...' : loading ? 'Sending OTP...' : isFaceProcessing ? 'Scanning Face...' : '🚀 Submit Registration'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── LOADING STATE ── */}
             {formBuilderConfig.length === 0 && (
               <div className="py-12 w-full max-w-md mx-auto px-4 flex flex-col items-center justify-center animate-in fade-in duration-500">
                 <div className="w-full flex justify-between items-end mb-2">
@@ -1010,110 +1255,8 @@ export default function OnboardingPage() {
                   <span className="text-sm font-black text-blue-600 tabular-nums">{Math.min(100, loadingProgress)}%</span>
                 </div>
                 <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden shadow-inner border border-gray-200">
-                  <div 
-                    className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-600 rounded-full transition-all duration-300 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)] relative overflow-hidden"
-                    style={{ width: `${Math.min(100, loadingProgress)}%` }}
-                  >
-                    <div className="absolute inset-0 bg-white/20 w-full h-full animate-[shimmer_2s_infinite] -skew-x-12 translate-x-[-100%]"></div>
-                  </div>
+                  <div className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-600 rounded-full transition-all duration-300 ease-out" style={{ width: `${Math.min(100, loadingProgress)}%` }}></div>
                 </div>
-              </div>
-            )}
-
-
-            {formConfig.requireUndertaking && formBuilderConfig.length > 0 && (
-              <div className="p-4 sm:p-5 rounded-2xl bg-indigo-50/50 border-2 border-indigo-100/80 space-y-3.5 my-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">📜</span>
-                  <h3 className="text-xs font-black text-indigo-900 uppercase tracking-widest">
-                    Undertaking by Student
-                  </h3>
-                </div>
-                
-                <div className="text-[11px] text-indigo-950 font-bold leading-relaxed max-h-[220px] overflow-y-auto pr-1 select-none scrollbar-thin">
-                  <p className="whitespace-pre-line text-left">
-                    {formatUndertakingText(formConfig.undertakingText || DEFAULT_UNDERTAKING_TEXT)}
-                  </p>
-                </div>
-
-                <div className="pt-2.5 border-t border-indigo-100 flex items-start gap-2.5">
-                  <input
-                    type="checkbox"
-                    id="undertaking-agreement"
-                    checked={agreeUndertaking}
-                    onChange={(e) => {
-                      setAgreeUndertaking(e.target.checked);
-                      if (errors["undertaking"]) {
-                        setErrors(prev => ({ ...prev, undertaking: "" }));
-                      }
-                    }}
-                    className="mt-0.5 h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                  />
-                  <label htmlFor="undertaking-agreement" className="text-[10px] font-black text-indigo-900 uppercase tracking-wide cursor-pointer select-none leading-tight">
-                    I solemnly agree to all the undertaking points mentioned above <span className="text-red-500">*</span>
-                  </label>
-                </div>
-                {errors["undertaking"] && (
-                  <p className="text-[9px] text-red-650 font-black uppercase tracking-widest animate-pulse">
-                    ⚠️ {errors["undertaking"]}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {Object.keys(errors).length > 0 && (
-              <div className="p-3 rounded-lg bg-red-50 border border-red-200">
-                {errors.submit ? (
-                  <p className="text-sm text-red-800 font-bold text-center">⚠️ {errors.submit}</p>
-                ) : Object.keys(errors).some(k => k.startsWith('server_')) ? (
-                  <div className="flex flex-col gap-1 items-center text-center">
-                    <p className="text-sm text-red-800 font-bold">⚠️ Server Validation Errors:</p>
-                    {Object.entries(errors).filter(([k]) => k.startsWith('server_')).map(([id, msg]) => (
-                      <p key={id} className="text-xs text-red-700 font-medium">{msg}</p>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-red-800 font-bold text-center">⚠️ Please fill all required fields, mentioned in red color.</p>
-                )}
-              </div>
-            )}
-
-            {isSuccess && (
-              <div className="p-4 rounded-xl bg-green-50 border border-green-200 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xs font-black text-green-800 uppercase tracking-tight">Success</p>
-                  <p className="text-[11px] text-green-600 font-medium">
-                    {isExistingStudent 
-                      ? "Your profile updated successfully" 
-                      : "Congratulations! Your profile has been generated successfully."}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {formBuilderConfig.length > 0 && (
-              <div className="flex gap-4 mt-6">
-                <button
-                  type="button"
-                  onClick={handleBack}
-                  className="flex-1 h-12 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground font-medium transition-colors hover:bg-filler"
-                >
-                  Cancel
-                </button>
-                {!isProfileLocked && (
-                  <button
-                    type="submit"
-                    disabled={loading || isSavingDB || isFaceProcessing || isSuccess}
-                    className={`flex-[2] h-12 rounded-lg font-medium transition-colors ${isSuccess ? 'bg-green-600 text-white' : 'bg-blue-600 text-background hover:bg-blue-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    {isSuccess ? (isExistingStudent ? "Profile Updated!" : "Profile Generated!") : isSavingDB ? "Verifying..." : loading ? "Sending OTP..." : isFaceProcessing ? "Scanning Face..." : "Save your details"}
-                  </button>
-                )}
               </div>
             )}
           </form>

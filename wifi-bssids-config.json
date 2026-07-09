@@ -1,7 +1,7 @@
 {
   "hostels": [
     {
-      "hostelName": "Gaytri Hostel",
+      "hostelName": "GAYTRI HOSTEL",
       "description": "NGH - New Guest House",
       "floors": [
         {
@@ -73,7 +73,7 @@
       ]
     },
     {
-      "hostelName": "Boys Hostel",
+      "hostelName": "BOYS HOSTEL",
       "description": "BH",
       "floors": [
         {
@@ -139,7 +139,7 @@
       ]
     },
     {
-      "hostelName": "Gangotri Hostel",
+      "hostelName": "GANGOTRI HOSTEL",
       "description": "GH - Already configured",
       "floors": [
         {
@@ -259,7 +259,7 @@
       ]
     },
     {
-      "hostelName": "GHB Hostel",
+      "hostelName": "GHB HOSTEL",
       "description": "GHBH",
       "floors": [
         {

@@ -8,10 +8,10 @@ export async function POST(request: NextRequest) {
         const source = await db.getSource();
         const adminSettings = await db.settings.get();
         let hostelPrefixMap = adminSettings?.hostelPrefixMap || [
-            { hostelName: "GHB Hostel", prefix: "GUEST" },
-            { hostelName: "Boys Hostel", prefix: "BOYS" },
-            { hostelName: "Gangotri Hostel", prefix: "GANGOTRI" },
-            { hostelName: "Gaytri Hostel", prefix: "GAYTRI" }
+            { hostelName: "GHB HOSTEL", prefix: "GUEST" },
+            { hostelName: "BOYS HOSTEL", prefix: "BOYS" },
+            { hostelName: "GANGOTRI HOSTEL", prefix: "GANGOTRI" },
+            { hostelName: "GAYTRI HOSTEL", prefix: "GAYTRI" }
         ];
 
         const students = await db.students.list({});

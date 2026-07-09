@@ -1,7 +1,7 @@
 {
   "wifiWhitelist": [
     {
-      "hostelName": "Gaytri Hostel",
+      "hostelName": "GAYTRI HOSTEL",
       "bssids": [
         "64:29:95:4d:d2:80",
         "64:29:95:4d:ef:f0",
@@ -12,7 +12,7 @@
       "description": "NGH - New Guest House - 5 routers"
     },
     {
-      "hostelName": "Boys Hostel",
+      "hostelName": "BOYS HOSTEL",
       "bssids": [
         "64:29:43:bb:84:b0",
         "64:29:43:bb:89:70",
@@ -23,7 +23,7 @@
       "description": "BH - 5 routers"
     },
     {
-      "hostelName": "Gangotri Hostel",
+      "hostelName": "GANGOTRI HOSTEL",
       "bssids": [
         "64:29:43:bb:78:60",
         "64:29:43:bb:78:68",
@@ -44,7 +44,7 @@
       "description": "GH - Already configured - 8 routers"
     },
     {
-      "hostelName": "GHB Hostel",
+      "hostelName": "GHB HOSTEL",
       "bssids": [
         "64:29:43:bb:7d:78",
         "64:29:45:bb:76:a0",

@@ -225,9 +225,9 @@ const filterStudentFieldProgressForPrisma = (data: any) => {
  */
 const formatHostelName = (name: string) => {
     if (!name) return name;
-    const n = name.toUpperCase();
-    if (n.includes("GUEST") || n.includes("GHB")) return "GHB Hostel";
-    return name;
+    const n = name.toUpperCase().trim();
+    if (n.includes("GUEST") || n.includes("GHB")) return "GHB HOSTEL";
+    return n;
 };
 
 /**
@@ -255,7 +255,15 @@ const mapStudentToCamelCase = (s: any) => {
         createdAt: s.created_at || s.createdAt,
         updatedAt: s.updated_at || s.updatedAt,
         tenantId: s.tenant_id || s.tenantId,
-        gender: s.gender || profile?.gender || s.dynamic_fields?.gender || s.dynamicFields?.gender || security?.dynamic_fields?.gender || security?.dynamicFields?.gender || "",
+        gender: (() => {
+            if (s.gender) return s.gender;
+            if (profile?.gender) return profile.gender;
+            const df = s.dynamic_fields || s.dynamicFields || security?.dynamic_fields || security?.dynamicFields || {};
+            if (df.gender) return df.gender;
+            const genderKey = Object.keys(df).find(k => k.startsWith('name_copy_1782065596117') || k.toLowerCase().includes('gender') || k.toLowerCase().includes('sex') || k.startsWith('name_copy_'));
+            if (genderKey) return df[genderKey];
+            return "";
+        })(),
 
         // Profile Table fields or fallback
         dob: profile?.dob !== undefined ? profile.dob : s.dob,

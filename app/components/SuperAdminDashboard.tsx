@@ -54,6 +54,7 @@ interface Tenant {
     contactName?: string;
     contactPhone?: string;
     isDeleted?: boolean;
+    healthScore?: number;
 }
 
 // ⚡ LIVE SWITCH COMPONENT
@@ -148,9 +149,10 @@ const LiveDbSwitch = () => {
 
 export default function SuperAdminDashboard() {
     const [tenants, setTenants] = useState<Tenant[]>([]);
-    const [viewMode, setViewMode] = useState<"active" | "recycle" | "audit" | "billing">("active");
+    const [viewMode, setViewMode] = useState<"active" | "recycle" | "audit" | "billing" | "expired">("active");
     const [globalStats, setGlobalStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [showExpiredAlert, setShowExpiredAlert] = useState(true);
 
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
     const [loadingLogs, setLoadingLogs] = useState(false);
@@ -357,10 +359,33 @@ export default function SuperAdminDashboard() {
 
     const fetchTenants = async () => {
         try {
-            const res = await fetch(`/api/super-admin/tenants${viewMode === 'recycle' ? '?deleted=true' : ''}`);
+            const isExpiredView = viewMode === 'expired';
+            const isRecycleView = viewMode === 'recycle';
+            const res = await fetch(`/api/super-admin/tenants${isRecycleView ? '?deleted=true' : ''}`);
             const data = await res.json();
             if (data.success) {
-                setTenants(data.tenants);
+                // Compute a health score (0–100) per tenant
+                const tenantsWithHealth = data.tenants.map((t: any) => {
+                    let score = 0;
+                    // 30pts: subscription active
+                    if (t.subscriptionStatus === 'active') score += 30;
+                    else if (t.subscriptionStatus === 'trial') score += 15;
+                    // 30pts: has students registered
+                    if ((t.studentCount || 0) > 50) score += 30;
+                    else if ((t.studentCount || 0) > 0) score += 15;
+                    // 20pts: has contact details
+                    if (t.contactName && t.contactPhone) score += 20;
+                    // 10pts: is active/online
+                    if (t.isActive) score += 10;
+                    // 10pts: storage not critical (< 80% of 100MB)
+                    if (!t.storageBytes || t.storageBytes < 80 * 1024 * 1024) score += 10;
+                    return { ...t, healthScore: score };
+                });
+                // Filter for expired view
+                const filtered = isExpiredView
+                    ? tenantsWithHealth.filter((t: any) => t.subscriptionStatus === 'expired' && !t.isDeleted)
+                    : tenantsWithHealth;
+                setTenants(filtered);
                 setGlobalStats(data.globalStats);
             }
         } catch (error) {
@@ -369,6 +394,7 @@ export default function SuperAdminDashboard() {
             setLoading(false);
         }
     };
+
 
     const fetchPaymentSettings = async () => {
         try {
@@ -808,6 +834,41 @@ export default function SuperAdminDashboard() {
                 </div>
             </header>
 
+            {/* ⚠️ EXPIRED TENANTS ALERT BANNER */}
+            {showExpiredAlert && (() => {
+                const expiredCount = tenants.filter(t => t.subscriptionStatus === 'expired' && !t.isDeleted).length;
+                if (expiredCount === 0) return null;
+                return (
+                    <div className="mx-4 sm:mx-8 mt-4 bg-gradient-to-r from-rose-500 to-red-600 text-white px-4 py-3 rounded-2xl flex items-center justify-between gap-3 shadow-lg shadow-rose-200 animate-in slide-in-from-top">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                                <AlertCircle className="w-4 h-4 text-white" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-black uppercase tracking-widest">
+                                    ⚠️ {expiredCount} Tenant{expiredCount > 1 ? 's' : ''} with Expired Subscription
+                                </p>
+                                <p className="text-[10px] text-rose-100 font-medium">
+                                    These institutions may have lost access. Review and renew their subscriptions.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <button
+                                onClick={() => setViewMode('expired')}
+                                className="px-3 py-1.5 bg-white text-rose-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 transition-all"
+                            >
+                                View All
+                            </button>
+                            <button
+                                onClick={() => setShowExpiredAlert(false)}
+                                className="w-6 h-6 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center text-white text-xs font-black transition-all"
+                            >✕</button>
+                        </div>
+                    </div>
+                );
+            })()}
+
             <div className="px-4 sm:px-8 pt-6 sm:pt-8">
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
                     {[
@@ -895,6 +956,15 @@ export default function SuperAdminDashboard() {
                         >
                             Billing Ledger
                         </button>
+                        <button 
+                            onClick={() => setViewMode('expired')}
+                            className={`flex-1 min-w-0 px-0.5 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[6px] sm:text-[10px] font-black uppercase tracking-tight sm:tracking-widest transition-all text-center whitespace-normal leading-tight flex items-center justify-center gap-1 ${viewMode === 'expired' ? 'bg-white text-rose-600 shadow-md border border-gray-200' : 'text-gray-400 hover:text-rose-400'}`}
+                        >
+                            {globalStats?.revenueSummary?.expired > 0 && viewMode !== 'expired' && (
+                                <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[7px] font-black flex items-center justify-center shrink-0">{globalStats.revenueSummary.expired}</span>
+                            )}
+                            Expired
+                        </button>
                     </div>
                 </div>
 
@@ -902,12 +972,12 @@ export default function SuperAdminDashboard() {
                     <div className="flex items-center justify-between">
                          <div className="flex items-center gap-3">
                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
-                                {viewMode === 'active' ? 'Operational Hub' : viewMode === 'recycle' ? 'Trash Registry' : viewMode === 'audit' ? 'HQ Security Logs' : 'Subscription Billing Ledger'}
+                                {viewMode === 'active' ? 'Operational Hub' : viewMode === 'recycle' ? 'Trash Registry' : viewMode === 'audit' ? 'HQ Security Logs' : viewMode === 'expired' ? '⚠️ Expired Subscriptions' : 'Subscription Billing Ledger'}
                             </p>
                          </div>
                          <div className="flex gap-2">
                              <div className="px-3 py-1 bg-white rounded-lg border border-gray-100 text-[9px] font-black text-gray-400 uppercase tracking-widest">
-                                {viewMode === 'active' ? `Total Active Nodes: ${tenants.length}` : viewMode === 'recycle' ? `Deleted Nodes: ${tenants.length}` : viewMode === 'audit' ? `Audit Records: ${auditLogs.length}` : `Ledger Transactions: ${billingLogs.length}`}
+                                {viewMode === 'active' ? `Total Active Nodes: ${tenants.length}` : viewMode === 'recycle' ? `Deleted Nodes: ${tenants.length}` : viewMode === 'audit' ? `Audit Records: ${auditLogs.length}` : viewMode === 'expired' ? `Expired Nodes: ${tenants.length}` : `Ledger Transactions: ${billingLogs.length}`}
                              </div>
                          </div>
                     </div>
@@ -1073,6 +1143,24 @@ export default function SuperAdminDashboard() {
                                         <div className="mt-3 grid grid-cols-12 gap-3 border-t border-slate-100 pt-3 w-full">
                                             {/* Contact Details (Left) */}
                                             <div className="col-span-7 flex flex-col gap-1 min-w-0">
+                                                {/* Student Count Badge — prominent */}
+                                                <div className="flex items-center gap-1.5 mb-0.5">
+                                                    <div className="flex items-center gap-1 px-2 py-1 bg-blue-50 border border-blue-100 rounded-lg">
+                                                        <Users className="w-2.5 h-2.5 text-blue-500 shrink-0" />
+                                                        <span className="text-[9px] font-black text-blue-700">{(tenant.studentCount || 0).toLocaleString()} Students</span>
+                                                    </div>
+                                                    {/* Health Score */}
+                                                    {(() => {
+                                                        const score = tenant.healthScore ?? 0;
+                                                        const color = score >= 70 ? 'emerald' : score >= 40 ? 'amber' : 'rose';
+                                                        const label = score >= 70 ? 'Healthy' : score >= 40 ? 'Fair' : 'Critical';
+                                                        return (
+                                                            <div className={`flex items-center gap-1 px-2 py-1 bg-${color}-50 border border-${color}-100 rounded-lg`}>
+                                                                <span className={`text-[9px] font-black text-${color}-700`}>{label} {score}%</span>
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </div>
                                                 {tenant.contactName && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1.5"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Contact:</span> {tenant.contactName}</p>}
                                                 {tenant.contactPhone && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1.5"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Phone:</span> {tenant.contactPhone}</p>}
                                                 {tenant.totalHostelars && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1.5"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Hostelars:</span> {tenant.totalHostelars}</p>}
@@ -1080,6 +1168,7 @@ export default function SuperAdminDashboard() {
                                                     <p className="text-[9px] text-slate-400 italic">No college details provided.</p>
                                                 )}
                                             </div>
+
                                             
                                             {/* Subscription Period Card (Right) */}
                                             <div className="col-span-5 flex flex-col items-end justify-center">

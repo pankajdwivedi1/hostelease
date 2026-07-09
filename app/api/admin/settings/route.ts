@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
             endTime: settings?.attendanceEndTime || "22:30",
             registrationFieldsConfig: settings?.registrationFieldsConfig || {},
             formBuilderConfig: settings?.formBuilderConfig || [],
+            formBuilderVersions: settings?.formBuilderVersions || [],
             universityBankDetails: settings?.universityBankDetails || {},
             hostelFeeAmount: settings?.hostelFeeAmount || 0,
             paymentInstructions: settings?.paymentInstructions || "",
@@ -73,7 +74,24 @@ export async function POST(request: NextRequest) {
         if (startTime) updateData.attendanceStartTime = startTime;
         if (endTime) updateData.attendanceEndTime = endTime;
         if (registrationFieldsConfig) updateData.registrationFieldsConfig = registrationFieldsConfig;
-        if (formBuilderConfig) updateData.formBuilderConfig = formBuilderConfig;
+        
+        if (formBuilderConfig) {
+            updateData.formBuilderConfig = formBuilderConfig;
+            try {
+                const existingSettings = await db.settings.get();
+                const currentVersions = existingSettings?.formBuilderVersions || [];
+                const newVersion = {
+                    id: Math.random().toString(36).substring(2, 9),
+                    timestamp: new Date().toISOString(),
+                    fieldsCount: formBuilderConfig.length,
+                    config: formBuilderConfig
+                };
+                updateData.formBuilderVersions = [newVersion, ...currentVersions].slice(0, 15);
+            } catch (err) {
+                console.error("Version snapshot failure:", err);
+            }
+        }
+
         if (universityBankDetails) {
             const existingSettings = await db.settings.get();
             const existingBankDetails = existingSettings?.universityBankDetails || {};
@@ -110,4 +128,5 @@ export async function POST(request: NextRequest) {
         );
     }
 }
+
 

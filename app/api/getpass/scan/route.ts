@@ -30,7 +30,7 @@ function getISTStrings(date: Date) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { qrData, firebaseUID, deviceId } = body;
+        const { qrData, firebaseUID, deviceId, isOfflineSync } = body;
 
         // Validate required fields
         if (!qrData || !firebaseUID) {
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
 
             // 2. Check if token is too old (25 seconds limit: 15s rotation + 10s network buffer)
             const nowMs = Date.now();
-            if (nowMs - timestamp > 25000) {
+            if (!isOfflineSync && (nowMs - timestamp > 25000)) {
                 return NextResponse.json(
                     { error: "QR code has expired. Please scan the new QR code displayed at the gate." },
                     { status: 410 }
@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             );
         }
+
 
         // Find the student
         const student = await db.students.findOne({ firebaseUID });

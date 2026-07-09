@@ -31,6 +31,7 @@ const FieldEnforcementComponent = dynamic(() => import("./FieldEnforcementCompon
 });
 
 import TenantSettingsView from "./TenantSettingsView";
+import { formTemplates } from "@/lib/formTemplates";
 
 import HostelManagementModal from "./HostelManagementModal";
 import ParentConsentVideoModal from "./ParentConsentVideoModal";
@@ -62,6 +63,11 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [isDeletingStudents, setIsDeletingStudents] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
+  // OTP-Protected Bulk Delete state
+  const [showBulkDeleteOtpModal, setShowBulkDeleteOtpModal] = useState(false);
+  const [bulkDeleteOtp, setBulkDeleteOtp] = useState("");
+  const [bulkDeleteOtpInput, setBulkDeleteOtpInput] = useState("");
+  const [bulkDeleteOtpError, setBulkDeleteOtpError] = useState("");
 
   useEffect(() => {
     if (isUnlocked && students.length === 0 && refreshStudents) {
@@ -96,10 +102,20 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
       alert("Please select at least one student to delete.");
       return;
     }
+    // Generate a fresh 6-digit OTP and show the modal
+    const generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
+    setBulkDeleteOtp(generatedOtp);
+    setBulkDeleteOtpInput("");
+    setBulkDeleteOtpError("");
+    setShowBulkDeleteOtpModal(true);
+  };
 
-    const message = `🚨 DANGER: You are about to permanently delete ${selectedStudentIds.length} students from the database and Firebase Auth.\n\nThis will wipe all their records, permissions, device IDs, and credentials. THIS CANNOT BE UNDONE.\n\nAre you absolutely sure you want to proceed?`;
-    if (!await showConfirm(message)) return;
-
+  const handleBulkDeleteConfirm = async () => {
+    if (bulkDeleteOtpInput !== bulkDeleteOtp) {
+      setBulkDeleteOtpError("Incorrect OTP. Please type the exact 6-digit code shown above.");
+      return;
+    }
+    setShowBulkDeleteOtpModal(false);
     setIsDeletingStudents(true);
     try {
       const res = await fetch("/api/admin/students/bulk-delete", {
@@ -124,6 +140,7 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
       setIsDeletingStudents(false);
     }
   };
+
 
   const handleUnlock = () => {
     if (password === developerPassword) {
@@ -534,6 +551,68 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
           </div>
         </div>
       </div>
+
+      {/* 🔐 OTP-PROTECTED BULK DELETE MODAL */}
+      {showBulkDeleteOtpModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+            {/* Header */}
+            <div className="bg-gradient-to-br from-rose-600 to-red-700 p-6 text-center">
+              <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <span className="text-3xl">🔐</span>
+              </div>
+              <h2 className="text-lg font-black text-white tracking-widest uppercase">Confirm Delete</h2>
+              <p className="text-rose-100 text-xs mt-1 font-medium">
+                {selectedStudentIds.length} student{selectedStudentIds.length > 1 ? 's' : ''} will be permanently removed
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* OTP Display */}
+              <div className="bg-rose-50 border-2 border-rose-200 rounded-2xl p-4 text-center">
+                <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest mb-2">Your One-Time Confirmation Code</p>
+                <p className="text-4xl font-black text-rose-700 tracking-[0.4em]">{bulkDeleteOtp}</p>
+                <p className="text-[9px] text-rose-400 mt-2">Type this code below to confirm deletion</p>
+              </div>
+
+              {/* OTP Input */}
+              <div>
+                <label className="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Enter Code to Confirm</label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={bulkDeleteOtpInput}
+                  onChange={(e) => { setBulkDeleteOtpInput(e.target.value.replace(/\D/g, '')); setBulkDeleteOtpError(""); }}
+                  placeholder="------"
+                  autoFocus
+                  className="w-full text-center text-2xl font-black tracking-[0.5em] py-3 bg-gray-50 border-2 border-gray-200 rounded-xl focus:border-rose-500 focus:bg-white outline-none transition-all"
+                />
+                {bulkDeleteOtpError && (
+                  <p className="text-[10px] text-red-600 font-black uppercase tracking-widest mt-1.5 text-center animate-pulse">{bulkDeleteOtpError}</p>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkDeleteOtpModal(false)}
+                  className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-black text-xs uppercase tracking-widest hover:bg-gray-50 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkDeleteConfirm}
+                  disabled={bulkDeleteOtpInput.length < 6}
+                  className="flex-[2] py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-rose-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  🚨 Delete {selectedStudentIds.length} Student{selectedStudentIds.length > 1 ? 's' : ''}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -784,6 +863,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [adminNotifications, setAdminNotifications] = useState<DBNotification[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null); // ⚡ NEW: Tracking data freshness
   const [activeConsentVideoUrl, setActiveConsentVideoUrl] = useState<string | null>(null);
+  const [anomalyAlerts, setAnomalyAlerts] = useState<any[]>([]);
+  const [anomalyAlertsLoading, setAnomalyAlertsLoading] = useState(false);
 
   const [editingNotificationId, setEditingNotificationId] = useState<string | null>(null);
   const [sendingMessage, setSendingMessage] = useState(false);
@@ -941,6 +1022,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [hostelsConfig, setHostelsConfig] = useState<any[]>([]);
   const [registrationFields, setRegistrationFields] = useState<Record<string, any>>({});
   const [formBuilderFields, setFormBuilderFields] = useState<any[]>([]);
+  const [formBuilderVersions, setFormBuilderVersions] = useState<any[]>([]);
+  const [showVersionHistoryModal, setShowVersionHistoryModal] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("college");
+
+
   const [requireUndertaking, setRequireUndertaking] = useState(false);
   const [undertakingText, setUndertakingText] = useState("");
   const [savedFormBuilderConfig, setSavedFormBuilderConfig] = useState<any[]>([]); // ⚡ NEW: Reference for Diff
@@ -1241,11 +1328,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     if (!hostelName) return null;
     const name = hostelName.toLowerCase();
 
-    // Priority: Always return the Standardized Mixed-Case version first
-    if (name.includes("gaytri") || name.includes("hostel a")) return "Gaytri Hostel";
-    if (name.includes("gangotri") || name.includes("hostel b")) return "Gangotri Hostel";
-    if (name.includes("guest") || name.includes("ghb") || name.includes("hostel d")) return "GHB Hostel";
-    if (name.includes("boys") || name.includes("hostel c")) return "Boys Hostel";
+    // Priority: Always return the Standardized Upper-Case version first
+    if (name.includes("gaytri") || name.includes("hostel a")) return "GAYTRI HOSTEL";
+    if (name.includes("gangotri") || name.includes("hostel b")) return "GANGOTRI HOSTEL";
+    if (name.includes("guest") || name.includes("ghb") || name.includes("hostel d")) return "GHB HOSTEL";
+    if (name.includes("boys") || name.includes("hostel c")) return "BOYS HOSTEL";
 
     // Fallback: Check if it matches any existing hostel record
     const exactMatch = hostels.find(h => h.name.toLowerCase() === name);
@@ -1256,9 +1343,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const formatHostelDisplay = (name: string) => {
     if (!name) return name;
-    const n = name.toUpperCase();
-    if (n.includes("GUEST") || n.includes("GHB")) return "GHB Hostel";
-    return name;
+    const n = name.toUpperCase().trim();
+    if (n.includes("GUEST") || n.includes("GHB")) return "GHB HOSTEL";
+    return n;
   };
 
   const formatDate = (dateString: string | undefined) => {
@@ -1817,6 +1904,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         setRegistrationFields(mergedFields);
         setFormBuilderFields(settingsData.formBuilderConfig || []);
         setSavedFormBuilderConfig(settingsData.formBuilderConfig || []); // ⚡ NEW: Save reference
+        setFormBuilderVersions(settingsData.formBuilderVersions || []);
+
         if (settingsData.wardenPassword) {
           setGlobalWardenPassword(settingsData.wardenPassword);
         }
@@ -1936,6 +2025,36 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       setIsNotifyingAbsentees(false);
     }
   };
+
+  const [isNotifyingAnomalies, setIsNotifyingAnomalies] = useState(false);
+  const handleNotifyAnomalies = async () => {
+    if (anomalyAlerts.length === 0) return;
+    if (!await showConfirm(`Are you sure you want to send Web Push & SMS Anomaly Alerts to parents of all ${anomalyAlerts.length} long-absent students?`)) return;
+
+    try {
+      setIsNotifyingAnomalies(true);
+      const res = await fetch("/api/admin/notify-absentees", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentIds: anomalyAlerts.map(a => a.studentId),
+          customMessage: "⚠️ Parent Alert: Your ward {name} has been absent from daily night curfew attendance for 3+ consecutive days. Please contact the hostel administration."
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Web Push & SMS anomaly alerts sent to ${data.notifiedCount} parents!`, "success");
+      } else {
+        alert("Failed to send alerts: " + (data.error || "Unknown error"));
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert("Error: " + (e.message || "Network error"));
+    } finally {
+      setIsNotifyingAnomalies(false);
+    }
+  };
+
 
   const handleUpdateSettings = async (updateData: any) => {
     try {
@@ -2117,6 +2236,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const handleUpdateFormBuilder = (updatedFields: any[]) => {
     setFormBuilderFields(updatedFields);
   };
+
+  const handleFormBuilderDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData("text/plain", index.toString());
+  };
+
+  const handleFormBuilderDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleFormBuilderDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    const sourceIndexStr = e.dataTransfer.getData("text/plain");
+    if (!sourceIndexStr) return;
+    const sourceIndex = parseInt(sourceIndexStr);
+    if (sourceIndex === targetIndex) return;
+
+    const updated = [...formBuilderFields];
+    const [movedField] = updated.splice(sourceIndex, 1);
+    updated.splice(targetIndex, 0, movedField);
+    handleUpdateFormBuilder(updated);
+  };
+
 
   const handlePreviewFormBuilderHub = () => {
     setPendingFormBuilderChanges(formBuilderFields);
@@ -2810,10 +2951,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (!forceRefresh) {
         const cached = localStorage.getItem(CACHE_KEYS.HOSTELS);
         if (cached) {
-          setHostels(JSON.parse(cached));
-          // Don't return here if we want to background update, but usually hostels don't change often.
-          // Let's return to save bandwidth as requested.
-          return;
+          try {
+            const parsed = JSON.parse(cached);
+            const hasMixedCase = parsed.some((h: any) => h.name && /[a-z]/.test(h.name));
+            if (hasMixedCase) {
+              console.log("Invalidating hostels cache due to mixed-case names");
+              localStorage.removeItem(CACHE_KEYS.HOSTELS);
+            } else {
+              setHostels(parsed);
+              return;
+            }
+          } catch (e) {
+            localStorage.removeItem(CACHE_KEYS.HOSTELS);
+          }
         }
       }
 
@@ -2855,17 +3005,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         try {
           const parsed = JSON.parse(cached);
           if (parsed && parsed.length > 0) {
-            setStudents(parsed);
-            hasCache = true;
-            
-            // If cache is fresh and not forced, return immediately
-            if (!forceRefresh && timestamp) {
-              const age = Date.now() - parseInt(timestamp);
-              const needsUpgrade = parsed[0].floorNumber === undefined;
-              const CACHE_FRESH_DURATION = 5 * 60 * 1000; // 5 minutes
-              if (!needsUpgrade && age < CACHE_FRESH_DURATION) {
-                setStudentsLoading(false);
-                return;
+            // Invalidate cache if it contains mixed-case hostel names (has any lowercase letter)
+            const hasMixedCase = parsed.some((s: any) => s.hostelName && /[a-z]/.test(s.hostelName));
+            if (hasMixedCase) {
+              console.log("Invalidating student cache due to mixed-case hostel names");
+              localStorage.removeItem(CACHE_KEYS.STUDENTS);
+              localStorage.removeItem(CACHE_KEYS.TIMESTAMP);
+            } else {
+              setStudents(parsed);
+              hasCache = true;
+              
+              // If cache is fresh and not forced, return immediately
+              if (!forceRefresh && timestamp) {
+                const age = Date.now() - parseInt(timestamp);
+                const needsUpgrade = parsed[0].floorNumber === undefined;
+                const CACHE_FRESH_DURATION = 5 * 60 * 1000; // 5 minutes
+                if (!needsUpgrade && age < CACHE_FRESH_DURATION) {
+                  setStudentsLoading(false);
+                  return;
+                }
               }
             }
           }
@@ -3023,20 +3181,53 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     try {
       setAttendanceLogsLoading(true);
       const activeFilter = currentTab === "rooms" ? "all" : attendanceHostelFilter;
-      const url = new URL(`/api/admin/attendance?date=${selectedDate}&hostelName=${activeFilter}&_t=${Date.now()}`, window.location.origin);
-      const response = await fetch(url.href);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
-      if (data.success) {
-        setAttendanceLogs(data.attendance || []);
+      const url = new URL(`/api/admin/anomaly-alerts?_t=${Date.now()}`, window.location.origin);
+      
+      // Also fetch default attendance logs
+      const logsUrl = new URL(`/api/admin/attendance?date=${selectedDate}&hostelName=${activeFilter}&_t=${Date.now()}`, window.location.origin);
+      const [logsRes, anomalyRes] = await Promise.all([
+        fetch(logsUrl.href),
+        fetch(url.href)
+      ]);
+
+      if (logsRes.ok) {
+        const logsData = await logsRes.json();
+        if (logsData.success) {
+          setAttendanceLogs(logsData.attendance || []);
+        }
+      }
+
+      if (anomalyRes.ok) {
+        const anomalyData = await anomalyRes.json();
+        if (anomalyData.success) {
+          setAnomalyAlerts(anomalyData.alerts || []);
+        }
       }
     } catch (error: any) {
-      console.error("Error fetching attendance logs:", error.message);
-      showToast("Error fetching attendance logs list.", "error");
+      console.error("Error fetching logs or anomaly alerts:", error.message);
     } finally {
       setAttendanceLogsLoading(false);
     }
   };
+
+  const fetchAnomalyAlerts = async () => {
+    try {
+      setAnomalyAlertsLoading(true);
+      const url = new URL(`/api/admin/anomaly-alerts?_t=${Date.now()}`, window.location.origin);
+      const res = await fetch(url.href);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setAnomalyAlerts(data.alerts || []);
+        }
+      }
+    } catch (e: any) {
+      console.error("Error fetching anomaly alerts:", e.message);
+    } finally {
+      setAnomalyAlertsLoading(false);
+    }
+  };
+
 
   const fetchStudentHistory = async () => {
     if (!attendanceHistoryStudentId) return;
@@ -3759,7 +3950,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       Name: s.name,
       Room: s.roomNumber,
       Mobile: s.phoneNumber || "N/A",
-      Hostel: s.hostelName,
+      Hostel: formatHostelDisplay(s.hostelName),
       College: s.collegeName,
       Branch: s.branch,
       Year: s.year,
@@ -3801,7 +3992,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           "Name": log.name || st?.name || (isStudentIdObj ? log.studentId?.name : null) || "Unknown",
           "Room": log.roomNumber || st?.roomNumber || (isStudentIdObj ? log.studentId?.roomNumber : null) || "N/A",
           "Mobile": (isStudentIdObj ? log.studentId?.phoneNumber : null) || st?.phoneNumber || "N/A",
-          Hostel: log.hostelName || st?.hostelName || (isStudentIdObj ? log.studentId?.hostelName : null) || "N/A",
+          Hostel: formatHostelDisplay(log.hostelName || st?.hostelName || (isStudentIdObj ? log.studentId?.hostelName : null) || "N/A"),
           Time: log.istTime,
           Accuracy: log.location?.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"
         };
@@ -3825,7 +4016,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         "Student ID": s.registrationId || "N/A",
         "Name": s.name || "Unknown",
         "Mobile": s.phoneNumber || "N/A",
-        "Hostel": s.hostelName || (s as any).hostel_name || "N/A",
+        "Hostel": formatHostelDisplay(s.hostelName || (s as any).hostel_name || "N/A"),
         "Status": "Absent"
       }));
       setExportPreviewData(data);
@@ -5609,6 +5800,76 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </div>
                       </div>
 
+                      {/* ⚠️ CURFEW ANOMALY DETECTED PANEL */}
+                      {anomalyAlerts.length > 0 && (() => {
+                        return (
+                          <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-100 rounded-3xl p-4 md:p-6 space-y-4 shadow-sm animate-in slide-in-from-top duration-300">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-red-500 text-white flex items-center justify-center shrink-0 shadow-lg shadow-red-200">
+                                  <svg className="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                </div>
+                                <div>
+                                  <h3 className="text-sm font-black text-red-950 uppercase tracking-wider">
+                                    ⚠️ Attendance Anomalies Detected
+                                  </h3>
+                                  <p className="text-[11px] text-red-700 font-medium">
+                                    {anomalyAlerts.length} student{anomalyAlerts.length > 1 ? 's' : ''} have been absent for 3+ consecutive days.
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={handleNotifyAnomalies}
+                                disabled={isNotifyingAnomalies}
+                                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-red-500/25 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                              >
+                                {isNotifyingAnomalies ? (
+                                  <>
+                                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                    <span>Notifying...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>📢 Alert Parents</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+
+                            {/* Collapsible Details list */}
+                            <details className="group border-t border-red-200/50 pt-3">
+                              <summary className="text-[10px] font-black text-red-600 uppercase tracking-widest cursor-pointer select-none flex items-center gap-1 hover:text-red-800 transition-colors">
+                                <span className="transition-transform group-open:rotate-90 inline-block font-bold">▶</span>
+                                View Affected Students ({anomalyAlerts.length})
+                              </summary>
+                              <div className="mt-3 overflow-hidden rounded-2xl border border-red-150 bg-white/70 backdrop-blur divide-y divide-red-50 max-h-60 overflow-y-auto">
+                                {anomalyAlerts.map((student: any) => (
+                                  <div key={student.studentId} className="p-3 text-xs flex items-center justify-between gap-3 hover:bg-red-50/30 transition-colors">
+                                    <div>
+                                      <p className="font-extrabold text-red-950">{student.studentName}</p>
+                                      <p className="text-[9px] text-gray-500 font-bold uppercase">
+                                        Hostel: {student.hostelName || 'N/A'} • Room: {student.roomNumber || 'N/A'}
+                                      </p>
+                                    </div>
+                                    <div className="text-right">
+                                      <span className="inline-block px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 text-[9px] font-black uppercase tracking-wider mb-1">
+                                        {student.consecutiveAbsentDays} Days Absent
+                                      </span>
+                                      {student.parentPhone && (
+                                        <p className="text-[9px] text-gray-500 font-bold">
+                                          Parent: {student.parentPhone}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          </div>
+                        );
+                      })()}
+
+
                       <div className="grid grid-cols-3 gap-2 md:gap-4">
                         <div className="bg-filler p-2.5 rounded-lg border border-gray-100 shadow-sm text-center">
                           <p className="text-[9px] font-bold text-secondary uppercase tracking-wider">Total Present</p>
@@ -7285,8 +7546,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     }
                     return isGuest;
                   }).map((h) => {
-                    const count = dropdownFilteredStudents.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === h.name).length;
-                    const presentCount = dropdownFilteredStudents.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === h.name && presentStudentIds.includes(s.id)).length;
+                    const count = dropdownFilteredStudents.filter(s => (getHostelCategory(s.hostelName) || s.hostelName || "").toUpperCase() === h.name.toUpperCase()).length;
+                    const presentCount = dropdownFilteredStudents.filter(s => (getHostelCategory(s.hostelName) || s.hostelName || "").toUpperCase() === h.name.toUpperCase() && presentStudentIds.includes(s.id)).length;
                     return (
                       <button
                         key={h._id || h.name}
@@ -7296,7 +7557,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                           }`}
                       >
-                        <span className="text-center leading-tight">{h.name}</span>
+                        <span className="text-center leading-tight">{formatHostelDisplay(h.name)}</span>
                         <div className="flex items-center gap-1.5">
                           <span className="text-[9px] opacity-75">T: {count}</span>
                           <span className="text-[9px] text-green-600 font-black bg-green-50/50 px-1 rounded">P: {presentCount}</span>
@@ -7322,8 +7583,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       return (aIdx === -1 ? 99 : aIdx) - (bIdx === -1 ? 99 : bIdx);
                     })
                     .map((h) => {
-                      const count = dropdownFilteredStudents.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === h.name).length;
-                      const presentCount = dropdownFilteredStudents.filter(s => (getHostelCategory(s.hostelName) || s.hostelName) === h.name && presentStudentIds.includes(s.id)).length;
+                      const count = dropdownFilteredStudents.filter(s => (getHostelCategory(s.hostelName) || s.hostelName || "").toUpperCase() === h.name.toUpperCase()).length;
+                      const presentCount = dropdownFilteredStudents.filter(s => (getHostelCategory(s.hostelName) || s.hostelName || "").toUpperCase() === h.name.toUpperCase() && presentStudentIds.includes(s.id)).length;
 
                       return (
                         <button
@@ -7334,7 +7595,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                             }`}
                         >
-                          <span className="text-center leading-tight">{h.name}</span>
+                          <span className="text-center leading-tight">{formatHostelDisplay(h.name)}</span>
                           <div className="flex items-center gap-1.5">
                             <span className="text-[9px] opacity-75">T: {count}</span>
                             <span className="text-[9px] text-green-600 font-black bg-green-50/50 px-1 rounded">P: {presentCount}</span>
@@ -7812,6 +8073,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       {selectedStudent.category && (
                         <p className="text-[10px] text-blue-600 font-bold mt-0.5 uppercase">Category: {selectedStudent.category}</p>
                       )}
+                      {selectedStudent.gender && (
+                        <p className="text-[10px] text-indigo-600 font-bold mt-0.5 uppercase">Gender: {selectedStudent.gender}</p>
+                      )}
                       {selectedStudent.joiningDate && (
                         <p className="text-[9px] text-gray-500 mt-1 font-medium italic">Joined: {new Date(selectedStudent.joiningDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}</p>
                       )}
@@ -7927,6 +8191,41 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </div>
                       </div>
                     )}
+
+                    {/* ⚡ NEW: Dynamic Custom Onboarding Fields Display in Sidebar */}
+                    {(() => {
+                      const standardFieldIds = new Set([
+                        'name', 'email', 'phoneNumber', 'gender', 'dob', 'category', 'erpInformation',
+                        'registrationId', 'collegeName', 'branch', 'year', 'semester', 'section', 'hostelName',
+                        'roomNumber', 'floorNumber', 'joiningDate', 'fatherName', 'fatherNumber',
+                        'motherName', 'motherNumber', 'homePinCode', 'homeState',
+                        'localGuardianAddress', 'localGuardianPhoneNumber', 'profilePicture'
+                      ]);
+                      const customFields = savedFormBuilderConfig.filter(f => {
+                        if (!f.visible) return false;
+                        if (standardFieldIds.has(f.id)) return false;
+                        const labelLower = (f.label || "").toLowerCase().trim();
+                        if (labelLower === 'gender' || labelLower === 'sex') return false;
+                        return true;
+                      });
+
+                      const populatedCustomFields = customFields.filter(f => selectedStudent.dynamicFields?.[f.id]);
+                      if (populatedCustomFields.length === 0) return null;
+
+                      return (
+                        <div className="col-span-2 pt-2 border-t border-gray-100 mt-1">
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-2">Custom Fields</p>
+                          <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-xl border border-gray-100">
+                            {populatedCustomFields.map(f => (
+                              <div key={f.id}>
+                                <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">{f.label}</p>
+                                <p className="text-[12px] text-gray-900 font-bold uppercase">{selectedStudent.dynamicFields[f.id]}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -7992,7 +8291,29 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </button>
                   <button
                     onClick={() => {
-                      setEditStudentForm({ ...selectedStudent });
+                      // Find gender value from dynamic fields if not present on standard field
+                      const genderField = savedFormBuilderConfig.find(f => {
+                        const label = String(f.label || "").toLowerCase().trim();
+                        return label === 'gender' || label === 'sex';
+                      });
+                      
+                      let initialGender = selectedStudent.gender || "";
+                      if (!initialGender && selectedStudent.dynamicFields) {
+                        if (genderField && selectedStudent.dynamicFields[genderField.id]) {
+                          initialGender = selectedStudent.dynamicFields[genderField.id];
+                        } else {
+                          const keys = Object.keys(selectedStudent.dynamicFields);
+                          const oldGenderKey = keys.find(k => k.startsWith('name_copy_') || k.toLowerCase().includes('gender') || k.toLowerCase().includes('sex'));
+                          if (oldGenderKey) {
+                            initialGender = selectedStudent.dynamicFields[oldGenderKey];
+                          }
+                        }
+                      }
+
+                      setEditStudentForm({ 
+                        ...selectedStudent,
+                        gender: initialGender 
+                      });
                       setEditErrors({});
                       setShowEditStudentModal(true);
                     }}
@@ -8646,12 +8967,33 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   e.preventDefault();
                   try {
                     setIsUpdatingStudent(true);
+                    
+                    // Sync gender back to the dynamic fields so it updates properly in DB
+                    const genderField = savedFormBuilderConfig.find(f => {
+                      const label = String(f.label || "").toLowerCase().trim();
+                      return label === 'gender' || label === 'sex';
+                    });
+                    
+                    const payload = { ...editStudentForm };
+                    if (payload.gender && genderField) {
+                      const dynamicFields = { ...(payload.dynamicFields || {}) };
+                      dynamicFields[genderField.id] = payload.gender;
+                      
+                      const keys = Object.keys(dynamicFields);
+                      const oldGenderKey = keys.find(k => k.startsWith('name_copy_') || k.toLowerCase().includes('gender') || k.toLowerCase().includes('sex'));
+                      if (oldGenderKey && oldGenderKey !== genderField.id) {
+                        dynamicFields[oldGenderKey] = payload.gender;
+                      }
+                      
+                      payload.dynamicFields = dynamicFields;
+                    }
+
                     const response = await fetch(`/api/students/${selectedStudent?.id}`, {
                       method: "PATCH",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        ...editStudentForm,
-                        joiningDate: editStudentForm.joiningDate ? new Date(editStudentForm.joiningDate).toISOString() : undefined
+                        ...payload,
+                        joiningDate: payload.joiningDate ? new Date(payload.joiningDate).toISOString() : undefined
                       }),
                     });
 
@@ -8870,7 +9212,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </select>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 col-span-full">
+                    <div className="grid grid-cols-3 gap-4 col-span-full">
                       <div>
                         <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Year</label>
                         <select
@@ -8891,6 +9233,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         >
                           <option value="">SELECT SEMESTER</option>
                           {["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Section</label>
+                        <select
+                          value={editStudentForm.section || ""}
+                          onChange={(e) => setEditStudentForm(prev => ({ ...prev, section: e.target.value.toUpperCase() }))}
+                          className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800 uppercase"
+                        >
+                          <option value="">SELECT SECTION</option>
+                          {["A", "B", "C", "D", "E", "F"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
                         </select>
                       </div>
                     </div>
@@ -9045,12 +9398,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     {(() => {
                       const standardFieldIds = new Set([
                         'name', 'email', 'phoneNumber', 'gender', 'dob', 'category', 'erpInformation',
-                        'registrationId', 'collegeName', 'branch', 'year', 'semester', 'hostelName',
+                        'registrationId', 'collegeName', 'branch', 'year', 'semester', 'section', 'hostelName',
                         'roomNumber', 'floorNumber', 'joiningDate', 'fatherName', 'fatherNumber',
                         'motherName', 'motherNumber', 'homePinCode', 'homeState',
                         'localGuardianAddress', 'localGuardianPhoneNumber', 'profilePicture'
                       ]);
-                      const customFields = savedFormBuilderConfig.filter(f => !standardFieldIds.has(f.id) && f.visible);
+                      const customFields = savedFormBuilderConfig.filter(f => {
+                        if (!f.visible) return false;
+                        if (standardFieldIds.has(f.id)) return false;
+                        
+                        // Exclude Gender from Custom Fields list since it is already rendered standardly in Personal Info
+                        const labelLower = (f.label || "").toLowerCase().trim();
+                        if (labelLower === 'gender' || labelLower === 'sex') return false;
+                        
+                        return true;
+                      });
                       if (customFields.length === 0) return null;
                       return (
                         <>
@@ -9623,40 +9985,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-2 w-full sm:w-auto sm:shrink-0 grid grid-cols-2 sm:flex">
+                      <div className="flex gap-2 w-full sm:w-auto sm:shrink-0 flex-wrap justify-end">
                         <button
-                          onClick={async () => {
-                            if (formBuilderFields.length > 0 && !await showConfirm("This will replace your current form configuration with the 20+ standard registration fields. Continue?")) return;
-                            const defaults = [
-                              { id: "profilePicture", label: "Profile Photo", type: "image", required: true, visible: true, section: "Personal" },
-                              { id: "name", label: "Full Name", type: "text", required: true, visible: true, section: "Personal" },
-                              { id: "phoneNumber", label: "Phone Number", type: "tel", required: true, visible: true, section: "Personal" },
-                              { id: "dob", label: "Date of Birth", type: "date", required: true, visible: true, section: "Personal" },
-                              { id: "category", label: "Social Category", type: "select", options: ["GENERAL", "OBC", "SC", "ST"], required: true, visible: true, section: "Personal" },
-                              { id: "erpInformation", label: "ERP ID", type: "text", required: true, visible: true, section: "Academic" },
-                              { id: "collegeName", label: "College Name", type: "select", options: ["OIST", "OCT", "OCP", "OPM", "OIPR"], required: true, visible: true, section: "Academic" },
-                              { id: "branch", label: "Branch", type: "select", options: ["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"], required: true, visible: true, section: "Academic" },
-                              { id: "year", label: "Current Year", type: "select", options: ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"], required: true, visible: true, section: "Academic" },
-                              { id: "semester", label: "Semester", type: "select", options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"], required: true, visible: true, section: "Academic" },
-                              { id: "section", label: "Section", type: "select", options: ["A", "B", "C", "D", "E", "F"], required: true, visible: true, section: "Academic" },
-                              { id: "fatherName", label: "Father's Name", type: "text", required: true, visible: true, section: "Guardian" },
-                              { id: "fatherNumber", label: "Father's Phone No", type: "tel", required: true, visible: true, section: "Guardian" },
-                              { id: "motherName", label: "Mother's Name", type: "text", required: true, visible: true, section: "Guardian" },
-                              { id: "motherNumber", label: "Mother's Phone No", type: "tel", required: true, visible: true, section: "Guardian" },
-                              { id: "localGuardianAddress", label: "Local Guardian Address", type: "textarea", required: false, visible: true, section: "Guardian" },
-                              { id: "localGuardianPhoneNumber", label: "Local Guardian Phone", type: "tel", required: false, visible: true, section: "Guardian" },
-                              { id: "homeState", label: "Home State", type: "select", options: ["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"], required: true, visible: true, section: "Address" },
-                              { id: "permanentAddress", label: "Permanent Address", type: "textarea", required: true, visible: true, section: "Address" },
-                              { id: "hostelName", label: "Hostel Name", type: "select", options: hostels.map(h => h.name), required: true, visible: true, section: "Registration" },
-                              { id: "floorNumber", label: "Floor Number", type: "select", options: ["GND FLOOR", "1ST FLOOR", "2ND FLOOR", "3RD FLOOR", "4TH FLOOR"], required: true, visible: true, section: "Registration" },
-                              { id: "roomNumber", label: "Room Number", type: "select", options: ["101", "102", "103", "104", "105"], required: true, visible: true, section: "Registration" },
-                              { id: "joiningDate", label: "Joining Date", type: "date", required: true, visible: true, section: "Registration" }
-                            ];
-                            handleUpdateFormBuilder(defaults);
-                          }}
-                          className="px-4 py-2 bg-indigo-100 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-200 transition-all shadow-sm w-full sm:w-auto"
+                          onClick={() => { setSelectedTemplateId("college"); setShowTemplateModal(true); }}
+                          className="px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:from-violet-600 hover:to-purple-700 transition-all shadow-lg shadow-purple-200 w-full sm:w-auto flex items-center gap-2"
                         >
-                          🔄 Load Form
+                          <span>📋</span> Choose Template
+                        </button>
+                        <button
+                          onClick={() => setShowVersionHistoryModal(true)}
+                          className="px-4 py-2 bg-purple-50 text-purple-600 border-2 border-purple-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-100 transition-all w-full sm:w-auto flex items-center gap-1.5"
+                        >
+                          <span>⌛</span> History ({formBuilderVersions.length})
                         </button>
                         <button
                           onClick={() => {
@@ -9670,7 +10010,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             };
                             handleUpdateFormBuilder([...formBuilderFields, newField]);
                           }}
-                          className="px-4 py-2 bg-purple-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-700 transition-all shadow-lg shadow-purple-100 w-full sm:w-auto"
+                          className="px-4 py-2 bg-purple-100 text-purple-700 border-2 border-purple-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-200 transition-all w-full sm:w-auto"
                         >
                           + Add Field
                         </button>
@@ -9679,70 +10019,75 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                     <div className="space-y-4">
                       {formBuilderFields.length === 0 ? (
-                        <div className="py-12 text-center bg-gray-50 rounded-[32px] border-2 border-dashed border-gray-200">
-                          <p className="text-gray-400 font-bold uppercase tracking-widest text-sm mb-4">Form is empty</p>
-                          <button
-                            onClick={() => {
-                              const defaults = [
-                                { id: "name", label: "Full Name", type: "text", required: true, visible: true, section: "Personal" },
-                                { id: "phoneNumber", label: "Phone Number", type: "tel", required: true, visible: true, section: "Personal" },
-                                { id: "dob", label: "Date of Birth", type: "date", required: true, visible: true, section: "Personal" },
-                                { id: "category", label: "Social Category", type: "select", options: ["GENERAL", "OBC", "SC", "ST"], required: true, visible: true, section: "Personal" },
-                                { id: "erpInformation", label: "ERP ID", type: "text", required: true, visible: true, section: "Academic" },
-                                { id: "collegeName", label: "College Name", type: "select", options: ["OIST", "OCT", "OCP", "OPM", "OIPR"], required: true, visible: true, section: "Academic" },
-                                { id: "branch", label: "Branch", type: "select", options: ["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"], required: true, visible: true, section: "Academic" },
-                                { id: "year", label: "Current Year", type: "select", options: ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"], required: true, visible: true, section: "Academic" },
-                                { id: "semester", label: "Semester", type: "select", options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"], required: true, visible: true, section: "Academic" },
-                                { id: "section", label: "Section", type: "select", options: ["A", "B", "C", "D", "E", "F"], required: true, visible: true, section: "Academic" },
-                                { id: "fatherName", label: "Father's Name", type: "text", required: true, visible: true, section: "Guardian" },
-                                { id: "fatherNumber", label: "Father's Phone No", type: "tel", required: true, visible: true, section: "Guardian" },
-                                { id: "motherName", label: "Mother's Name", type: "text", required: true, visible: true, section: "Guardian" },
-                                { id: "motherNumber", label: "Mother's Phone No", type: "tel", required: true, visible: true, section: "Guardian" },
-                                { id: "localGuardianAddress", label: "Local Guardian Address", type: "textarea", required: false, visible: true, section: "Guardian" },
-                                { id: "localGuardianPhoneNumber", label: "Local Guardian Phone", type: "tel", required: false, visible: true, section: "Guardian" },
-                                { id: "homeState", label: "Home State", type: "select", options: ["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"], required: true, visible: true, section: "Address" },
-                                { id: "homePinCode", label: "Permanent Address", type: "textarea", required: true, visible: true, section: "Address" },
-                                { id: "hostelName", label: "Hostel Name", type: "select", options: hostels.map(h => h.name), required: true, visible: true, section: "Registration" },
-                                { id: "floorNumber", label: "Floor Number", type: "select", options: ["GND FLOOR", "1ST FLOOR", "2ND FLOOR", "3RD FLOOR", "4TH FLOOR"], required: true, visible: true, section: "Registration" },
-                                { id: "roomNumber", label: "Room Number", type: "select", options: ["101", "102", "103", "104", "105"], required: true, visible: true, section: "Registration" },
-                                { id: "joiningDate", label: "Joining Date", type: "date", required: true, visible: true, section: "Registration" }
-                              ];
-                              handleUpdateFormBuilder(defaults);
-                            }}
-                            className="text-purple-600 font-black text-xs uppercase tracking-widest hover:underline"
-                          >
-                            Load Standard Fields
-                          </button>
+                        <div className="py-16 text-center bg-gradient-to-br from-purple-50 via-violet-50 to-indigo-50 rounded-[32px] border-2 border-dashed border-purple-200 relative overflow-hidden">
+                          <div className="absolute top-4 left-6 text-5xl opacity-10 select-none">📋</div>
+                          <div className="absolute bottom-4 right-6 text-5xl opacity-10 select-none">✨</div>
+                          <div className="relative z-10">
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-2xl mx-auto mb-4 shadow-lg shadow-purple-200">
+                              🏗️
+                            </div>
+                            <p className="text-gray-700 font-black text-base mb-1">Your registration form is empty</p>
+                            <p className="text-gray-400 font-medium text-xs mb-6 max-w-xs mx-auto">Choose a ready-made template designed for your institution type. You can preview it live before applying.</p>
+                            <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+                              {formTemplates.map((tpl) => (
+                                <button
+                                  key={tpl.id}
+                                  onClick={() => { setSelectedTemplateId(tpl.id); setShowTemplateModal(true); }}
+                                  className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-white border-2 border-purple-100 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-100 transition-all group"
+                                >
+                                  <span className="text-xl">{tpl.icon}</span>
+                                  <div className="text-left">
+                                    <p className="text-xs font-black text-gray-800 group-hover:text-purple-700 leading-tight">{tpl.name.split(" ")[0]} {tpl.name.split(" ")[1]}</p>
+                                    <p className="text-[10px] text-gray-400 leading-tight">Preview & Apply</p>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-8">
                           {formBuilderFields.map((field, index) => (
-                            <div key={field.id} className="group bg-white p-3 rounded-2xl border-2 border-gray-100 hover:border-purple-200 transition-all shadow-sm hover:shadow-lg relative">
+                            <div
+                              key={field.id}
+                              draggable
+                              onDragStart={(e) => handleFormBuilderDragStart(e, index)}
+                              onDragOver={handleFormBuilderDragOver}
+                              onDrop={(e) => handleFormBuilderDrop(e, index)}
+                              className="group bg-white p-3 rounded-2xl border-2 border-gray-100 hover:border-purple-300 hover:bg-purple-50/10 cursor-grab active:cursor-grabbing active:scale-[0.98] transition-all shadow-sm hover:shadow-lg relative"
+                            >
                               <div className="flex gap-3 items-start">
-                                {/* Field Grip/Order (Simulated) */}
-                                <div className="flex flex-col gap-0.5 shrink-0">
-                                  <button
-                                    disabled={index === 0}
-                                    onClick={() => {
-                                      const updated = [...formBuilderFields];
-                                      [updated[index], updated[index - 1]] = [updated[index - 1], updated[index]];
-                                      handleUpdateFormBuilder(updated);
-                                    }}
-                                    className="p-1 hover:bg-gray-100 rounded text-gray-400 disabled:opacity-10 transition-colors"
-                                  >
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 15l7-7 7 7" /></svg>
-                                  </button>
-                                  <button
-                                    disabled={index === formBuilderFields.length - 1}
-                                    onClick={() => {
-                                      const updated = [...formBuilderFields];
-                                      [updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
-                                      handleUpdateFormBuilder(updated);
-                                    }}
-                                    className="p-1 hover:bg-gray-100 rounded text-gray-400 disabled:opacity-10 transition-colors"
-                                  >
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
-                                  </button>
+                                {/* Drag Handle & Grip Icon */}
+                                <div className="flex items-center gap-1 shrink-0 mt-2">
+                                  <div className="text-gray-300 group-hover:text-purple-400 transition-colors font-bold text-xs select-none">
+                                    ⋮⋮
+                                  </div>
+                                  <div className="flex flex-col gap-0.5">
+                                    <button
+                                      disabled={index === 0}
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = [...formBuilderFields];
+                                        [updated[index], updated[index - 1]] = [updated[index - 1], updated[index]];
+                                        handleUpdateFormBuilder(updated);
+                                      }}
+                                      className="p-1 hover:bg-gray-100 rounded text-gray-400 disabled:opacity-10 transition-colors"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 15l7-7 7 7" /></svg>
+                                    </button>
+                                    <button
+                                      disabled={index === formBuilderFields.length - 1}
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = [...formBuilderFields];
+                                        [updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
+                                        handleUpdateFormBuilder(updated);
+                                      }}
+                                      className="p-1 hover:bg-gray-100 rounded text-gray-400 disabled:opacity-10 transition-colors"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+                                    </button>
+                                  </div>
                                 </div>
 
                                 {/* Label Editor */}
@@ -11180,7 +11525,303 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         </div>
       )}
 
+      {/* =================== FORM TEMPLATE SELECTOR MODAL =================== */}
+      {showTemplateModal && (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-5xl max-h-[92vh] overflow-hidden shadow-2xl flex flex-col">
+
+            {/* Header */}
+            <div className="p-4 sm:p-6 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-violet-600 to-purple-700">
+              <div>
+                <h2 className="text-base sm:text-xl font-black text-white">📋 Choose a Registration Template</h2>
+                <p className="text-violet-200 text-xs mt-0.5">Select the template that fits your institution. Preview it live, then apply.</p>
+              </div>
+              <button
+                onClick={() => setShowTemplateModal(false)}
+                className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center text-sm font-black transition-all"
+              >✕</button>
+            </div>
+
+            {/* Body — two-column layout */}
+            <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
+
+              {/* LEFT: Template Cards */}
+              <div className="lg:w-[42%] p-4 sm:p-6 border-b lg:border-b-0 lg:border-r border-gray-100 overflow-y-auto flex flex-col gap-3">
+                <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Select a template</p>
+                {formTemplates.map((tpl) => {
+                  const isActive = selectedTemplateId === tpl.id;
+                  return (
+                    <button
+                      key={tpl.id}
+                      onClick={() => setSelectedTemplateId(tpl.id)}
+                      className={`w-full text-left p-4 rounded-2xl border-2 transition-all group ${
+                        isActive
+                          ? "border-purple-500 bg-purple-50 shadow-md shadow-purple-100"
+                          : "border-gray-100 hover:border-purple-200 hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 transition-all ${
+                          isActive ? "bg-gradient-to-br from-violet-500 to-purple-600 shadow-lg shadow-purple-200" : "bg-gray-100"
+                        }`}>
+                          {tpl.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-black leading-tight mb-1 ${isActive ? "text-purple-700" : "text-gray-800"}`}>{tpl.name}</p>
+                          <p className="text-xs text-gray-400 leading-snug">{tpl.description}</p>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {Array.from(new Set(tpl.fields.map(f => f.section))).map(sec => (
+                              <span key={sec} className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide ${
+                                isActive ? "bg-purple-100 text-purple-600" : "bg-gray-100 text-gray-500"
+                              }`}>{sec}</span>
+                            ))}
+                          </div>
+                          <p className={`text-[10px] mt-2 font-bold ${isActive ? "text-purple-500" : "text-gray-400"}`}>
+                            {tpl.fields.length} fields total
+                          </p>
+                        </div>
+                        {isActive && (
+                          <div className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center shrink-0 mt-0.5">
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* RIGHT: Live Mobile Preview */}
+              <div className="lg:w-[58%] p-4 sm:p-6 overflow-y-auto bg-gradient-to-br from-gray-50 to-slate-100 flex flex-col items-center">
+                <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 self-start">Live Preview — Student View</p>
+
+                {/* Phone Mockup */}
+                <div className="relative w-[260px] sm:w-[280px] shrink-0">
+                  {/* Phone outer frame */}
+                  <div className="relative bg-gray-900 rounded-[36px] p-[10px] shadow-2xl border-4 border-gray-800">
+                    {/* Notch */}
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-5 bg-gray-900 rounded-b-2xl z-10 flex items-center justify-center gap-1">
+                      <div className="w-2 h-2 rounded-full bg-gray-700"></div>
+                      <div className="w-8 h-1.5 rounded-full bg-gray-700"></div>
+                    </div>
+                    {/* Screen */}
+                    <div className="bg-white rounded-[28px] overflow-hidden" style={{height: '520px'}}>
+                      {/* Status bar */}
+                      <div className="bg-gradient-to-r from-violet-600 to-purple-700 px-4 py-2 flex justify-between items-center">
+                        <span className="text-white text-[8px] font-black">9:41</span>
+                        <div className="flex gap-1">
+                          <div className="w-3 h-1.5 bg-white/60 rounded-sm"></div>
+                          <div className="w-2 h-1.5 bg-white/60 rounded-sm"></div>
+                          <div className="w-2 h-1.5 bg-white rounded-sm"></div>
+                        </div>
+                      </div>
+                      {/* App Header */}
+                      <div className="bg-gradient-to-r from-violet-600 to-purple-700 px-4 pb-3">
+                        <p className="text-white text-[10px] font-black">Student Registration</p>
+                        <p className="text-violet-200 text-[7px]">{formTemplates.find(t => t.id === selectedTemplateId)?.name}</p>
+                      </div>
+                      {/* Form Fields Scrollable */}
+                      <div className="overflow-y-auto px-3 py-2 flex flex-col gap-2" style={{height: '420px'}}>
+                        {(() => {
+                          const tpl = formTemplates.find(t => t.id === selectedTemplateId);
+                          if (!tpl) return null;
+                          const sections = Array.from(new Set(tpl.fields.map(f => f.section)));
+                          return sections.map(sec => (
+                            <div key={sec}>
+                              <div className="flex items-center gap-1 mb-1.5 mt-1">
+                                <div className="flex-1 h-px bg-purple-100"></div>
+                                <span className="text-[7px] font-black text-purple-400 uppercase tracking-wider px-1">{sec}</span>
+                                <div className="flex-1 h-px bg-purple-100"></div>
+                              </div>
+                              {tpl.fields.filter(f => f.section === sec).map(field => (
+                                <div key={field.id} className="mb-1.5">
+                                  <p className="text-[7px] font-black text-gray-500 uppercase tracking-wide mb-0.5">
+                                    {field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}
+                                  </p>
+                                  {field.type === "image" ? (
+                                    <div className="h-8 rounded-lg border border-dashed border-purple-200 bg-purple-50 flex items-center justify-center gap-1">
+                                      <span className="text-[8px]">📷</span>
+                                      <span className="text-[7px] text-purple-400 font-bold">Tap to upload photo</span>
+                                    </div>
+                                  ) : field.type === "textarea" ? (
+                                    <div className="h-8 rounded-lg border border-gray-200 bg-gray-50 px-2 flex items-start pt-1">
+                                      <span className="text-[7px] text-gray-300">Type here...</span>
+                                    </div>
+                                  ) : field.type === "select" ? (
+                                    <div className="h-6 rounded-lg border border-gray-200 bg-gray-50 px-2 flex items-center justify-between">
+                                      <span className="text-[7px] text-gray-300">{field.options?.[0] || "Select option"}</span>
+                                      <svg className="w-2 h-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                    </div>
+                                  ) : field.type === "date" ? (
+                                    <div className="h-6 rounded-lg border border-gray-200 bg-gray-50 px-2 flex items-center justify-between">
+                                      <span className="text-[7px] text-gray-300">DD / MM / YYYY</span>
+                                      <span className="text-[8px] text-gray-300">📅</span>
+                                    </div>
+                                  ) : (
+                                    <div className="h-6 rounded-lg border border-gray-200 bg-gray-50 px-2 flex items-center">
+                                      <span className="text-[7px] text-gray-300">Enter {field.label.toLowerCase()}...</span>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ));
+                        })()}
+                        {/* Submit button preview */}
+                        <div className="mt-2 h-8 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 flex items-center justify-center">
+                          <span className="text-white text-[8px] font-black uppercase tracking-widest">Submit Registration</span>
+                        </div>
+                        <div className="h-4"></div>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Phone bottom button */}
+                  <div className="flex justify-center mt-2">
+                    <div className="w-20 h-1 bg-gray-300 rounded-full"></div>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-gray-400 mt-3 text-center max-w-xs">
+                  This is how your students will see the registration form. All fields can be edited after applying.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 sm:p-5 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/50">
+              <div>
+                <p className="text-xs font-bold text-gray-600">
+                  {formBuilderFields.length > 0 ? "⚠️ This will replace your current form configuration." : "✅ Your form is currently empty — safe to apply."}
+                </p>
+                <p className="text-[10px] text-gray-400">You can modify all fields in the Form Builder after applying.</p>
+              </div>
+              <div className="flex gap-3 shrink-0">
+                <button
+                  onClick={() => setShowTemplateModal(false)}
+                  className="px-5 py-2.5 rounded-xl border-2 border-gray-200 text-gray-500 text-xs font-black hover:bg-gray-100 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    const tpl = formTemplates.find(t => t.id === selectedTemplateId);
+                    if (!tpl) return;
+                    if (formBuilderFields.length > 0 && !await showConfirm(`This will replace your current ${formBuilderFields.length} fields with the "${tpl.name}" template (${tpl.fields.length} fields). Continue?`)) return;
+                    handleUpdateFormBuilder(tpl.fields);
+                    setShowTemplateModal(false);
+                  }}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-xs font-black hover:from-violet-600 hover:to-purple-700 transition-all shadow-lg shadow-purple-200 flex items-center gap-2"
+                >
+                  <span>✅</span> Apply Template
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================== FORM VERSION HISTORY MODAL =================== */}
+      {showVersionHistoryModal && (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[85vh] overflow-hidden shadow-2xl flex flex-col">
+            {/* Header */}
+            <div className="p-4 sm:p-6 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-purple-600 to-indigo-700">
+              <div>
+                <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                  <span>⌛</span> Form Version History Snapshots
+                </h2>
+                <p className="text-purple-200 text-[10px] sm:text-xs mt-0.5">Every time you save the form config, a snapshot is saved automatically. Roll back to any previous version.</p>
+              </div>
+              <button
+                onClick={() => setShowVersionHistoryModal(false)}
+                className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center text-sm font-black transition-all"
+              >✕</button>
+            </div>
+
+            {/* Body */}
+            <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden">
+              {/* Left Panel: Versions list */}
+              <div className="md:w-[45%] border-r border-gray-100 overflow-y-auto p-4 flex flex-col gap-2.5">
+                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-1">Available Snapshots</p>
+                {formBuilderVersions.length === 0 ? (
+                  <div className="py-12 text-center text-gray-400 text-xs">
+                    No snapshots saved yet. Save the form configuration first.
+                  </div>
+                ) : (
+                  formBuilderVersions.map((ver: any, i: number) => {
+                    const date = new Date(ver.timestamp).toLocaleDateString("en-IN", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      hour12: true
+                    });
+                    return (
+                      <div
+                        key={ver.id}
+                        className="p-3.5 rounded-2xl border-2 border-gray-50 bg-gray-50/50 hover:bg-purple-50/20 hover:border-purple-200 transition-all flex flex-col gap-2 relative group"
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <p className="text-[10px] font-black text-purple-700 uppercase tracking-wider">
+                              Snapshot #{formBuilderVersions.length - i} {i === 0 && "(Current)"}
+                            </p>
+                            <p className="text-xs font-black text-gray-800 mt-1">{date}</p>
+                          </div>
+                          <span className="shrink-0 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[8px] font-black uppercase tracking-wider">
+                            {ver.fieldsCount} Fields
+                          </span>
+                        </div>
+                        <div className="flex gap-2 justify-end pt-1">
+                          <button
+                            onClick={async () => {
+                              if (await showConfirm(`Are you sure you want to rollback to Snapshot #${formBuilderVersions.length - i}?\n\nThis will load its ${ver.fieldsCount} fields into your form builder config.`)) {
+                                handleUpdateFormBuilder(ver.config);
+                                setShowVersionHistoryModal(false);
+                                showToast(`Rolled back to Snapshot #${formBuilderVersions.length - i} successfully!`, "success");
+                              }
+                            }}
+                            className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95"
+                          >
+                            Rollback
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Right Panel: Fields Preview */}
+              <div className="flex-1 bg-gray-50/30 overflow-y-auto p-4 flex flex-col gap-3">
+                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Fields Preview (Snapshot #1)</p>
+                {formBuilderVersions.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-2">
+                    {formBuilderVersions[0]?.config?.map((f: any) => (
+                      <div key={f.id} className="p-3 bg-white rounded-xl border border-gray-150 flex items-center justify-between text-xs font-bold text-gray-800 shadow-sm">
+                        <div>
+                          <p className="font-extrabold text-gray-900">{f.label}</p>
+                          <p className="text-[8px] text-gray-400 uppercase tracking-wider mt-0.5">Section: {f.section} • Type: {f.type}</p>
+                        </div>
+                        {f.required && (
+                          <span className="px-2 py-0.5 bg-red-50 text-red-600 rounded-full text-[8px] font-black uppercase tracking-wider">Required</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-xs italic text-center py-12">Select a version snapshot to preview fields</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+
       {/* Change Preview Modal */}
+
       {showChangePreviewModal && pendingFormBuilderChanges && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-3xl w-full max-w-5xl h-[90vh] overflow-hidden shadow-2xl flex flex-col">
@@ -11362,6 +12003,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         url={activeConsentVideoUrl}
         onClose={() => setActiveConsentVideoUrl(null)}
       />
+
     </div >
+
+
   );
 }

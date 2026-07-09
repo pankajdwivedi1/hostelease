@@ -251,6 +251,91 @@ export default function StudentScannerPage() {
         }, 300); // Scan every 300ms for responsiveness
     };
 
+    const [syncingOffline, setSyncingOffline] = useState(false);
+
+    // Helper: Queue scan offline
+    const queueOfflineScan = useCallback((qrData: string) => {
+        try {
+            const targetAction = currentStatus === "in" ? "checkout" : "checkin";
+            const newStatus = currentStatus === "in" ? "out" : "in";
+
+            const offlineRecord = {
+                id: Math.random().toString(36).substring(2, 9),
+                qrData,
+                firebaseUID,
+                deviceId,
+                action: targetAction,
+                newStatus,
+                timestamp: new Date().toISOString()
+            };
+
+            const existing = JSON.parse(localStorage.getItem("pendingOfflineScans") || "[]");
+            localStorage.setItem("pendingOfflineScans", JSON.stringify([...existing, offlineRecord]));
+
+            // Update status locally instantly for smooth student flow
+            setCurrentStatus(newStatus);
+            localStorage.setItem("studentStatus", newStatus);
+
+            setScanResult({
+                success: true,
+                action: targetAction,
+                message: `⚡ Offline Mode: Scan captured successfully and saved locally! It will auto-sync when your internet reconnects.`,
+                studentName: studentName || "Student"
+            });
+        } catch (e) {
+            setScanResult({
+                success: false,
+                error: "Failed to process offline scan data."
+            });
+        }
+    }, [currentStatus, firebaseUID, deviceId, studentName]);
+
+    // Helper: Sync queued scans
+    const syncOfflineScans = useCallback(async () => {
+        const queued = JSON.parse(localStorage.getItem("pendingOfflineScans") || "[]");
+        if (queued.length === 0) return;
+
+        setSyncingOffline(true);
+        const remaining: any[] = [];
+
+        for (const item of queued) {
+            try {
+                const res = await fetch("/api/getpass/scan", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        qrData: item.qrData,
+                        firebaseUID: item.firebaseUID,
+                        deviceId: item.deviceId,
+                        isOfflineSync: true
+                    }),
+                });
+                const data = await res.json();
+                if (!data.success && data.error && !data.error.includes("already")) {
+                    remaining.push(item);
+                }
+            } catch (err) {
+                remaining.push(item);
+            }
+        }
+
+        localStorage.setItem("pendingOfflineScans", JSON.stringify(remaining));
+        setSyncingOffline(false);
+
+        if (remaining.length === 0 && firebaseUID) {
+            fetchOutingHistory(firebaseUID);
+        }
+    }, [firebaseUID]);
+
+    // Listen to network changes
+    useEffect(() => {
+        window.addEventListener("online", syncOfflineScans);
+        syncOfflineScans();
+        return () => {
+            window.removeEventListener("online", syncOfflineScans);
+        };
+    }, [syncOfflineScans]);
+
     // ===================== Handle QR Code Detection =====================
     const handleQRCodeDetected = useCallback(async (qrData: string) => {
         if (processingRef.current) return;
@@ -260,9 +345,11 @@ export default function StudentScannerPage() {
         try {
             const parsed = JSON.parse(qrData);
             if (parsed.app !== "hosteleaze-getpass") {
+                processingRef.current = false;
                 return; // Not our QR code, keep scanning
             }
         } catch {
+            processingRef.current = false;
             return; // Invalid JSON, not our QR code
         }
 
@@ -272,6 +359,14 @@ export default function StudentScannerPage() {
         // Vibrate for haptic feedback
         if (navigator.vibrate) {
             navigator.vibrate(200);
+        }
+
+        // Fallback instantly if navigator reports offline
+        if (!navigator.onLine) {
+            queueOfflineScan(qrData);
+            processingRef.current = false;
+            setProcessing(false);
+            return;
         }
 
         try {
@@ -312,15 +407,14 @@ export default function StudentScannerPage() {
                 });
             }
         } catch (err: any) {
-            setScanResult({
-                success: false,
-                error: "Network error. Please try again.",
-            });
+            // Fetch/network error - fallback queue offline scan
+            queueOfflineScan(qrData);
         }
 
         processingRef.current = false;
         setProcessing(false);
-    }, [firebaseUID, deviceId]);
+    }, [firebaseUID, deviceId, queueOfflineScan]);
+
 
     // ===================== Cleanup =====================
     useEffect(() => {
@@ -359,6 +453,29 @@ export default function StudentScannerPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Offline sync indicator banner */}
+            {syncingOffline && (
+                <div style={{
+                    background: "rgba(59, 130, 246, 0.2)",
+                    borderBottom: "1px solid rgba(59, 130, 246, 0.4)",
+                    color: "#60a5fa",
+                    padding: "8px 16px",
+                    textAlign: "center",
+                    fontSize: "11px",
+                    fontWeight: "900",
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px"
+                }}>
+                    <span className="animate-spin inline-block">🔄</span>
+                    <span>Syncing offline scans in background...</span>
+                </div>
+            )}
+
 
             {/* ⚠️ PWA Install Warning — shown when opened in browser tab instead of installed app */}
             {!isPWA && (

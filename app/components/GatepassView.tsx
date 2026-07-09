@@ -762,9 +762,9 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
     const formatHostelDisplay = (name: string) => {
         if (!name) return name;
-        const n = name.toUpperCase();
-        if (n.includes("GUEST") || n.includes("GHB")) return "GHB Hostel";
-        return name;
+        const n = name.toUpperCase().trim();
+        if (n.includes("GUEST") || n.includes("GHB")) return "GHB HOSTEL";
+        return n;
     };
 
     return (

@@ -302,9 +302,9 @@ export default function OutingHistoryPage() {
 
     const formatHostelDisplay = (name: string) => {
         if (!name) return name;
-        const n = name.toUpperCase();
-        if (n.includes("GUEST") || n.includes("GHB")) return "GHB Hostel";
-        return name;
+        const n = name.toUpperCase().trim();
+        if (n.includes("GUEST") || n.includes("GHB")) return "GHB HOSTEL";
+        return n;
     };
 
     if (!mounted) return <div className="min-h-screen bg-[#0d1117]" />;
