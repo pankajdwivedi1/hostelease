@@ -1640,7 +1640,7 @@ export const db = {
         // ⚡ DATABASE-AWARE LIST WITH FILTERS
         list: async (filters: any = {}, options: { light?: boolean; select?: string; limit?: number } = {}) => {
             const source = await getDbSource();
-            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,supabase_id,profile_picture,student_profiles(*),student_security(device_id,device_reset_count,device_history,is_profile_locked,attendance_mode,web_authn_credentials,auth_provider)';
+            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,supabase_id,profile_picture,dynamic_fields,student_profiles(*),student_security(device_id,device_reset_count,device_history,is_profile_locked,attendance_mode,web_authn_credentials,auth_provider)';
             const selection = options.select || (options.light ? lightFields : '*, student_profiles(*), student_security(*)');
 
             if (source === 'SUPABASE') {
