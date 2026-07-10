@@ -409,6 +409,7 @@ const mapAttendanceToCamelCase = (a: any) => {
         _id: a._id,
         studentId: a.student_id || a.studentId,
         firebaseUID: a.firebase_uid || a.firebaseUID,
+        name: a.name || a.student_name || a.studentName || "Unknown",
         studentName: a.name || a.student_name || a.studentName || "Unknown",
         hostelName: formatHostelName(a.hostel_name || a.hostelName),
         roomNumber: a.room_number || a.roomNumber,
@@ -2105,30 +2106,54 @@ export const db = {
                 const tenantId = await getTenantIdOrThrow();
                 // Convert camelCase keys to snake_case for Supabase
                 const snakeUpdate = mapStudentToSnakeCase(updateData);
-                // ⚡ Do NOT use .select() after bulk update — it causes Supabase to
-                // stream back ALL rows which hits the statement timeout on large tables.
-                // Instead: update without returning rows, then do a cheap count.
-                let updateQuery = supabase.from('students').update(snakeUpdate);
-                updateQuery = updateQuery.eq('tenant_id', tenantId);
+                const { studentUpdate, profileUpdate, securityUpdate } = splitStudentFields(snakeUpdate);
+
+                // Fetch student IDs matching the filter
+                let studentsQuery = supabase
+                    .from('students')
+                    .select('_id')
+                    .eq('tenant_id', tenantId);
 
                 if (filter?.hostelName) {
-                    updateQuery = updateQuery.ilike('hostel_name', filter.hostelName);
-                } else {
-                    // neq('_id', '') matches every row — required by Supabase safety check
-                    updateQuery = updateQuery.neq('_id', '');
+                    studentsQuery = studentsQuery.ilike('hostel_name', filter.hostelName);
                 }
 
-                const { error } = await updateQuery;
-                if (error) throw error;
+                const { data: studentsData, error: fetchError } = await studentsQuery;
+                if (fetchError) throw fetchError;
 
-                // Get a lightweight count of students (to return how many were affected)
-                let countQuery = supabase.from('students').select('_id', { count: 'exact', head: true });
-                countQuery = countQuery.eq('tenant_id', tenantId);
-                if (filter?.hostelName) {
-                    countQuery = countQuery.ilike('hostel_name', filter.hostelName);
+                const studentIds = (studentsData || []).map((s: any) => s._id);
+                if (studentIds.length === 0) {
+                    return { count: 0 };
                 }
-                const { count } = await countQuery;
-                return { count: count || 0 };
+
+                // 1. Update core students table
+                if (Object.keys(studentUpdate).length > 0) {
+                    const { error } = await supabase
+                        .from('students')
+                        .update(studentUpdate)
+                        .in('_id', studentIds);
+                    if (error) throw error;
+                }
+
+                // 2. Update profile details
+                if (Object.keys(profileUpdate).length > 0) {
+                    const { error } = await supabase
+                        .from('student_profiles')
+                        .update(profileUpdate)
+                        .in('student_id', studentIds);
+                    if (error) throw error;
+                }
+
+                // 3. Update security details
+                if (Object.keys(securityUpdate).length > 0) {
+                    const { error } = await supabase
+                        .from('student_security')
+                        .update(securityUpdate)
+                        .in('student_id', studentIds);
+                    if (error) throw error;
+                }
+
+                return { count: studentIds.length };
             } else if (source === 'PRISMA') {
                 const tenantId = await getTenantIdOrThrow();
                 const prismaData = filterStudentForPrisma(updateData);

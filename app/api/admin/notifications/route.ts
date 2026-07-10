@@ -6,7 +6,7 @@ import { db } from "@/lib/dbAdapter";
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { senderId, targetType, targetHostel, message, priority } = body;
+        const { senderId, targetType, targetHostel, message, priority, expiresAt } = body;
         let { targetStudentId } = body;
 
         if (!senderId || !targetType || !message) {
@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
             targetStudentId: targetStudentId || null,
             message,
             priority: priority || "normal",
+            expiresAt: expiresAt ? new Date(expiresAt) : null,
         });
 
         return NextResponse.json({ success: true, notification });
@@ -108,7 +109,16 @@ export async function PATCH(request: NextRequest) {
 
         const updateData: any = { message };
         if (priority) updateData.priority = priority;
-        if (expiryHours) updateData.expiryHours = expiryHours;
+
+        if (expiryHours) {
+            if (expiryHours === "never") {
+                updateData.expiresAt = null;
+            } else {
+                const expiresAt = new Date();
+                expiresAt.setHours(expiresAt.getHours() + parseInt(expiryHours));
+                updateData.expiresAt = expiresAt;
+            }
+        }
 
         const updated = await db.notifications.update(id, { $set: updateData });
 
@@ -117,4 +127,3 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
-

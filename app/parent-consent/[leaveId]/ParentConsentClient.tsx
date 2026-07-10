@@ -7,7 +7,11 @@ const CONSENT_MIME_TYPES = [
     "video/webm;codecs=vp9,opus",
     "video/webm;codecs=vp8,opus",
     "video/webm",
+    "video/mp4;codecs=avc1,mp4a.40.2",
+    "video/mp4;codecs=h264,aac",
     "video/mp4",
+    "video/quicktime;codecs=h264,aac",
+    "video/quicktime",
 ];
 
 function pickConsentMimeType(): { mimeType: string; fileExt: string } {
@@ -31,6 +35,12 @@ function isMobileDevice(): boolean {
 }
 
 function getCameraConstraints(isMobile: boolean): MediaStreamConstraints {
+    const audioConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+    };
+
     if (isMobile) {
         return {
             video: {
@@ -40,7 +50,7 @@ function getCameraConstraints(isMobile: boolean): MediaStreamConstraints {
                 aspectRatio: { ideal: 9 / 16 },
                 frameRate: { ideal: 24 },
             },
-            audio: true,
+            audio: audioConstraints,
         };
     }
 
@@ -51,7 +61,7 @@ function getCameraConstraints(isMobile: boolean): MediaStreamConstraints {
             height: { ideal: 480 },
             frameRate: { ideal: 15 },
         },
-        audio: true,
+        audio: audioConstraints,
     };
 }
 
@@ -467,6 +477,14 @@ export default function ParentConsentClient({
                                     </div>
                                 )}
                             </div>
+
+                            {recordingState === "review" && (
+                                <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl text-[11px] text-indigo-200 leading-relaxed max-w-md mx-auto text-center mt-2 flex flex-col gap-1 shadow-sm">
+                                    <span className="font-bold text-indigo-300">📢 आवाज नहीं आने पर सलाह (Audio Tip):</span>
+                                    <span>यदि आपको आवाज नहीं आ रही है, तो कृपया सुनिश्चित करें कि आपका मोबाइल <strong>साइलेंट मोड (Silent Mode)</strong> पर न हो और फोन की आवाज बढ़ाएं।</span>
+                                    <span className="text-[10px] text-indigo-400 opacity-90">(If you cannot hear your voice, please check that your device is <strong>not on Silent/Vibrate Mode</strong> and increase your volume.)</span>
+                                </div>
+                            )}
 
                             <div className="flex flex-col items-center justify-center gap-3">
                                 {recordingState === "idle" && stream && (

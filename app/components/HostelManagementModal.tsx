@@ -139,7 +139,7 @@ export default function HostelManagementModal({
                             : matchedHostel.attendanceMode === 'biometric' ? 'bg-blue-100 text-blue-700 border-blue-200'
                             : 'bg-green-100 text-green-700 border-green-200'
                           }`}>
-                            {matchedHostel.attendanceMode === 'gps-only' ? '⚠️ GPS ONLY' : matchedHostel.attendanceMode === 'biometric' ? '👆 BIOMETRIC' : '📸 CAMERA'}
+                            {matchedHostel.attendanceMode === 'gps-only' ? '📍 GPS ONLY' : matchedHostel.attendanceMode === 'biometric' ? '👆 BIOMETRIC' : '📸 CAMERA'}
                           </span>
                         </div>
                         <div className="flex bg-white p-1 rounded-lg border border-slate-200 w-full sm:w-auto mt-2">

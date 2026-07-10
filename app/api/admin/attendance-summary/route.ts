@@ -3,6 +3,10 @@ import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
+// ⚡ IN-MEMORY CACHE for hostel stats (Reduces DB queries on date change)
+const statsCache = new Map<string, { stats: any, hostelStats: any, expires: number }>();
+const STATS_CACHE_TTL = 30 * 1000; // 30 seconds cache
+
 export async function GET(request: NextRequest) {
     try {
         const searchParams = request.nextUrl.searchParams;
@@ -116,26 +120,50 @@ export async function GET(request: NextRequest) {
         const pendingCountResult = await db.permissions.count({ status: 'pending' });
         const pendingCount = typeof pendingCountResult === 'number' ? pendingCountResult : 0;
 
-        const activeHostels = authorizedHostels.length > 0 ? authorizedHostels : canonicalHostelNames;
-        const hostelStats: Record<string, { total: number; in: number; out: number }> = {};
-        
-        let totalStudents = 0;
-        let totalIn = 0;
-        let totalOut = 0;
 
-        // ⚡ SINGLE PASS PARALLEL COUNTS: Fetch all required stats instantly
-        await Promise.all(activeHostels.map(async (h) => {
-            const [hTotal, hIn, hOut] = await Promise.all([
-                db.students.count({ hostelName: h }),
-                db.students.count({ hostelName: h, studentStatus: 'in' }),
-                db.students.count({ hostelName: h, studentStatus: 'out' })
-            ]);
-            
-            hostelStats[h] = { total: hTotal, in: hIn, out: hOut };
-            totalStudents += hTotal;
-            totalIn += hIn;
-            totalOut += hOut;
-        }));
+        const tenantId = await db.getTenantIdOrThrow();
+        const cacheKey = `${tenantId}_${authorizedHostels.join(',')}`;
+        const cachedStats = statsCache.get(cacheKey);
+
+        let stats;
+        let hostelStats: Record<string, { total: number; in: number; out: number }>;
+
+        if (cachedStats && cachedStats.expires > Date.now()) {
+            stats = cachedStats.stats;
+            hostelStats = cachedStats.hostelStats;
+        } else {
+            const activeHostels = authorizedHostels.length > 0 ? authorizedHostels : canonicalHostelNames;
+            hostelStats = {};
+            let totalStudents = 0;
+            let totalIn = 0;
+            let totalOut = 0;
+
+            await Promise.all(activeHostels.map(async (h) => {
+                const [hTotal, hIn, hOut] = await Promise.all([
+                    db.students.count({ hostelName: h }),
+                    db.students.count({ hostelName: h, studentStatus: 'in' }),
+                    db.students.count({ hostelName: h, studentStatus: 'out' })
+                ]);
+                
+                hostelStats[h] = { total: hTotal, in: hIn, out: hOut };
+                totalStudents += hTotal;
+                totalIn += hIn;
+                totalOut += hOut;
+            }));
+
+            stats = {
+                totalStudents,
+                totalIn,
+                totalOut,
+                pendingPermissions: pendingCount
+            };
+
+            statsCache.set(cacheKey, {
+                stats,
+                hostelStats,
+                expires: Date.now() + STATS_CACHE_TTL
+            });
+        }
 
         // ⚡ WARDEN FILTER: If authorized hostels are specified, filter the presentStudentIds
         if (authorizedHostels.length > 0) {
@@ -147,14 +175,6 @@ export async function GET(request: NextRequest) {
             }));
             presentStudentIds = presentStudentIds.filter(id => authorizedIds.has(String(id)));
         }
-
-        // Global Stats
-        const stats = {
-            totalStudents,
-            totalIn,
-            totalOut,
-            pendingPermissions: pendingCount
-        };
 
         return NextResponse.json({
             success: true,

@@ -212,6 +212,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [showNotifPopup, setShowNotifPopup] = useState(false);
     const [isAcknowledging, setIsAcknowledging] = useState(false);
     const [sessionDismissedIds, setSessionDismissedIds] = useState<string[]>([]);
+    const incrementedNotifIdsRef = useRef<string[]>([]);
     const [locationVerificationResults, setLocationVerificationResults] = useState<{
         name: string;
         distance: number;
@@ -741,6 +742,18 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
     }, [searchParams]);
 
+    const showNotification = (notif: any) => {
+        setCurrentNotification(notif);
+        setShowNotifPopup(true);
+
+        if (!incrementedNotifIdsRef.current.includes(notif._id)) {
+            incrementedNotifIdsRef.current.push(notif._id);
+            const showCounts = JSON.parse(localStorage.getItem("notif_show_counts") || "{}");
+            showCounts[notif._id] = (showCounts[notif._id] || 0) + 1;
+            localStorage.setItem("notif_show_counts", JSON.stringify(showCounts));
+        }
+    };
+
     useEffect(() => {
         if (studentProfile && !loading) {
             // ⚡ DISABLED: Device binding is no longer required for currently registered students
@@ -850,14 +863,27 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     if (!res.ok) throw new Error(`Failed to fetch notifications: ${res.status}`);
                     const data = await res.json();
                     if (data.success && data.notifications.length > 0) {
-                        // Filter out ones dismissed in current session
                         const currentDismissed = JSON.parse(localStorage.getItem("dismissed_notifs") || "[]");
-                        const active = data.notifications.filter((n: any) => !currentDismissed.includes(n._id));
+                        const showCounts = JSON.parse(localStorage.getItem("notif_show_counts") || "{}");
+
+                        const active = data.notifications.filter((n: any) => {
+                            if (currentDismissed.includes(n._id)) return false;
+
+                            // Check DB acknowledgment
+                            const ackList = n.acknowledgedBy || [];
+                            const isAcked = ackList.some((ack: any) => ack.studentId === studentProfile._id);
+                            if (isAcked) return false;
+
+                            // Cap at 2 displays
+                            const count = showCounts[n._id] || 0;
+                            if (count >= 2) return false;
+
+                            return true;
+                        });
 
                         setNotifications(active);
                         if (active.length > 0) {
-                            setCurrentNotification(active[0]);
-                            setShowNotifPopup(true);
+                            showNotification(active[0]);
                         } else {
                             setShowNotifPopup(false);
                         }
@@ -1818,8 +1844,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 const remaining = notifications.filter((n: any) => n._id !== notificationId);
                 setNotifications(remaining);
                 if (remaining.length > 0) {
-                    setCurrentNotification(remaining[0]);
-                    setTimeout(() => setShowNotifPopup(true), 500);
+                    const nextNotif = remaining[0];
+                    setTimeout(() => showNotification(nextNotif), 500);
                 }
             }
         } catch (error) {

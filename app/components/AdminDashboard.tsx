@@ -956,6 +956,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [showExportPreview, setShowExportPreview] = useState(false);
   const [exportPreviewData, setExportPreviewData] = useState<any[]>([]);
   const [exportType, setExportType] = useState<'students' | 'attendance'>('students');
+  const [exportOption, setExportOption] = useState<'present' | 'absent' | 'all' | null>(null);
   const [isListExpanded, setIsListExpanded] = useState(false);
   const [showGatepassOverlay, setShowGatepassOverlay] = useState(false);
   const [showAllPresent, setShowAllPresent] = useState(false);
@@ -2694,7 +2695,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       const data = await res.json();
       if (data.success) {
-        alert(data.message);
+        showToast(data.message, "success");
       } else {
         throw new Error(data.error);
       }
@@ -3184,14 +3185,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     try {
       setAttendanceLogsLoading(true);
       const activeFilter = currentTab === "rooms" ? "all" : attendanceHostelFilter;
-      const url = new URL(`/api/admin/anomaly-alerts?_t=${Date.now()}`, window.location.origin);
       
-      // Also fetch default attendance logs
+      // Fetch default attendance logs and render instantly
       const logsUrl = new URL(`/api/admin/attendance?date=${selectedDate}&hostelName=${activeFilter}&_t=${Date.now()}`, window.location.origin);
-      const [logsRes, anomalyRes] = await Promise.all([
-        fetch(logsUrl.href),
-        fetch(url.href)
-      ]);
+      const logsRes = await fetch(logsUrl.href);
 
       if (logsRes.ok) {
         const logsData = await logsRes.json();
@@ -3199,17 +3196,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           setAttendanceLogs(logsData.attendance || []);
         }
       }
+    } catch (error: any) {
+      console.error("Error fetching detailed attendance logs:", error.message);
+    } finally {
+      setAttendanceLogsLoading(false);
+    }
 
+    // Fetch anomaly alerts in the background asynchronously
+    fetchAnomalyAlertsInBackground();
+  };
+
+  const fetchAnomalyAlertsInBackground = async () => {
+    try {
+      const url = new URL(`/api/admin/anomaly-alerts?_t=${Date.now()}`, window.location.origin);
+      const anomalyRes = await fetch(url.href);
       if (anomalyRes.ok) {
         const anomalyData = await anomalyRes.json();
         if (anomalyData.success) {
           setAnomalyAlerts(anomalyData.alerts || []);
         }
       }
-    } catch (error: any) {
-      console.error("Error fetching logs or anomaly alerts:", error.message);
-    } finally {
-      setAttendanceLogsLoading(false);
+    } catch (e: any) {
+      console.error("Error fetching anomaly alerts in background:", e.message);
     }
   };
 
@@ -3517,15 +3525,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   }, [title]);
 
   useEffect(() => {
-    // ⚡ INSTANT UPDATE: Always fetch summary when filters or date change
+    // ⚡ INSTANT UPDATE: Fetch summary and logs when date, hostel filter, or tab changes
     fetchAttendanceSummary();
 
     if (currentTab === "attendance" || currentTab === "rooms") {
       fetchAttendanceLogs();
+    }
+  }, [selectedDate, attendanceHostelFilter, currentTab]);
+
+  useEffect(() => {
+    // Silently revalidate students list in the background only when tab switches
+    if (currentTab === "attendance" || currentTab === "rooms") {
       if (students.length === 0) {
         fetchStudents();
       } else {
-        // Silently revalidate in the background on tab switch
         fetchStudents(true);
       }
     }
@@ -3534,7 +3547,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       fetchAdminPayments();
       fetchBankSettings();
     }
-  }, [selectedDate, attendanceHostelFilter, currentTab, paymentStatusFilter, paymentSearch]);
+  }, [currentTab, paymentStatusFilter, paymentSearch]);
 
   // Load cached students list immediately on mount for zero-latency tab transitions
   useEffect(() => {
@@ -3968,8 +3981,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     setShowExportOptionsModal(true);
   };
 
-  const handleExportOption = (option: 'present' | 'absent') => {
+  const handleExportOption = (option: 'present' | 'absent' | 'all') => {
     setShowExportOptionsModal(false);
+    setExportOption(option);
 
     if (option === 'present') {
       let logsToExport = filteredAttendanceLogs;
@@ -4003,7 +4017,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       setExportPreviewData(data);
       setExportType('attendance');
       setShowExportPreview(true);
-    } else {
+    } else if (option === 'absent') {
       let filteredAbsentees = absentees;
       if (attendanceHostelFilter !== 'all') {
         filteredAbsentees = absentees.filter(s => {
@@ -4025,14 +4039,47 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       setExportPreviewData(data);
       setExportType('attendance');
       setShowExportPreview(true);
+    } else if (option === 'all') {
+      // Get all students for the selected hostel filter
+      let filteredStudents = students;
+      if (attendanceHostelFilter !== 'all') {
+        filteredStudents = students.filter(s => {
+          const rawName = s.hostelName || (s as any).hostel_name || "";
+          const hName = (getHostelCategory(rawName) || rawName).trim().toLowerCase();
+          return hName === attendanceHostelFilter.trim().toLowerCase();
+        });
+      }
+
+      const data = filteredStudents.map(s => {
+        // Find if they marked attendance today
+        const log = attendanceLogs.find(l => {
+          const sid = typeof l.studentId === 'string' ? l.studentId : (l.studentId?._id || l.studentId?.id);
+          return sid === s.id;
+        });
+
+        return {
+          "Student ID": s.registrationId || "N/A",
+          "Name": s.name || "Unknown",
+          "Room": s.roomNumber || "N/A",
+          "Mobile": s.phoneNumber || "N/A",
+          "Hostel": formatHostelDisplay(s.hostelName || "N/A"),
+          "Status": log ? "Present" : "Absent",
+          "Time": log ? log.istTime : "N/A",
+          "Accuracy": log?.location?.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"
+        };
+      });
+
+      setExportPreviewData(data);
+      setExportType('attendance');
+      setShowExportPreview(true);
     }
   };
 
   const confirmDownload = async () => {
     const XLSXStyle = await import('xlsx-js-style');
 
-    const isAbsenteeReport = exportPreviewData.length > 0 && exportPreviewData[0].Status === "Absent";
-    const reportPrefix = isAbsenteeReport ? "absentees" : "attendance";
+    const isAbsenteeReport = exportOption === 'absent';
+    const reportPrefix = exportOption === 'absent' ? "absentees" : exportOption === 'all' ? "all_students" : "attendance";
     const hostelNameSuffix = attendanceHostelFilter !== "all" ? `_${attendanceHostelFilter}` : "";
 
     if (exportType === 'students') {
@@ -4050,20 +4097,46 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const hostelLabel = attendanceHostelFilter !== "all" ? attendanceHostelFilter : "All Hostels";
     const reportDate = selectedDate;
     const generatedAt = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-    const totalStudents = students.length;
-    const presentCount = isAbsenteeReport ? (totalStudents - exportPreviewData.length) : exportPreviewData.length;
-    const absentCount  = isAbsenteeReport ? exportPreviewData.length : (totalStudents - exportPreviewData.length);
-    const reportTitle  = isAbsenteeReport ? "ABSENTEE REPORT" : "ATTENDANCE REPORT";
+    
+    // Calculate total students of the selected hostel category
+    let totalStudents = students.length;
+    if (attendanceHostelFilter !== 'all') {
+      totalStudents = students.filter(s => {
+        const rawName = s.hostelName || (s as any).hostel_name || "";
+        const hName = (getHostelCategory(rawName) || rawName).trim().toLowerCase();
+        return hName === attendanceHostelFilter.trim().toLowerCase();
+      }).length;
+    }
+
+    // Present / Absent count calculations
+    let presentCount = 0;
+    let absentCount = 0;
+    if (exportOption === 'absent') {
+      absentCount = exportPreviewData.length;
+      presentCount = Math.max(0, totalStudents - absentCount);
+    } else if (exportOption === 'present') {
+      presentCount = exportPreviewData.length;
+      absentCount = Math.max(0, totalStudents - presentCount);
+    } else { // exportOption === 'all'
+      presentCount = exportPreviewData.filter(r => r.Status === "Present").length;
+      absentCount = exportPreviewData.filter(r => r.Status === "Absent").length;
+    }
+
+    const reportTitle = exportOption === 'absent' ? "ABSENTEE REPORT" : exportOption === 'all' ? "ALL STUDENTS ATTENDANCE REPORT" : "ATTENDANCE REPORT";
 
     // ── Column definitions ──
-    const columns = isAbsenteeReport
+    const columns = exportOption === 'absent'
       ? ["S.No", "Student ID", "Name", "Mobile", "Hostel", "Status"]
+      : exportOption === 'all'
+      ? ["S.No", "Student ID", "Name", "Room", "Mobile", "Hostel", "Status", "Entry Time", "GPS Accuracy"]
       : ["S.No", "Student ID", "Name", "Room", "Mobile", "Hostel", "Entry Time", "GPS Accuracy"];
 
     // ── Data rows (with S.No) ──
     const dataRows = exportPreviewData.map((row: any, idx: number) => {
-      if (isAbsenteeReport) {
+      if (exportOption === 'absent') {
         return [idx + 1, row["Student ID"] || "N/A", row["Name"] || "N/A", row["Mobile"] || "N/A", row["Hostel"] || "N/A", "ABSENT"];
+      } else if (exportOption === 'all') {
+        return [idx + 1, row["Student ID"] || "N/A", row["Name"] || "N/A", row["Room"] || "N/A", row["Mobile"] || "N/A", row["Hostel"] || "N/A", row["Status"].toUpperCase(), row["Time"] || "N/A", row["Accuracy"] || "N/A"];
       }
       return [idx + 1, row["Student ID"] || "N/A", row["Name"] || "N/A", row["Room"] || "N/A", row["Mobile"] || "N/A", row["Hostel"] || "N/A", row["Time"] || "N/A", row["Accuracy"] || "N/A"];
     });
@@ -4105,7 +4178,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     ];
 
     // ── Column widths ──
-    ws["!cols"] = [
+    let colWidths = [
       { wch: 6 },   // S.No
       { wch: 14 },  // Student ID
       { wch: 24 },  // Name
@@ -4115,6 +4188,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       { wch: 14 },  // Entry Time
       { wch: 14 },  // GPS Accuracy
     ];
+
+    if (exportOption === 'all') {
+      colWidths = [
+        { wch: 6 },   // S.No
+        { wch: 14 },  // Student ID
+        { wch: 24 },  // Name
+        { wch: 8 },   // Room
+        { wch: 14 },  // Mobile
+        { wch: 18 },  // Hostel
+        { wch: 10 },  // Status
+        { wch: 14 },  // Entry Time
+        { wch: 14 },  // GPS Accuracy
+      ];
+    }
+    ws["!cols"] = colWidths;
 
     // ── Row heights ──
     ws["!rows"] = [
@@ -5146,7 +5234,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         fetchHostels(true);
                         fetchAttendanceSummary();
                         fetchStudents(true);
-                        if (currentTab === 'attendance') fetchAttendanceLogs();
+                        if (currentTab === 'attendance' || currentTab === 'rooms') fetchAttendanceLogs();
                         if (currentTab === 'messaging') fetchAdminNotifications();
                         if (currentTab === 'payments') {
                           fetchAdminPayments();
@@ -7120,7 +7208,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       {roommates.map((r, i) => {
                                         const rStatus = getRoommateStatus(r);
                                         const studentIdStr = r.id || r._id;
-                                        const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString());
+                                        const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString()) || presentStudentIds.includes(studentIdStr?.toString());
                                         return (
                                           <div key={r.id || i} className="flex flex-col items-center gap-0.5 shrink-0 relative">
                                             <div
@@ -7179,7 +7267,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           {selectedRoomStudents.map(student => {
                             const rStatus = getRoommateStatus(student);
                             const studentIdStr = student.id || student._id;
-                            const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString());
+                            const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString()) || presentStudentIds.includes(studentIdStr?.toString());
                             return (
                               <div key={student.id} className="p-2 sm:p-3 bg-slate-50 rounded-2xl border border-slate-100 flex flex-row items-center justify-between gap-3 hover:border-slate-200 transition-all">
                                 <div className="flex items-center gap-3.5 min-w-0">
@@ -8613,6 +8701,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   className="w-full px-4 py-3 bg-red-50 text-red-700 rounded-xl font-bold flex items-center justify-between hover:bg-red-100 transition-colors"
                 >
                   <span>Export Absentees List</span>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                </button>
+                <button
+                  onClick={() => handleExportOption('all')}
+                  className="w-full px-4 py-3 bg-green-50 text-green-700 rounded-xl font-bold flex items-center justify-between hover:bg-green-100 transition-colors"
+                >
+                  <span>Export All Students List</span>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                 </button>
                 <button

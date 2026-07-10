@@ -31,7 +31,21 @@ export async function GET(request: NextRequest) {
             createdAt: { $gte: fortyEightHoursAgo }
         }, { limit: 50 });
 
-        return NextResponse.json({ success: true, notifications });
+        // Filter out expired and already acknowledged notifications
+        const now = new Date();
+        const activeNotifications = (notifications || []).filter((n: any) => {
+            if (n.expiresAt && new Date(n.expiresAt) < now) {
+                return false;
+            }
+            const ackList = n.acknowledgedBy || [];
+            const isAcked = ackList.some((ack: any) => ack.studentId === studentId);
+            if (isAcked) {
+                return false;
+            }
+            return true;
+        });
+
+        return NextResponse.json({ success: true, notifications: activeNotifications });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }

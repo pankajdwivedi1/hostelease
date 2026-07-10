@@ -40,6 +40,23 @@ export async function GET(request: NextRequest) {
         }
         // dates[0] = today, dates[1] = yesterday, etc.
 
+        // Fetch all attendance records for the last 7 days in a single range query
+        const earliestDate = dates[6];
+        const latestDate = dates[0];
+        const attendanceLogs = await db.attendance.list({
+            startDate: earliestDate,
+            endDate: latestDate
+        }, { limit: 10000 });
+
+        const attendanceSet = new Set(
+            (attendanceLogs || []).map((log: any) => {
+                const sid = typeof log.studentId === 'object' && log.studentId !== null
+                    ? (log.studentId._id || log.studentId.id)
+                    : log.studentId;
+                return `${sid}_${log.date}`;
+            })
+        );
+
         const alerts: Array<{
             studentId: string;
             studentName: string;
@@ -51,15 +68,15 @@ export async function GET(request: NextRequest) {
         }> = [];
 
         // 3. Check each student
-        for (const student of students.slice(0, 200)) { // Cap at 200 to avoid timeout
+        for (const student of students) {
             if (!student._id) continue;
 
             let consecutiveAbsent = 0;
             const missingDates: string[] = [];
 
             for (const date of dates) {
-                const record = await db.attendance.checkToday(student._id.toString(), date);
-                if (!record) {
+                const hasAttendance = attendanceSet.has(`${student._id.toString()}_${date}`);
+                if (!hasAttendance) {
                     consecutiveAbsent++;
                     missingDates.push(date);
                 } else {
@@ -97,7 +114,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             success: true,
             alerts,
-            checkedStudents: Math.min(students.length, 200),
+            checkedStudents: students.length,
             threshold: CONSECUTIVE_ABSENT_THRESHOLD,
             message: alerts.length === 0
                 ? "✅ No attendance anomalies detected"
