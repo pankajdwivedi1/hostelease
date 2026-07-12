@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const MONGO_URL = process.env.MONGODB_URL;
+const MONGO_URL = (process.env.MONGODB_URL || "").replace(/^["']|["']$/g, "");
 const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || process.env.NEXT_PHASE?.includes('build');
 
 if (!MONGO_URL && !isBuildPhase) {

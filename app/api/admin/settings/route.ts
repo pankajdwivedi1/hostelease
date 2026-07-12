@@ -32,7 +32,13 @@ export async function GET(request: NextRequest) {
             wifiWhitelist: settings?.wifiWhitelist || [],
             enableManualAttendance: settings?.enableManualAttendance ?? false,
             notificationSettings: settings?.notificationSettings || {},
-            leaveApprovalMethod: settings?.leaveApprovalMethod || 'app'
+            leaveApprovalMethod: settings?.leaveApprovalMethod || 'app',
+            enforceUniqueErpId: settings?.enforceUniqueErpId || false,
+            enforceUniquePhone: settings?.enforceUniquePhone || false,
+            enforceUniqueEmail: settings?.enforceUniqueEmail || false,
+            enforceUniqueFace: settings?.enforceUniqueFace || false,
+            allowWardenAddStudent: settings?.allowWardenAddStudent || false,
+            allowDeanAddStudent: settings?.allowDeanAddStudent || false
         });
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);
@@ -113,6 +119,16 @@ export async function POST(request: NextRequest) {
         if (developerPassword !== undefined) updateData.developerPassword = typeof developerPassword === 'string' ? developerPassword.trim() : developerPassword;
         if (notificationSettings !== undefined) updateData.notificationSettings = notificationSettings;
         if (leaveApprovalMethod !== undefined) updateData.leaveApprovalMethod = leaveApprovalMethod;
+
+        // Dynamic field safeguard rules
+        if (body.enforceUniqueErpId !== undefined) updateData.enforceUniqueErpId = body.enforceUniqueErpId;
+        if (body.enforceUniquePhone !== undefined) updateData.enforceUniquePhone = body.enforceUniquePhone;
+        if (body.enforceUniqueEmail !== undefined) updateData.enforceUniqueEmail = body.enforceUniqueEmail;
+        if (body.enforceUniqueFace !== undefined) updateData.enforceUniqueFace = body.enforceUniqueFace;
+
+        // Manual registration delegation rules
+        if (body.allowWardenAddStudent !== undefined) updateData.allowWardenAddStudent = body.allowWardenAddStudent;
+        if (body.allowDeanAddStudent !== undefined) updateData.allowDeanAddStudent = body.allowDeanAddStudent;
 
         const settings = await db.settings.update(updateData);
 

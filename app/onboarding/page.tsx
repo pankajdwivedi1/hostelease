@@ -68,6 +68,7 @@ export default function OnboardingPage() {
 
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [duplicateWarnings, setDuplicateWarnings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [isProfileLocked, setIsProfileLocked] = useState(false);
   const [isExistingStudent, setIsExistingStudent] = useState(false);
@@ -774,6 +775,49 @@ export default function OnboardingPage() {
     });
   };
 
+  const checkFieldUniqueness = async (fieldId: string, value: string) => {
+    const val = value.trim();
+    if (!val) {
+      setDuplicateWarnings(prev => {
+        const updated = { ...prev };
+        delete updated[fieldId];
+        return updated;
+      });
+      return;
+    }
+
+    let checkField = "";
+    if (fieldId === "phoneNumber") checkField = "phoneNumber";
+    if (fieldId === "email") checkField = "email";
+    if (fieldId === "erpInformation") checkField = "erpInformation";
+
+    if (!checkField) return;
+
+    // Length pre-validations
+    if (fieldId === "phoneNumber" && val.length < 10) return;
+    if (fieldId === "email" && !val.includes("@")) return;
+    if (fieldId === "erpInformation" && val.length < 3) return;
+
+    try {
+      const res = await fetch(`/api/students?checkValue=${encodeURIComponent(val)}&checkField=${checkField}`);
+      const data = await res.json();
+      if (res.ok && data.exists) {
+        setDuplicateWarnings(prev => ({
+          ...prev,
+          [fieldId]: `⚠️ Already registered to student "${data.studentName || 'unnamed'}"`
+        }));
+      } else {
+        setDuplicateWarnings(prev => {
+          const updated = { ...prev };
+          delete updated[fieldId];
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to check duplicate:", err);
+    }
+  };
+
   const handleChange = (field: string, value: string) => {
     let formattedValue = value;
     const lowerId = String(field || "").toLowerCase();
@@ -802,6 +846,9 @@ export default function OnboardingPage() {
     }
 
     setFormData((prev) => ({ ...prev, [field]: formattedValue }));
+    if (field === "phoneNumber" || field === "email" || field === "erpInformation") {
+      checkFieldUniqueness(field, formattedValue);
+    }
     
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }));
@@ -870,6 +917,11 @@ export default function OnboardingPage() {
                   }
                   // 2. Validation rules (only if there's a value)
                   if (val) {
+                    if (duplicateWarnings[field.id]) {
+                      newErrors[field.id] = duplicateWarnings[field.id];
+                      return;
+                    }
+
                     const lowerId = String(field.id || "").toLowerCase();
                     
                     // Name fields check: Names should not contain numbers
@@ -1114,13 +1166,26 @@ export default function OnboardingPage() {
                       id={field.id}
                       value={(formData as any)[field.id] || ""}
                       onChange={(e) => handleChange(field.id, e.target.value)}
+                      onBlur={(e) => {
+                        if (field.id === "phoneNumber" || field.id === "email" || field.id === "erpInformation") {
+                          checkFieldUniqueness(field.id, e.target.value);
+                        }
+                      }}
                       placeholder={`Enter ${field.label.toLowerCase()}`}
                       disabled={isProfileLocked}
-                      className={`w-full h-11 px-4 rounded-xl border-2 transition-all font-bold text-xs uppercase ${errors[field.id] ? "border-red-500 bg-red-50 font-medium" : "border-gray-100 bg-gray-50/50 focus:border-blue-500 focus:bg-white"} outline-none`}
+                      className={`w-full h-11 px-4 rounded-xl border-2 transition-all font-bold text-xs uppercase ${
+                        duplicateWarnings[field.id] 
+                          ? "border-red-500 bg-red-50 focus:border-red-600 focus:bg-red-50/10 text-red-900" 
+                          : errors[field.id]
+                            ? "border-red-500 bg-red-50 font-medium"
+                            : "border-gray-100 bg-gray-50/50 focus:border-blue-500 focus:bg-white"
+                      } outline-none`}
                     />
                   )}
-                  {(stepErrors[field.id] || errors[field.id]) && (
-                    <p className="mt-1 text-[10px] text-red-600 font-black uppercase tracking-widest">{stepErrors[field.id] || errors[field.id]}</p>
+                  {(stepErrors[field.id] || errors[field.id] || duplicateWarnings[field.id]) && (
+                    <p className="mt-1 text-[10px] text-red-600 font-black uppercase tracking-widest">
+                      {duplicateWarnings[field.id] || stepErrors[field.id] || errors[field.id]}
+                    </p>
                   )}
                 </div>
               );

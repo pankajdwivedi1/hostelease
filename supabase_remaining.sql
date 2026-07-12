@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS admin_settings (
     tenant_id TEXT,
     developer_password TEXT,
     leave_approval_method TEXT,
+    enforce_unique_erp_id BOOLEAN DEFAULT FALSE,
+    enforce_unique_phone BOOLEAN DEFAULT FALSE,
+    enforce_unique_email BOOLEAN DEFAULT FALSE,
+    enforce_unique_face BOOLEAN DEFAULT FALSE,
+    allow_warden_add_student BOOLEAN DEFAULT FALSE,
+    allow_dean_add_student BOOLEAN DEFAULT FALSE,
     
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()

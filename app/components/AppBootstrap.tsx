@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { installToastSystem, showToast } from "@/lib/toast";
+import { Capacitor } from "@capacitor/core";
+import { supabase } from "@/lib/supabase";
 
 /**
  * ============================================================
@@ -34,8 +36,44 @@ export default function AppBootstrap() {
         setTimeout(() => setShowOverlay(true), 1200);
       }
     }
-  }, []);
 
+    // 3. Set up deep link listener for native app (OAuth Loopback)
+    if (typeof window !== "undefined" && Capacitor.isNativePlatform()) {
+      import("@capacitor/app").then(({ App }) => {
+        App.addListener("appUrlOpen", async (event: { url: string }) => {
+          console.log("App opened via deep link:", event.url);
+          try {
+            const parsedUrl = new URL(event.url);
+            // OAuth tokens are returned in the hash (e.g., #access_token=...&refresh_token=...)
+            const hash = parsedUrl.hash.substring(1);
+            const params = new URLSearchParams(hash || parsedUrl.search);
+            
+            const accessToken = params.get("access_token");
+            const refreshToken = params.get("refresh_token");
+            
+            if (accessToken && refreshToken) {
+              console.log("Found OAuth tokens, setting native session...");
+              const { error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken
+              });
+              
+              if (!error) {
+                showToast("Logged in successfully!", "success");
+                // Force reload or redirect to home dashboard
+                window.location.replace("/");
+              } else {
+                console.error("Error setting native session:", error);
+                showToast("Authentication session setup failed.", "error");
+              }
+            }
+          } catch (err) {
+            console.error("Error parsing deep link URL:", err);
+          }
+        });
+      });
+    }
+  }, []);
   const handleGrantPermissions = async () => {
     if (isRequesting) return;
     setIsRequesting(true);
@@ -51,11 +89,13 @@ export default function AppBootstrap() {
       });
     } catch {}
 
-    // ─── 📷 2. Request CAMERA ───────────────────────────
+    // ─── 📷 🎤 2. Request CAMERA & MICROPHONE ────────────
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       stream.getTracks().forEach(t => t.stop()); // Close immediately
-    } catch {}
+    } catch (err) {
+      console.warn("Camera/Microphone permission error during bootstrap:", err);
+    }
 
     // 🏁 3. Finish
     localStorage.setItem(PERMISSIONS_ASKED_KEY, "1");
@@ -89,16 +129,16 @@ export default function AppBootstrap() {
 
         <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">Setup Access</h1>
         <p className="text-blue-100/60 text-sm mb-8 leading-relaxed">
-          To provide secure attendance and QR scanning, Hosteleaze requires Location and Camera permissions.
+          To provide secure attendance, face biometric scanning, and video verification, Hosteleaze requires Location, Camera, and Microphone permissions.
         </p>
 
         {/* Feature List */}
-        <div className="w-full space-y-4 mb-10">
+        <div className="w-full space-y-4 mb-8">
             <div className="flex items-center gap-4 text-left">
                 <div className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center text-xl shrink-0">📍</div>
                 <div>
                     <h3 className="text-white text-xs font-bold uppercase tracking-widest opacity-40">Location</h3>
-                    <p className="text-white/80 text-[11px] font-medium leading-tight">Verifies you are currently on campus when scanning.</p>
+                    <p className="text-white/80 text-[11px] font-medium leading-tight">Verifies you are currently on campus when checking in.</p>
                 </div>
             </div>
             <div className="flex items-center gap-4 text-left">
@@ -106,6 +146,13 @@ export default function AppBootstrap() {
                 <div>
                     <h3 className="text-white text-xs font-bold uppercase tracking-widest opacity-40">Camera</h3>
                     <p className="text-white/80 text-[11px] font-medium leading-tight">Registers your facial biometric and scans QR codes.</p>
+                </div>
+            </div>
+            <div className="flex items-center gap-4 text-left">
+                <div className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center text-xl shrink-0">🎙️</div>
+                <div>
+                    <h3 className="text-white text-xs font-bold uppercase tracking-widest opacity-40">Microphone</h3>
+                    <p className="text-white/80 text-[11px] font-medium leading-tight">Allows recording video with audio for consent and security verification.</p>
                 </div>
             </div>
         </div>
@@ -118,7 +165,7 @@ export default function AppBootstrap() {
           {isRequesting ? (
             <>
                 <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                Wait for Browser Prompt...
+                Wait for System Prompt...
             </>
           ) : (
             "Grant All Permissions"
@@ -126,7 +173,7 @@ export default function AppBootstrap() {
         </button>
 
         <p className="mt-4 text-[10px] text-white/30 font-medium">
-          Note: Your browser will show a native confirmation prompt next.
+          Note: Your device will show native system confirmation prompts next.
         </p>
       </div>
     </div>

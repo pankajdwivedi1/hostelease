@@ -12,7 +12,7 @@ export async function GET(req: Request) {
             return NextResponse.json({ success: false, error: "Audit type is required" });
         }
 
-        if (!["duplicates-phone", "duplicates-regid", "gibberish-names"].includes(type)) {
+        if (!["duplicates-phone", "duplicates-regid", "duplicates-erpid", "gibberish-names"].includes(type)) {
             return NextResponse.json({ success: false, error: "Invalid audit type" });
         }
 

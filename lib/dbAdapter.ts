@@ -512,6 +512,12 @@ const mapSettingsToCamelCase = (s: any) => {
         developerPassword: s.developer_password || s.developerPassword,
         leaveApprovalMethod: s.leave_approval_method || s.leaveApprovalMethod || 'app',
         notificationSettings: s.notification_settings || s.notificationSettings || {},
+        enforceUniqueErpId: s.enforce_unique_erp_id !== undefined ? s.enforce_unique_erp_id : (s.enforceUniqueErpId || false),
+        enforceUniquePhone: s.enforce_unique_phone !== undefined ? s.enforce_unique_phone : (s.enforceUniquePhone || false),
+        enforceUniqueEmail: s.enforce_unique_email !== undefined ? s.enforce_unique_email : (s.enforceUniqueEmail || false),
+        enforceUniqueFace: s.enforce_unique_face !== undefined ? s.enforce_unique_face : (s.enforceUniqueFace || false),
+        allowWardenAddStudent: s.allow_warden_add_student !== undefined ? s.allow_warden_add_student : (s.allowWardenAddStudent || false),
+        allowDeanAddStudent: s.allow_dean_add_student !== undefined ? s.allow_dean_add_student : (s.allowDeanAddStudent || false),
         createdAt: s.created_at || s.createdAt,
         updatedAt: s.updated_at || s.updatedAt
     };
@@ -545,7 +551,13 @@ const mapSettingsToSnakeCase = (s: any) => {
         enableManualAttendance: 'enable_manual_attendance',
         developerPassword: 'developer_password',
         leaveApprovalMethod: 'leave_approval_method',
-        notificationSettings: 'notification_settings'
+        notificationSettings: 'notification_settings',
+        enforceUniqueErpId: 'enforce_unique_erp_id',
+        enforceUniquePhone: 'enforce_unique_phone',
+        enforceUniqueEmail: 'enforce_unique_email',
+        enforceUniqueFace: 'enforce_unique_face',
+        allowWardenAddStudent: 'allow_warden_add_student',
+        allowDeanAddStudent: 'allow_dean_add_student'
     };
 
     Object.keys(s).forEach(key => {
@@ -1161,25 +1173,69 @@ export const db = {
 
                 if (!existing) {
                     // Create if doesn't exist
-                    const { data, error } = await supabase
-                        .from('admin_settings')
-                        .insert([snakeData])
-                        .select()
-                        .single();
-                    if (error) throw error;
-                    return mapSettingsToCamelCase(data);
+                    try {
+                        const { data, error } = await supabase
+                            .from('admin_settings')
+                            .insert([snakeData])
+                            .select()
+                            .single();
+                        if (error) throw error;
+                        return mapSettingsToCamelCase(data);
+                    } catch (err: any) {
+                        const isColumnError = err.code === 'PGRST102' || (err.message && err.message.includes('column')) || (err.details && err.details.includes('column'));
+                        if (isColumnError) {
+                            const cleanedData = { ...snakeData };
+                            delete cleanedData.enforce_unique_erp_id;
+                            delete cleanedData.enforce_unique_phone;
+                            delete cleanedData.enforce_unique_email;
+                            delete cleanedData.enforce_unique_face;
+                            delete cleanedData.allow_warden_add_student;
+                            delete cleanedData.allow_dean_add_student;
+                            const { data, error } = await supabase
+                                .from('admin_settings')
+                                .insert([cleanedData])
+                                .select()
+                                .single();
+                            if (error) throw error;
+                            return mapSettingsToCamelCase(data);
+                        }
+                        throw err;
+                    }
                 }
 
-                const { data, error } = await supabase
-                    .from('admin_settings')
-                    .update(snakeData)
-                    .eq('_id', existing._id)
-                    .eq('tenant_id', tenantId)
-                    .select()
-                    .single();
+                try {
+                    const { data, error } = await supabase
+                        .from('admin_settings')
+                        .update(snakeData)
+                        .eq('_id', existing._id)
+                        .eq('tenant_id', tenantId)
+                        .select()
+                        .single();
 
-                if (error) throw error;
-                return mapSettingsToCamelCase(data);
+                    if (error) throw error;
+                    return mapSettingsToCamelCase(data);
+                } catch (err: any) {
+                    const isColumnError = err.code === 'PGRST102' || (err.message && err.message.includes('column')) || (err.details && err.details.includes('column'));
+                    if (isColumnError) {
+                        const cleanedData = { ...snakeData };
+                        delete cleanedData.enforce_unique_erp_id;
+                        delete cleanedData.enforce_unique_phone;
+                        delete cleanedData.enforce_unique_email;
+                        delete cleanedData.enforce_unique_face;
+                        delete cleanedData.allow_warden_add_student;
+                        delete cleanedData.allow_dean_add_student;
+                        const { data, error } = await supabase
+                            .from('admin_settings')
+                            .update(cleanedData)
+                            .eq('_id', existing._id)
+                            .eq('tenant_id', tenantId)
+                            .select()
+                            .single();
+                        if (error) throw error;
+                        return mapSettingsToCamelCase(data);
+                    }
+                    throw err;
+                }
             } else if (source === 'PRISMA') {
                 const tenantId = await getTenantIdOrThrow();
                 const prismaData = { ...filterSettingsForPrisma(updateData), tenantId };
@@ -2235,6 +2291,31 @@ export const db = {
                     return Object.values(grouped).filter((g: any) => g.count > 1).sort((a: any, b: any) => b.count - a.count);
                 }
 
+                if (type === "duplicates-erpid") {
+                    const { data: allStudents } = await supabase
+                        .from('students')
+                        .select('_id,name,phone_number,room_number,hostel_name,email,student_profiles!inner(registration_id,erp_id)')
+                        .eq('tenant_id', tenantId);
+                    const grouped = (allStudents || []).reduce((acc: any, s: any) => {
+                        const prof = Array.isArray(s.student_profiles) ? s.student_profiles[0] : s.student_profiles;
+                        const key = prof?.erp_id;
+                        if (!key || key.trim() === '') return acc;
+                        if (!acc[key]) acc[key] = { _id: key, count: 0, students: [] };
+                        acc[key].count++;
+                        acc[key].students.push({
+                            id: s._id,
+                            name: s.name,
+                            phone: s.phone_number,
+                            room: s.room_number,
+                            hostel: s.hostel_name,
+                            email: s.email,
+                            regId: prof?.registration_id || ""
+                        });
+                        return acc;
+                    }, {});
+                    return Object.values(grouped).filter((g: any) => g.count > 1).sort((a: any, b: any) => b.count - a.count);
+                }
+
                 if (type === "gibberish-names") {
                     const { data: students } = await supabase
                         .from('students')
@@ -2334,6 +2415,51 @@ export const db = {
                     return Object.values(grouped).filter((g: any) => g.count > 1).sort((a: any, b: any) => b.count - a.count);
                 }
 
+                if (type === "duplicates-erpid") {
+                    const allStudents = await prisma.student.findMany({
+                        where: {
+                            tenantId,
+                            profile: {
+                                erpId: {
+                                    not: null,
+                                    notIn: [""]
+                                }
+                            }
+                        },
+                        select: {
+                            id: true,
+                            name: true,
+                            phoneNumber: true,
+                            roomNumber: true,
+                            hostelName: true,
+                            email: true,
+                            profile: {
+                                select: {
+                                    registrationId: true,
+                                    erpId: true
+                                }
+                            }
+                        }
+                    });
+                    const grouped = (allStudents || []).reduce((acc: any, s: any) => {
+                        const key = s.profile?.erpId;
+                        if (!key) return acc;
+                        if (!acc[key]) acc[key] = { _id: key, count: 0, students: [] };
+                        acc[key].count++;
+                        acc[key].students.push({
+                            id: s.id,
+                            name: s.name,
+                            phone: s.phoneNumber,
+                            room: s.roomNumber,
+                            hostel: s.hostelName,
+                            email: s.email,
+                            regId: s.profile?.registrationId
+                        });
+                        return acc;
+                    }, {});
+                    return Object.values(grouped).filter((g: any) => g.count > 1).sort((a: any, b: any) => b.count - a.count);
+                }
+
                 if (type === "gibberish-names") {
                     const students = await prisma.student.findMany({
                         where: { tenantId },
@@ -2378,6 +2504,14 @@ export const db = {
                     return await StudentModel.aggregate([
                         { $match: { registrationId: { $nin: [null, ""], $exists: true } } },
                         { $group: { _id: "$registrationId", count: { $sum: 1 }, students: { $push: { id: "$_id", name: "$name", phone: "$phoneNumber", room: "$roomNumber", hostel: "$hostelName", email: "$email" } } } },
+                        { $match: { count: { $gt: 1 } } },
+                        { $sort: { count: -1 } }
+                    ]);
+                }
+                if (type === "duplicates-erpid") {
+                    return await StudentModel.aggregate([
+                        { $match: { erpInformation: { $nin: [null, ""], $exists: true } } },
+                        { $group: { _id: "$erpInformation", count: { $sum: 1 }, students: { $push: { id: "$_id", name: "$name", phone: "$phoneNumber", room: "$roomNumber", hostel: "$hostelName", email: "$email", regId: "$registrationId" } } } },
                         { $match: { count: { $gt: 1 } } },
                         { $sort: { count: -1 } }
                     ]);

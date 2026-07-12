@@ -8,8 +8,8 @@ let cachedSupabaseAdmin: any = null;
 export const getSupabaseAdmin = () => {
     if (cachedSupabaseAdmin) return cachedSupabaseAdmin;
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/^["']|["']$/g, "");
+    const supabaseServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").replace(/^["']|["']$/g, "");
 
     const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || process.env.NEXT_PHASE?.includes('build');
 

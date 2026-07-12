@@ -5,10 +5,18 @@ import { supabase } from "@/lib/supabase";
 
 export default function AuthCallback() {
   useEffect(() => {
+    // Check if redirecting back to native app
+    const url = new URL(window.location.href);
+    const isNative = url.searchParams.get('native') === 'true';
+    if (isNative) {
+      const hash = window.location.hash;
+      const search = window.location.search;
+      window.location.replace(`com.hosteleaze.app://auth/callback${search}${hash}`);
+      return;
+    }
+
     const doRedirect = () => {
       const tenant = typeof window !== 'undefined' ? localStorage.getItem('lastTenantSlug') : null;
-      // Using window.location.replace completely bypasses Next.js client-side routing delays (especially dev mode compilation hangs)
-      // It also cleanly wipes the #access_token from the URL history.
       if (tenant) {
           window.location.replace(`/?tenant=${tenant}`);
       } else {
@@ -17,12 +25,12 @@ export default function AuthCallback() {
     };
 
     // 1. If session is instantly available, redirect immediately.
-    supabase.auth.getSession().then(({ data: { session } }: { data: { session: any } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) doRedirect();
     });
 
     // 2. Otherwise, listen for the exact moment Supabase finishes parsing the URL hash.
-    const { data: authListener } = supabase.auth.onAuthStateChange((event: string, session: any) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_IN" || event === "PASSWORD_RECOVERY") {
         if (session) doRedirect();
       }

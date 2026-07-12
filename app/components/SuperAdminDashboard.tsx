@@ -281,7 +281,7 @@ export default function SuperAdminDashboard() {
         }
     };
 
-    const checkTenantDns = async (slug: string) => {
+    const checkTenantDns = async (slug: string, isManual = false) => {
         const domain = slug + ".hosteleaze.com";
         setDnsStatus(prev => ({ ...prev, [slug]: 'checking' }));
         try {
@@ -291,12 +291,22 @@ export default function SuperAdminDashboard() {
                 body: JSON.stringify({ domain })
             });
             const data = await res.json();
-            setDnsStatus(prev => ({
-                ...prev,
-                [slug]: data.resolved ? 'resolved' : 'pending'
-            }));
-        } catch (error) {
+            if (data.resolved) {
+                setDnsStatus(prev => ({ ...prev, [slug]: 'resolved' }));
+                if (isManual) {
+                    showToast(`DNS resolved successfully for ${domain}`, "success");
+                }
+            } else {
+                setDnsStatus(prev => ({ ...prev, [slug]: 'pending' }));
+                if (isManual) {
+                    showToast(`DNS check failed: ${domain} is unresolved.`, "error");
+                }
+            }
+        } catch (error: any) {
             setDnsStatus(prev => ({ ...prev, [slug]: 'pending' }));
+            if (isManual) {
+                showToast(`DNS check error: ${error?.message || "Unknown error"}`, "error");
+            }
         }
     };
 
@@ -755,8 +765,8 @@ export default function SuperAdminDashboard() {
             {/* Header */}
             <header className="bg-white/70 backdrop-blur-md border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-8 py-4 sm:py-5 sticky top-0 z-40 transition-shadow gap-4 sm:gap-0">
                 <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-900 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg shadow-gray-200 shrink-0">
-                        <Building2 className="text-blue-400 w-6 h-6 sm:w-7 sm:h-7" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg shadow-gray-200 shrink-0 overflow-hidden border border-gray-100">
+                        <img src="/logo.jpeg" alt="Hosteleaze Logo" className="w-full h-full object-cover" />
                     </div>
                     <div className="min-w-0">
                         <h2 className="text-lg sm:text-xl font-black text-gray-900 uppercase tracking-tighter truncate">Hosteleaze Boss Control</h2>
@@ -1140,67 +1150,64 @@ export default function SuperAdminDashboard() {
                                             )}
                                         </div>
 
-                                        <div className="mt-3 grid grid-cols-12 gap-3 border-t border-slate-100 pt-3 w-full">
-                                            {/* Contact Details (Left) */}
-                                            <div className="col-span-7 flex flex-col gap-1 min-w-0">
-                                                {/* Student Count Badge — prominent */}
-                                                <div className="flex items-center gap-1.5 mb-0.5">
-                                                    <div className="flex items-center gap-1 px-2 py-1 bg-blue-50 border border-blue-100 rounded-lg">
-                                                        <Users className="w-2.5 h-2.5 text-blue-500 shrink-0" />
-                                                        <span className="text-[9px] font-black text-blue-700">{(tenant.studentCount || 0).toLocaleString()} Students</span>
-                                                    </div>
-                                                    {/* Health Score */}
-                                                    {(() => {
-                                                        const score = tenant.healthScore ?? 0;
-                                                        const color = score >= 70 ? 'emerald' : score >= 40 ? 'amber' : 'rose';
-                                                        const label = score >= 70 ? 'Healthy' : score >= 40 ? 'Fair' : 'Critical';
+                                        <div className="mt-3 flex flex-col gap-2.5 border-t border-slate-100 pt-3 w-full">
+                                            {/* Badges Row (Students, Healthy, Subscription) */}
+                                            <div className={`grid ${tenant.subscriptionEndDate ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5 w-full`}>
+                                                <div className="flex items-center justify-center gap-1 px-2 py-1 bg-blue-50 border border-blue-100 rounded-lg w-full">
+                                                    <Users className="w-2.5 h-2.5 text-blue-500 shrink-0" />
+                                                    <span className="text-[9px] font-black text-blue-700">{(tenant.studentCount || 0).toLocaleString()} Students</span>
+                                                </div>
+                                                {/* Health Score */}
+                                                {(() => {
+                                                    const score = tenant.healthScore ?? 0;
+                                                    const color = score >= 70 ? 'emerald' : score >= 40 ? 'amber' : 'rose';
+                                                    const label = score >= 70 ? 'Healthy' : score >= 40 ? 'Fair' : 'Critical';
+                                                    return (
+                                                        <div className={`flex items-center justify-center gap-1 px-2 py-1 bg-${color}-50 border border-${color}-100 rounded-lg w-full`}>
+                                                            <span className={`text-[9px] font-black text-${color}-700`}>{label} {score}%</span>
+                                                        </div>
+                                                    );
+                                                })()}
+                                                {/* Subscription Period Badge */}
+                                                {tenant.subscriptionEndDate && (() => {
+                                                    const now = new Date();
+                                                    const end = new Date(tenant.subscriptionEndDate);
+                                                    const diffTime = end.getTime() - now.getTime();
+                                                    const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                                    
+                                                    if (daysRemaining < 0) {
                                                         return (
-                                                            <div className={`flex items-center gap-1 px-2 py-1 bg-${color}-50 border border-${color}-100 rounded-lg`}>
-                                                                <span className={`text-[9px] font-black text-${color}-700`}>{label} {score}%</span>
+                                                            <div className="flex items-center justify-center gap-1 px-2 py-1 bg-rose-50 border border-rose-100 rounded-lg w-full">
+                                                                <Clock className="w-2.5 h-2.5 text-rose-500 shrink-0" />
+                                                                <span className="text-[9px] font-black text-rose-700">Expired ({Math.abs(daysRemaining)}d ago)</span>
                                                             </div>
                                                         );
-                                                    })()}
-                                                </div>
+                                                    } else if (daysRemaining <= 7) {
+                                                        return (
+                                                            <div className="flex items-center justify-center gap-1 px-2 py-1 bg-amber-50 border border-amber-100 rounded-lg animate-pulse w-full">
+                                                                <Clock className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                                                                <span className="text-[9px] font-black text-amber-700">{daysRemaining} Days Left</span>
+                                                            </div>
+                                                        );
+                                                    } else {
+                                                        return (
+                                                            <div className="flex items-center justify-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-100 rounded-lg w-full">
+                                                                <Clock className="w-2.5 h-2.5 text-emerald-500 shrink-0" />
+                                                                <span className="text-[9px] font-black text-emerald-700">{daysRemaining} Days Left</span>
+                                                            </div>
+                                                        );
+                                                    }
+                                                })()}
+                                            </div>
+
+                                            {/* Contact Details */}
+                                            <div className="flex flex-col gap-1 min-w-0">
                                                 {tenant.contactName && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1.5"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Contact:</span> {tenant.contactName}</p>}
                                                 {tenant.contactPhone && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1.5"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Phone:</span> {tenant.contactPhone}</p>}
                                                 {tenant.totalHostelars && <p className="text-[9px] text-slate-600 font-bold flex items-center gap-1.5"><span className="text-slate-400 uppercase tracking-widest text-[7px] w-12 inline-block">Hostelars:</span> {tenant.totalHostelars}</p>}
                                                 {!tenant.contactName && !tenant.contactPhone && !tenant.totalHostelars && (
                                                     <p className="text-[9px] text-slate-400 italic">No college details provided.</p>
                                                 )}
-                                            </div>
-
-                                            
-                                            {/* Subscription Period Card (Right) */}
-                                            <div className="col-span-5 flex flex-col items-end justify-center">
-                                                <div className="bg-slate-50/80 p-2 sm:p-2.5 rounded-xl border border-slate-100 flex flex-col items-center justify-center gap-1 w-full text-center max-w-[150px] shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
-                                                    <span className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest leading-none">Subscription Period</span>
-                                                    {tenant.subscriptionEndDate && (() => {
-                                                        const now = new Date();
-                                                        const end = new Date(tenant.subscriptionEndDate);
-                                                        const diffTime = end.getTime() - now.getTime();
-                                                        const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                                        
-                                                        if (daysRemaining < 0) {
-                                                            return (
-                                                                <span className="text-[7px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 border border-rose-100 rounded px-1.5 py-0.5 leading-none">
-                                                                    Expired ({Math.abs(daysRemaining)}d ago)
-                                                                </span>
-                                                            );
-                                                        } else if (daysRemaining <= 7) {
-                                                            return (
-                                                                <span className="text-[7px] font-black uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 leading-none animate-pulse">
-                                                                    Expiring ({daysRemaining}d left)
-                                                                </span>
-                                                            );
-                                                        } else {
-                                                            return (
-                                                                <span className="text-[7px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 leading-none">
-                                                                    {daysRemaining} days left
-                                                                </span>
-                                                            );
-                                                        }
-                                                    })()}
-                                                </div>
                                             </div>
                                         </div>
 
@@ -1260,7 +1267,7 @@ export default function SuperAdminDashboard() {
                                                         } else {
                                                             return (
                                                                 <button 
-                                                                    onClick={() => checkTenantDns(tenant.slug)}
+                                                                    onClick={() => checkTenantDns(tenant.slug, true)}
                                                                     className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 rounded-lg text-red-400 border border-red-500/30 cursor-pointer hover:bg-red-500/30 transition-all" 
                                                                     title="🔴 DNS Unresolved (Click to retry)"
                                                                 >
@@ -1346,7 +1353,7 @@ export default function SuperAdminDashboard() {
 
                 {/* Boss Overrides Section */}
                 <div className="lg:col-span-12 mt-8 sm:mt-12">
-                     <div className="bg-slate-900 rounded-[32px] sm:rounded-[48px] p-6 sm:p-12 text-white relative overflow-hidden shadow-2xl shadow-blue-900/40">
+                     <div className="bg-slate-900 rounded-[32px] sm:rounded-[48px] px-4 py-6 sm:p-12 text-white relative overflow-hidden shadow-2xl shadow-blue-900/40">
                         {/* Decorative background circle */}
                         <div className="absolute top-0 right-0 w-64 h-64 sm:w-96 sm:h-96 bg-blue-600/10 rounded-full blur-[60px] sm:blur-[100px] -mr-32 -mt-32 sm:-mr-48 sm:-mt-48"></div>
                         <div className="absolute bottom-0 left-0 w-64 h-64 sm:w-96 sm:h-96 bg-indigo-600/10 rounded-full blur-[60px] sm:blur-[100px] -ml-32 -mb-32 sm:-ml-48 -mb-48"></div>
@@ -1357,8 +1364,8 @@ export default function SuperAdminDashboard() {
                                     <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
                                     <span className="text-[9px] sm:text-[11px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-blue-400">Boss Overrides Management</span>
                                 </div>
-                                <h3 className="text-3xl sm:text-5xl font-black tracking-tighter uppercase mb-4 sm:mb-6 leading-tight sm:leading-none">Global Network <br/><span className="text-blue-500">Infrastructure.</span></h3>
-                                <p className="text-slate-400 font-medium text-base sm:text-lg mb-8 sm:mb-10 leading-relaxed max-w-xl">
+                                <h3 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight uppercase mb-4 sm:mb-6 leading-tight lg:leading-none">Global Network <br className="hidden sm:inline" /> <span className="text-blue-500">Infrastructure.</span></h3>
+                                <p className="text-slate-400 font-medium text-xs sm:text-base mb-6 sm:mb-10 leading-relaxed max-w-xl">
                                     Maintain total control over the registration ecosystem. Force system-wide updates, push core maintenance flags, and broadcast alerts across all university nodes simultaneously.
                                 </p>
 
@@ -1381,7 +1388,7 @@ export default function SuperAdminDashboard() {
                             </div>
 
                             <div className="w-full xl:w-auto grid grid-cols-1 gap-4">
-                                <div className="bg-white/5 border border-white/10 p-6 sm:p-8 rounded-[32px] sm:rounded-[40px] backdrop-blur-xl">
+                                <div className="bg-white/5 border border-white/10 px-4 py-6 sm:p-8 rounded-[32px] sm:rounded-[40px] backdrop-blur-xl">
                                     <h4 className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-blue-400 mb-6 flex items-center gap-2">
                                         <Activity className="w-4 h-4" />
                                         Infrastructure Capacity
@@ -1419,19 +1426,19 @@ export default function SuperAdminDashboard() {
             {/* Add Modal */}
             {showAddModal && (
                 <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 transition-all animate-in fade-in">
-                    <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl overflow-hidden border border-white animate-in zoom-in slide-in-from-bottom-12 duration-500">
-                        <div className="bg-gray-900 p-10 text-white relative">
-                            <div className="absolute top-0 right-0 p-12 opacity-5 scale-150">
-                                <Building2 className="w-24 h-24" />
+                    <div className="bg-white w-full max-w-lg rounded-[32px] sm:rounded-[48px] shadow-2xl overflow-hidden border border-white animate-in zoom-in slide-in-from-bottom-12 duration-500 max-h-[90vh] sm:max-h-[85vh] flex flex-col">
+                        <div className="bg-gray-900 p-6 sm:p-10 text-white relative shrink-0">
+                            <div className="absolute top-0 right-0 p-8 sm:p-12 opacity-5 scale-150">
+                                <Building2 className="w-16 h-16 sm:w-24 sm:h-24" />
                             </div>
-                            <h3 className="text-3xl font-black uppercase tracking-tighter">Provision New Node</h3>
-                            <p className="text-blue-200/60 text-[10px] font-black uppercase tracking-widest mt-1">Establishing Virtual Infrastructure</p>
-                            <button onClick={() => setShowAddModal(false)} className="absolute top-10 right-10 text-gray-500 hover:text-white transition-colors bg-white/10 h-10 w-10 rounded-full flex items-center justify-center hover:rotate-90">
-                                <X className="w-6 h-6" />
+                            <h3 className="text-xl sm:text-3xl font-black uppercase tracking-tighter">Provision New Node</h3>
+                            <p className="text-blue-200/60 text-[8px] sm:text-[10px] font-black uppercase tracking-widest mt-1">Establishing Virtual Infrastructure</p>
+                            <button onClick={() => setShowAddModal(false)} className="absolute top-6 sm:top-10 right-6 sm:right-10 text-gray-500 hover:text-white transition-colors bg-white/10 h-8 w-8 sm:h-10 sm:w-10 rounded-full flex items-center justify-center hover:rotate-90">
+                                <X className="w-4 h-4 sm:w-6 sm:h-6" />
                             </button>
                         </div>
 
-                        <form onSubmit={handleCreateTenant} className="p-10 space-y-8">
+                        <form onSubmit={handleCreateTenant} className="p-6 sm:p-10 space-y-6 sm:space-y-8 overflow-y-auto flex-1">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">University Name</label>
@@ -1441,7 +1448,7 @@ export default function SuperAdminDashboard() {
                                         value={newTenant.name}
                                         onChange={(e) => setNewTenant({ ...newTenant, name: e.target.value })}
                                         placeholder="e.g. Oxford University"
-                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
+                                        className="w-full bg-slate-50 border-transparent p-4 sm:p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
                                     />
                                 </div>
                                 <div className="space-y-2">
@@ -1453,7 +1460,7 @@ export default function SuperAdminDashboard() {
                                             value={newTenant.slug}
                                             onChange={(e) => setNewTenant({ ...newTenant, slug: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '') })}
                                             placeholder="oxford"
-                                            className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 lowercase px-5"
+                                            className="w-full bg-slate-50 border-transparent p-4 sm:p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300 lowercase px-4 sm:px-5"
                                         />
                                         <Globe className="absolute right-5 w-4 h-4 text-gray-300" />
                                     </div>
@@ -1469,7 +1476,7 @@ export default function SuperAdminDashboard() {
                                         value={newTenant.adminEmail}
                                         onChange={(e) => setNewTenant({ ...newTenant, adminEmail: e.target.value })}
                                         placeholder="admin@oxford.edu"
-                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
+                                        className="w-full bg-slate-50 border-transparent p-4 sm:p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
                                     />
                                 </div>
                                 <div className="space-y-2">
@@ -1477,7 +1484,7 @@ export default function SuperAdminDashboard() {
                                     <select
                                         value={newTenant.subscriptionStatus}
                                         onChange={(e) => setNewTenant({ ...newTenant, subscriptionStatus: e.target.value as any })}
-                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-gray-700"
+                                        className="w-full bg-slate-50 border-transparent p-4 sm:p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-gray-700"
                                     >
                                         <option value="trial">14-Day Free Trial</option>
                                         <option value="active">Active (Paid)</option>
@@ -1494,7 +1501,7 @@ export default function SuperAdminDashboard() {
                                         value={newTenant.contactName}
                                         onChange={(e) => setNewTenant({ ...newTenant, contactName: e.target.value })}
                                         placeholder="e.g. John Doe"
-                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
+                                        className="w-full bg-slate-50 border-transparent p-4 sm:p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
                                     />
                                 </div>
                                 <div className="space-y-2">
@@ -1505,7 +1512,7 @@ export default function SuperAdminDashboard() {
                                         value={newTenant.contactPhone}
                                         onChange={(e) => setNewTenant({ ...newTenant, contactPhone: e.target.value })}
                                         placeholder="+91 9876543210"
-                                        className="w-full bg-slate-50 border-transparent p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
+                                        className="w-full bg-slate-50 border-transparent p-4 sm:p-5 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-gray-300"
                                     />
                                 </div>
                             </div>
@@ -1514,13 +1521,13 @@ export default function SuperAdminDashboard() {
                                 <button
                                     type="button"
                                     onClick={() => setShowAddModal(false)}
-                                    className="p-5 rounded-2xl bg-slate-50 text-slate-500 font-black uppercase text-xs tracking-widest hover:bg-slate-100"
+                                    className="p-4 sm:p-5 rounded-2xl bg-slate-50 text-slate-500 font-black uppercase text-xs tracking-widest hover:bg-slate-100"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     disabled={isCreating}
-                                    className="p-5 rounded-2xl bg-blue-600 text-white font-black uppercase text-xs tracking-widest shadow-2xl shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
+                                    className="p-4 sm:p-5 rounded-2xl bg-blue-600 text-white font-black uppercase text-xs tracking-widest shadow-2xl shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
                                 >
                                     {isCreating ? "Deploying..." : (
                                         <>Deploy Node <ArrowRight className="w-4 h-4" /></>

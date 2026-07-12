@@ -29,6 +29,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Load admin settings for uniqueness configuration and prefix mapping
+    const adminSettings = await db.settings.get();
+
     // Find existing student by firebaseUID, or supabase_id, or email, or phoneNumber fallback
     let existingStudent = await db.students.findOne({ firebaseUID });
     if (!existingStudent && supabase_id) {
@@ -41,17 +44,19 @@ export async function POST(request: NextRequest) {
       existingStudent = await db.students.findOne({ phoneNumber: phoneNumber.trim() });
     }
 
-    // ✅ Check for duplicate phone numbers belonging to another student
-    const phoneExists = await db.students.findOne({ phoneNumber: phoneNumber.trim() });
-    if (phoneExists && (!existingStudent || phoneExists.firebaseUID !== existingStudent.firebaseUID)) {
-      return NextResponse.json(
-        { error: "This phone number is already registered with another account" },
-        { status: 409 }
-      );
+    // ✅ Check for duplicate phone numbers belonging to another student (if enforced)
+    if (adminSettings?.enforceUniquePhone) {
+      const phoneExists = await db.students.findOne({ phoneNumber: phoneNumber.trim() });
+      if (phoneExists && (!existingStudent || phoneExists.firebaseUID !== existingStudent.firebaseUID)) {
+        return NextResponse.json(
+          { error: "This phone number is already registered with another account" },
+          { status: 409 }
+        );
+      }
     }
 
-    // ✅ Check for duplicate email belonging to another student
-    if (email) {
+    // ✅ Check for duplicate email belonging to another student (if enforced)
+    if (adminSettings?.enforceUniqueEmail && email) {
       const emailExists = await db.students.findOne({ email: email.toLowerCase().trim() });
       if (emailExists && (!existingStudent || emailExists.firebaseUID !== existingStudent.firebaseUID)) {
         return NextResponse.json(
@@ -61,14 +66,84 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ✅ Check for duplicate ERP ID belonging to another student (if enforced)
+    if (adminSettings?.enforceUniqueErpId && erpInformation) {
+      const erpExists = await db.students.findOne({ erpInformation: erpInformation.trim() });
+      if (erpExists && (!existingStudent || erpExists.firebaseUID !== existingStudent.firebaseUID)) {
+        return NextResponse.json(
+          { error: "This ERP ID is already registered under another student account" },
+          { status: 409 }
+        );
+      }
+    }
+
+    // ✅ Check for duplicate face scan belonging to another student (if enforced)
+    if (adminSettings?.enforceUniqueFace && faceDescriptor && Array.isArray(faceDescriptor) && faceDescriptor.length > 0) {
+      const allStudents = await db.students.list({});
+      for (const s of allStudents) {
+        if (existingStudent && s.firebaseUID === existingStudent.firebaseUID) continue;
+        if (s.faceDescriptor && Array.isArray(s.faceDescriptor) && s.faceDescriptor.length === faceDescriptor.length) {
+          let sum = 0;
+          for (let i = 0; i < faceDescriptor.length; i++) {
+            const diff = faceDescriptor[i] - s.faceDescriptor[i];
+            sum += diff * diff;
+          }
+          const distance = Math.sqrt(sum);
+          if (distance < 0.6) { // standard match threshold
+            return NextResponse.json(
+              { error: "A student profile with this face scan is already registered" },
+              { status: 409 }
+            );
+          }
+        }
+      }
+    }
+
     let registrationId = existingStudent?.registrationId;
 
     if (!registrationId) {
-      // Format: ST + CollegeCode + Year (last 2 digits) + Sequence Number
-      // Example: STOIST25497
-      const colName = collegeName ? collegeName.toUpperCase().replace(/[^A-Z]/g, '') : "UNK";
-      const yearStr = joiningDate ? new Date(joiningDate).getFullYear().toString().slice(-2) : new Date().getFullYear().toString().slice(-2);
-      const prefix = `ST${colName}${yearStr}`;
+      let prefix = "";
+      let isHostelPrefix = false;
+
+      // Try to find custom prefix from hostelPrefixMap in settings
+      try {
+        const hostelPrefixMap = adminSettings?.hostelPrefixMap || [
+          { hostelName: "GHB HOSTEL", prefix: "GUEST" },
+          { hostelName: "BOYS HOSTEL", prefix: "BOYS" },
+          { hostelName: "GANGOTRI HOSTEL", prefix: "GANGOTRI" },
+          { hostelName: "GAYTRI HOSTEL", prefix: "GAYTRI" }
+        ];
+
+        if (hostelName) {
+          const lowerHostel = hostelName.toLowerCase();
+          if (Array.isArray(hostelPrefixMap)) {
+            for (const mapping of hostelPrefixMap) {
+              if (lowerHostel.includes(mapping.hostelName.toLowerCase())) {
+                prefix = mapping.prefix;
+                isHostelPrefix = true;
+                break;
+              }
+            }
+          } else {
+            for (const [name, p] of Object.entries(hostelPrefixMap)) {
+              if (lowerHostel.includes(name.toLowerCase())) {
+                prefix = p as string;
+                isHostelPrefix = true;
+                break;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load hostelPrefixMap from settings:", err);
+      }
+
+      // Fallback if no matching hostel prefix was found
+      if (!prefix) {
+        const colName = collegeName ? collegeName.toUpperCase().replace(/[^A-Z]/g, '') : "UNK";
+        const yearStr = joiningDate ? new Date(joiningDate).getFullYear().toString().slice(-2) : new Date().getFullYear().toString().slice(-2);
+        prefix = `ST${colName}${yearStr}`;
+      }
 
       // Find the highest number for this prefix
       const students = await db.students.list({ search: prefix });
@@ -80,14 +155,25 @@ export async function POST(request: NextRequest) {
           .filter((id: string) => id && id.startsWith(prefix));
 
         if (regIds.length > 0) {
-          const numbers = regIds.map((id: string) => parseInt(id.replace(prefix, ''))).filter((n: number) => !isNaN(n));
+          const numbers = regIds
+            .map((id: string) => {
+              // Strip prefix and any non-digits (like the hyphen in GUEST-0001)
+              const cleanId = id.replace(prefix, '').replace(/[^0-9]/g, '');
+              return parseInt(cleanId);
+            })
+            .filter((n: number) => !isNaN(n));
+
           if (numbers.length > 0) {
             nextNumber = Math.max(...numbers) + 1;
           }
         }
       }
 
-      registrationId = `${prefix}${String(nextNumber).padStart(3, '0')}`;
+      if (isHostelPrefix) {
+        registrationId = `${prefix}-${String(nextNumber).padStart(4, '0')}`;
+      } else {
+        registrationId = `${prefix}${String(nextNumber).padStart(3, '0')}`;
+      }
     }
 
     // ✅ NEW: Upload base64 profile photo to Supabase storage to save database egress/bandwidth
@@ -188,6 +274,16 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
+    const checkValue = searchParams.get("checkValue");
+    const checkField = searchParams.get("checkField"); // 'phoneNumber' | 'email' | 'erpInformation'
+
+    if (checkValue && checkField) {
+      const query: any = {};
+      query[checkField] = checkField === "email" ? checkValue.toLowerCase().trim() : checkValue.trim();
+      const existing = await db.students.findOne(query, { minimal: true });
+      return NextResponse.json({ exists: !!existing, studentName: existing?.name || null }, { status: 200 });
+    }
+
     const firebaseUID = searchParams.get("firebaseUID");
     const supabaseId = searchParams.get("supabaseId");
     const email = searchParams.get("email");

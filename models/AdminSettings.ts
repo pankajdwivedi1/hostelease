@@ -72,6 +72,8 @@ export interface IAdminSettings {
     wardenScanFailure?: boolean;
     deanSecurityAlert?: boolean;
   };
+  allowWardenAddStudent?: boolean;
+  allowDeanAddStudent?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -200,6 +202,22 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
       type: Boolean,
       default: false, // Default to disabled
     },
+    enforceUniqueErpId: {
+      type: Boolean,
+      default: false,
+    },
+    enforceUniquePhone: {
+      type: Boolean,
+      default: false,
+    },
+    enforceUniqueEmail: {
+      type: Boolean,
+      default: false,
+    },
+    enforceUniqueFace: {
+      type: Boolean,
+      default: false,
+    },
     // ✅ NEW FIX #13: Configurable hostel prefix mapping
     hostelPrefixMap: {
       type: [{
@@ -273,6 +291,14 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
         wardenScanFailure: true,
         deanSecurityAlert: true
       }
+    },
+    allowWardenAddStudent: {
+      type: Boolean,
+      default: false
+    },
+    allowDeanAddStudent: {
+      type: Boolean,
+      default: false
     },
   },
   {

@@ -1049,6 +1049,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [getpassPassword, setGetpassPassword] = useState("GET456"); // ⚡ NEW
   const [wifiWhitelist, setWifiWhitelist] = useState<any[]>([]); // ⚡ NEW: Global IP Whitelist
   const [enableManualAttendance, setEnableManualAttendance] = useState(false); // ⚡ NEW: Toggle for Manual Marking Toolbar
+  const [enforceUniqueErpId, setEnforceUniqueErpId] = useState(false);
+  const [enforceUniquePhone, setEnforceUniquePhone] = useState(false);
+  const [enforceUniqueEmail, setEnforceUniqueEmail] = useState(false);
+  const [enforceUniqueFace, setEnforceUniqueFace] = useState(false);
+  const [allowWardenAddStudent, setAllowWardenAddStudent] = useState(false);
+  const [allowDeanAddStudent, setAllowDeanAddStudent] = useState(false);
+  const [addStudentForm, setAddStudentForm] = useState<Record<string, string>>({});
+  const [isSavingStudent, setIsSavingStudent] = useState(false);
+  const [isWardenCameraOpen, setIsWardenCameraOpen] = useState(false);
+  const wardenVideoRef = useRef<HTMLVideoElement>(null);
+  const [duplicateWarnings, setDuplicateWarnings] = useState<Record<string, string>>({});
   const [leaveApprovalMethod, setLeaveApprovalMethod] = useState("app"); // ⚡ NEW: Leave Approval Method
   const [notificationSettings, setNotificationSettings] = useState<Record<string, boolean>>({
     parentNightAbsent: true,
@@ -1065,7 +1076,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   // Audit States
   const [auditResults, setAuditResults] = useState<any[]>([]);
   const [isAuditing, setIsAuditing] = useState(false);
-  const [activeAuditType, setActiveAuditType] = useState<"phone" | "regid" | "gibberish" | null>(null);
+  const [activeAuditType, setActiveAuditType] = useState<"phone" | "regid" | "erpid" | "gibberish" | null>(null);
 
   // MERGED WARDEN ACCOUNTS STATE
   const [wardenAccounts, setWardenAccounts] = useState<{ _id?: string, username: string, password?: string, hostels: string[] }[]>([]);
@@ -1150,6 +1161,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [authorizedHostels, setAuthorizedHostels] = useState<string[]>(initialWarden.authorized);
   const [isWarden, setIsWarden] = useState(initialWarden.isWarden);
   const [dashboardTitle, setDashboardTitle] = useState(title);
+
+  const canAddStudent = 
+    title === "Super Admin Dashboard" || 
+    (title === "Dean Dashboard" && allowDeanAddStudent) || 
+    (isWarden && allowWardenAddStudent);
 
   useEffect(() => {
     if (hostels.length > 0 && !activeVisualHostel) {
@@ -1924,6 +1940,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (settingsData.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(settingsData.prioritizeAssignedHostel);
         if (settingsData.getpassPassword) setGetpassPassword(settingsData.getpassPassword);
         if (settingsData.enableManualAttendance !== undefined) setEnableManualAttendance(settingsData.enableManualAttendance);
+        if (settingsData.enforceUniqueErpId !== undefined) setEnforceUniqueErpId(settingsData.enforceUniqueErpId);
+        if (settingsData.enforceUniquePhone !== undefined) setEnforceUniquePhone(settingsData.enforceUniquePhone);
+        if (settingsData.enforceUniqueEmail !== undefined) setEnforceUniqueEmail(settingsData.enforceUniqueEmail);
+        if (settingsData.enforceUniqueFace !== undefined) setEnforceUniqueFace(settingsData.enforceUniqueFace);
+        if (settingsData.allowWardenAddStudent !== undefined) setAllowWardenAddStudent(settingsData.allowWardenAddStudent);
+        if (settingsData.allowDeanAddStudent !== undefined) setAllowDeanAddStudent(settingsData.allowDeanAddStudent);
         if (settingsData.developerPassword) setDeveloperPassword(settingsData.developerPassword);
         if (settingsData.leaveApprovalMethod) setLeaveApprovalMethod(settingsData.leaveApprovalMethod);
         if (settingsData.wifiWhitelist) setWifiWhitelist(settingsData.wifiWhitelist);
@@ -1964,6 +1986,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (key === 'overlapRadius') setOverlapRadius(value);
         if (key === 'prioritizeAssignedHostel') setPrioritizeAssignedHostel(value);
         if (key === 'enableManualAttendance') setEnableManualAttendance(value);
+        if (key === 'enforceUniqueErpId') setEnforceUniqueErpId(value);
+        if (key === 'enforceUniquePhone') setEnforceUniquePhone(value);
+        if (key === 'enforceUniqueEmail') setEnforceUniqueEmail(value);
+        if (key === 'enforceUniqueFace') setEnforceUniqueFace(value);
+        if (key === 'allowWardenAddStudent') setAllowWardenAddStudent(value);
+        if (key === 'allowDeanAddStudent') setAllowDeanAddStudent(value);
       } else {
         alert("Failed to update setting: " + (data.error || "Unknown error"));
       }
@@ -1972,6 +2000,157 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       alert("Error: " + (e.message || "Network error"));
     } finally {
       setIsUpdatingSettings(false);
+    }
+  };
+
+  const startWardenCamera = async () => {
+    try {
+      setIsWardenCameraOpen(true);
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      setTimeout(() => {
+        if (wardenVideoRef.current) {
+          wardenVideoRef.current.srcObject = stream;
+        }
+      }, 100);
+    } catch (err) {
+      showToast("Could not access camera: " + err, "error");
+      setIsWardenCameraOpen(false);
+    }
+  };
+
+  const stopWardenCamera = () => {
+    if (wardenVideoRef.current && wardenVideoRef.current.srcObject) {
+      const stream = wardenVideoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      wardenVideoRef.current.srcObject = null;
+    }
+    setIsWardenCameraOpen(false);
+  };
+
+  const captureWardenPhoto = (fieldId: string) => {
+    if (wardenVideoRef.current) {
+      const canvas = document.createElement("canvas");
+      canvas.width = wardenVideoRef.current.videoWidth || 640;
+      canvas.height = wardenVideoRef.current.videoHeight || 480;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(wardenVideoRef.current, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg");
+        setAddStudentForm(prev => ({ ...prev, [fieldId]: dataUrl }));
+        stopWardenCamera();
+      }
+    }
+  };
+
+  const checkFieldUniqueness = async (fieldId: string, value: string) => {
+    const val = value.trim();
+    if (!val) {
+      setDuplicateWarnings(prev => {
+        const updated = { ...prev };
+        delete updated[fieldId];
+        return updated;
+      });
+      return;
+    }
+
+    let checkField = "";
+    if (fieldId === "phoneNumber") checkField = "phoneNumber";
+    if (fieldId === "email") checkField = "email";
+    if (fieldId === "erpInformation") checkField = "erpInformation";
+
+    if (!checkField) return;
+
+    // Length pre-validations
+    if (fieldId === "phoneNumber" && val.length < 10) return;
+    if (fieldId === "email" && !val.includes("@")) return;
+    if (fieldId === "erpInformation" && val.length < 3) return;
+
+    try {
+      const res = await fetch(`/api/students?checkValue=${encodeURIComponent(val)}&checkField=${checkField}`);
+      const data = await res.json();
+      if (res.ok && data.exists) {
+        setDuplicateWarnings(prev => ({
+          ...prev,
+          [fieldId]: `⚠️ Already registered to student "${data.studentName || 'unnamed'}"`
+        }));
+      } else {
+        setDuplicateWarnings(prev => {
+          const updated = { ...prev };
+          delete updated[fieldId];
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to check duplicate:", err);
+    }
+  };
+
+  const handleSaveManualStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSavingStudent) return;
+
+    // Prevent saving if there are active duplicate warnings
+    const hasWarnings = Object.keys(duplicateWarnings).length > 0;
+    if (hasWarnings) {
+      showToast("Cannot save student profile: Please resolve duplicate values first!", "error");
+      return;
+    }
+
+    const email = addStudentForm.email?.trim() || "";
+    const phoneNumber = addStudentForm.phoneNumber?.trim() || "";
+    const hostelName = isWarden ? (wardenHostelName || authorizedHostels[0] || "") : (addStudentForm.hostelName || "");
+    const roomNumber = addStudentForm.roomNumber?.trim() || "";
+    const floorNumber = addStudentForm.floorNumber || "GND FLOOR";
+
+    if (!email) {
+      showToast("Email address is required for credentials linking!", "error");
+      return;
+    }
+    if (!phoneNumber) {
+      showToast("Phone number is required!", "error");
+      return;
+    }
+    if (!hostelName) {
+      showToast("Hostel name is required!", "error");
+      return;
+    }
+    if (!roomNumber) {
+      showToast("Room number is required!", "error");
+      return;
+    }
+
+    try {
+      setIsSavingStudent(true);
+      const dummyUid = `temp_admin_added_${email.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
+      
+      const payload = {
+        ...addStudentForm,
+        firebaseUID: dummyUid,
+        hostelName,
+        roomNumber,
+        floorNumber,
+        email,
+        phoneNumber
+      };
+
+      const res = await fetch("/api/students", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`Student "${addStudentForm.name || 'new profile'}" manually registered successfully!`, "success");
+        setAddStudentForm({});
+        setCurrentTab("permissions");
+      } else {
+        showToast(data.error || "Failed to register student", "error");
+      }
+    } catch (err: any) {
+      showToast("Network error: " + err.message, "error");
+    } finally {
+      setIsSavingStudent(false);
     }
   };
 
@@ -2030,7 +2209,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [isNotifyingAnomalies, setIsNotifyingAnomalies] = useState(false);
   const handleNotifyAnomalies = async () => {
     if (anomalyAlerts.length === 0) return;
-    if (!await showConfirm(`Are you sure you want to send Web Push & SMS Anomaly Alerts to parents of all ${anomalyAlerts.length} long-absent students?`)) return;
+    if (!await showConfirm(`Are you sure you want to send Web Push Anomaly Alerts to parents of all ${anomalyAlerts.length} long-absent students?`)) return;
 
     try {
       setIsNotifyingAnomalies(true);
@@ -2044,7 +2223,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`Web Push & SMS anomaly alerts sent to ${data.notifiedCount} parents!`, "success");
+        showToast(`Web Push anomaly alerts sent to ${data.notifiedCount} parents!`, "success");
       } else {
         alert("Failed to send alerts: " + (data.error || "Unknown error"));
       }
@@ -2056,6 +2235,149 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
+  const [excelTemplate, setExcelTemplate] = useState<any>(null);
+
+  const downloadExcelSample = async () => {
+    try {
+      const XLSX = await import("xlsx");
+      
+      // Get the currently selected template reference dynamically
+      const activeTpl = selectedTemplateId === "custom-excel-template"
+        ? excelTemplate
+        : formTemplates.find(t => t.id === selectedTemplateId);
+      
+      let exportData: any[] = [];
+      let filename = "hostelease_form_template_sample.xlsx";
+      
+      if (activeTpl && Array.isArray(activeTpl.fields) && activeTpl.fields.length > 0) {
+        exportData = activeTpl.fields.map((f: any) => ({
+          "Field ID": f.id,
+          "Field Label": f.label,
+          "Field Type": f.type,
+          "Required": f.required ? "TRUE" : "FALSE",
+          "Visible": f.visible ? "TRUE" : "FALSE",
+          "Section": f.section || "Personal",
+          "Options": Array.isArray(f.options) ? f.options.join(", ") : (f.options || "")
+        }));
+        
+        // Clean name for the filename
+        const cleanName = activeTpl.name.toLowerCase().replace(/[^a-z0-9]/g, "_");
+        filename = `hostelease_${cleanName}_template.xlsx`;
+      } else {
+        // Fallback default sample fields
+        exportData = [
+          { "Field ID": "profilePicture", "Field Label": "Profile Photo", "Field Type": "image", "Required": "TRUE", "Visible": "TRUE", "Section": "Personal", "Options": "" },
+          { "Field ID": "name", "Field Label": "Full Name", "Field Type": "text", "Required": "TRUE", "Visible": "TRUE", "Section": "Personal", "Options": "" },
+          { "Field ID": "phoneNumber", "Field Label": "Phone Number", "Field Type": "tel", "Required": "TRUE", "Visible": "TRUE", "Section": "Personal", "Options": "" },
+          { "Field ID": "gender", "Field Label": "Gender", "Field Type": "select", "Required": "TRUE", "Visible": "TRUE", "Section": "Personal", "Options": "MALE, FEMALE, OTHER" },
+          { "Field ID": "dob", "Field Label": "Date of Birth", "Field Type": "date", "Required": "TRUE", "Visible": "TRUE", "Section": "Personal", "Options": "" },
+          { "Field ID": "erpInformation", "Field Label": "ERP ID", "Field Type": "text", "Required": "TRUE", "Visible": "TRUE", "Section": "Academic", "Options": "" },
+          { "Field ID": "custom_department", "Field Label": "Department", "Field Type": "select", "Required": "FALSE", "Visible": "TRUE", "Section": "Academic", "Options": "Engineering, Pharmacy, Management" }
+        ];
+      }
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Form Template");
+      XLSX.writeFile(workbook, filename);
+      showToast(`Exported ${activeTpl ? `"${activeTpl.name}"` : "default sample"} template to Excel!`, "success");
+    } catch (e: any) {
+      showToast("Error generating template: " + e.message, "error");
+    }
+  };
+
+  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const XLSX = await import("xlsx");
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const buffer = evt.target?.result as ArrayBuffer;
+          if (!buffer) {
+            showToast("Failed to read Excel file data", "error");
+            return;
+          }
+          const data = new Uint8Array(buffer);
+          const wb = XLSX.read(data, { type: "array" });
+          const wsname = wb.SheetNames[0];
+          const ws = wb.Sheets[wsname];
+          const rows = XLSX.utils.sheet_to_json(ws) as any[];
+
+          if (rows.length === 0) {
+            showToast("Excel file is empty!", "error");
+            return;
+          }
+
+          // Case-insensitive key lookup helper to support custom capitalizations or formatting
+          const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, "");
+          const findValue = (rowObj: any, matchNames: string[]) => {
+            const normalizedMatchNames = matchNames.map(normalize);
+            for (const key of Object.keys(rowObj)) {
+              if (normalizedMatchNames.includes(normalize(key))) {
+                return rowObj[key];
+              }
+            }
+            return undefined;
+          };
+
+          const fields: any[] = [];
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const label = findValue(row, ["Field Label", "label", "FieldLabel", "Name", "FieldName"]);
+            const type = findValue(row, ["Field Type", "type", "FieldType", "InputType"]);
+            const section = findValue(row, ["Section", "section", "Group"]) || "Personal";
+
+            if (!label || !type) {
+              showToast(`Row ${i + 2} is missing "Field Label" or "Field Type"!`, "error");
+              return;
+            }
+
+            let fieldId = findValue(row, ["Field ID", "id", "FieldID", "key"]);
+            if (!fieldId) {
+              fieldId = "custom_" + label.toLowerCase().replace(/[^a-z0-9]/g, "_");
+            }
+
+            const requiredVal = String(findValue(row, ["Required", "required"]) || "FALSE").toUpperCase();
+            const visibleVal = String(findValue(row, ["Visible", "visible"]) || "TRUE").toUpperCase();
+
+            const optionsStr = String(findValue(row, ["Options", "options"]) || "");
+            const options = optionsStr ? optionsStr.split(",").map((s: string) => s.trim()).filter(s => s !== "") : undefined;
+
+            fields.push({
+              id: fieldId,
+              label: label,
+              type: type.toLowerCase(),
+              required: requiredVal === "TRUE" || requiredVal === "YES",
+              visible: visibleVal === "TRUE" || visibleVal === "YES",
+              section: section,
+              options: options
+            });
+          }
+
+          const customTemplate = {
+            id: "custom-excel-template",
+            name: "Imported Excel Template",
+            description: `Custom fields imported from ${file.name}.`,
+            icon: "📊",
+            fields: fields
+          };
+
+          setExcelTemplate(customTemplate);
+          setSelectedTemplateId("custom-excel-template");
+          showToast("Excel form template imported successfully!", "success");
+        } catch (err: any) {
+          showToast("Error parsing excel: " + err.message, "error");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      e.target.value = ""; // Clear file input so that re-uploading the same file triggers change handler again
+    } catch (err: any) {
+      showToast("Error loading XLSX parser: " + err.message, "error");
+    }
+  };
 
   const handleUpdateSettings = async (updateData: any) => {
     try {
@@ -2298,12 +2620,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const handleAudit = async (type: "duplicates-phone" | "duplicates-regid" | "gibberish-names") => {
+  const handleAudit = async (type: "duplicates-phone" | "duplicates-regid" | "duplicates-erpid" | "gibberish-names") => {
     try {
       setIsAuditing(true);
       setAuditResults([]);
       // Extract middle part or whole for type
-      const typeLabel = type.includes('phone') ? 'phone' : (type.includes('regid') ? 'regid' : 'gibberish');
+      const typeLabel = type.includes('phone') ? 'phone' : (type.includes('regid') ? 'regid' : (type.includes('erpid') ? 'erpid' : 'gibberish'));
       setActiveAuditType(typeLabel as any);
 
       const response = await fetch(`/api/developer/audit?type=${type}`);
@@ -3520,8 +3842,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
     if (title === "Super Admin Dashboard") {
       fetchHostelLocations();
-      fetchSystemSettings();
     }
+    fetchSystemSettings();
   }, [title]);
 
   useEffect(() => {
@@ -5448,6 +5770,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 >
                   Visual Rooms
                 </button>
+                {canAddStudent && (
+                  <button
+                    onClick={() => setCurrentTab('add_student')}
+                    className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'add_student' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                  >
+                    Add Student
+                  </button>
+                )}
                 {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
                   <button
                     onClick={() => setCurrentTab('alerts')}
@@ -7457,6 +7787,250 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         ))
                     )}
                   </div>
+                </div>
+              )}
+
+              {currentTab === 'add_student' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  <div>
+                    <h2 className="text-lg font-black text-foreground uppercase tracking-wide">Manual Student Registration</h2>
+                    <p className="text-xs text-secondary font-bold uppercase tracking-tight">Pre-register a student directly in the database. They can link their credentials later by logging in with their email.</p>
+                  </div>
+
+                  <form onSubmit={handleSaveManualStudent} className="bg-white p-6 rounded-2xl border-2 border-slate-100 shadow-sm space-y-6 text-left">
+                    {/* Render fields grouped by sections */}
+                    {(() => {
+                      // Get all unique sections
+                      const defaultFields = formBuilderFields.length > 0 ? formBuilderFields : [
+                        { id: "name", label: "Full Name", type: "text", required: true, section: "Personal" },
+                        { id: "phoneNumber", label: "Phone Number", type: "tel", required: true, section: "Personal" },
+                        { id: "email", label: "Email Address", type: "email", required: true, section: "Personal" },
+                        { id: "dob", label: "Date of Birth", type: "date", required: true, section: "Personal" },
+                        { id: "category", label: "Category", type: "select", options: ["GENERAL", "SC", "ST", "OBC"], required: true, section: "Personal" },
+                        { id: "erpInformation", label: "ERP ID", type: "text", required: true, section: "Academic" },
+                        { id: "collegeName", label: "College Name", type: "select", options: ["OIST", "OCT", "OCP", "OPM", "OIPR"], required: true, section: "Academic" },
+                        { id: "branch", label: "Branch", type: "select", options: ["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"], required: true, section: "Academic" },
+                        { id: "year", label: "Year", type: "select", options: ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"], required: true, section: "Academic" },
+                        { id: "semester", label: "Semester", type: "select", options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"], required: true, section: "Academic" },
+                        { id: "section", label: "Section", type: "select", options: ["A", "B", "C", "D", "E", "F"], required: true, section: "Academic" },
+                        { id: "fatherName", label: "Father's Name", type: "text", required: true, section: "Guardian" },
+                        { id: "fatherNumber", label: "Father's Phone", type: "tel", required: true, section: "Guardian" },
+                        { id: "motherName", label: "Mother's Name", type: "text", required: true, section: "Guardian" },
+                        { id: "motherNumber", label: "Mother's Phone", type: "tel", required: true, section: "Guardian" },
+                        { id: "homePinCode", label: "Address & Pincode", type: "text", required: true, section: "Address" },
+                        { id: "homeState", label: "Home State", type: "select", options: ["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"], required: true, section: "Address" },
+                      ];
+
+                      // Ensure registration fields and email are present
+                      const registrationFields = [
+                        { id: "email", label: "Email Address", type: "email", required: true, section: "Personal" },
+                        { id: "hostelName", label: "Hostel Name", type: "select", options: hostels.map(h => h.name), required: true, section: "Registration" },
+                        { id: "floorNumber", label: "Floor Number", type: "select", options: ["GND FLOOR", "1ST FLOOR", "2ND FLOOR", "3RD FLOOR"], required: true, section: "Registration" },
+                        { id: "roomNumber", label: "Room Number", type: "text", required: true, section: "Registration" },
+                      ];
+
+                      // Combine them and deduplicate by id
+                      const allFields = [...defaultFields];
+                      registrationFields.forEach(rf => {
+                        if (!allFields.some(af => af.id === rf.id)) {
+                          allFields.push(rf);
+                        }
+                      });
+
+                      const sections = ["Personal", "Academic", "Registration", "Guardian", "Address", "Local Guardian"];
+                      
+                      return (
+                        <div className="space-y-8">
+                          {sections.map(sec => {
+                            const secFields = allFields.filter(f => f.section === sec);
+                            if (secFields.length === 0) return null;
+
+                            return (
+                              <div key={sec} className="space-y-4 text-left">
+                                <h3 className="text-xs font-black text-blue-600 uppercase tracking-widest border-b border-slate-100 pb-2">{sec} Details</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {secFields.map(field => {
+                                    // Custom rule: if Warden is registering, hostelName is locked to their hostel
+                                    const isHostelLocked = isWarden && field.id === "hostelName";
+                                    const lockedValue = isWarden ? (wardenHostelName || authorizedHostels[0] || "") : "";
+
+                                    return (
+                                      <div key={field.id} className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-0.5">
+                                          {field.label}
+                                          {field.required && <span className="text-red-500">*</span>}
+                                        </label>
+
+                                        {field.type === "image" || field.id === "profilePicture" || field.id === "profilephoto" ? (
+                                           <div className="space-y-2 border-2 border-dashed border-slate-200 p-4 rounded-xl flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100/50 transition-all min-h-[140px] w-full">
+                                             {addStudentForm[field.id] ? (
+                                               <div className="flex flex-col items-center gap-2">
+                                                 <img
+                                                   src={addStudentForm[field.id]}
+                                                   alt="Profile Preview"
+                                                   className="w-24 h-24 rounded-2xl object-cover border-2 border-blue-500 shadow-md"
+                                                 />
+                                                 <button
+                                                   type="button"
+                                                   onClick={() => setAddStudentForm(prev => {
+                                                     const updated = { ...prev };
+                                                     delete updated[field.id];
+                                                     return updated;
+                                                   })}
+                                                   className="px-3 py-1 bg-red-50 text-red-600 hover:bg-red-100 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all border border-red-100"
+                                                 >
+                                                   Remove Photo
+                                                 </button>
+                                               </div>
+                                             ) : isWardenCameraOpen ? (
+                                               <div className="flex flex-col items-center gap-3 w-full max-w-[260px]">
+                                                 <video
+                                                   ref={wardenVideoRef}
+                                                   autoPlay
+                                                   playsInline
+                                                   className="w-full aspect-[4/3] rounded-xl object-cover border border-slate-200 bg-black"
+                                                 />
+                                                 <div className="flex gap-2">
+                                                   <button
+                                                     type="button"
+                                                     onClick={() => captureWardenPhoto(field.id)}
+                                                     className="px-4 py-1.5 bg-blue-600 text-white hover:bg-blue-700 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                                                   >
+                                                     📸 Capture
+                                                   </button>
+                                                   <button
+                                                     type="button"
+                                                     onClick={stopWardenCamera}
+                                                     className="px-4 py-1.5 bg-slate-200 text-slate-700 hover:bg-slate-300 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all"
+                                                   >
+                                                     Cancel
+                                                   </button>
+                                                 </div>
+                                               </div>
+                                             ) : (
+                                               <div className="flex flex-col sm:flex-row items-center gap-2 w-full justify-center">
+                                                 <label className="px-4 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 border border-blue-200 shadow-sm">
+                                                   📁 Choose Photo
+                                                   <input
+                                                     type="file"
+                                                     accept="image/*"
+                                                     className="hidden"
+                                                     onChange={(e) => {
+                                                       const file = e.target.files?.[0];
+                                                       if (file) {
+                                                         const reader = new FileReader();
+                                                         reader.onload = () => {
+                                                           setAddStudentForm(prev => ({ ...prev, [field.id]: reader.result as string }));
+                                                         };
+                                                         reader.readAsDataURL(file);
+                                                       }
+                                                     }}
+                                                   />
+                                                 </label>
+                                                 <button
+                                                   type="button"
+                                                   onClick={startWardenCamera}
+                                                   className="px-4 py-2.5 bg-purple-50 text-purple-600 hover:bg-purple-100 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 border border-purple-200 shadow-sm"
+                                                 >
+                                                   📷 Open Camera
+                                                 </button>
+                                               </div>
+                                             )}
+                                           </div>
+                                         ) : field.type === "select" ? (
+                                          <select
+                                            disabled={isHostelLocked}
+                                            value={isHostelLocked ? lockedValue : (addStudentForm[field.id] || "")}
+                                            onChange={(e) => setAddStudentForm(prev => ({ ...prev, [field.id]: e.target.value }))}
+                                            required={field.required}
+                                            className="w-full h-11 px-4 rounded-xl border-2 border-slate-100 text-sm focus:border-blue-500 focus:outline-none transition-all shadow-sm bg-white"
+                                          >
+                                            <option value="">Select {field.label}...</option>
+                                            {(field.options || []).map((opt: string) => (
+                                              <option key={opt} value={opt}>{opt}</option>
+                                            ))}
+                                          </select>
+                                        ) : field.type === "textarea" ? (
+                                          <textarea
+                                            value={addStudentForm[field.id] || ""}
+                                            onChange={(e) => setAddStudentForm(prev => ({ ...prev, [field.id]: e.target.value }))}
+                                            required={field.required}
+                                            className="w-full p-4 rounded-xl border-2 border-slate-100 text-sm focus:border-blue-500 focus:outline-none transition-all shadow-sm"
+                                            rows={3}
+                                          />
+                                        ) : (
+                                           <div className="w-full text-left">
+                                             <input
+                                               type={field.type === "date" ? "date" : field.type === "tel" ? "tel" : "text"}
+                                               value={addStudentForm[field.id] || ""}
+                                               onChange={(e) => {
+                                                 const val = e.target.value;
+                                                 setAddStudentForm(prev => ({ ...prev, [field.id]: val }));
+                                                 if (field.id === "phoneNumber" || field.id === "email" || field.id === "erpInformation") {
+                                                   checkFieldUniqueness(field.id, val);
+                                                 }
+                                               }}
+                                               onBlur={(e) => {
+                                                 if (field.id === "phoneNumber" || field.id === "email" || field.id === "erpInformation") {
+                                                   checkFieldUniqueness(field.id, e.target.value);
+                                                 }
+                                               }}
+                                               required={field.required}
+                                               placeholder={`Enter ${field.label.toLowerCase()}...`}
+                                               className={`w-full h-11 px-4 rounded-xl border-2 text-sm focus:outline-none transition-all shadow-sm ${
+                                                 duplicateWarnings[field.id]
+                                                   ? "border-red-200 focus:border-red-500 text-red-900 bg-red-50/10"
+                                                   : "border-slate-100 focus:border-blue-500 bg-white"
+                                               }`}
+                                             />
+                                             {duplicateWarnings[field.id] && (
+                                               <p className="text-[10px] text-red-500 font-extrabold mt-1 tracking-tight uppercase">
+                                                 {duplicateWarnings[field.id]}
+                                               </p>
+                                             )}
+                                           </div>
+                                         )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAddStudentForm({});
+                                setCurrentTab("permissions");
+                              }}
+                              className="px-6 py-2.5 rounded-xl border border-slate-200 text-slate-500 font-black text-xs uppercase tracking-wider hover:bg-slate-50 transition-all"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={isSavingStudent}
+                              className="px-6 py-2.5 rounded-xl bg-blue-600 text-white font-black text-xs uppercase tracking-wider hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-200 disabled:opacity-70 flex items-center gap-2"
+                            >
+                              {isSavingStudent ? (
+                                <>
+                                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                  </svg>
+                                  Saving...
+                                </>
+                              ) : (
+                                "Save Student Profile"
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </form>
                 </div>
               )}
             </>
@@ -10626,16 +11200,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
 
                       {/* ⚡ NEW: WiFi IP Whitelist Management */}
-                      <div className="bg-white p-6 rounded-2xl border-2 border-amber-100 shadow-sm hover:border-amber-200 transition-all space-y-4">
-                        <div className="flex items-center justify-between">
+                      <div className="bg-white p-4 sm:p-6 rounded-2xl border-2 border-amber-100 shadow-sm hover:border-amber-200 transition-all space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                           <div className="flex items-center gap-3">
-                            <div className="p-2 bg-amber-50 rounded-lg text-amber-600 font-bold">📶</div>
+                            <div className="p-2 bg-amber-50 rounded-lg text-amber-600 font-bold text-sm sm:text-base">📶</div>
                             <div>
-                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Campus WiFi IP Whitelist</h3>
-                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Enable 100% reliable tracking via Network IP</p>
+                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">Campus WiFi IP Whitelist</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Enable 100% reliable tracking via Network IP</p>
                             </div>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto">
                             <button
                               onClick={async () => {
                                 const bssid = await showPrompt("Enter WIFI BSSID (e.g. 64:29:43:bb:78:60):");
@@ -10648,9 +11222,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   handleUpdateSettings({ wifiWhitelist: updated });
                                 }
                               }}
-                              className="px-4 py-2 bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all opacity-100 cursor-pointer"
+                              className="px-2 py-2 sm:px-4 sm:py-2 bg-amber-600 text-white rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all opacity-100 cursor-pointer text-center flex items-center justify-center min-h-[38px] leading-tight"
                             >
-                              + ADD WIFI BSSID
+                              + ADD BSSID
                             </button>
                             <button
                               onClick={async () => {
@@ -10664,7 +11238,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   handleUpdateSettings({ wifiWhitelist: updated });
                                 }
                               }}
-                              className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all opacity-100 cursor-pointer"
+                              className="px-2 py-2 sm:px-4 sm:py-2 bg-indigo-600 text-white rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all opacity-100 cursor-pointer text-center flex items-center justify-center min-h-[38px] leading-tight"
                             >
                               + ADD CAMPUS IP
                             </button>
@@ -10676,8 +11250,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             <p className="text-[10px] text-slate-400 italic text-center py-4 uppercase font-bold">No whitelisted networks configured</p>
                           ) : (
                             wifiWhitelist.map((item, idx) => (
-                              <div key={idx} className="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-100 group transition-all">
-                                <div className="flex-1">
+                              <div key={idx} className="relative p-3 pr-14 sm:pr-20 bg-amber-50 rounded-xl border border-amber-100 group transition-all">
+                                <div className="w-full">
                                   {item.hostelName || item.bssids ? (
                                     <>
                                       <div className="flex items-center gap-2">
@@ -10686,7 +11260,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       </div>
                                       <p className="text-[9px] font-bold text-amber-600 mt-0.5">
                                         {item.bssids?.length || 0} Routers Configured
-                                        {item.description && <span className="text-slate-400 ml-1 italic">({item.description})</span>}
                                       </p>
                                       <div className="mt-2 flex flex-wrap gap-1.5 p-2 bg-white/40 rounded-lg border border-amber-100/50 border-dashed">
                                         {item.bssids?.map((b: string, i: number) => (
@@ -10709,7 +11282,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     </>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-1.5 ml-4">
+                                <div className="absolute top-3 right-3 flex items-center gap-1 sm:gap-1.5">
                                   {(item.hostelName || item.bssids) && (
                                     <button
                                       onClick={async () => {
@@ -10922,6 +11495,149 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         Update Bank Configuration
                       </button>
                     </div>
+
+                    <div className="w-full h-0.5 bg-gray-100 my-6"></div>
+
+                    {/* 🛡️ Safeguards & De-duplication settings */}
+                    <div className="space-y-4">
+                      <div className="bg-emerald-50 border-2 border-emerald-100 p-4 rounded-2xl flex items-start gap-4 mb-4">
+                        <span className="text-xl sm:text-2xl">🛡️</span>
+                        <div>
+                          <h3 className="text-xs sm:text-sm text-emerald-900 font-black uppercase tracking-wide">Registration Safeguards & De-duplication</h3>
+                          <p className="text-[10px] sm:text-xs text-emerald-800 font-medium mt-0.5">
+                            Prevent duplicate registrations by enforcing strict global uniqueness checks.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-emerald-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Enforce Unique ERP ID</h3>
+                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Blocks registration if ERP ID is already used</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={enforceUniqueErpId}
+                              onChange={(e) => handleToggleDeveloperSetting('enforceUniqueErpId', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                          </label>
+                        </div>
+
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-emerald-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Enforce Unique Phone</h3>
+                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Ensures phone numbers are globally unique</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={enforceUniquePhone}
+                              onChange={(e) => handleToggleDeveloperSetting('enforceUniquePhone', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                          </label>
+                        </div>
+
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-emerald-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Enforce Unique Email</h3>
+                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Ensures student emails are globally unique</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={enforceUniqueEmail}
+                              onChange={(e) => handleToggleDeveloperSetting('enforceUniqueEmail', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                          </label>
+                        </div>
+
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-emerald-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Enforce Unique Face Scan</h3>
+                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Prevents duplicate signups using matching faces</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={enforceUniqueFace}
+                              onChange={(e) => handleToggleDeveloperSetting('enforceUniqueFace', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                          </label>
+                        </div>
+
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Allow Wardens to Add Students</h3>
+                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Allows hostel wardens to manually add students from their dashboard</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={allowWardenAddStudent}
+                              onChange={(e) => handleToggleDeveloperSetting('allowWardenAddStudent', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Allow Deans to Add Students</h3>
+                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Allows college deans to manually add students from their dashboard</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={allowDeanAddStudent}
+                              onChange={(e) => handleToggleDeveloperSetting('allowDeanAddStudent', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -10934,7 +11650,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
                       <button
                         onClick={() => handleAudit("duplicates-phone")}
                         disabled={isAuditing}
@@ -10955,6 +11671,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 012-2h2a2 2 0 012 2v1m-4 0h4m-7 6h6m-6 3h6m-6 3h6" /></svg>
                         </div>
                         <span className="text-[7px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest text-slate-900">Duplicate Reg IDs</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleAudit("duplicates-erpid")}
+                        disabled={isAuditing}
+                        className="p-3 sm:p-6 bg-white border-2 border-slate-100 rounded-2xl hover:border-emerald-500 hover:shadow-xl transition-all group flex flex-col items-center text-center gap-2 sm:gap-3"
+                      >
+                        <div className="w-8 h-8 sm:w-12 sm:h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        </div>
+                        <span className="text-[7px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest text-slate-900">Duplicate ERP IDs</span>
                       </button>
 
                       <button
@@ -11648,47 +12375,82 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               {/* LEFT: Template Cards */}
               <div className="lg:w-[42%] p-4 sm:p-6 border-b lg:border-b-0 lg:border-r border-gray-100 overflow-y-auto flex flex-col gap-3">
                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Select a template</p>
-                {formTemplates.map((tpl) => {
-                  const isActive = selectedTemplateId === tpl.id;
-                  return (
+                {(() => {
+                  const templatesToRender = [...formTemplates];
+                  if (excelTemplate) {
+                    templatesToRender.push(excelTemplate);
+                  }
+                  return templatesToRender.map((tpl) => {
+                    const isActive = selectedTemplateId === tpl.id;
+                    return (
+                      <button
+                        key={tpl.id}
+                        onClick={() => setSelectedTemplateId(tpl.id)}
+                        className={`w-full text-left p-4 rounded-2xl border-2 transition-all group ${
+                          isActive
+                            ? "border-purple-500 bg-purple-50 shadow-md shadow-purple-100"
+                            : "border-gray-100 hover:border-purple-200 hover:bg-gray-50"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 transition-all ${
+                            isActive ? "bg-gradient-to-br from-violet-500 to-purple-600 shadow-lg shadow-purple-200" : "bg-gray-100"
+                          }`}>
+                            {tpl.icon}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-black leading-tight mb-1 ${isActive ? "text-purple-700" : "text-gray-800"}`}>{tpl.name}</p>
+                            <p className="text-xs text-gray-400 leading-snug">{tpl.description}</p>
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {Array.from(new Set(tpl.fields.map(f => f.section))).map(sec => (
+                                <span key={sec} className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide ${
+                                  isActive ? "bg-purple-100 text-purple-600" : "bg-gray-100 text-gray-500"
+                                }`}>{sec}</span>
+                              ))}
+                            </div>
+                            <p className={`text-[10px] mt-2 font-bold ${isActive ? "text-purple-500" : "text-gray-400"}`}>
+                              {tpl.fields.length} fields total
+                            </p>
+                          </div>
+                          {isActive && (
+                            <div className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center shrink-0 mt-0.5">
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  });
+                })()}
+
+                {/* 📄 Import from Excel Button Card */}
+                <div className="relative border-2 border-dashed border-purple-300 hover:border-purple-500 rounded-2xl p-4 bg-purple-50/30 hover:bg-purple-50/60 transition-all flex flex-col items-center justify-center text-center gap-2">
+                  <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 font-black text-lg">
+                    📥
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-purple-950 uppercase tracking-wide">Import from Excel</p>
+                    <p className="text-[10px] text-purple-500 font-bold mt-0.5 uppercase tracking-tight">Upload .xlsx sheet with fields schema</p>
+                  </div>
+                  
+                  <div className="flex gap-2 mt-1">
+                    <label className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-purple-700 cursor-pointer transition-all">
+                      Choose File
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls"
+                        className="hidden"
+                        onChange={handleExcelUpload}
+                      />
+                    </label>
                     <button
-                      key={tpl.id}
-                      onClick={() => setSelectedTemplateId(tpl.id)}
-                      className={`w-full text-left p-4 rounded-2xl border-2 transition-all group ${
-                        isActive
-                          ? "border-purple-500 bg-purple-50 shadow-md shadow-purple-100"
-                          : "border-gray-100 hover:border-purple-200 hover:bg-gray-50"
-                      }`}
+                      onClick={downloadExcelSample}
+                      className="px-3 py-1.5 bg-white text-purple-600 border border-purple-200 rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-purple-50 transition-all"
                     >
-                      <div className="flex items-start gap-3">
-                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 transition-all ${
-                          isActive ? "bg-gradient-to-br from-violet-500 to-purple-600 shadow-lg shadow-purple-200" : "bg-gray-100"
-                        }`}>
-                          {tpl.icon}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-black leading-tight mb-1 ${isActive ? "text-purple-700" : "text-gray-800"}`}>{tpl.name}</p>
-                          <p className="text-xs text-gray-400 leading-snug">{tpl.description}</p>
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {Array.from(new Set(tpl.fields.map(f => f.section))).map(sec => (
-                              <span key={sec} className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide ${
-                                isActive ? "bg-purple-100 text-purple-600" : "bg-gray-100 text-gray-500"
-                              }`}>{sec}</span>
-                            ))}
-                          </div>
-                          <p className={`text-[10px] mt-2 font-bold ${isActive ? "text-purple-500" : "text-gray-400"}`}>
-                            {tpl.fields.length} fields total
-                          </p>
-                        </div>
-                        {isActive && (
-                          <div className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center shrink-0 mt-0.5">
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                          </div>
-                        )}
-                      </div>
+                      Download Sample
                     </button>
-                  );
-                })}
+                  </div>
+                </div>
               </div>
 
               {/* RIGHT: Live Mobile Preview */}
@@ -11718,12 +12480,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       {/* App Header */}
                       <div className="bg-gradient-to-r from-violet-600 to-purple-700 px-4 pb-3">
                         <p className="text-white text-[10px] font-black">Student Registration</p>
-                        <p className="text-violet-200 text-[7px]">{formTemplates.find(t => t.id === selectedTemplateId)?.name}</p>
+                        <p className="text-violet-200 text-[7px]">
+                          {selectedTemplateId === "custom-excel-template"
+                            ? excelTemplate?.name
+                            : formTemplates.find(t => t.id === selectedTemplateId)?.name}
+                        </p>
                       </div>
                       {/* Form Fields Scrollable */}
                       <div className="overflow-y-auto px-3 py-2 flex flex-col gap-2" style={{height: '420px'}}>
                         {(() => {
-                          const tpl = formTemplates.find(t => t.id === selectedTemplateId);
+                          const tpl = selectedTemplateId === "custom-excel-template"
+                            ? excelTemplate
+                            : formTemplates.find(t => t.id === selectedTemplateId);
                           if (!tpl) return null;
                           const sections = Array.from(new Set(tpl.fields.map(f => f.section)));
                           return sections.map(sec => (
@@ -11804,7 +12572,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </button>
                 <button
                   onClick={async () => {
-                    const tpl = formTemplates.find(t => t.id === selectedTemplateId);
+                    const tpl = selectedTemplateId === "custom-excel-template"
+                      ? excelTemplate
+                      : formTemplates.find(t => t.id === selectedTemplateId);
                     if (!tpl) return;
                     if (formBuilderFields.length > 0 && !await showConfirm(`This will replace your current ${formBuilderFields.length} fields with the "${tpl.name}" template (${tpl.fields.length} fields). Continue?`)) return;
                     handleUpdateFormBuilder(tpl.fields);

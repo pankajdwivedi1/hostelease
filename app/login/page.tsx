@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
 import { showToast, showPrompt } from "@/lib/toast";
 
 
@@ -277,7 +278,9 @@ function LoginForm() {
       // Preserve tenant context in redirect
       const tenant = searchParams.get('tenant');
       const redirectUrl = new URL(`${window.location.origin}/auth/callback`);
-      // Do not append tenant query param here to avoid Supabase exact match failure on localhost
+      if (Capacitor.isNativePlatform()) {
+        redirectUrl.searchParams.set('native', 'true');
+      }
       
       const { data, error: sbError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
