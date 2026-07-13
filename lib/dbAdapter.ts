@@ -518,6 +518,11 @@ const mapSettingsToCamelCase = (s: any) => {
         enforceUniqueFace: s.enforce_unique_face !== undefined ? s.enforce_unique_face : (s.enforceUniqueFace || false),
         allowWardenAddStudent: s.allow_warden_add_student !== undefined ? s.allow_warden_add_student : (s.allowWardenAddStudent || false),
         allowDeanAddStudent: s.allow_dean_add_student !== undefined ? s.allow_dean_add_student : (s.allowDeanAddStudent || false),
+        allowWardenEditProfile: s.allow_warden_edit_profile !== undefined ? s.allow_warden_edit_profile : (s.allowWardenEditProfile || false),
+        allowDeanEditProfile: s.allow_dean_edit_profile !== undefined ? s.allow_dean_edit_profile : (s.allowDeanEditProfile || false),
+        allowWardenRemoveStudent: s.allow_warden_remove_student !== undefined ? s.allow_warden_remove_student : (s.allowWardenRemoveStudent || false),
+        allowDeanRemoveStudent: s.allow_dean_remove_student !== undefined ? s.allow_dean_remove_student : (s.allowDeanRemoveStudent || false),
+        allowBulkStudentUpdates: s.allow_bulk_student_updates !== undefined ? s.allow_bulk_student_updates : (s.allowBulkStudentUpdates || false),
         createdAt: s.created_at || s.createdAt,
         updatedAt: s.updated_at || s.updatedAt
     };
@@ -557,7 +562,12 @@ const mapSettingsToSnakeCase = (s: any) => {
         enforceUniqueEmail: 'enforce_unique_email',
         enforceUniqueFace: 'enforce_unique_face',
         allowWardenAddStudent: 'allow_warden_add_student',
-        allowDeanAddStudent: 'allow_dean_add_student'
+        allowDeanAddStudent: 'allow_dean_add_student',
+        allowWardenEditProfile: 'allow_warden_edit_profile',
+        allowDeanEditProfile: 'allow_dean_edit_profile',
+        allowWardenRemoveStudent: 'allow_warden_remove_student',
+        allowDeanRemoveStudent: 'allow_dean_remove_student',
+        allowBulkStudentUpdates: 'allow_bulk_student_updates'
     };
 
     Object.keys(s).forEach(key => {
@@ -583,6 +593,9 @@ const mapHostelToCamelCase = (h: any) => {
         wardenUsername: h.warden_username || h.wardenUsername,
         wardenPassword: h.warden_password || h.wardenPassword,
         attendanceMode: h.attendance_mode || h.attendanceMode,
+        allowWardenAddStudent: h.allow_warden_add_student !== undefined ? h.allow_warden_add_student : (h.allowWardenAddStudent || false),
+        allowWardenEditProfile: h.allow_warden_edit_profile !== undefined ? h.allow_warden_edit_profile : (h.allowWardenEditProfile || false),
+        allowWardenRemoveStudent: h.allow_warden_remove_student !== undefined ? h.allow_warden_remove_student : (h.allowWardenRemoveStudent || false),
         createdAt: h.created_at || h.createdAt,
         updatedAt: h.updated_at || h.updatedAt
     };
@@ -644,7 +657,10 @@ const mapHostelToSnakeCase = (h: any) => {
         totalRooms: 'total_rooms',
         wardenUsername: 'warden_username',
         wardenPassword: 'warden_password',
-        attendanceMode: 'attendance_mode'
+        attendanceMode: 'attendance_mode',
+        allowWardenAddStudent: 'allow_warden_add_student',
+        allowWardenEditProfile: 'allow_warden_edit_profile',
+        allowWardenRemoveStudent: 'allow_warden_remove_student'
     };
 
     Object.keys(h).forEach(key => {
@@ -1191,6 +1207,10 @@ export const db = {
                             delete cleanedData.enforce_unique_face;
                             delete cleanedData.allow_warden_add_student;
                             delete cleanedData.allow_dean_add_student;
+                            delete cleanedData.allow_warden_edit_profile;
+                            delete cleanedData.allow_dean_edit_profile;
+                            delete cleanedData.allow_warden_remove_student;
+                            delete cleanedData.allow_dean_remove_student;
                             const { data, error } = await supabase
                                 .from('admin_settings')
                                 .insert([cleanedData])
@@ -1224,6 +1244,10 @@ export const db = {
                         delete cleanedData.enforce_unique_face;
                         delete cleanedData.allow_warden_add_student;
                         delete cleanedData.allow_dean_add_student;
+                        delete cleanedData.allow_warden_edit_profile;
+                        delete cleanedData.allow_dean_edit_profile;
+                        delete cleanedData.allow_warden_remove_student;
+                        delete cleanedData.allow_dean_remove_student;
                         const { data, error } = await supabase
                             .from('admin_settings')
                             .update(cleanedData)
@@ -2164,20 +2188,26 @@ export const db = {
                 const snakeUpdate = mapStudentToSnakeCase(updateData);
                 const { studentUpdate, profileUpdate, securityUpdate } = splitStudentFields(snakeUpdate);
 
-                // Fetch student IDs matching the filter
-                let studentsQuery = supabase
-                    .from('students')
-                    .select('_id')
-                    .eq('tenant_id', tenantId);
+                let studentIds: string[] = [];
 
-                if (filter?.hostelName) {
-                    studentsQuery = studentsQuery.ilike('hostel_name', filter.hostelName);
+                if (filter?.ids && Array.isArray(filter.ids)) {
+                    studentIds = filter.ids;
+                } else {
+                    // Fetch student IDs matching the filter
+                    let studentsQuery = supabase
+                        .from('students')
+                        .select('_id')
+                        .eq('tenant_id', tenantId);
+
+                    if (filter?.hostelName) {
+                        studentsQuery = studentsQuery.ilike('hostel_name', filter.hostelName);
+                    }
+
+                    const { data: studentsData, error: fetchError } = await studentsQuery;
+                    if (fetchError) throw fetchError;
+                    studentIds = (studentsData || []).map((s: any) => s._id);
                 }
 
-                const { data: studentsData, error: fetchError } = await studentsQuery;
-                if (fetchError) throw fetchError;
-
-                const studentIds = (studentsData || []).map((s: any) => s._id);
                 if (studentIds.length === 0) {
                     return { count: 0 };
                 }
@@ -2215,7 +2245,9 @@ export const db = {
                 const prismaData = filterStudentForPrisma(updateData);
                 const whereClause: any = { tenantId };
 
-                if (filter?.hostelName) {
+                if (filter?.ids && Array.isArray(filter.ids)) {
+                    whereClause.id = { in: filter.ids };
+                } else if (filter?.hostelName) {
                     whereClause.hostelName = { contains: filter.hostelName, mode: 'insensitive' };
                 }
 
@@ -2229,7 +2261,9 @@ export const db = {
                 const StudentModel = (await import('@/models/Student')).default;
 
                 let mongoFilter: any = {};
-                if (filter?.hostelName) {
+                if (filter?.ids && Array.isArray(filter.ids)) {
+                    mongoFilter._id = { $in: filter.ids };
+                } else if (filter?.hostelName) {
                     mongoFilter.hostelName = { $regex: new RegExp(`^${filter.hostelName}$`, 'i') };
                 }
 

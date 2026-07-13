@@ -51,6 +51,10 @@ export interface IAdminSettings {
     hostelName: string;
     bssids: string[]; // Array of WiFi router MAC addresses (BSSIDs)
     description?: string;
+    ip?: string;
+    name?: string;
+    syncedByStudent?: string;
+    syncedAt?: string;
   }[];
   // ✅ NEW FIX #13: Hostel prefix mapping for registration ID generation
   hostelPrefixMap?: {
@@ -74,6 +78,11 @@ export interface IAdminSettings {
   };
   allowWardenAddStudent?: boolean;
   allowDeanAddStudent?: boolean;
+  allowWardenEditProfile?: boolean;
+  allowDeanEditProfile?: boolean;
+  allowWardenRemoveStudent?: boolean;
+  allowDeanRemoveStudent?: boolean;
+  allowBulkStudentUpdates?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -235,7 +244,11 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
       type: [{
         hostelName: String,
         bssids: [String],
-        description: String
+        description: String,
+        ip: String,
+        name: String,
+        syncedByStudent: String,
+        syncedAt: String
       }],
       default: [
         {
@@ -297,6 +310,26 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
       default: false
     },
     allowDeanAddStudent: {
+      type: Boolean,
+      default: false
+    },
+    allowWardenEditProfile: {
+      type: Boolean,
+      default: false
+    },
+    allowDeanEditProfile: {
+      type: Boolean,
+      default: false
+    },
+    allowWardenRemoveStudent: {
+      type: Boolean,
+      default: false
+    },
+    allowDeanRemoveStudent: {
+      type: Boolean,
+      default: false
+    },
+    allowBulkStudentUpdates: {
       type: Boolean,
       default: false
     },

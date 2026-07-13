@@ -6,6 +6,9 @@ export interface IHostel extends Document {
     wardenUsername?: string;
     wardenPassword?: string;
     attendanceMode: 'strict' | 'gps-only' | 'biometric'; // New Setting
+    allowWardenAddStudent?: boolean;
+    allowWardenEditProfile?: boolean;
+    allowWardenRemoveStudent?: boolean;
     createdAt?: Date;
     updatedAt?: Date;
 }
@@ -35,6 +38,18 @@ const HostelSchema: Schema = new Schema(
             type: String,
             enum: ['strict', 'gps-only', 'biometric'],
             default: 'strict'
+        },
+        allowWardenAddStudent: {
+            type: Boolean,
+            default: false
+        },
+        allowWardenEditProfile: {
+            type: Boolean,
+            default: false
+        },
+        allowWardenRemoveStudent: {
+            type: Boolean,
+            default: false
         }
     },
     { timestamps: true }

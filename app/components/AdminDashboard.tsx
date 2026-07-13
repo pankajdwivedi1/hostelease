@@ -1055,6 +1055,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [enforceUniqueFace, setEnforceUniqueFace] = useState(false);
   const [allowWardenAddStudent, setAllowWardenAddStudent] = useState(false);
   const [allowDeanAddStudent, setAllowDeanAddStudent] = useState(false);
+  const [allowWardenEditProfile, setAllowWardenEditProfile] = useState(false);
+  const [allowDeanEditProfile, setAllowDeanEditProfile] = useState(false);
+  const [allowWardenRemoveStudent, setAllowWardenRemoveStudent] = useState(false);
+  const [allowDeanRemoveStudent, setAllowDeanRemoveStudent] = useState(false);
+  const [allowBulkStudentUpdates, setAllowBulkStudentUpdates] = useState(false);
+  const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [bulkUpdateForm, setBulkUpdateForm] = useState<Record<string, string>>({});
+  const [bulkUpdateFieldsEnabled, setBulkUpdateFieldsEnabled] = useState<Record<string, boolean>>({});
+  const [bulkStudentsEditList, setBulkStudentsEditList] = useState<any[]>([]);
+  const [bulkFillColumn, setBulkFillColumn] = useState("");
+  const [bulkFillValue, setBulkFillValue] = useState("");
   const [addStudentForm, setAddStudentForm] = useState<Record<string, string>>({});
   const [isSavingStudent, setIsSavingStudent] = useState(false);
   const [isWardenCameraOpen, setIsWardenCameraOpen] = useState(false);
@@ -1162,10 +1174,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [isWarden, setIsWarden] = useState(initialWarden.isWarden);
   const [dashboardTitle, setDashboardTitle] = useState(title);
 
+  const currentWardenHostelConfig = hostelsConfig.find(h => {
+    const nameA = String(h.name || "").toLowerCase().trim();
+    const nameB = String(wardenHostelName || "").toLowerCase().trim();
+    return nameA === nameB;
+  });
+
   const canAddStudent = 
     title === "Super Admin Dashboard" || 
     (title === "Dean Dashboard" && allowDeanAddStudent) || 
-    (isWarden && allowWardenAddStudent);
+    (isWarden && !!currentWardenHostelConfig?.allowWardenAddStudent);
 
   useEffect(() => {
     if (hostels.length > 0 && !activeVisualHostel) {
@@ -1329,6 +1347,70 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       alert("An error occurred during bulk operation.");
     } finally {
       setIsBulkMarking(false);
+    }
+  };
+
+  const handleBulkUpdateStudents = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bulkStudentsEditList || bulkStudentsEditList.length === 0) return;
+
+    if (!await showConfirm(`Are you sure you want to save changes for these ${bulkStudentsEditList.length} students?`)) {
+      return;
+    }
+
+    setIsBulkUpdating(true);
+    try {
+      const payloadStudents = bulkStudentsEditList.map(s => {
+        return {
+          id: s.id || s._id,
+          updates: {
+            name: s.name,
+            phoneNumber: s.phoneNumber,
+            email: s.email,
+            hostelName: s.hostelName,
+            roomNumber: s.roomNumber,
+            floorNumber: s.floorNumber,
+            semester: s.semester,
+            studentStatus: s.studentStatus,
+            branch: s.branch,
+            year: s.year,
+            section: s.section,
+            category: s.category,
+            dob: s.dob,
+            homeState: s.homeState,
+            homePinCode: s.homePinCode || s.permanentAddress || "",
+            fatherName: s.fatherName,
+            fatherNumber: s.fatherNumber,
+            motherName: s.motherName,
+            motherNumber: s.motherNumber,
+            collegeName: s.collegeName,
+            erpId: s.erpId || s.erpInformation || "",
+            joiningDate: s.joiningDate
+          }
+        };
+      });
+
+      const res = await fetch("/api/admin/students/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ students: payloadStudents })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || `Successfully updated ${bulkStudentsEditList.length} students.`);
+        setShowBulkUpdateModal(false);
+        setBulkStudentsEditList([]);
+        setSelectedStudentIds([]); // Clear selection
+        fetchStudents(true); // Refresh students list
+      } else {
+        alert(data.error || "Failed to update students");
+      }
+    } catch (error: any) {
+      console.error("Bulk update API error:", error);
+      alert("An error occurred during bulk student update: " + (error.message || ""));
+    } finally {
+      setIsBulkUpdating(false);
     }
   };
 
@@ -1946,6 +2028,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (settingsData.enforceUniqueFace !== undefined) setEnforceUniqueFace(settingsData.enforceUniqueFace);
         if (settingsData.allowWardenAddStudent !== undefined) setAllowWardenAddStudent(settingsData.allowWardenAddStudent);
         if (settingsData.allowDeanAddStudent !== undefined) setAllowDeanAddStudent(settingsData.allowDeanAddStudent);
+        if (settingsData.allowWardenEditProfile !== undefined) setAllowWardenEditProfile(settingsData.allowWardenEditProfile);
+        if (settingsData.allowDeanEditProfile !== undefined) setAllowDeanEditProfile(settingsData.allowDeanEditProfile);
+        if (settingsData.allowWardenRemoveStudent !== undefined) setAllowWardenRemoveStudent(settingsData.allowWardenRemoveStudent);
+        if (settingsData.allowDeanRemoveStudent !== undefined) setAllowDeanRemoveStudent(settingsData.allowDeanRemoveStudent);
+        if (settingsData.allowBulkStudentUpdates !== undefined) setAllowBulkStudentUpdates(settingsData.allowBulkStudentUpdates);
         if (settingsData.developerPassword) setDeveloperPassword(settingsData.developerPassword);
         if (settingsData.leaveApprovalMethod) setLeaveApprovalMethod(settingsData.leaveApprovalMethod);
         if (settingsData.wifiWhitelist) setWifiWhitelist(settingsData.wifiWhitelist);
@@ -1992,6 +2079,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (key === 'enforceUniqueFace') setEnforceUniqueFace(value);
         if (key === 'allowWardenAddStudent') setAllowWardenAddStudent(value);
         if (key === 'allowDeanAddStudent') setAllowDeanAddStudent(value);
+        if (key === 'allowWardenEditProfile') setAllowWardenEditProfile(value);
+        if (key === 'allowDeanEditProfile') setAllowDeanEditProfile(value);
+        if (key === 'allowWardenRemoveStudent') setAllowWardenRemoveStudent(value);
+        if (key === 'allowDeanRemoveStudent') setAllowDeanRemoveStudent(value);
+        if (key === 'allowBulkStudentUpdates') setAllowBulkStudentUpdates(value);
       } else {
         alert("Failed to update setting: " + (data.error || "Unknown error"));
       }
@@ -5812,6 +5904,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     Payments
                   </button>
                 )}
+                <button
+                  onClick={() => setCurrentTab('wifi_sync')}
+                  className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'wifi_sync' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                >
+                  WiFi Network
+                </button>
                 {!isWarden && (title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
                   <button
                     onClick={() => setCurrentTab('settings')}
@@ -6878,7 +6976,238 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
               )}
 
+              {currentTab === 'wifi_sync' && (
+                <div className="space-y-6 fade-in">
+                  {/* Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-black text-gray-900 tracking-tight">📶 Campus WiFi Network Verification</h2>
+                      <p className="text-xs text-gray-500 mt-1 font-medium">
+                        {isWarden
+                          ? `Sync and verify your hostel's public IP. Once verified, students connected to your WiFi will be automatically verified without GPS.`
+                          : `View and manage whitelisted IPs for all hostels across campus.`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Warden: Detect & Test Current IP */}
+                  {isWarden && (
+                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-2xl p-5">
+                      <div className="flex items-start gap-4 mb-4">
+                        <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center text-white text-xl shrink-0">📡</div>
+                        <div>
+                          <h3 className="font-black text-green-900 text-base">Step 1: Detect Your Hostel IP</h3>
+                          <p className="text-xs text-green-700 font-medium mt-0.5">Make sure you are connected to your <strong>hostel's WiFi</strong>, then click the button below.</p>
+                        </div>
+                      </div>
+
+                      {/* IP Detect + Test + Save buttons */}
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch("/api/check-network");
+                              const data = await res.json();
+                              if (data.success && data.ip) {
+                                const ip = data.ip;
+                                if (ip === "127.0.0.1" || ip === "::1") {
+                                  showToast("⚠️ Detected IP is localhost (127.0.0.1). You are running on your local PC, not on the real campus network. To get your real IP, access this app from the live deployed URL on campus WiFi.", "warning");
+                                  return;
+                                }
+                                const confirmResult = await showConfirm(
+                                  `Your hostel's detected public IP is:\n\n${ip}\n\nThis is your live public IP address. Do you want to verify it is correct, then save it to the server for ${wardenHostelName || "your hostel"}?`
+                                );
+                                if (confirmResult) {
+                                  const hostelEntry = wifiWhitelist.find((w: any) =>
+                                    w.name?.toLowerCase().includes((wardenHostelName || "").toLowerCase())
+                                  );
+                                  const updated = hostelEntry
+                                    ? wifiWhitelist.map((w: any) =>
+                                        w.name?.toLowerCase().includes((wardenHostelName || "").toLowerCase())
+                                          ? { ...w, ip, name: `${wardenHostelName} IP (Warden Synced)` }
+                                          : w
+                                      )
+                                    : [...wifiWhitelist, { name: `${wardenHostelName} IP (Warden Synced)`, ip }];
+                                  setWifiWhitelist(updated);
+                                  await handleUpdateSettings({ wifiWhitelist: updated });
+                                  showToast(`✅ IP ${ip} saved successfully for ${wardenHostelName}!`, "success");
+                                }
+                              } else {
+                                showToast("Could not detect IP. Please check your internet connection.", "error");
+                              }
+                            } catch (e: any) {
+                              showToast("Error detecting IP: " + e.message, "error");
+                            }
+                          }}
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-green-700 transition-all shadow-lg shadow-green-200 animate-pulse hover:animate-none"
+                        >
+                          ⚡ DETECT & SAVE MY HOSTEL IP
+                        </button>
+
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch("/api/check-network");
+                              const data = await res.json();
+                              if (data.success) {
+                                if (data.ip === "127.0.0.1" || data.ip === "::1") {
+                                  showToast(`⚠️ Test Result: IP is ${data.ip} (LOCALHOST). This only happens when you run the app locally on your PC. On the deployed server with campus WiFi, the real IP will be detected correctly.`, "warning");
+                                } else if (data.isWhitelisted) {
+                                  showToast(`✅ TEST PASSED! Your IP (${data.ip}) is whitelisted. Students on this network will be verified instantly.`, "success");
+                                } else {
+                                  showToast(`❌ TEST FAILED: Your IP (${data.ip}) is NOT whitelisted yet. Click "DETECT & SAVE MY HOSTEL IP" to add it.`, "error");
+                                }
+                              }
+                            } catch (e: any) {
+                              showToast("Test failed: " + e.message, "error");
+                            }
+                          }}
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+                        >
+                          🔍 TEST CURRENT NETWORK
+                        </button>
+                      </div>
+
+                      {/* Info Banner */}
+                      <div className="mt-4 bg-white/60 border border-green-200 rounded-xl p-3">
+                        <p className="text-[11px] text-green-800 font-bold leading-relaxed">
+                          ⓘ <strong>Why 127.0.0.1 appears?</strong> When the app runs on a local computer (not deployed), all requests look like they come from the same machine. To get the <strong>real campus IP</strong>, you must access this dashboard from the <strong>live deployed URL</strong> while connected to campus WiFi.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Super Admin & Dean: All Hostels Network Status */}
+                  {!isWarden && (
+                    <div className="space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                        <div>
+                          <h3 className="font-black text-gray-800 text-xs sm:text-sm uppercase tracking-widest">All Hostel IP Whitelist Status</h3>
+                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Campus-wide connectivity verification</p>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch("/api/check-network");
+                              const data = await res.json();
+                              if (data.success && data.ip) {
+                                const ip = data.ip;
+                                const label = await showPrompt("Enter label for this IP (e.g. Campus Admin IP):", `Admin Synced IP`);
+                                if (label) {
+                                  const updated = [...wifiWhitelist, { name: label, ip }];
+                                  setWifiWhitelist(updated);
+                                  await handleUpdateSettings({ wifiWhitelist: updated });
+                                  showToast(`✅ IP ${ip} added: ${label}`, "success");
+                                }
+                              }
+                            } catch (e: any) {
+                              showToast("Error: " + e.message, "error");
+                            }
+                          }}
+                          className="w-full sm:w-auto px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-md shadow-green-100 flex items-center justify-center gap-1.5"
+                        >
+                          ⚡ SYNC MY CURRENT IP
+                        </button>
+                      </div>
+
+                      {/* Hostel IP Cards */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {hostels.length > 0 ? hostels.map((hostel: any) => {
+                          const hostelIpEntry = wifiWhitelist.find((w: any) =>
+                            w.ip && w.name?.toLowerCase().includes(hostel.name?.toLowerCase())
+                          );
+                          const hostelBssidEntry = wifiWhitelist.find((w: any) =>
+                            (w.hostelName?.toLowerCase() === hostel.name?.toLowerCase() || w.name?.toLowerCase().includes(hostel.name?.toLowerCase())) && w.bssids?.length > 0
+                          );
+                          const hasIp = !!hostelIpEntry;
+                          const hasBssid = !!hostelBssidEntry;
+                          
+                          let badgeText = "⚠️ NOT SET";
+                          let badgeStyle = "bg-orange-100 text-orange-800 border-orange-200";
+                          let cardStyle = "border-orange-200 bg-orange-50/60";
+
+                          if (hasIp && hasBssid) {
+                            badgeText = "✅ IP & BSSID SET";
+                            badgeStyle = "bg-green-100 text-green-800 border-green-200";
+                            cardStyle = "border-green-200 bg-green-50/60";
+                          } else if (hasIp) {
+                            badgeText = "✅ IP SET";
+                            badgeStyle = "bg-green-100 text-green-800 border-green-200";
+                            cardStyle = "border-green-200 bg-green-50/60";
+                          } else if (hasBssid) {
+                            badgeText = "📡 BSSID ONLY";
+                            badgeStyle = "bg-amber-100 text-amber-800 border-amber-200";
+                            cardStyle = "border-amber-200 bg-amber-50/60";
+                          }
+
+                          return (
+                            <div key={hostel._id} className={`p-4 rounded-2xl border-2 transition-all ${cardStyle}`}>
+                              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-lg">🏢</span>
+                                  <div>
+                                    <p className="font-black text-gray-900 text-sm uppercase tracking-tight">{hostel.name}</p>
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                      {hostel.attendanceMode === 'gps-only' ? '📍 GPS ONLY' : hostel.attendanceMode === 'biometric' ? '👆 BIOMETRIC' : '📸 CAMERA'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border ${badgeStyle}`}>
+                                  {badgeText}
+                                </span>
+                              </div>
+
+                              {hostelIpEntry && (
+                                <div className="bg-white rounded-xl p-2.5 border border-green-200 mb-2 shadow-sm">
+                                  <p className="text-[9px] font-black text-green-600 uppercase tracking-widest mb-1">🌐 Whitelisted IP</p>
+                                  <p className="text-[12px] font-mono font-bold text-gray-800">IP: {hostelIpEntry.ip}</p>
+                                  <p className="text-[9px] text-gray-500 mt-0.5">{hostelIpEntry.name}</p>
+                                </div>
+                              )}
+                              {hostelBssidEntry && (
+                                <div className="bg-white rounded-xl p-2.5 border border-amber-200 shadow-sm flex items-center justify-between gap-2">
+                                  <div>
+                                    <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">📡 BSSID Config</p>
+                                    <p className="text-[10px] font-bold text-gray-700">{hostelBssidEntry.bssids?.length || 0} routers configured</p>
+                                  </div>
+                                  
+                                  {/* Dynamic student name synced by self-healing (marked by blue pen) */}
+                                  {hostelIpEntry?.syncedByStudent && !hostelIpEntry.name?.toLowerCase().includes("warden") && (
+                                    <div className="hidden xs:flex flex-1 bg-blue-50/70 border border-blue-200 rounded-xl p-1.5 px-2 flex-col justify-center max-w-[150px] mx-auto text-center">
+                                      <span className="text-[7.5px] font-black text-blue-500 uppercase tracking-wider block">First Auto-Sync By</span>
+                                      <span className="text-[10px] font-bold text-blue-800 truncate" title={hostelIpEntry.syncedByStudent}>
+                                        👤 {hostelIpEntry.syncedByStudent}
+                                      </span>
+                                      {hostelIpEntry.syncedAt && (
+                                        <span className="text-[7.5px] font-medium text-blue-400 block mt-0.5">{hostelIpEntry.syncedAt}</span>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  <div className="text-right shrink-0 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1">
+                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider block">Network IP</span>
+                                    <span className="text-[11px] font-mono font-bold text-slate-700">
+                                      IP: {hostelIpEntry?.ip || "None"}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                              {!hasIp && (
+                                <p className="text-[10px] text-orange-700 font-bold mt-2">⚠️ Warden has not synced their network IP yet. Ask the warden to open the WiFi Network tab and click "DETECT & SAVE MY HOSTEL IP".</p>
+                              )}
+                            </div>
+                          );
+                        }) : (
+                          <p className="text-sm text-gray-400 text-center py-8 col-span-2">No hostels configured yet.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {currentTab === 'messaging' && (
+
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div>
@@ -8381,6 +8710,46 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 Unmark Selected ({toUnmark.length})
                               </button>
                             )}
+
+                            {allowBulkStudentUpdates && selectedStudentIds.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const selectedData = students
+                                    .filter(s => selectedStudentIds.includes(s.id))
+                                    .map(s => ({
+                                      ...s,
+                                      name: s.name || "",
+                                      phoneNumber: s.phoneNumber || "",
+                                      email: s.email || "",
+                                      hostelName: s.hostelName || "",
+                                      roomNumber: s.roomNumber || "",
+                                      floorNumber: s.floorNumber || "",
+                                      semester: s.semester || "",
+                                      studentStatus: s.studentStatus || "in",
+                                      branch: s.branch || "",
+                                      year: s.year || "",
+                                      section: s.section || "",
+                                      category: s.category || "",
+                                      dob: s.dob ? new Date(s.dob).toISOString().split('T')[0] : "",
+                                      homeState: s.homeState || "",
+                                      homePinCode: s.homePinCode || s.permanentAddress || "",
+                                      fatherName: s.fatherName || "",
+                                      fatherNumber: s.fatherNumber || "",
+                                      motherName: s.motherName || "",
+                                      motherNumber: s.motherNumber || "",
+                                      collegeName: s.collegeName || "",
+                                      erpId: s.erpId || s.erpInformation || "",
+                                      joiningDate: s.joiningDate ? new Date(s.joiningDate).toISOString().split('T')[0] : ""
+                                    }));
+                                  setBulkStudentsEditList(selectedData);
+                                  setShowBulkUpdateModal(true);
+                                }}
+                                className="px-4 py-1.5 bg-violet-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-violet-700 transition-all shadow-sm shadow-violet-200"
+                              >
+                                ✏️ Bulk Update ({selectedStudentIds.length})
+                              </button>
+                            )}
                           </>
                         );
                       })()}
@@ -8431,6 +8800,46 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           className="px-4 py-1.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-all shadow-sm shadow-green-200 disabled:opacity-50"
                         >
                           Mark Selected as IN ({selectedStudentIds.length})
+                        </button>
+                      )}
+
+                      {allowBulkStudentUpdates && selectedStudentIds.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const selectedData = students
+                              .filter(s => selectedStudentIds.includes(s.id))
+                              .map(s => ({
+                                ...s,
+                                name: s.name || "",
+                                phoneNumber: s.phoneNumber || "",
+                                email: s.email || "",
+                                hostelName: s.hostelName || "",
+                                roomNumber: s.roomNumber || "",
+                                floorNumber: s.floorNumber || "",
+                                semester: s.semester || "",
+                                studentStatus: s.studentStatus || "in",
+                                branch: s.branch || "",
+                                year: s.year || "",
+                                section: s.section || "",
+                                category: s.category || "",
+                                dob: s.dob ? new Date(s.dob).toISOString().split('T')[0] : "",
+                                homeState: s.homeState || "",
+                                homePinCode: s.homePinCode || s.permanentAddress || "",
+                                fatherName: s.fatherName || "",
+                                fatherNumber: s.fatherNumber || "",
+                                motherName: s.motherName || "",
+                                motherNumber: s.motherNumber || "",
+                                collegeName: s.collegeName || "",
+                                erpId: s.erpId || s.erpInformation || "",
+                                joiningDate: s.joiningDate ? new Date(s.joiningDate).toISOString().split('T')[0] : ""
+                              }));
+                            setBulkStudentsEditList(selectedData);
+                            setShowBulkUpdateModal(true);
+                          }}
+                          className="px-4 py-1.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-sm shadow-indigo-200"
+                        >
+                          ✏️ Bulk Update Selected ({selectedStudentIds.length})
                         </button>
                       )}
                     </div>
@@ -8711,6 +9120,62 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               />
                             </div>
                           </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Buttons for Warden / Dean based on permissions */}
+                    {(((isWarden && !!currentWardenHostelConfig?.allowWardenEditProfile) || (title === "Dean Dashboard" && allowDeanEditProfile)) || 
+                      ((isWarden && !!currentWardenHostelConfig?.allowWardenRemoveStudent) || (title === "Dean Dashboard" && allowDeanRemoveStudent))) && (
+                      <div className="mt-4 flex gap-3 justify-center w-full max-w-sm mx-auto">
+                        {((isWarden && !!currentWardenHostelConfig?.allowWardenEditProfile) || (title === "Dean Dashboard" && allowDeanEditProfile)) && (
+                          <button
+                            onClick={() => {
+                              // Find gender value from dynamic fields if not present on standard field
+                              const genderField = savedFormBuilderConfig.find(f => {
+                                const label = String(f.label || "").toLowerCase().trim();
+                                return label === 'gender' || label === 'sex';
+                              });
+                              
+                              let initialGender = selectedStudent.gender || "";
+                              if (!initialGender && selectedStudent.dynamicFields) {
+                                if (genderField && selectedStudent.dynamicFields[genderField.id]) {
+                                  initialGender = selectedStudent.dynamicFields[genderField.id];
+                                } else {
+                                  const keys = Object.keys(selectedStudent.dynamicFields);
+                                  const oldGenderKey = keys.find(k => k.startsWith('name_copy_') || k.toLowerCase().includes('gender') || k.toLowerCase().includes('sex'));
+                                  if (oldGenderKey) {
+                                    initialGender = selectedStudent.dynamicFields[oldGenderKey];
+                                  }
+                                }
+                              }
+
+                              setEditStudentForm({ 
+                                ...selectedStudent,
+                                gender: initialGender 
+                              });
+                              setEditErrors({});
+                              setShowEditStudentModal(true);
+                            }}
+                            className="flex-1 py-2.5 rounded-xl border-2 border-blue-600 text-blue-600 font-black uppercase tracking-widest hover:bg-blue-50 text-[10px] active:scale-95 transition-all flex items-center justify-center gap-2"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Edit Profile
+                          </button>
+                        )}
+                        {((isWarden && !!currentWardenHostelConfig?.allowWardenRemoveStudent) || (title === "Dean Dashboard" && allowDeanRemoveStudent)) && (
+                          <button
+                            onClick={() => setShowDeleteConfirm(true)}
+                            disabled={deletingStudentId === selectedStudent.id}
+                            className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-black uppercase tracking-widest hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-[10px] active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-100"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Remove Student
+                          </button>
                         )}
                       </div>
                     )}
@@ -10459,6 +10924,495 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         )
       }
       {
+        showBulkUpdateModal && (() => {
+          const updateableFields = [
+            { id: "name", label: "Student Name", type: "text" },
+            { id: "erpId", label: "ERP ID", type: "text" },
+            { id: "phoneNumber", label: "Phone Number", type: "tel" },
+            { id: "email", label: "Email Address", type: "email" },
+            { id: "hostelName", label: "Hostel Name", type: "select", options: hostelsConfig.map(h => h.name) },
+            { id: "floorNumber", label: "Floor Number", type: "select", options: ["GND FLOOR", "1ST FLOOR", "2ND FLOOR", "3RD FLOOR"] },
+            { id: "roomNumber", label: "Room Number", type: "text" },
+            { id: "semester", label: "Semester", type: "select", options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"] },
+            { id: "year", label: "Year", type: "select", options: ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"] },
+            { id: "branch", label: "Branch", type: "select", options: ["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"] },
+            { id: "section", label: "Section", type: "select", options: ["A", "B", "C", "D", "E", "F"] },
+            { id: "collegeName", label: "College Name", type: "select", options: ["OIST", "OCT", "OCP", "OPM", "OIPR"] },
+            { id: "studentStatus", label: "Student Status", type: "select", options: ["in", "out", "leave"] },
+            { id: "category", label: "Category", type: "select", options: ["GENERAL", "SC", "ST", "OBC"] },
+            { id: "dob", label: "Date of Birth", type: "date" },
+            { id: "fatherName", label: "Father Name", type: "text" },
+            { id: "fatherNumber", label: "Father Phone", type: "tel" },
+            { id: "motherName", label: "Mother Name", type: "text" },
+            { id: "motherNumber", label: "Mother Phone", type: "tel" },
+            { id: "homeState", label: "Home State", type: "select", options: ["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"] },
+            { id: "homePinCode", label: "Pincode/Address", type: "text" },
+            { id: "joiningDate", label: "Joining Date", type: "date" },
+          ];
+
+          const updateStudentField = (id: string, field: string, val: string) => {
+            setBulkStudentsEditList(prev => prev.map(s => {
+              if ((s.id || s._id) === id) {
+                return { ...s, [field]: val };
+              }
+              return s;
+            }));
+          };
+
+          const applyBulkFill = () => {
+            if (!bulkFillColumn || bulkFillValue === undefined) return;
+            setBulkStudentsEditList(prev => prev.map(s => ({
+              ...s,
+              [bulkFillColumn]: bulkFillValue
+            })));
+            setBulkFillValue("");
+          };
+
+          return (
+            <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-2 sm:p-4">
+              <div className="bg-white w-full min-h-[95vh] sm:min-h-[90vh] rounded-2xl sm:rounded-[28px] max-w-[98vw] sm:max-w-[95vw] shadow-2xl flex flex-col my-4">
+
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-5 border-b border-slate-100 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-t-2xl sm:rounded-t-[28px]">
+                  <div>
+                    <h2 className="text-sm sm:text-lg font-black text-white uppercase tracking-tight flex items-center gap-2">
+                      ✏️ Spreadsheet Bulk Student Editor
+                    </h2>
+                    <p className="text-[9px] sm:text-xs text-violet-200 font-semibold mt-0.5">
+                      Editing {bulkStudentsEditList.length} selected students. Edit values directly in any cell below.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowBulkUpdateModal(false)}
+                    className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors text-white"
+                  >
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Bulk Fill Toolbar */}
+                <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100 bg-slate-50/50">
+                  <div className="flex flex-col md:flex-row items-start md:items-center gap-3 p-3 sm:p-4 bg-white border border-slate-200 rounded-xl sm:rounded-2xl shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1.5 bg-violet-100 text-violet-700 rounded-lg text-xs">⚡</span>
+                      <p className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">Auto-Fill Tool:</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto">
+                      <select
+                        value={bulkFillColumn}
+                        onChange={(e) => {
+                          setBulkFillColumn(e.target.value);
+                          setBulkFillValue("");
+                        }}
+                        className="p-1.5 sm:p-2 border border-slate-200 rounded-xl text-[10px] sm:text-xs font-bold focus:border-violet-500 outline-none bg-white min-w-[140px] sm:min-w-[180px] shadow-sm cursor-pointer"
+                      >
+                        <option value="">Select Column to Fill...</option>
+                        {updateableFields.map(f => (
+                          <option key={f.id} value={f.id}>{f.label}</option>
+                        ))}
+                      </select>
+                      
+                      {bulkFillColumn && (() => {
+                        const targetField = updateableFields.find(f => f.id === bulkFillColumn);
+                        if (!targetField) return null;
+                        
+                        return (
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-1 md:flex-initial">
+                            {targetField.type === "select" ? (
+                              <select
+                                value={bulkFillValue}
+                                onChange={(e) => setBulkFillValue(e.target.value)}
+                                className="p-1.5 sm:p-2 border border-slate-200 rounded-xl text-[10px] sm:text-xs font-bold focus:border-violet-500 outline-none bg-white min-w-[140px] sm:min-w-[180px] shadow-sm cursor-pointer"
+                              >
+                                <option value="">Select value...</option>
+                                {(targetField.options || []).map((opt: string) => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                type={targetField.type}
+                                value={bulkFillValue}
+                                onChange={(e) => setBulkFillValue(e.target.value)}
+                                placeholder={`Enter value for all rows`}
+                                className="p-1.5 sm:p-2 border border-slate-200 rounded-xl text-[10px] sm:text-xs font-bold focus:border-violet-500 outline-none bg-white min-w-[140px] sm:min-w-[180px] shadow-sm placeholder-slate-400"
+                              />
+                            )}
+                            <button
+                              type="button"
+                              onClick={applyBulkFill}
+                              className="px-3 py-1.5 sm:px-4 sm:py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all shadow-md shadow-violet-100 whitespace-nowrap active:scale-95"
+                            >
+                              Apply to All Rows
+                            </button>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
+
+                <form onSubmit={handleBulkUpdateStudents} className="flex flex-col flex-1">
+
+                  {/* Spreadsheet Grid Container */}
+                  <div className="flex-1 p-3 sm:p-6">
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white">
+                      <div className="overflow-x-auto overflow-y-auto max-h-[45vh] sm:max-h-[55vh] custom-scrollbar">
+                        <table className="w-full border-collapse text-left table-fixed">
+                          <thead>
+                            <tr className="bg-slate-100 border-b border-slate-200 sticky top-0 z-20">
+                              <th className="w-8 sm:w-12 border-r border-slate-200 text-center text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2 sticky left-0 bg-slate-100 z-30">#</th>
+                              <th className="w-[120px] sm:w-[180px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2 sticky left-8 sm:left-12 bg-slate-100 z-30 shadow-[2px_0_5px_rgba(0,0,0,0.05)]">Student Name</th>
+                              
+                              {/* Headers of other editable columns */}
+                              <th className="w-[90px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">ERP ID</th>
+                              <th className="w-[100px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Phone</th>
+                              <th className="w-[140px] sm:w-[180px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Email</th>
+                              <th className="w-[110px] sm:w-[150px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Hostel Name</th>
+                              <th className="w-[100px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Floor Number</th>
+                              <th className="w-[80px] sm:w-[100px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Room Number</th>
+                              <th className="w-[95px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Semester</th>
+                              <th className="w-[95px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Year</th>
+                              <th className="w-[110px] sm:w-[140px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Branch</th>
+                              <th className="w-[80px] sm:w-[100px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Section</th>
+                              <th className="w-[80px] sm:w-[100px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">College</th>
+                              <th className="w-[80px] sm:w-[100px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Status</th>
+                              <th className="w-[90px] sm:w-[110px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Category</th>
+                              <th className="w-[110px] sm:w-[130px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Date of Birth</th>
+                              <th className="w-[120px] sm:w-[150px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Father Name</th>
+                              <th className="w-[100px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Father Phone</th>
+                              <th className="w-[120px] sm:w-[150px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Mother Name</th>
+                              <th className="w-[100px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Mother Phone</th>
+                              <th className="w-[130px] sm:w-[160px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Home State</th>
+                              <th className="w-[100px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Pincode</th>
+                              <th className="w-[110px] sm:w-[130px] border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Joining Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200">
+                            {bulkStudentsEditList.map((student, i) => {
+                              const sId = student.id || student._id;
+                              return (
+                                <tr key={sId} className="hover:bg-slate-50/50 transition-colors">
+                                  <td className="border-r border-slate-200 text-center text-[10px] sm:text-xs font-bold text-slate-400 p-1 sm:p-2 sticky left-0 bg-white group-hover/card:bg-slate-50 z-10">{i + 1}</td>
+                                  
+                                  {/* Sticky Student Name Input Column */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5 sticky left-8 sm:left-12 bg-white group-hover/card:bg-slate-50 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.05)]">
+                                    <input
+                                      type="text"
+                                      value={student.name || ""}
+                                      onChange={(e) => updateStudentField(sId, "name", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-black focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800 uppercase"
+                                    />
+                                  </td>
+
+                                  {/* ERP ID */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="text"
+                                      value={student.erpId || ""}
+                                      onChange={(e) => updateStudentField(sId, "erpId", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800 uppercase"
+                                    />
+                                  </td>
+
+                                  {/* Phone */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="tel"
+                                      value={student.phoneNumber || ""}
+                                      onChange={(e) => updateStudentField(sId, "phoneNumber", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
+                                  </td>
+
+                                  {/* Email */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="email"
+                                      value={student.email || ""}
+                                      onChange={(e) => updateStudentField(sId, "email", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
+                                  </td>
+
+                                  {/* Hostel Name Select */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.hostelName || ""}
+                                      onChange={(e) => updateStudentField(sId, "hostelName", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Select Hostel</option>
+                                      {hostelsConfig.map(h => (
+                                        <option key={h._id || h.name} value={h.name}>{h.name}</option>
+                                      ))}
+                                    </select>
+                                  </td>
+
+                                  {/* Floor Number Select */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.floorNumber || ""}
+                                      onChange={(e) => updateStudentField(sId, "floorNumber", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Select Floor</option>
+                                      <option value="GND FLOOR">GND FLOOR</option>
+                                      <option value="1ST FLOOR">1ST FLOOR</option>
+                                      <option value="2ND FLOOR">2ND FLOOR</option>
+                                      <option value="3RD FLOOR">3RD FLOOR</option>
+                                    </select>
+                                  </td>
+
+                                  {/* Room Number */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="text"
+                                      value={student.roomNumber || ""}
+                                      onChange={(e) => updateStudentField(sId, "roomNumber", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800 uppercase"
+                                    />
+                                  </td>
+
+                                  {/* Semester Select */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.semester || ""}
+                                      onChange={(e) => updateStudentField(sId, "semester", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Select Semester</option>
+                                      <option value="1ST SEM">1ST SEM</option>
+                                      <option value="2ND SEM">2ND SEM</option>
+                                      <option value="3RD SEM">3RD SEM</option>
+                                      <option value="4TH SEM">4TH SEM</option>
+                                      <option value="5TH SEM">5TH SEM</option>
+                                      <option value="6TH SEM">6TH SEM</option>
+                                      <option value="7TH SEM">7TH SEM</option>
+                                      <option value="8TH SEM">8TH SEM</option>
+                                    </select>
+                                  </td>
+
+                                  {/* Year Select */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.year || ""}
+                                      onChange={(e) => updateStudentField(sId, "year", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Select Year</option>
+                                      <option value="1ST YEAR">1ST YEAR</option>
+                                      <option value="2ND YEAR">2ND YEAR</option>
+                                      <option value="3RD YEAR">3RD YEAR</option>
+                                      <option value="4TH YEAR">4TH YEAR</option>
+                                    </select>
+                                  </td>
+
+                                  {/* Branch Select */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.branch || ""}
+                                      onChange={(e) => updateStudentField(sId, "branch", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Select Branch</option>
+                                      {["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"].map(b => (
+                                        <option key={b} value={b}>{b}</option>
+                                      ))}
+                                    </select>
+                                  </td>
+
+                                  {/* Section Select */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.section || ""}
+                                      onChange={(e) => updateStudentField(sId, "section", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Select Sec</option>
+                                      <option value="A">A</option>
+                                      <option value="B">B</option>
+                                      <option value="C">C</option>
+                                      <option value="D">D</option>
+                                      <option value="E">E</option>
+                                      <option value="F">F</option>
+                                    </select>
+                                  </td>
+
+                                  {/* College Select */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.collegeName || ""}
+                                      onChange={(e) => updateStudentField(sId, "collegeName", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">College</option>
+                                      <option value="OIST">OIST</option>
+                                      <option value="OCT">OCT</option>
+                                      <option value="OCP">OCP</option>
+                                      <option value="OPM">OPM</option>
+                                      <option value="OIPR">OIPR</option>
+                                    </select>
+                                  </td>
+
+                                  {/* Status Select */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.studentStatus || ""}
+                                      onChange={(e) => updateStudentField(sId, "studentStatus", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="in">IN</option>
+                                      <option value="out">OUT</option>
+                                      <option value="leave">LEAVE</option>
+                                    </select>
+                                  </td>
+
+                                  {/* Category Select */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.category || ""}
+                                      onChange={(e) => updateStudentField(sId, "category", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Category</option>
+                                      <option value="GENERAL">GENERAL</option>
+                                      <option value="SC">SC</option>
+                                      <option value="ST">ST</option>
+                                      <option value="OBC">OBC</option>
+                                    </select>
+                                  </td>
+
+                                  {/* DOB Date Input */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="date"
+                                      value={student.dob || ""}
+                                      onChange={(e) => updateStudentField(sId, "dob", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
+                                  </td>
+
+                                  {/* Father Name */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="text"
+                                      value={student.fatherName || ""}
+                                      onChange={(e) => updateStudentField(sId, "fatherName", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800 uppercase"
+                                    />
+                                  </td>
+
+                                  {/* Father Phone */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="tel"
+                                      value={student.fatherNumber || ""}
+                                      onChange={(e) => updateStudentField(sId, "fatherNumber", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
+                                  </td>
+
+                                  {/* Mother Name */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="text"
+                                      value={student.motherName || ""}
+                                      onChange={(e) => updateStudentField(sId, "motherName", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800 uppercase"
+                                    />
+                                  </td>
+
+                                  {/* Mother Phone */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="tel"
+                                      value={student.motherNumber || ""}
+                                      onChange={(e) => updateStudentField(sId, "motherNumber", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
+                                  </td>
+
+                                  {/* Home State Select */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.homeState || ""}
+                                      onChange={(e) => updateStudentField(sId, "homeState", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Home State</option>
+                                      {["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"].map(st => (
+                                        <option key={st} value={st}>{st}</option>
+                                      ))}
+                                    </select>
+                                  </td>
+
+                                  {/* Pincode */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="text"
+                                      value={student.homePinCode || student.permanentAddress || ""}
+                                      onChange={(e) => updateStudentField(sId, "homePinCode", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
+                                  </td>
+
+                                  {/* Joining Date Input */}
+                                  <td className="p-1 sm:p-1.5">
+                                    <input
+                                      type="date"
+                                      value={student.joiningDate || ""}
+                                      onChange={(e) => updateStudentField(sId, "joiningDate", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
+                                  </td>
+
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer Actions */}
+                  <div className="px-4 py-3 sm:px-6 sm:py-5 border-t border-slate-100 flex items-center justify-between gap-3 bg-slate-50/50 rounded-b-2xl sm:rounded-b-[28px] mt-auto">
+                    <p className="text-[9px] sm:text-xs text-slate-500 font-bold max-w-[50%] leading-tight sm:leading-normal">
+                      💡 Click any cell to edit directly. Hit Save Changes when done.
+                    </p>
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowBulkUpdateModal(false)}
+                        className="px-4 py-2 sm:px-5 sm:py-2.5 border-2 border-slate-200 hover:bg-white text-slate-600 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isBulkUpdating}
+                        className="px-4 py-2 sm:px-6 sm:py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-violet-100 flex items-center gap-1.5 sm:gap-2 whitespace-nowrap active:scale-95"
+                      >
+                        {isBulkUpdating ? (
+                          <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin"></span> Saving...</>
+                        ) : (
+                          <>💾 Save Changes ({bulkStudentsEditList.length})</>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                </form>
+              </div>
+            </div>
+          );
+        })()
+      }
+      {
         showSystemSettingsModal && (
           <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-300">
             <div className="bg-white rounded-[24px] sm:rounded-[32px] w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden shadow-2xl flex flex-col transition-all duration-300 scale-100">
@@ -11242,6 +12196,35 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             >
                               + ADD CAMPUS IP
                             </button>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch("/api/check-network");
+                                  const data = await res.json();
+                                  if (data.success && data.ip) {
+                                    const currentIp = data.ip;
+                                    const confirmSync = await showConfirm(`Your detected public IP is: ${currentIp}.\n\nDo you want to whitelist this IP for campus wifi access?`);
+                                    if (confirmSync) {
+                                      const label = await showPrompt("Enter network label:", `Synced IP (${new Date().toLocaleDateString('en-IN')})`);
+                                      if (label) {
+                                        const updated = [...wifiWhitelist, { name: label, ip: currentIp }];
+                                        setWifiWhitelist(updated);
+                                        await handleUpdateSettings({ wifiWhitelist: updated });
+                                        showToast(`IP whitelisted successfully: ${currentIp}`, "success");
+                                      }
+                                    }
+                                  } else {
+                                    showToast("Could not retrieve current IP address.", "error");
+                                  }
+                                } catch (err: any) {
+                                  console.error("IP sync error:", err);
+                                  showToast("IP sync failed: " + err.message, "error");
+                                }
+                              }}
+                              className="px-2 py-2 sm:px-4 sm:py-2 bg-green-600 text-white rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-all opacity-100 cursor-pointer text-center flex items-center justify-center min-h-[38px] leading-tight animate-pulse"
+                            >
+                              ⚡ SYNC CURRENT IP
+                            </button>
                           </div>
                         </div>
 
@@ -11598,27 +12581,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
                           <div className="flex items-center gap-3">
                             <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
-                            </div>
-                            <div>
-                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Allow Wardens to Add Students</h3>
-                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Allows hostel wardens to manually add students from their dashboard</p>
-                            </div>
-                          </div>
-                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={allowWardenAddStudent}
-                              onChange={(e) => handleToggleDeveloperSetting('allowWardenAddStudent', e.target.checked)}
-                              className="sr-only peer"
-                            />
-                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                          </label>
-                        </div>
-
-                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                             </div>
                             <div>
@@ -11631,6 +12593,72 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               type="checkbox"
                               checked={allowDeanAddStudent}
                               onChange={(e) => handleToggleDeveloperSetting('allowDeanAddStudent', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+
+                        {/* Allow Deans to Edit Student Profiles */}
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Allow Deans to Edit Profiles</h3>
+                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Allows college deans to edit student details from their dashboard</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={allowDeanEditProfile}
+                              onChange={(e) => handleToggleDeveloperSetting('allowDeanEditProfile', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+
+                        {/* Allow Deans to Remove Students */}
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Allow Deans to Remove Students</h3>
+                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Allows college deans to permanently delete students from their dashboard</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={allowDeanRemoveStudent}
+                              onChange={(e) => handleToggleDeveloperSetting('allowDeanRemoveStudent', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+
+                        {/* allowBulkStudentUpdates toggle */}
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Allow Bulk Student Updates</h3>
+                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Allows bulk student updates onboarding modal from student selection</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={allowBulkStudentUpdates}
+                              onChange={(e) => handleToggleDeveloperSetting('allowBulkStudentUpdates', e.target.checked)}
                               className="sr-only peer"
                             />
                             <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
@@ -12276,6 +13304,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           handleManageWardenAccount={handleManageWardenAccount}
           handleUpdateHostelMode={handleUpdateHostelMode}
           handleSyncAllStudents={handleSyncAllStudents}
+          wifiWhitelist={wifiWhitelist}
         />
       )}
       {/* Database Export Modal */}

@@ -16,7 +16,8 @@ export default function HostelManagementModal({
   handleDeleteHostelConfig,
   handleManageWardenAccount,
   handleUpdateHostelMode,
-  handleSyncAllStudents
+  handleSyncAllStudents,
+  wifiWhitelist
 }: any) {
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
@@ -178,6 +179,28 @@ export default function HostelManagementModal({
                         >
                           🔄 Force Sync All Students to Current Mode
                         </button>
+
+                        {/* WiFi IP Badge */}
+                        {(() => {
+                          const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                          const ipEntry = wl.find((w: any) =>
+                            w.ip && w.name?.toLowerCase().includes(hostel.name?.toLowerCase())
+                          );
+                          return ipEntry ? (
+                            <div className="mt-3 flex items-center gap-1.5 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1.5">
+                              <span className="text-green-500 text-xs">🌐</span>
+                              <span className="text-[9px] font-black text-green-700 uppercase tracking-widest">WiFi IP:</span>
+                              <span className="text-[10px] font-mono font-bold text-green-900">{ipEntry.ip}</span>
+                              <span className="ml-auto px-1.5 py-0.5 bg-green-200 text-green-800 text-[8px] font-black rounded uppercase tracking-wider">✅ SET</span>
+                            </div>
+                          ) : (
+                            <div className="mt-3 flex items-center gap-1.5 bg-orange-50 border border-orange-200 rounded-lg px-2.5 py-1.5">
+                              <span className="text-orange-400 text-xs">📡</span>
+                              <span className="text-[9px] font-bold text-orange-700">No WiFi IP saved yet — warden must sync from WiFi Network tab</span>
+                              <span className="ml-auto px-1.5 py-0.5 bg-orange-200 text-orange-800 text-[8px] font-black rounded uppercase tracking-wider">⚠️ MISSING</span>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Credentials Configuration */}
@@ -242,6 +265,63 @@ export default function HostelManagementModal({
                               className="font-black text-slate-700 text-sm bg-transparent border-none outline-none focus:ring-0 p-0 w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                           </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Warden Dashboard Privileges */}
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 mt-4">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 block px-1">Warden Dashboard Privileges</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-white p-4 rounded-lg border border-slate-200">
+                        {/* Allow Warden to Add Students */}
+                        <div className="flex items-center justify-between border-b sm:border-b-0 sm:border-r border-slate-100 pb-3 sm:pb-0 sm:pr-4">
+                          <div>
+                            <p className="text-[11px] font-black text-slate-700 uppercase tracking-wider">Add Student</p>
+                            <p className="text-[9px] text-slate-400 font-bold mt-0.5 uppercase">Allow manual register</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!hostel.allowWardenAddStudent}
+                              onChange={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, allowWardenAddStudent: e.target.checked })}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+
+                        {/* Allow Warden to Edit Profiles */}
+                        <div className="flex items-center justify-between border-b sm:border-b-0 sm:border-r border-slate-100 py-3 sm:py-0 sm:px-4">
+                          <div>
+                            <p className="text-[11px] font-black text-slate-700 uppercase tracking-wider">Edit Profile</p>
+                            <p className="text-[9px] text-slate-400 font-bold mt-0.5 uppercase">Allow details updates</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!hostel.allowWardenEditProfile}
+                              onChange={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, allowWardenEditProfile: e.target.checked })}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+
+                        {/* Allow Warden to Remove Students */}
+                        <div className="flex items-center justify-between pt-3 sm:pt-0 sm:pl-4">
+                          <div>
+                            <p className="text-[11px] font-black text-slate-700 uppercase tracking-wider">Remove Student</p>
+                            <p className="text-[9px] text-slate-400 font-bold mt-0.5 uppercase">Allow permanent deletion</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!hostel.allowWardenRemoveStudent}
+                              onChange={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, allowWardenRemoveStudent: e.target.checked })}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
                         </div>
                       </div>
                     </div>

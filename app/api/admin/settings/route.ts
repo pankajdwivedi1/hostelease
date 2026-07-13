@@ -38,7 +38,12 @@ export async function GET(request: NextRequest) {
             enforceUniqueEmail: settings?.enforceUniqueEmail || false,
             enforceUniqueFace: settings?.enforceUniqueFace || false,
             allowWardenAddStudent: settings?.allowWardenAddStudent || false,
-            allowDeanAddStudent: settings?.allowDeanAddStudent || false
+            allowDeanAddStudent: settings?.allowDeanAddStudent || false,
+            allowWardenEditProfile: settings?.allowWardenEditProfile || false,
+            allowDeanEditProfile: settings?.allowDeanEditProfile || false,
+            allowWardenRemoveStudent: settings?.allowWardenRemoveStudent || false,
+            allowDeanRemoveStudent: settings?.allowDeanRemoveStudent || false,
+            allowBulkStudentUpdates: settings?.allowBulkStudentUpdates || false
         });
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);
@@ -129,6 +134,11 @@ export async function POST(request: NextRequest) {
         // Manual registration delegation rules
         if (body.allowWardenAddStudent !== undefined) updateData.allowWardenAddStudent = body.allowWardenAddStudent;
         if (body.allowDeanAddStudent !== undefined) updateData.allowDeanAddStudent = body.allowDeanAddStudent;
+        if (body.allowWardenEditProfile !== undefined) updateData.allowWardenEditProfile = body.allowWardenEditProfile;
+        if (body.allowDeanEditProfile !== undefined) updateData.allowDeanEditProfile = body.allowDeanEditProfile;
+        if (body.allowWardenRemoveStudent !== undefined) updateData.allowWardenRemoveStudent = body.allowWardenRemoveStudent;
+        if (body.allowDeanRemoveStudent !== undefined) updateData.allowDeanRemoveStudent = body.allowDeanRemoveStudent;
+        if (body.allowBulkStudentUpdates !== undefined) updateData.allowBulkStudentUpdates = body.allowBulkStudentUpdates;
 
         const settings = await db.settings.update(updateData);
 

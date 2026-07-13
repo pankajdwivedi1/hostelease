@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { id, name, totalRooms, wardenUsername, wardenPassword, attendanceMode } = body;
+        const { id, name, totalRooms, wardenUsername, wardenPassword, attendanceMode, allowWardenAddStudent, allowWardenEditProfile, allowWardenRemoveStudent } = body;
         const trimmedWardenUsername = typeof wardenUsername === 'string' ? wardenUsername.trim() : wardenUsername;
         const trimmedWardenPassword = typeof wardenPassword === 'string' ? wardenPassword.trim() : wardenPassword;
 
@@ -39,7 +39,10 @@ export async function POST(request: NextRequest) {
                 totalRooms,
                 wardenUsername: trimmedWardenUsername,
                 wardenPassword: trimmedWardenPassword,
-                attendanceMode
+                attendanceMode,
+                allowWardenAddStudent,
+                allowWardenEditProfile,
+                allowWardenRemoveStudent
             });
         } else {
             hostel = await db.hostels.create({
@@ -47,7 +50,10 @@ export async function POST(request: NextRequest) {
                 totalRooms,
                 wardenUsername: trimmedWardenUsername,
                 wardenPassword: trimmedWardenPassword,
-                attendanceMode
+                attendanceMode,
+                allowWardenAddStudent,
+                allowWardenEditProfile,
+                allowWardenRemoveStudent
             });
         }
 

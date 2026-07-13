@@ -327,6 +327,66 @@ export async function POST(request: NextRequest) {
             isLocationVerified = true;
             verifiedBy = 'gps';
             console.log(`✅ GPS Verified: ${student.name} at coordinates (${lat}, ${lng})`);
+
+            // ⚡ STRATEGY 1: SELF-HEALING IP WHITELIST
+            // If GPS lock is highly accurate (<= 15m), we capture the public IP and update the hostel's whitelisted IP in database
+            if (bodyAccuracy !== undefined && bodyAccuracy <= 15) {
+                const forwarded = request.headers.get("x-forwarded-for");
+                const clientIp = forwarded ? forwarded.split(",")[0].trim() : (request as any).ip || "127.0.0.1";
+
+                if (clientIp && clientIp !== "127.0.0.1" && clientIp !== "::1") {
+                    try {
+                        const wifiWhitelist = adminSettings?.wifiWhitelist || [];
+                        const hostelName = student.hostelName || "Campus WiFi";
+
+                        const ipExists = wifiWhitelist.some((wl: any) => 
+                            wl.ip && wl.ip.trim() === clientIp && 
+                            ((wl.hostelName && wl.hostelName.toLowerCase() === hostelName.toLowerCase()) ||
+                             (wl.name && wl.name.toLowerCase().includes(hostelName.toLowerCase())))
+                        );
+
+                        if (!ipExists) {
+                            const updatedWhitelist = [...wifiWhitelist];
+                            const existingHostelIpIdx = updatedWhitelist.findIndex((wl: any) => 
+                                (wl.hostelName && wl.hostelName.toLowerCase() === hostelName.toLowerCase()) ||
+                                (wl.name && wl.name.toLowerCase().includes(hostelName.toLowerCase()))
+                            );
+
+                            const currentTimestamp = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+                            if (existingHostelIpIdx >= 0) {
+                                const isWardenSynced = updatedWhitelist[existingHostelIpIdx].name?.toLowerCase().includes("warden") ||
+                                                       (updatedWhitelist[existingHostelIpIdx].ip && !updatedWhitelist[existingHostelIpIdx].name?.toLowerCase().includes("self-healed"));
+                                if (!isWardenSynced) {
+                                    updatedWhitelist[existingHostelIpIdx] = {
+                                        ...updatedWhitelist[existingHostelIpIdx],
+                                        ip: clientIp,
+                                        name: `Self-Healed ${hostelName} IP`,
+                                        syncedByStudent: student.name || "Unknown Student",
+                                        syncedAt: currentTimestamp
+                                    };
+                                }
+                            } else {
+                                updatedWhitelist.push({
+                                    hostelName: hostelName,
+                                    name: `Self-Healed ${hostelName} IP`,
+                                    ip: clientIp,
+                                    syncedByStudent: student.name || "Unknown Student",
+                                    syncedAt: currentTimestamp,
+                                    bssids: []
+                                });
+                            }
+
+                            await db.settings.update({ wifiWhitelist: updatedWhitelist });
+                            cachedAdminSettings = null;
+                            lastCacheUpdate = 0;
+                            console.log(`🔄 [Self-Healing] Automatically whitelisted IP ${clientIp} for ${hostelName} by student ${student.name}`);
+                        }
+                    } catch (err: any) {
+                        console.error("Error updating self-healing IP whitelist:", err);
+                    }
+                }
+            }
         }
 
         // If neither WiFi nor GPS verified the location
