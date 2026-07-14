@@ -1159,7 +1159,7 @@ export default function OnboardingPage() {
                         onChange={(e) => handleChange(field.id, e.target.value)}
                         placeholder={field.label.toLowerCase().includes("address") ? "🏡 VILLAGE FORMAT: Devendra Singh, Village Rampur, Post Office Kolar, Near Government Primary School, Tehsil Huzur, Bhopal, Madhya Pradesh, PIN: 462042\n\n🏙️ CITY FORMAT: Rahul Sharma, Flat 402, Alpine Apartments, 12th Main Road, Indiranagar, Bengaluru, Karnataka, PIN: 560038" : `Enter ${field.label.toLowerCase()}`}
                         disabled={isProfileLocked}
-                        className={`w-full p-4 rounded-xl border-2 transition-all font-medium text-[11px] min-h-[100px] ${errors[field.id] ? "border-red-500 bg-red-50" : "border-gray-100 bg-gray-50/50 focus:border-blue-500 focus:bg-white"} outline-none`}
+                        className={`w-full p-3.5 rounded-xl border-2 transition-all font-medium text-[11px] placeholder:text-[9px] placeholder:font-bold placeholder:leading-normal min-h-[125px] ${errors[field.id] ? "border-red-500 bg-red-50" : "border-gray-100 bg-gray-50/50 focus:border-blue-500 focus:bg-white"} outline-none`}
                       />
                       {field.label.toLowerCase().includes("address") && (() => {
                         const addressVal = (formData as any)[field.id] || "";

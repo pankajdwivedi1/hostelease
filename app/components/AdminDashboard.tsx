@@ -8292,8 +8292,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                onChange={(e) => setAddStudentForm(prev => ({ ...prev, [field.id]: e.target.value }))}
                                                required={field.required}
                                                placeholder={field.label.toLowerCase().includes("address") ? "🏡 VILLAGE FORMAT: Devendra Singh, Village Rampur, Post Office Kolar, Near Government Primary School, Tehsil Huzur, Bhopal, Madhya Pradesh, PIN: 462042\n\n🏙️ CITY FORMAT: Rahul Sharma, Flat 402, Alpine Apartments, 12th Main Road, Indiranagar, Bengaluru, Karnataka, PIN: 560038" : `Enter ${field.label.toLowerCase()}`}
-                                               className="w-full p-4 rounded-xl border-2 border-slate-100 text-[11px] font-medium focus:border-blue-500 focus:outline-none transition-all shadow-sm bg-white"
-                                               rows={4}
+                                               className="w-full p-3.5 rounded-xl border-2 border-slate-100 text-[11px] font-medium placeholder:text-[9px] placeholder:font-bold placeholder:leading-normal focus:border-blue-500 focus:outline-none transition-all shadow-sm bg-white"
+                                               rows={5}
                                              />
                                              {field.label.toLowerCase().includes("address") && (() => {
                                                const addressVal = addStudentForm[field.id] || "";
