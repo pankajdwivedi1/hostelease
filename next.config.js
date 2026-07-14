@@ -33,7 +33,17 @@ const nextConfig = {
     experimental: {
         optimizePackageImports: ['firebase', 'firebase-admin', 'mongoose'],
     },
+    // Prevent webpack from trying to bundle face-api on server (fixes Critical dependency warning)
+    serverExternalPackages: ['@vladmandic/face-api', 'face-api.js', 'canvas'],
     reactStrictMode: true,
+    webpack: (config, { isServer }) => {
+        // Suppress known dynamic require() warning from face-api library
+        config.ignoreWarnings = [
+            { module: /node_modules\/@vladmandic\/face-api/ },
+            { module: /node_modules\/face-api\.js/ },
+        ];
+        return config;
+    },
 };
 
 module.exports = withPWA(nextConfig);
