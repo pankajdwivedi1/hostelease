@@ -7018,16 +7018,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   `Your hostel's detected public IP is:\n\n${ip}\n\nThis is your live public IP address. Do you want to verify it is correct, then save it to the server for ${wardenHostelName || "your hostel"}?`
                                 );
                                 if (confirmResult) {
-                                  const hostelEntry = wifiWhitelist.find((w: any) =>
-                                    w.name?.toLowerCase().includes((wardenHostelName || "").toLowerCase())
+                                  const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                                  const hostelEntry = wl.find((w: any) =>
+                                    w && typeof w === 'object' && w.name && typeof w.name === 'string' && w.name.toLowerCase().includes((wardenHostelName || "").toLowerCase())
                                   );
                                   const updated = hostelEntry
-                                    ? wifiWhitelist.map((w: any) =>
-                                        w.name?.toLowerCase().includes((wardenHostelName || "").toLowerCase())
+                                    ? wl.map((w: any) =>
+                                        w && typeof w === 'object' && w.name && typeof w.name === 'string' && w.name.toLowerCase().includes((wardenHostelName || "").toLowerCase())
                                           ? { ...w, ip, name: `${wardenHostelName} IP (Warden Synced)` }
                                           : w
                                       )
-                                    : [...wifiWhitelist, { name: `${wardenHostelName} IP (Warden Synced)`, ip }];
+                                    : [...wl, { name: `${wardenHostelName} IP (Warden Synced)`, ip }];
                                   setWifiWhitelist(updated);
                                   await handleUpdateSettings({ wifiWhitelist: updated });
                                   showToast(`✅ IP ${ip} saved successfully for ${wardenHostelName}!`, "success");
@@ -7113,11 +7114,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       {/* Hostel IP Cards */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {hostels.length > 0 ? hostels.map((hostel: any) => {
-                          const hostelIpEntry = wifiWhitelist.find((w: any) =>
-                            w.ip && w.name?.toLowerCase().includes(hostel.name?.toLowerCase())
+                          const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                          const hostelIpEntry = wl.find((w: any) =>
+                            w && typeof w === 'object' && w.ip && w.name && typeof w.name === 'string' && w.name.toLowerCase().includes(hostel.name?.toLowerCase())
                           );
-                          const hostelBssidEntry = wifiWhitelist.find((w: any) =>
-                            (w.hostelName?.toLowerCase() === hostel.name?.toLowerCase() || w.name?.toLowerCase().includes(hostel.name?.toLowerCase())) && w.bssids?.length > 0
+                          const hostelBssidEntry = wl.find((w: any) =>
+                            w && typeof w === 'object' && (
+                              (w.hostelName && typeof w.hostelName === 'string' && w.hostelName.toLowerCase() === hostel.name?.toLowerCase()) || 
+                              (w.name && typeof w.name === 'string' && w.name.toLowerCase().includes(hostel.name?.toLowerCase()))
+                            ) && Array.isArray(w.bssids) && w.bssids.length > 0
                           );
                           const hasIp = !!hostelIpEntry;
                           const hasBssid = !!hostelBssidEntry;
@@ -7172,7 +7177,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
                                   
                                   {/* Dynamic student name synced by self-healing (marked by blue pen) */}
-                                  {hostelIpEntry?.syncedByStudent && !hostelIpEntry.name?.toLowerCase().includes("warden") && (
+                                  {hostelIpEntry?.syncedByStudent && typeof hostelIpEntry.name === 'string' && !hostelIpEntry.name.toLowerCase().includes("warden") && (
                                     <div className="hidden xs:flex flex-1 bg-blue-50/70 border border-blue-200 rounded-xl p-1.5 px-2 flex-col justify-center max-w-[150px] mx-auto text-center">
                                       <span className="text-[7.5px] font-black text-blue-500 uppercase tracking-wider block">First Auto-Sync By</span>
                                       <span className="text-[10px] font-bold text-blue-800 truncate" title={hostelIpEntry.syncedByStudent}>

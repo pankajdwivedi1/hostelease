@@ -182,10 +182,10 @@ export default function HostelManagementModal({
 
                         {/* WiFi IP Badge */}
                         {(() => {
-                          const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
-                          const ipEntry = wl.find((w: any) =>
-                            w.ip && w.name?.toLowerCase().includes(hostel.name?.toLowerCase())
-                          );
+                           const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                           const ipEntry = wl.find((w: any) =>
+                             w && typeof w === 'object' && w.ip && w.name && typeof w.name === 'string' && w.name.toLowerCase().includes(hostel.name?.toLowerCase())
+                           );
                           return ipEntry ? (
                             <div className="mt-3 flex items-center gap-1.5 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1.5">
                               <span className="text-green-500 text-xs">🌐</span>
