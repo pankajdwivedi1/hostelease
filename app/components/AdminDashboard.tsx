@@ -7197,9 +7197,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
                                 </div>
                               )}
-                              {!hasIp && (
-                                <p className="text-[10px] text-orange-700 font-bold mt-2">⚠️ Warden has not synced their network IP yet. Ask the warden to open the WiFi Network tab and click "DETECT & SAVE MY HOSTEL IP".</p>
-                              )}
+
                             </div>
                           );
                         }) : (
