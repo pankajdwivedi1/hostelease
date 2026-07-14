@@ -1152,14 +1152,30 @@ export default function OnboardingPage() {
                       )}
                     </select>
                   ) : field.type === "textarea" ? (
-                    <textarea
-                      id={field.id}
-                      value={(formData as any)[field.id] || ""}
-                      onChange={(e) => handleChange(field.id, e.target.value)}
-                      placeholder={`Enter ${field.label.toLowerCase()}`}
-                      disabled={isProfileLocked}
-                      className={`w-full p-4 rounded-xl border-2 transition-all font-bold text-xs uppercase min-h-[80px] ${errors[field.id] ? "border-red-500 bg-red-50 font-medium" : "border-gray-100 bg-gray-50/50 focus:border-blue-500 focus:bg-white"} outline-none`}
-                    />
+                    <div className="w-full space-y-1 text-left">
+                      <textarea
+                        id={field.id}
+                        value={(formData as any)[field.id] || ""}
+                        onChange={(e) => handleChange(field.id, e.target.value)}
+                        placeholder={field.label.toLowerCase().includes("address") ? "e.g. village xyz, post khdure, thana hghjds, mp pin 485001" : `Enter ${field.label.toLowerCase()}`}
+                        disabled={isProfileLocked}
+                        className={`w-full p-4 rounded-xl border-2 transition-all font-bold text-xs uppercase min-h-[80px] ${errors[field.id] ? "border-red-500 bg-red-50 font-medium" : "border-gray-100 bg-gray-50/50 focus:border-blue-500 focus:bg-white"} outline-none`}
+                      />
+                      {field.label.toLowerCase().includes("address") && (() => {
+                        const addressVal = (formData as any)[field.id] || "";
+                        const pinMatch = addressVal.match(/\b\d{6}\b/);
+                        return pinMatch ? (
+                          <p className="text-[10px] text-green-600 font-bold uppercase tracking-wider pl-1 flex items-center gap-1 mt-0.5">
+                            <span>✅ PIN Code Detected:</span>
+                            <span className="font-mono bg-green-50 px-1.5 py-0.5 rounded border border-green-200">{pinMatch[0]}</span>
+                          </p>
+                        ) : (
+                          <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider pl-1 flex items-center gap-1 mt-0.5 animate-pulse">
+                            <span>⚠️ Missing 6-digit PIN Code in address (e.g. 485001)</span>
+                          </p>
+                        );
+                      })()}
+                    </div>
                   ) : (
                     <input
                       type={field.type}

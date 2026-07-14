@@ -288,7 +288,7 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
                 className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
               >
                 <option value="">Choose a hostel...</option>
-                {hostels.map(h => <option key={h._id} value={h.name}>{h.name}</option>)}
+                {hostels.map(h => <option key={h._id} value={h.name.toUpperCase()}>{h.name.toUpperCase()}</option>)}
               </select>
             </div>
 
@@ -337,7 +337,7 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
                   className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-amber-500 outline-none"
                 >
                   <option value="">Choose a hostel...</option>
-                  {hostels.map(h => <option key={h._id} value={h.name}>{h.name}</option>)}
+                  {hostels.map(h => <option key={h._id} value={h.name.toUpperCase()}>{h.name.toUpperCase()}</option>)}
                 </select>
               </div>
             </div>
@@ -384,7 +384,7 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
                   className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
                 >
                   <option value="">Choose a hostel...</option>
-                  {hostels.map(h => <option key={h._id} value={h.name}>{h.name}</option>)}
+                  {hostels.map(h => <option key={h._id} value={h.name.toUpperCase()}>{h.name.toUpperCase()}</option>)}
                 </select>
               </div>
             </div>
@@ -431,7 +431,7 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
                   className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-emerald-500 outline-none"
                 >
                   <option value="">Choose a hostel...</option>
-                  {hostels.map(h => <option key={h._id} value={h.name}>{h.name}</option>)}
+                  {hostels.map(h => <option key={h._id} value={h.name.toUpperCase()}>{h.name.toUpperCase()}</option>)}
                 </select>
               </div>
             </div>
@@ -5974,7 +5974,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       >
                         <option value="all">Hostel</option>
                         {hostels.map((h) => (
-                          <option key={h._id || h.name} value={h.name}>{h.name}</option>
+                          <option key={h._id || h.name} value={h.name.toUpperCase()}>{h.name.toUpperCase()}</option>
                         ))}
                       </select>
 
@@ -7351,8 +7351,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           >
                             <option value="">Choose Hostel...</option>
                             {(isWarden ? authorizedHostels : hostels.map(h => h.name)).map((hName) => (
-                              <option key={hName} value={hName}>
-                                {hName}
+                              <option key={hName} value={hName.toUpperCase()}>
+                                {hName.toUpperCase()}
                               </option>
                             ))}
                           </select>
@@ -7510,7 +7510,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     >
                       <option value="all">All Hostels</option>
                       {hostels.map(h => (
-                        <option key={h._id || h.name} value={h.name}>{h.name}</option>
+                        <option key={h._id || h.name} value={h.name.toUpperCase()}>{h.name.toUpperCase()}</option>
                       ))}
                     </select>
                     <div className="flex gap-2 items-center">
@@ -7814,9 +7814,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         className="h-9 px-3 rounded-lg border border-solid border-[#9CA3AF] bg-white text-foreground text-xs focus:outline-none focus:border-blue-500 font-bold"
                       >
                         {isWarden ? (
-                          authorizedHostels.map(h => <option key={h} value={h}>{h}</option>)
+                          authorizedHostels.map(h => <option key={h} value={h.toUpperCase()}>{h.toUpperCase()}</option>)
                         ) : (
-                          hostels.map(h => <option key={h.name} value={h.name}>{h.name}</option>)
+                          hostels.map(h => <option key={h.name} value={h.name.toUpperCase()}>{h.name.toUpperCase()}</option>)
                         )}
                       </select>
                     </div>
@@ -8158,7 +8158,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       // Ensure registration fields and email are present
                       const registrationFields = [
                         { id: "email", label: "Email Address", type: "email", required: true, section: "Personal" },
-                        { id: "hostelName", label: "Hostel Name", type: "select", options: hostels.map(h => h.name), required: true, section: "Registration" },
+                        { id: "hostelName", label: "Hostel Name", type: "select", options: hostels.map(h => h.name.toUpperCase()), required: true, section: "Registration" },
                         { id: "floorNumber", label: "Floor Number", type: "select", options: ["GND FLOOR", "1ST FLOOR", "2ND FLOOR", "3RD FLOOR"], required: true, section: "Registration" },
                         { id: "roomNumber", label: "Room Number", type: "text", required: true, section: "Registration" },
                       ];
@@ -8280,18 +8280,36 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             className="w-full h-11 px-4 rounded-xl border-2 border-slate-100 text-sm focus:border-blue-500 focus:outline-none transition-all shadow-sm bg-white"
                                           >
                                             <option value="">Select {field.label}...</option>
-                                            {(field.options || []).map((opt: string) => (
-                                              <option key={opt} value={opt}>{opt}</option>
-                                            ))}
+                                            {(field.options || []).map((opt: string) => {
+                                              const val = field.id === "hostelName" ? opt.toUpperCase() : opt;
+                                              return <option key={opt} value={val}>{val}</option>;
+                                            })}
                                           </select>
                                         ) : field.type === "textarea" ? (
-                                          <textarea
-                                            value={addStudentForm[field.id] || ""}
-                                            onChange={(e) => setAddStudentForm(prev => ({ ...prev, [field.id]: e.target.value }))}
-                                            required={field.required}
-                                            className="w-full p-4 rounded-xl border-2 border-slate-100 text-sm focus:border-blue-500 focus:outline-none transition-all shadow-sm"
-                                            rows={3}
-                                          />
+                                           <div className="w-full space-y-1">
+                                             <textarea
+                                               value={addStudentForm[field.id] || ""}
+                                               onChange={(e) => setAddStudentForm(prev => ({ ...prev, [field.id]: e.target.value }))}
+                                               required={field.required}
+                                               placeholder={field.label.toLowerCase().includes("address") ? "e.g. village xyz, post khdure, thana hghjds, mp pin 485001" : `Enter ${field.label.toLowerCase()}`}
+                                               className="w-full p-4 rounded-xl border-2 border-slate-100 text-sm focus:border-blue-500 focus:outline-none transition-all shadow-sm bg-white"
+                                               rows={3}
+                                             />
+                                             {field.label.toLowerCase().includes("address") && (() => {
+                                               const addressVal = addStudentForm[field.id] || "";
+                                               const pinMatch = addressVal.match(/\b\d{6}\b/);
+                                               return pinMatch ? (
+                                                 <p className="text-[10px] text-green-600 font-bold uppercase tracking-wider pl-1 flex items-center gap-1 mt-0.5">
+                                                   <span>✅ PIN Code Detected:</span>
+                                                   <span className="font-mono bg-green-50 px-1.5 py-0.5 rounded border border-green-200">{pinMatch[0]}</span>
+                                                 </p>
+                                               ) : (
+                                                 <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider pl-1 flex items-center gap-1 mt-0.5 animate-pulse">
+                                                   <span>⚠️ Missing 6-digit PIN Code in address (e.g. 485001)</span>
+                                                 </p>
+                                               );
+                                             })()}
+                                           </div>
                                         ) : (
                                            <div className="w-full text-left">
                                              <input
@@ -10935,7 +10953,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             { id: "erpId", label: "ERP ID", type: "text" },
             { id: "phoneNumber", label: "Phone Number", type: "tel" },
             { id: "email", label: "Email Address", type: "email" },
-            { id: "hostelName", label: "Hostel Name", type: "select", options: hostelsConfig.map(h => h.name) },
+            { id: "hostelName", label: "Hostel Name", type: "select", options: hostelsConfig.map(h => h.name.toUpperCase()) },
             { id: "floorNumber", label: "Floor Number", type: "select", options: ["GND FLOOR", "1ST FLOOR", "2ND FLOOR", "3RD FLOOR"] },
             { id: "roomNumber", label: "Room Number", type: "text" },
             { id: "semester", label: "Semester", type: "select", options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"] },
@@ -11152,7 +11170,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     >
                                       <option value="">Select Hostel</option>
                                       {hostelsConfig.map(h => (
-                                        <option key={h._id || h.name} value={h.name}>{h.name}</option>
+                                        <option key={h._id || h.name} value={h.name.toUpperCase()}>{h.name.toUpperCase()}</option>
                                       ))}
                                     </select>
                                   </td>
