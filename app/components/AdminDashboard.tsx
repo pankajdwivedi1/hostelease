@@ -8291,11 +8291,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                value={addStudentForm[field.id] || ""}
                                                onChange={(e) => setAddStudentForm(prev => ({ ...prev, [field.id]: e.target.value }))}
                                                required={field.required}
-                                               placeholder={field.label.toLowerCase().includes("address") ? "e.g. village xyz, post khdure, thana hghjds, mp pin 485001" : `Enter ${field.label.toLowerCase()}`}
+                                               placeholder={field.label.toLowerCase().includes("address") ? "e.g. Enter full address..." : `Enter ${field.label.toLowerCase()}`}
                                                className="w-full p-4 rounded-xl border-2 border-slate-100 text-sm focus:border-blue-500 focus:outline-none transition-all shadow-sm bg-white"
                                                rows={3}
                                              />
-                                             {field.label.toLowerCase().includes("address") && (() => {
+            {field.label.toLowerCase().includes("address") && (() => {
                                                const addressVal = addStudentForm[field.id] || "";
                                                const pinMatch = addressVal.match(/\b\d{6}\b/);
                                                return pinMatch ? (
@@ -8309,7 +8309,40 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                  </p>
                                                );
                                              })()}
-                                           </div>
+                                             {field.label.toLowerCase().includes("address") && (
+                                               <div className="mt-2 p-2.5 bg-slate-50 border border-slate-100 rounded-xl space-y-2 text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                                                 <p className="text-slate-400 text-[8px] font-black">💡 Click template to populate format:</p>
+                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+                                                   <div 
+                                                     type="button"
+                                                     onClick={() => setAddStudentForm(prev => ({ 
+                                                       ...prev, 
+                                                       [field.id]: "Rahul Sharma\nFlat 402, Alpine Apartments\n12th Main Road, Indiranagar\nBengaluru, Karnataka\nPIN: 560038" 
+                                                     }))}
+                                                     className="p-2 bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50/20 transition-all text-left"
+                                                   >
+                                                     <span className="text-blue-600 block text-[7.5px] font-black mb-1">🏙️ City Format</span>
+                                                     <span className="normal-case text-[9.5px] font-bold text-slate-600 whitespace-pre-line leading-relaxed block">
+                                                       Rahul Sharma{"\n"}Flat 402, Alpine Apartments{"\n"}12th Main Road, Indiranagar{"\n"}Bengaluru, Karnataka{"\n"}PIN: 560038
+                                                     </span>
+                                                   </div>
+                                                   <div 
+                                                     type="button"
+                                                     onClick={() => setAddStudentForm(prev => ({ 
+                                                       ...prev, 
+                                                       [field.id]: "Devendra Singh\nVillage Rampur, Post Office Kolar\nNear Government Primary School\nTehsil Huzur, Bhopal\nMadhya Pradesh, PIN: 462042" 
+                                                     }))}
+                                                     className="p-2 bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/20 transition-all text-left"
+                                                    >
+                                                      <span className="text-emerald-600 block text-[7.5px] font-black mb-1">🏡 Village Format</span>
+                                                      <span className="normal-case text-[9.5px] font-bold text-slate-600 whitespace-pre-line leading-relaxed block">
+                                                        Devendra Singh{"\n"}Village Rampur, Post Office Kolar{"\n"}Near Government Primary School{"\n"}Tehsil Huzur, Bhopal{"\n"}Madhya Pradesh, PIN: 462042
+                                                      </span>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
                                         ) : (
                                            <div className="w-full text-left">
                                              <input

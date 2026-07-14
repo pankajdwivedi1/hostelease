@@ -699,52 +699,52 @@ export default function OnboardingPage() {
   const formatUndertakingText = (text: string) => {
     if (!text) return null;
 
-    // Infer S/o or D/o relation
-    let parentRelation = "S/o / D/o";
-    
-    // 1. Check by field label in formBuilderConfig
-    const genderField = formBuilderConfig.find(f => {
-      const label = String(f.label || "").toLowerCase().trim();
-      return label === 'gender' || label === 'sex';
-    });
-    
-    let genderValue = "";
-    if (genderField) {
-      genderValue = String(formData[genderField.id] || "").toLowerCase().trim();
-    } else {
-      // Fallback: Check if there's a literal key like "gender" or "sex" in formData
-      const literalKey = Object.keys(formData).find(k => k.toLowerCase() === 'gender' || k.toLowerCase() === 'sex');
-      if (literalKey) {
-        genderValue = String(formData[literalKey] || "").toLowerCase().trim();
-      }
-    }
-    
-    if (genderValue) {
-      if (genderValue.startsWith('f') || genderValue.includes('girl') || genderValue.includes('woman') || genderValue === 'female') {
-        parentRelation = "D/o";
-      } else if (genderValue.startsWith('m') || genderValue.includes('boy') || genderValue.includes('man') || genderValue === 'male') {
-        parentRelation = "S/o";
-      }
-    } else {
-      // 2. Check hostel name if gender field doesn't exist
-      const hostel = String(formData.hostelName || "").toLowerCase();
-      if (
-        hostel.includes('girls') || 
-        hostel.includes('girl') || 
-        hostel.includes('female') || 
-        hostel.includes('women') || 
-        hostel.includes('ghb') ||
-        hostel.startsWith('gh')
-      ) {
-        parentRelation = "D/o";
-      } else if (
-        hostel.includes('boys') || 
-        hostel.includes('boy') || 
-        hostel.includes('male') ||
-        hostel.startsWith('bh')
-      ) {
-        parentRelation = "S/o";
-      }
+    // Infer S/o or D/o relation
+    let parentRelation = "S/o / D/o";
+    
+    // 1. Check by field label in formBuilderConfig
+    const genderField = formBuilderConfig.find(f => {
+      const label = String(f.label || "").toLowerCase().trim();
+      return label === 'gender' || label === 'sex';
+    });
+    
+    let genderValue = "";
+    if (genderField) {
+      genderValue = String(formData[genderField.id] || "").toLowerCase().trim();
+    } else {
+      // Fallback: Check if there's a literal key like "gender" or "sex" in formData
+      const literalKey = Object.keys(formData).find(k => k.toLowerCase() === 'gender' || k.toLowerCase() === 'sex');
+      if (literalKey) {
+        genderValue = String(formData[literalKey] || "").toLowerCase().trim();
+      }
+    }
+    
+    if (genderValue) {
+      if (genderValue.startsWith('f') || genderValue.includes('girl') || genderValue.includes('woman') || genderValue === 'female') {
+        parentRelation = "D/o";
+      } else if (genderValue.startsWith('m') || genderValue.includes('boy') || genderValue.includes('man') || genderValue === 'male') {
+        parentRelation = "S/o";
+      }
+    } else {
+      // 2. Check hostel name if gender field doesn't exist
+      const hostel = String(formData.hostelName || "").toLowerCase();
+      if (
+        hostel.includes('girls') || 
+        hostel.includes('girl') || 
+        hostel.includes('female') || 
+        hostel.includes('women') || 
+        hostel.includes('ghb') ||
+        hostel.startsWith('gh')
+      ) {
+        parentRelation = "D/o";
+      } else if (
+        hostel.includes('boys') || 
+        hostel.includes('boy') || 
+        hostel.includes('male') ||
+        hostel.startsWith('bh')
+      ) {
+        parentRelation = "S/o";
+      }
     }
 
     const placeholderRegex = /({name}|{parent}|{college}|{email}|{phone})/g;
@@ -1175,6 +1175,31 @@ export default function OnboardingPage() {
                           </p>
                         );
                       })()}
+                      {field.label.toLowerCase().includes("address") && (
+                        <div className="mt-2 p-2.5 bg-slate-50 border border-slate-100 rounded-xl space-y-2 text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                          <p className="text-slate-400 text-[8px] font-black">💡 Click template to populate format:</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+                            <div 
+                              onClick={() => handleChange(field.id, "Rahul Sharma\nFlat 402, Alpine Apartments\n12th Main Road, Indiranagar\nBengaluru, Karnataka\nPIN: 560038")}
+                              className="p-2 bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50/20 transition-all text-left"
+                            >
+                              <span className="text-blue-600 block text-[7.5px] font-black mb-1">🏙️ City Format</span>
+                              <span className="normal-case text-[9.5px] font-bold text-slate-600 whitespace-pre-line leading-relaxed block">
+                                Rahul Sharma{"\n"}Flat 402, Alpine Apartments{"\n"}12th Main Road, Indiranagar{"\n"}Bengaluru, Karnataka{"\n"}PIN: 560038
+                              </span>
+                            </div>
+                            <div 
+                              onClick={() => handleChange(field.id, "Devendra Singh\nVillage Rampur, Post Office Kolar\nNear Government Primary School\nTehsil Huzur, Bhopal\nMadhya Pradesh, PIN: 462042")}
+                              className="p-2 bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/20 transition-all text-left"
+                            >
+                              <span className="text-emerald-600 block text-[7.5px] font-black mb-1">🏡 Village Format</span>
+                              <span className="normal-case text-[9.5px] font-bold text-slate-600 whitespace-pre-line leading-relaxed block">
+                                Devendra Singh{"\n"}Village Rampur, Post Office Kolar{"\n"}Near Government Primary School{"\n"}Tehsil Huzur, Bhopal{"\n"}Madhya Pradesh, PIN: 462042
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <input
