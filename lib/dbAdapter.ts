@@ -62,9 +62,13 @@ const filterSettingsForPrisma = (data: any) => {
         'adminPassword', 'wardenPassword', 'getpassPassword', 'hostelFeeAmount',
         'paymentInstructions', 'isPaymentEnabled', 'overlapRadius',
         'prioritizeAssignedHostel', 'hostelLocations', 'wardenAccounts',
-        'registrationFieldsConfig', 'formBuilderConfig', 'universityBankDetails',
+        'registrationFieldsConfig', 'formBuilderConfig', 'formBuilderVersions', 'universityBankDetails',
         'wifiWhitelist', 'hostelPrefixMap', 'enableManualAttendance', 'tenantId',
-        'developerPassword', 'leaveApprovalMethod', 'notificationSettings'
+        'developerPassword', 'leaveApprovalMethod', 'notificationSettings',
+        // 🛡️ Safeguard & delegation settings
+        'enforceUniqueErpId', 'enforceUniquePhone', 'enforceUniqueEmail', 'enforceUniqueFace',
+        'allowWardenAddStudent', 'allowDeanAddStudent', 'allowWardenEditProfile', 'allowDeanEditProfile',
+        'allowWardenRemoveStudent', 'allowDeanRemoveStudent', 'allowBulkStudentUpdates'
     ];
     const filtered: any = {};
     for (const key of settingsFields) {

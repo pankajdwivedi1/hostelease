@@ -1,7 +1,107 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { showConfirm, showPrompt, showToast } from "@/lib/toast";
+
+interface HostelLogItem {
+  id: string;
+  hostelName: string;
+  actionType: 'ADD' | 'DELETE' | 'UPDATE';
+  studentName: string;
+  erpId: string;
+  operator: string;
+  createdAt: string;
+}
+
+function HostelLogsView({ hostelName }: { hostelName: string }) {
+  const [logs, setLogs] = useState<HostelLogItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    async function loadLogs() {
+      try {
+        setIsLoading(true);
+        const res = await fetch(`/api/hostels/logs?hostelName=${encodeURIComponent(hostelName)}`);
+        const data = await res.json();
+        if (data.success && active) {
+          setLogs(data.logs || []);
+        }
+      } catch (err) {
+        console.error("Failed to load logs for " + hostelName, err);
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    }
+    loadLogs();
+    return () => {
+      active = false;
+    };
+  }, [hostelName]);
+
+  const formatTime = (isoString: string) => {
+    try {
+      const d = new Date(isoString);
+      // Format: 10:15 AM
+      let hours = d.getHours();
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12; // the hour '0' should be '12'
+      const timeStr = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+      
+      // Format: 15/08/2026
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${timeStr} on ${day}/${month}/${year}`;
+    } catch {
+      return "N/A";
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="mt-3 flex items-center justify-center p-3 bg-white rounded-lg border border-slate-100 min-h-[60px]">
+        <span className="text-[9px] text-slate-400 font-bold uppercase animate-pulse">⏳ Loading logs...</span>
+      </div>
+    );
+  }
+
+  if (logs.length === 0) {
+    return (
+      <div className="mt-3 p-3 bg-white rounded-lg border border-slate-100 flex flex-col justify-center items-center min-h-[60px]">
+        <span className="text-[9px] text-slate-400 font-bold uppercase">📭 No recent logs</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 bg-white rounded-lg border border-slate-200/80 overflow-hidden flex flex-col">
+      <div className="bg-slate-100/50 border-b border-slate-200 px-3 py-1.5 flex items-center justify-between">
+        <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider">📋 Hostel Activity Logs</span>
+        <span className="text-[8px] bg-slate-200 text-slate-700 px-1 rounded font-black">{logs.length}</span>
+      </div>
+      <div className="p-2 space-y-2 max-h-[140px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
+        {logs.map((log) => {
+          const emoji = log.actionType === 'ADD' ? '🟢' : log.actionType === 'DELETE' ? '🔴' : '🟡';
+          const actionText = log.actionType === 'ADD' ? 'ADDED' : log.actionType === 'DELETE' ? 'DELETED' : 'UPDATED';
+          return (
+            <div key={log.id} className="text-[9px] font-medium leading-relaxed text-slate-700 flex items-start gap-1.5 border-b border-slate-50 pb-1.5 last:border-0 last:pb-0 text-left">
+              <span className="shrink-0 mt-0.5">{emoji}</span>
+              <div>
+                <span className="font-extrabold text-slate-900">{actionText}: </span>
+                <span>"{log.studentName.toUpperCase()}" </span>
+                {log.erpId && log.erpId !== 'N/A' && <span className="text-[8px] font-black text-slate-500">({log.erpId}) </span>}
+                <span>by <span className="font-bold text-slate-800">{log.operator}</span> at {formatTime(log.createdAt)}.</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function HostelManagementModal({
   hostels,
@@ -25,8 +125,8 @@ export default function HostelManagementModal({
   const [newAccountForm, setNewAccountForm] = useState({ username: "", password: "", hostels: [] as string[] });
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-1 sm:p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
         
         {/* Header */}
         <div className="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50 relative">
@@ -52,7 +152,7 @@ export default function HostelManagementModal({
         </div>
 
         {/* Content */}
-        <div className="p-4 md:p-6 overflow-y-auto flex-1 bg-gray-50/30">
+        <div className="p-2 sm:p-4 md:p-6 overflow-y-auto flex-1 bg-gray-50/30">
           
           <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 mb-6">
             <div className="flex items-start gap-3">
@@ -91,7 +191,7 @@ export default function HostelManagementModal({
               const isLoading = updatingHostelId === matchedHostel._id;
 
               return (
-                <div key={hostel._id} className="bg-white border-2 border-slate-100 p-6 rounded-2xl hover:border-indigo-100 hover:shadow-xl transition-all relative overflow-hidden group">
+                <div key={hostel._id} className="bg-white border-2 border-slate-100 p-3 sm:p-6 rounded-2xl hover:border-indigo-100 hover:shadow-xl transition-all relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50/50 blur-[50px] rounded-full group-hover:bg-indigo-50 transition-all" />
                   
                   <div className="relative z-10">
@@ -130,9 +230,9 @@ export default function HostelManagementModal({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-4">
                       {/* Attendance Mode Configuration */}
-                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 flex flex-col justify-between">
+                      <div className="bg-slate-50 p-2.5 sm:p-4 rounded-xl border border-slate-200/60 flex flex-col justify-between">
                         <div className="flex items-center justify-between mb-3">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Attendance Mode</label>
                           <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${
@@ -201,127 +301,134 @@ export default function HostelManagementModal({
                             </div>
                           );
                         })()}
+                        {/* Hostel Action Logs */}
+                        <HostelLogsView hostelName={matchedHostel.name} />
                       </div>
 
-                      {/* Credentials Configuration */}
-                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 space-y-4">
-                        <div>
-                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block px-1">Warden Username</label>
-                          <div className="flex items-center gap-3 bg-white p-2.5 rounded-lg border border-slate-200">
-                            <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-                            <input
-                              type="text"
-                              defaultValue={hostel.wardenUsername || (hostel.name.toLowerCase().replace(/ /g, "_") + "_warden")}
-                              onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenUsername: e.target.value.trim() })}
-                              className="font-black text-slate-700 text-sm bg-transparent border-none outline-none focus:ring-0 p-0 w-full"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block px-1">Warden Password</label>
-                          <div className="flex items-center gap-3 bg-white p-2.5 rounded-lg border border-slate-200 justify-between">
-                            <div className="flex items-center gap-3 overflow-hidden">
-                              <div className="h-2 w-2 rounded-full bg-indigo-500 shrink-0" />
-                              <span className="font-black text-slate-700 text-sm tracking-widest truncate">
-                                {visiblePasswords.has(hostel._id)
-                                  ? (hostel.wardenPassword || globalWardenPassword || "Not Set")
-                                  : ((hostel.wardenPassword || globalWardenPassword) ? "••••••••" : "Not Set")
-                                }
-                              </span>
+                      {/* Credentials & Privileges Configuration */}
+                      <div className="grid grid-cols-2 gap-2 sm:gap-3.5 bg-slate-50 p-2 sm:p-4 rounded-xl border border-slate-200/60">
+                        {/* Credentials Details (Left Column) */}
+                        <div className="space-y-2 sm:space-y-4">
+                          <div>
+                            <label className="text-[8px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 block px-0.5">Warden Username</label>
+                            <div className="flex items-center gap-1.5 sm:gap-3 bg-white p-1.5 sm:p-2.5 rounded-lg border border-slate-200 shadow-sm">
+                              <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              <input
+                                type="text"
+                                defaultValue={hostel.wardenUsername || (hostel.name.toLowerCase().replace(/ /g, "_") + "_warden")}
+                                onBlur={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, wardenUsername: e.target.value.trim() })}
+                                className="font-bold sm:font-black text-slate-700 text-[10px] sm:text-sm bg-transparent border-none outline-none focus:ring-0 p-0 w-full"
+                              />
                             </div>
-                            <button
-                              onClick={() => {
-                                setVisiblePasswords(prev => {
-                                  const newSet = new Set(prev);
-                                  if (newSet.has(hostel._id)) newSet.delete(hostel._id);
-                                  else newSet.add(hostel._id);
-                                  return newSet;
-                                });
-                              }}
-                              className="p-1 text-slate-400 hover:text-indigo-600 transition-colors"
-                            >
-                              {visiblePasswords.has(hostel._id) ? (
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
-                              ) : (
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                              )}
-                            </button>
                           </div>
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block px-1">Total Rooms (Capacity)</label>
-                          <div className="flex items-center gap-3 bg-white p-2.5 rounded-lg border border-slate-200">
-                            <div className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
-                            <input
-                              type="number"
-                              defaultValue={hostel.totalRooms || 0}
-                              placeholder="0"
-                              onBlur={(e) => {
-                                const newVal = parseInt(e.target.value);
-                                if (!isNaN(newVal)) {
-                                  handleUpdateHostelConfig({ ...hostel, id: hostel._id, totalRooms: newVal });
-                                }
-                              }}
-                              className="font-black text-slate-700 text-sm bg-transparent border-none outline-none focus:ring-0 p-0 w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Warden Dashboard Privileges */}
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 mt-4">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 block px-1">Warden Dashboard Privileges</label>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-white p-4 rounded-lg border border-slate-200">
-                        {/* Allow Warden to Add Students */}
-                        <div className="flex items-center justify-between border-b sm:border-b-0 sm:border-r border-slate-100 pb-3 sm:pb-0 sm:pr-4">
                           <div>
-                            <p className="text-[11px] font-black text-slate-700 uppercase tracking-wider">Add Student</p>
-                            <p className="text-[9px] text-slate-400 font-bold mt-0.5 uppercase">Allow manual register</p>
+                            <label className="text-[8px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 block px-0.5">Warden Password</label>
+                            <div className="flex items-center gap-1.5 sm:gap-3 bg-white p-1.5 sm:p-2.5 rounded-lg border border-slate-200 justify-between shadow-sm">
+                              <div className="flex items-center gap-1.5 sm:gap-3 overflow-hidden">
+                                <div className="h-1.5 w-1.5 rounded-full bg-indigo-500 shrink-0" />
+                                <span className="font-bold sm:font-black text-slate-700 text-[10px] sm:text-sm tracking-wide sm:tracking-widest truncate">
+                                  {visiblePasswords.has(hostel._id)
+                                    ? (hostel.wardenPassword || globalWardenPassword || "Not Set")
+                                    : ((hostel.wardenPassword || globalWardenPassword) ? "••••••••" : "Not Set")
+                                  }
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setVisiblePasswords(prev => {
+                                    const newSet = new Set(prev);
+                                    if (newSet.has(hostel._id)) newSet.delete(hostel._id);
+                                    else newSet.add(hostel._id);
+                                    return newSet;
+                                  });
+                                }}
+                                className="p-0.5 text-slate-400 hover:text-indigo-600 transition-colors shrink-0"
+                              >
+                                {visiblePasswords.has(hostel._id) ? (
+                                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                                ) : (
+                                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                )}
+                              </button>
+                            </div>
                           </div>
-                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={!!hostel.allowWardenAddStudent}
-                              onChange={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, allowWardenAddStudent: e.target.checked })}
-                              className="sr-only peer"
-                            />
-                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                          </label>
+                          <div>
+                            <label className="text-[8px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 block px-0.5">Total Rooms (Capacity)</label>
+                            <div className="flex items-center gap-1.5 sm:gap-3 bg-white p-1.5 sm:p-2.5 rounded-lg border border-slate-200 shadow-sm">
+                              <div className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                              <input
+                                type="number"
+                                defaultValue={hostel.totalRooms || 0}
+                                placeholder="0"
+                                onBlur={(e) => {
+                                  const newVal = parseInt(e.target.value);
+                                  if (!isNaN(newVal)) {
+                                    handleUpdateHostelConfig({ ...hostel, id: hostel._id, totalRooms: newVal });
+                                  }
+                                }}
+                                className="font-bold sm:font-black text-slate-700 text-[10px] sm:text-sm bg-transparent border-none outline-none focus:ring-0 p-0 w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              />
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Allow Warden to Edit Profiles */}
-                        <div className="flex items-center justify-between border-b sm:border-b-0 sm:border-r border-slate-100 py-3 sm:py-0 sm:px-4">
-                          <div>
-                            <p className="text-[11px] font-black text-slate-700 uppercase tracking-wider">Edit Profile</p>
-                            <p className="text-[9px] text-slate-400 font-bold mt-0.5 uppercase">Allow details updates</p>
-                          </div>
-                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={!!hostel.allowWardenEditProfile}
-                              onChange={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, allowWardenEditProfile: e.target.checked })}
-                              className="sr-only peer"
-                            />
-                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                          </label>
-                        </div>
+                        {/* Privileges Switches (Right Column) */}
+                        <div className="flex flex-col border-l border-slate-200/60 pl-2 sm:pl-4 justify-between h-full">
+                          <label className="text-[8px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 sm:mb-2.5 block px-0.5">Warden Privileges</label>
+                          <div className="space-y-2 sm:space-y-2.5 flex-1 flex flex-col justify-center">
+                            
+                            {/* Allow Warden to Add Students */}
+                            <div className="flex items-center justify-between bg-white p-1.5 sm:p-2.5 rounded-lg border border-slate-200 shadow-sm">
+                              <div className="min-w-0 pr-1">
+                                <p className="text-[9px] sm:text-[10px] font-black text-slate-700 uppercase tracking-wider truncate">Add Student</p>
+                                <p className="text-[7px] sm:text-[8px] text-slate-400 font-bold mt-0.5 uppercase truncate">Manual register</p>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                <input
+                                  type="checkbox"
+                                  checked={!!hostel.allowWardenAddStudent}
+                                  onChange={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, allowWardenAddStudent: e.target.checked })}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-7 h-4 sm:w-9 sm:h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 sm:after:h-4 sm:after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                              </label>
+                            </div>
 
-                        {/* Allow Warden to Remove Students */}
-                        <div className="flex items-center justify-between pt-3 sm:pt-0 sm:pl-4">
-                          <div>
-                            <p className="text-[11px] font-black text-slate-700 uppercase tracking-wider">Remove Student</p>
-                            <p className="text-[9px] text-slate-400 font-bold mt-0.5 uppercase">Allow permanent deletion</p>
+                            {/* Allow Warden to Edit Profiles */}
+                            <div className="flex items-center justify-between bg-white p-1.5 sm:p-2.5 rounded-lg border border-slate-200 shadow-sm">
+                              <div className="min-w-0 pr-1">
+                                <p className="text-[9px] sm:text-[10px] font-black text-slate-700 uppercase tracking-wider truncate">Edit Profile</p>
+                                <p className="text-[7px] sm:text-[8px] text-slate-400 font-bold mt-0.5 uppercase truncate">Details updates</p>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                <input
+                                  type="checkbox"
+                                  checked={!!hostel.allowWardenEditProfile}
+                                  onChange={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, allowWardenEditProfile: e.target.checked })}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-7 h-4 sm:w-9 sm:h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 sm:after:h-4 sm:after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                              </label>
+                            </div>
+
+                            {/* Allow Warden to Remove Students */}
+                            <div className="flex items-center justify-between bg-white p-1.5 sm:p-2.5 rounded-lg border border-slate-200 shadow-sm">
+                              <div className="min-w-0 pr-1">
+                                <p className="text-[9px] sm:text-[10px] font-black text-slate-700 uppercase tracking-wider truncate">Remove Student</p>
+                                <p className="text-[7px] sm:text-[8px] text-slate-400 font-bold mt-0.5 uppercase truncate">Permanent deletion</p>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                <input
+                                  type="checkbox"
+                                  checked={!!hostel.allowWardenRemoveStudent}
+                                  onChange={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, allowWardenRemoveStudent: e.target.checked })}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-7 h-4 sm:w-9 sm:h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 sm:after:h-4 sm:after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                              </label>
+                            </div>
+
                           </div>
-                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={!!hostel.allowWardenRemoveStudent}
-                              onChange={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, allowWardenRemoveStudent: e.target.checked })}
-                              className="sr-only peer"
-                            />
-                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                          </label>
                         </div>
                       </div>
                     </div>

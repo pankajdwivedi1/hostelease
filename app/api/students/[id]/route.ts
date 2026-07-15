@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase-admin";
 import { db } from "@/lib/dbAdapter";
-import { writeAdminAuditLog } from "@/lib/auditLog";
+import { writeAdminAuditLog, writeHostelActivityLog } from "@/lib/auditLog";
 
 export async function DELETE(
   request: NextRequest,
@@ -57,6 +57,19 @@ export async function DELETE(
       },
       performedBy: adminEmail,
     }).catch(console.error); // fire-and-forget
+
+    // 📝 LOG ACTIVITY
+    try {
+      await writeHostelActivityLog({
+        hostelName: student.hostelName,
+        actionType: 'DELETE',
+        studentName: student.name || "Unknown Student",
+        erpId: student.erpInformation || "N/A",
+        operator: adminEmail,
+      });
+    } catch (logErr) {
+      console.error("Failed to write hostel activity log for delete:", logErr);
+    }
 
     return NextResponse.json(
       { success: true, message: "Student deleted successfully" },
@@ -231,6 +244,31 @@ export async function PATCH(
         details: { newStatus: body.studentStatus, changedAt: new Date().toISOString() },
         performedBy: adminEmail,
       }).catch(console.error);
+    }
+
+    // Write general edit audit log
+    if (!body.action && body.isProfileLocked === undefined && !body.studentStatus) {
+      writeAdminAuditLog({
+        action: "STUDENT_EDITED",
+        entityType: "student",
+        entityId: studentId,
+        entityName: updatedStudent?.name || "Unknown",
+        details: { editedAt: new Date().toISOString() },
+        performedBy: adminEmail,
+      }).catch(console.error);
+
+      // 📝 LOG ACTIVITY
+      try {
+        await writeHostelActivityLog({
+          hostelName: updatedStudent.hostelName,
+          actionType: 'UPDATE',
+          studentName: updatedStudent.name || "Unknown Student",
+          erpId: updatedStudent.erpInformation || "N/A",
+          operator: adminEmail,
+        });
+      } catch (logErr) {
+        console.error("Failed to write hostel activity log for update:", logErr);
+      }
     }
 
     return response;

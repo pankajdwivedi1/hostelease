@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { validators, validateStudentRegistration } from "@/lib/validation";
 import { getCurrentTenantId, getTenantById } from "@/lib/tenant";
+import { writeHostelActivityLog } from "@/lib/auditLog";
 
 export async function POST(request: NextRequest) {
   try {
@@ -259,6 +260,21 @@ export async function POST(request: NextRequest) {
       }
     } catch (enforceError) {
       console.warn("⚠️ [Field Enforcement] Failed to auto-initialize progress for new onboarding student:", enforceError);
+    }
+
+    // 📝 LOG ACTIVITY
+    try {
+      const operator = request.headers.get("x-admin-email") || "Admin";
+      const actionType = existingStudent ? 'UPDATE' : 'ADD';
+      await writeHostelActivityLog({
+        hostelName: student.hostelName || hostelName,
+        actionType,
+        studentName: student.name || name || "Unknown Student",
+        erpId: student.erpInformation || erpInformation || "N/A",
+        operator,
+      });
+    } catch (logErr) {
+      console.error("Failed to write hostel activity log:", logErr);
     }
 
     return NextResponse.json({ success: true, student }, { status: 200 });

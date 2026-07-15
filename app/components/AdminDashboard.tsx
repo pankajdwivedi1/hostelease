@@ -1367,6 +1367,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             name: s.name,
             phoneNumber: s.phoneNumber,
             email: s.email,
+            gender: s.gender,
             hostelName: s.hostelName,
             roomNumber: s.roomNumber,
             floorNumber: s.floorNumber,
@@ -1378,11 +1379,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             category: s.category,
             dob: s.dob,
             homeState: s.homeState,
-            homePinCode: s.homePinCode || s.permanentAddress || "",
+            permanentAddress: s.permanentAddress || s.homePinCode || "",
+            homePinCode: s.permanentAddress || s.homePinCode || "",
             fatherName: s.fatherName,
             fatherNumber: s.fatherNumber,
             motherName: s.motherName,
             motherNumber: s.motherNumber,
+            localGuardianAddress: s.localGuardianAddress,
+            localGuardianPhoneNumber: s.localGuardianPhoneNumber,
             collegeName: s.collegeName,
             erpId: s.erpId || s.erpInformation || "",
             joiningDate: s.joiningDate
@@ -1411,6 +1415,168 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       alert("An error occurred during bulk student update: " + (error.message || ""));
     } finally {
       setIsBulkUpdating(false);
+    }
+  };
+
+  const exportBulkStudentsToExcel = () => {
+    try {
+      const dataToExport = bulkStudentsEditList.map((s, index) => ({
+        "Database ID": s.id || s._id || "",
+        "Full Name": s.name || "",
+        "Phone Number": s.phoneNumber || "",
+        "Email Address": s.email || "",
+        "GENDER": s.gender || "",
+        "Date of Birth": s.dob || "",
+        "Social Category": s.category || "",
+        "ERP ID": s.erpId || s.erpInformation || "",
+        "College Name": s.collegeName || "",
+        "Branch": s.branch || "",
+        "Current Year": s.year || "",
+        "Semester": s.semester || "",
+        "Section": s.section || "",
+        "Father's Name": s.fatherName || "",
+        "Father's Phone No": s.fatherNumber || "",
+        "Mother's Name": s.motherName || "",
+        "Mother's Phone No": s.motherNumber || "",
+        "Local Guardian Address": s.localGuardianAddress || "",
+        "Local Guardian Phone": s.localGuardianPhoneNumber || "",
+        "Home State": s.homeState || "",
+        "Permanent Address": s.permanentAddress || s.homePinCode || "",
+        "Hostel Name": s.hostelName || "",
+        "Floor Number": s.floorNumber || "",
+        "Room Number": s.roomNumber || "",
+        "Joining Date": s.joiningDate || "",
+        "Student Status": s.studentStatus || ""
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Bulk Edit Students");
+      XLSX.writeFile(wb, `bulk_students_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      showToast("Spreadsheet data exported successfully!", "success");
+    } catch (err: any) {
+      console.error(err);
+      showToast("Failed to export Excel: " + err.message, "error");
+    }
+  };
+
+  const handleBulkStudentsExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const buffer = evt.target?.result as ArrayBuffer;
+          if (!buffer) {
+            showToast("Failed to read file data", "error");
+            return;
+          }
+          const data = new Uint8Array(buffer);
+          const wb = XLSX.read(data, { type: "array" });
+          const wsname = wb.SheetNames[0];
+          const ws = wb.Sheets[wsname];
+          const rows = XLSX.utils.sheet_to_json(ws) as any[];
+
+          if (rows.length === 0) {
+            showToast("Excel file is empty!", "error");
+            return;
+          }
+
+          // Case-insensitive/approximate matching helper for column names
+          const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, "");
+          const findValue = (rowObj: any, matchNames: string[]) => {
+            const normalizedMatchNames = matchNames.map(normalize);
+            for (const key of Object.keys(rowObj)) {
+              if (normalizedMatchNames.includes(normalize(key))) {
+                return rowObj[key];
+              }
+            }
+            return undefined;
+          };
+
+          let importedCount = 0;
+          const updatedList = bulkStudentsEditList.map(s => {
+            const currentId = s.id || s._id;
+            
+            // Find row in Excel where database id or erp id matches
+            const matchingRow = rows.find(row => {
+              const rowDbId = findValue(row, ["Database ID", "id", "DatabaseID"]);
+              const rowErpId = findValue(row, ["ERP ID", "erpId", "ERPInformation", "ERP_ID"]);
+              
+              if (rowDbId && currentId) {
+                return String(rowDbId).trim() === String(currentId).trim();
+              }
+              if (rowErpId && (s.erpId || s.erpInformation)) {
+                return String(rowErpId).trim().toUpperCase() === String(s.erpId || s.erpInformation).trim().toUpperCase();
+              }
+              return false;
+            });
+
+            if (matchingRow) {
+              importedCount++;
+              
+              // Helper to parse dates into YYYY-MM-DD
+              const parseDateValue = (val: any) => {
+                if (!val) return "";
+                if (typeof val === "number") {
+                  // Excel serial date representation
+                  const date = new Date((val - 25569) * 86400 * 1000);
+                  return isNaN(date.getTime()) ? "" : date.toISOString().split('T')[0];
+                }
+                const date = new Date(val);
+                return isNaN(date.getTime()) ? String(val).trim() : date.toISOString().split('T')[0];
+              };
+
+              return {
+                ...s,
+                name: String(findValue(matchingRow, ["Full Name", "Student Name", "name", "FullName"]) || s.name || "").trim().toUpperCase(),
+                phoneNumber: String(findValue(matchingRow, ["Phone Number", "Phone", "phoneNumber", "Mobile"]) || s.phoneNumber || "").trim(),
+                email: String(findValue(matchingRow, ["Email Address", "Email", "email"]) || s.email || "").trim(),
+                gender: String(findValue(matchingRow, ["GENDER", "gender"]) || s.gender || "").trim().toUpperCase(),
+                dob: parseDateValue(findValue(matchingRow, ["Date of Birth", "dob", "dobDate"])),
+                category: String(findValue(matchingRow, ["Social Category", "Category", "category"]) || s.category || "").trim().toUpperCase(),
+                erpId: String(findValue(matchingRow, ["ERP ID", "erpId", "ERP_ID"]) || s.erpId || s.erpInformation || "").trim().toUpperCase(),
+                collegeName: String(findValue(matchingRow, ["College Name", "College", "collegeName"]) || s.collegeName || "").trim().toUpperCase(),
+                branch: String(findValue(matchingRow, ["Branch", "branch"]) || s.branch || "").trim().toUpperCase(),
+                year: String(findValue(matchingRow, ["Current Year", "Year", "year"]) || s.year || "").trim().toUpperCase(),
+                semester: String(findValue(matchingRow, ["Semester", "semester"]) || s.semester || "").trim().toUpperCase(),
+                section: String(findValue(matchingRow, ["Section", "section"]) || s.section || "").trim().toUpperCase(),
+                fatherName: String(findValue(matchingRow, ["Father's Name", "Father Name", "fatherName"]) || s.fatherName || "").trim().toUpperCase(),
+                fatherNumber: String(findValue(matchingRow, ["Father's Phone No", "Father's Phone", "Father Phone", "fatherNumber"]) || s.fatherNumber || "").trim(),
+                motherName: String(findValue(matchingRow, ["Mother's Name", "Mother Name", "motherName"]) || s.motherName || "").trim().toUpperCase(),
+                motherNumber: String(findValue(matchingRow, ["Mother's Phone No", "Mother's Phone", "Mother Phone", "motherNumber"]) || s.motherNumber || "").trim(),
+                localGuardianAddress: String(findValue(matchingRow, ["Local Guardian Address", "localGuardianAddress"]) || s.localGuardianAddress || "").trim(),
+                localGuardianPhoneNumber: String(findValue(matchingRow, ["Local Guardian Phone", "localGuardianPhoneNumber"]) || s.localGuardianPhoneNumber || "").trim(),
+                homeState: String(findValue(matchingRow, ["Home State", "homeState"]) || s.homeState || "").trim().toUpperCase(),
+                permanentAddress: String(findValue(matchingRow, ["Permanent Address", "Pincode/Address", "permanentAddress", "homePinCode"]) || s.permanentAddress || s.homePinCode || "").trim(),
+                homePinCode: String(findValue(matchingRow, ["Permanent Address", "Pincode/Address", "permanentAddress", "homePinCode"]) || s.permanentAddress || s.homePinCode || "").trim(),
+                hostelName: String(findValue(matchingRow, ["Hostel Name", "Hostel", "hostelName"]) || s.hostelName || "").trim().toUpperCase(),
+                floorNumber: String(findValue(matchingRow, ["Floor Number", "Floor", "floorNumber"]) || s.floorNumber || "").trim().toUpperCase(),
+                roomNumber: String(findValue(matchingRow, ["Room Number", "Room", "roomNumber"]) || s.roomNumber || "").trim().toUpperCase(),
+                joiningDate: parseDateValue(findValue(matchingRow, ["Joining Date", "joiningDate"])),
+                studentStatus: String(findValue(matchingRow, ["Student Status", "Status", "studentStatus"]) || s.studentStatus || "").trim().toLowerCase()
+              };
+            }
+            return s;
+          });
+
+          if (importedCount === 0) {
+            showToast("No matching students found in the Excel rows!", "warning");
+            return;
+          }
+
+          setBulkStudentsEditList(updatedList);
+          showToast(`Successfully imported changes for ${importedCount} students! Click 'Save Changes' to commit them.`, "success");
+        } catch (err: any) {
+          showToast("Error parsing Excel file: " + err.message, "error");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      e.target.value = ""; // Clear file input
+    } catch (err: any) {
+      showToast("Error processing file: " + err.message, "error");
     }
   };
 
@@ -8743,6 +8909,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       name: s.name || "",
                                       phoneNumber: s.phoneNumber || "",
                                       email: s.email || "",
+                                      gender: s.gender || "",
                                       hostelName: s.hostelName || "",
                                       roomNumber: s.roomNumber || "",
                                       floorNumber: s.floorNumber || "",
@@ -8754,11 +8921,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       category: s.category || "",
                                       dob: s.dob ? new Date(s.dob).toISOString().split('T')[0] : "",
                                       homeState: s.homeState || "",
-                                      homePinCode: s.homePinCode || s.permanentAddress || "",
+                                      permanentAddress: s.permanentAddress || s.homePinCode || "",
+                                      homePinCode: s.permanentAddress || s.homePinCode || "",
                                       fatherName: s.fatherName || "",
                                       fatherNumber: s.fatherNumber || "",
                                       motherName: s.motherName || "",
                                       motherNumber: s.motherNumber || "",
+                                      localGuardianAddress: s.localGuardianAddress || "",
+                                      localGuardianPhoneNumber: s.localGuardianPhoneNumber || "",
                                       collegeName: s.collegeName || "",
                                       erpId: s.erpId || s.erpInformation || "",
                                       joiningDate: s.joiningDate ? new Date(s.joiningDate).toISOString().split('T')[0] : ""
@@ -8835,6 +9005,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 name: s.name || "",
                                 phoneNumber: s.phoneNumber || "",
                                 email: s.email || "",
+                                gender: s.gender || "",
                                 hostelName: s.hostelName || "",
                                 roomNumber: s.roomNumber || "",
                                 floorNumber: s.floorNumber || "",
@@ -8846,11 +9017,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 category: s.category || "",
                                 dob: s.dob ? new Date(s.dob).toISOString().split('T')[0] : "",
                                 homeState: s.homeState || "",
-                                homePinCode: s.homePinCode || s.permanentAddress || "",
+                                permanentAddress: s.permanentAddress || s.homePinCode || "",
+                                homePinCode: s.permanentAddress || s.homePinCode || "",
                                 fatherName: s.fatherName || "",
                                 fatherNumber: s.fatherNumber || "",
                                 motherName: s.motherName || "",
                                 motherNumber: s.motherNumber || "",
+                                localGuardianAddress: s.localGuardianAddress || "",
+                                localGuardianPhoneNumber: s.localGuardianPhoneNumber || "",
                                 collegeName: s.collegeName || "",
                                 erpId: s.erpId || s.erpInformation || "",
                                 joiningDate: s.joiningDate ? new Date(s.joiningDate).toISOString().split('T')[0] : ""
@@ -10947,28 +11121,31 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       {
         showBulkUpdateModal && (() => {
           const updateableFields = [
-            { id: "name", label: "Student Name", type: "text" },
-            { id: "erpId", label: "ERP ID", type: "text" },
+            { id: "name", label: "Full Name", type: "text" },
             { id: "phoneNumber", label: "Phone Number", type: "tel" },
             { id: "email", label: "Email Address", type: "email" },
+            { id: "gender", label: "GENDER", type: "select", options: ["MALE", "FEMALE", "TRANSGENDER"] },
+            { id: "dob", label: "Date of Birth", type: "date" },
+            { id: "category", label: "Social Category", type: "select", options: ["GENERAL", "SC", "ST", "OBC"] },
+            { id: "erpId", label: "ERP ID", type: "text" },
+            { id: "collegeName", label: "College Name", type: "select", options: ["OIST", "OCT", "OCP", "OPM", "OIPR"] },
+            { id: "branch", label: "Branch", type: "select", options: ["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"] },
+            { id: "year", label: "Current Year", type: "select", options: ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"] },
+            { id: "semester", label: "Semester", type: "select", options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"] },
+            { id: "section", label: "Section", type: "select", options: ["A", "B", "C", "D", "E", "F"] },
+            { id: "fatherName", label: "Father's Name", type: "text" },
+            { id: "fatherNumber", label: "Father's Phone No", type: "tel" },
+            { id: "motherName", label: "Mother's Name", type: "text" },
+            { id: "motherNumber", label: "Mother's Phone No", type: "tel" },
+            { id: "localGuardianAddress", label: "Local Guardian Address", type: "text" },
+            { id: "localGuardianPhoneNumber", label: "Local Guardian Phone", type: "tel" },
+            { id: "homeState", label: "Home State", type: "select", options: ["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"] },
+            { id: "permanentAddress", label: "Permanent Address", type: "text" },
             { id: "hostelName", label: "Hostel Name", type: "select", options: hostelsConfig.map(h => h.name.toUpperCase()) },
             { id: "floorNumber", label: "Floor Number", type: "select", options: ["GND FLOOR", "1ST FLOOR", "2ND FLOOR", "3RD FLOOR"] },
             { id: "roomNumber", label: "Room Number", type: "text" },
-            { id: "semester", label: "Semester", type: "select", options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"] },
-            { id: "year", label: "Year", type: "select", options: ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"] },
-            { id: "branch", label: "Branch", type: "select", options: ["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"] },
-            { id: "section", label: "Section", type: "select", options: ["A", "B", "C", "D", "E", "F"] },
-            { id: "collegeName", label: "College Name", type: "select", options: ["OIST", "OCT", "OCP", "OPM", "OIPR"] },
-            { id: "studentStatus", label: "Student Status", type: "select", options: ["in", "out", "leave"] },
-            { id: "category", label: "Category", type: "select", options: ["GENERAL", "SC", "ST", "OBC"] },
-            { id: "dob", label: "Date of Birth", type: "date" },
-            { id: "fatherName", label: "Father Name", type: "text" },
-            { id: "fatherNumber", label: "Father Phone", type: "tel" },
-            { id: "motherName", label: "Mother Name", type: "text" },
-            { id: "motherNumber", label: "Mother Phone", type: "tel" },
-            { id: "homeState", label: "Home State", type: "select", options: ["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"] },
-            { id: "homePinCode", label: "Pincode/Address", type: "text" },
             { id: "joiningDate", label: "Joining Date", type: "date" },
+            { id: "studentStatus", label: "Student Status", type: "select", options: ["in", "out", "leave"] },
           ];
 
           const updateStudentField = (id: string, field: string, val: string) => {
@@ -11086,30 +11263,33 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <thead>
                             <tr className="bg-slate-100 border-b border-slate-200 sticky top-0 z-20">
                               <th className="w-8 sm:w-12 border-r border-slate-200 text-center text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2 sticky left-0 bg-slate-100 z-30">#</th>
-                              <th className="w-[120px] sm:w-[180px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2 sticky left-8 sm:left-12 bg-slate-100 z-30 shadow-[2px_0_5px_rgba(0,0,0,0.05)]">Student Name</th>
+                              <th className="w-[120px] sm:w-[180px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2 sticky left-8 sm:left-12 bg-slate-100 z-30 shadow-[2px_0_5px_rgba(0,0,0,0.05)]">Full Name</th>
                               
                               {/* Headers of other editable columns */}
+                              <th className="w-[110px] sm:w-[140px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Phone Number</th>
+                              <th className="w-[140px] sm:w-[180px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Email Address</th>
+                              <th className="w-[85px] sm:w-[105px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">GENDER</th>
+                              <th className="w-[110px] sm:w-[130px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Date of Birth</th>
+                              <th className="w-[100px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Social Category</th>
                               <th className="w-[90px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">ERP ID</th>
-                              <th className="w-[100px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Phone</th>
-                              <th className="w-[140px] sm:w-[180px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Email</th>
+                              <th className="w-[100px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">College Name</th>
+                              <th className="w-[110px] sm:w-[140px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Branch</th>
+                              <th className="w-[95px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Current Year</th>
+                              <th className="w-[95px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Semester</th>
+                              <th className="w-[80px] sm:w-[100px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Section</th>
+                              <th className="w-[120px] sm:w-[150px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Father's Name</th>
+                              <th className="w-[110px] sm:w-[130px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Father's Phone No</th>
+                              <th className="w-[120px] sm:w-[150px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Mother's Name</th>
+                              <th className="w-[110px] sm:w-[130px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Mother's Phone No</th>
+                              <th className="w-[150px] sm:w-[190px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Local Guardian Address</th>
+                              <th className="w-[110px] sm:w-[130px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Local Guardian Phone</th>
+                              <th className="w-[130px] sm:w-[160px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Home State</th>
+                              <th className="w-[180px] sm:w-[240px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Permanent Address</th>
                               <th className="w-[110px] sm:w-[150px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Hostel Name</th>
                               <th className="w-[100px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Floor Number</th>
                               <th className="w-[80px] sm:w-[100px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Room Number</th>
-                              <th className="w-[95px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Semester</th>
-                              <th className="w-[95px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Year</th>
-                              <th className="w-[110px] sm:w-[140px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Branch</th>
-                              <th className="w-[80px] sm:w-[100px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Section</th>
-                              <th className="w-[80px] sm:w-[100px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">College</th>
-                              <th className="w-[80px] sm:w-[100px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Status</th>
-                              <th className="w-[90px] sm:w-[110px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Category</th>
-                              <th className="w-[110px] sm:w-[130px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Date of Birth</th>
-                              <th className="w-[120px] sm:w-[150px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Father Name</th>
-                              <th className="w-[100px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Father Phone</th>
-                              <th className="w-[120px] sm:w-[150px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Mother Name</th>
-                              <th className="w-[100px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Mother Phone</th>
-                              <th className="w-[130px] sm:w-[160px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Home State</th>
-                              <th className="w-[100px] sm:w-[120px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Pincode</th>
-                              <th className="w-[110px] sm:w-[130px] border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Joining Date</th>
+                              <th className="w-[110px] sm:w-[130px] border-r border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Joining Date</th>
+                              <th className="w-[80px] sm:w-[100px] border-slate-200 text-[8px] sm:text-[10px] font-black uppercase text-slate-500 tracking-wider p-1.5 sm:p-2">Status</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-200">
@@ -11129,6 +11309,65 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     />
                                   </td>
 
+                                  {/* Phone Number */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="tel"
+                                      value={student.phoneNumber || ""}
+                                      onChange={(e) => updateStudentField(sId, "phoneNumber", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
+                                  </td>
+
+                                  {/* Email Address */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="email"
+                                      value={student.email || ""}
+                                      onChange={(e) => updateStudentField(sId, "email", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
+                                  </td>
+
+                                  {/* GENDER */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.gender || ""}
+                                      onChange={(e) => updateStudentField(sId, "gender", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Select Gender</option>
+                                      <option value="MALE">MALE</option>
+                                      <option value="FEMALE">FEMALE</option>
+                                      <option value="TRANSGENDER">TRANSGENDER</option>
+                                    </select>
+                                  </td>
+
+                                  {/* Date of Birth */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="date"
+                                      value={student.dob || ""}
+                                      onChange={(e) => updateStudentField(sId, "dob", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
+                                  </td>
+
+                                  {/* Social Category */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.category || ""}
+                                      onChange={(e) => updateStudentField(sId, "category", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Category</option>
+                                      <option value="GENERAL">GENERAL</option>
+                                      <option value="SC">SC</option>
+                                      <option value="ST">ST</option>
+                                      <option value="OBC">OBC</option>
+                                    </select>
+                                  </td>
+
                                   {/* ERP ID */}
                                   <td className="border-r border-slate-200 p-1 sm:p-1.5">
                                     <input
@@ -11139,22 +11378,167 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     />
                                   </td>
 
-                                  {/* Phone */}
+                                  {/* College Name */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.collegeName || ""}
+                                      onChange={(e) => updateStudentField(sId, "collegeName", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">College</option>
+                                      <option value="OIST">OIST</option>
+                                      <option value="OCT">OCT</option>
+                                      <option value="OCP">OCP</option>
+                                      <option value="OPM">OPM</option>
+                                      <option value="OIPR">OIPR</option>
+                                    </select>
+                                  </td>
+
+                                  {/* Branch */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.branch || ""}
+                                      onChange={(e) => updateStudentField(sId, "branch", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Select Branch</option>
+                                      {["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"].map(b => (
+                                        <option key={b} value={b}>{b}</option>
+                                      ))}
+                                    </select>
+                                  </td>
+
+                                  {/* Current Year */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.year || ""}
+                                      onChange={(e) => updateStudentField(sId, "year", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Select Year</option>
+                                      <option value="1ST YEAR">1ST YEAR</option>
+                                      <option value="2ND YEAR">2ND YEAR</option>
+                                      <option value="3RD YEAR">3RD YEAR</option>
+                                      <option value="4TH YEAR">4TH YEAR</option>
+                                    </select>
+                                  </td>
+
+                                  {/* Semester */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.semester || ""}
+                                      onChange={(e) => updateStudentField(sId, "semester", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Select Semester</option>
+                                      <option value="1ST SEM">1ST SEM</option>
+                                      <option value="2ND SEM">2ND SEM</option>
+                                      <option value="3RD SEM">3RD SEM</option>
+                                      <option value="4TH SEM">4TH SEM</option>
+                                      <option value="5TH SEM">5TH SEM</option>
+                                      <option value="6TH SEM">6TH SEM</option>
+                                      <option value="7TH SEM">7TH SEM</option>
+                                      <option value="8TH SEM">8TH SEM</option>
+                                    </select>
+                                  </td>
+
+                                  {/* Section */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.section || ""}
+                                      onChange={(e) => updateStudentField(sId, "section", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Select Sec</option>
+                                      <option value="A">A</option>
+                                      <option value="B">B</option>
+                                      <option value="C">C</option>
+                                      <option value="D">D</option>
+                                      <option value="E">E</option>
+                                      <option value="F">F</option>
+                                    </select>
+                                  </td>
+
+                                  {/* Father Name */}
                                   <td className="border-r border-slate-200 p-1 sm:p-1.5">
                                     <input
-                                      type="tel"
-                                      value={student.phoneNumber || ""}
-                                      onChange={(e) => updateStudentField(sId, "phoneNumber", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                      type="text"
+                                      value={student.fatherName || ""}
+                                      onChange={(e) => updateStudentField(sId, "fatherName", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800 uppercase"
                                     />
                                   </td>
 
-                                  {/* Email */}
+                                  {/* Father Phone */}
                                   <td className="border-r border-slate-200 p-1 sm:p-1.5">
                                     <input
-                                      type="email"
-                                      value={student.email || ""}
-                                      onChange={(e) => updateStudentField(sId, "email", e.target.value)}
+                                      type="tel"
+                                      value={student.fatherNumber || ""}
+                                      onChange={(e) => updateStudentField(sId, "fatherNumber", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
+                                  </td>
+
+                                  {/* Mother Name */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="text"
+                                      value={student.motherName || ""}
+                                      onChange={(e) => updateStudentField(sId, "motherName", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800 uppercase"
+                                    />
+                                  </td>
+
+                                  {/* Mother Phone */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="tel"
+                                      value={student.motherNumber || ""}
+                                      onChange={(e) => updateStudentField(sId, "motherNumber", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
+                                  </td>
+
+                                  {/* Local Guardian Address */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="text"
+                                      value={student.localGuardianAddress || ""}
+                                      onChange={(e) => updateStudentField(sId, "localGuardianAddress", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
+                                  </td>
+
+                                  {/* Local Guardian Phone */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="tel"
+                                      value={student.localGuardianPhoneNumber || ""}
+                                      onChange={(e) => updateStudentField(sId, "localGuardianPhoneNumber", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
+                                  </td>
+
+                                  {/* Home State Select */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <select
+                                      value={student.homeState || ""}
+                                      onChange={(e) => updateStudentField(sId, "homeState", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
+                                    >
+                                      <option value="">Home State</option>
+                                      {["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"].map(st => (
+                                        <option key={st} value={st}>{st}</option>
+                                      ))}
+                                    </select>
+                                  </td>
+
+                                  {/* Permanent Address */}
+                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                    <input
+                                      type="text"
+                                      value={student.permanentAddress || student.homePinCode || ""}
+                                      onChange={(e) => updateStudentField(sId, "permanentAddress", e.target.value)}
                                       className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
                                     />
                                   </td>
@@ -11198,89 +11582,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     />
                                   </td>
 
-                                  {/* Semester Select */}
+                                  {/* Joining Date Input */}
                                   <td className="border-r border-slate-200 p-1 sm:p-1.5">
-                                    <select
-                                      value={student.semester || ""}
-                                      onChange={(e) => updateStudentField(sId, "semester", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
-                                    >
-                                      <option value="">Select Semester</option>
-                                      <option value="1ST SEM">1ST SEM</option>
-                                      <option value="2ND SEM">2ND SEM</option>
-                                      <option value="3RD SEM">3RD SEM</option>
-                                      <option value="4TH SEM">4TH SEM</option>
-                                      <option value="5TH SEM">5TH SEM</option>
-                                      <option value="6TH SEM">6TH SEM</option>
-                                      <option value="7TH SEM">7TH SEM</option>
-                                      <option value="8TH SEM">8TH SEM</option>
-                                    </select>
-                                  </td>
-
-                                  {/* Year Select */}
-                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
-                                    <select
-                                      value={student.year || ""}
-                                      onChange={(e) => updateStudentField(sId, "year", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
-                                    >
-                                      <option value="">Select Year</option>
-                                      <option value="1ST YEAR">1ST YEAR</option>
-                                      <option value="2ND YEAR">2ND YEAR</option>
-                                      <option value="3RD YEAR">3RD YEAR</option>
-                                      <option value="4TH YEAR">4TH YEAR</option>
-                                    </select>
-                                  </td>
-
-                                  {/* Branch Select */}
-                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
-                                    <select
-                                      value={student.branch || ""}
-                                      onChange={(e) => updateStudentField(sId, "branch", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
-                                    >
-                                      <option value="">Select Branch</option>
-                                      {["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"].map(b => (
-                                        <option key={b} value={b}>{b}</option>
-                                      ))}
-                                    </select>
-                                  </td>
-
-                                  {/* Section Select */}
-                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
-                                    <select
-                                      value={student.section || ""}
-                                      onChange={(e) => updateStudentField(sId, "section", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
-                                    >
-                                      <option value="">Select Sec</option>
-                                      <option value="A">A</option>
-                                      <option value="B">B</option>
-                                      <option value="C">C</option>
-                                      <option value="D">D</option>
-                                      <option value="E">E</option>
-                                      <option value="F">F</option>
-                                    </select>
-                                  </td>
-
-                                  {/* College Select */}
-                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
-                                    <select
-                                      value={student.collegeName || ""}
-                                      onChange={(e) => updateStudentField(sId, "collegeName", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
-                                    >
-                                      <option value="">College</option>
-                                      <option value="OIST">OIST</option>
-                                      <option value="OCT">OCT</option>
-                                      <option value="OCP">OCP</option>
-                                      <option value="OPM">OPM</option>
-                                      <option value="OIPR">OIPR</option>
-                                    </select>
+                                    <input
+                                      type="date"
+                                      value={student.joiningDate || ""}
+                                      onChange={(e) => updateStudentField(sId, "joiningDate", e.target.value)}
+                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
+                                    />
                                   </td>
 
                                   {/* Status Select */}
-                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
+                                  <td className="p-1 sm:p-1.5">
                                     <select
                                       value={student.studentStatus || ""}
                                       onChange={(e) => updateStudentField(sId, "studentStatus", e.target.value)}
@@ -11290,105 +11603,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       <option value="out">OUT</option>
                                       <option value="leave">LEAVE</option>
                                     </select>
-                                  </td>
-
-                                  {/* Category Select */}
-                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
-                                    <select
-                                      value={student.category || ""}
-                                      onChange={(e) => updateStudentField(sId, "category", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
-                                    >
-                                      <option value="">Category</option>
-                                      <option value="GENERAL">GENERAL</option>
-                                      <option value="SC">SC</option>
-                                      <option value="ST">ST</option>
-                                      <option value="OBC">OBC</option>
-                                    </select>
-                                  </td>
-
-                                  {/* DOB Date Input */}
-                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
-                                    <input
-                                      type="date"
-                                      value={student.dob || ""}
-                                      onChange={(e) => updateStudentField(sId, "dob", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
-                                    />
-                                  </td>
-
-                                  {/* Father Name */}
-                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
-                                    <input
-                                      type="text"
-                                      value={student.fatherName || ""}
-                                      onChange={(e) => updateStudentField(sId, "fatherName", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800 uppercase"
-                                    />
-                                  </td>
-
-                                  {/* Father Phone */}
-                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
-                                    <input
-                                      type="tel"
-                                      value={student.fatherNumber || ""}
-                                      onChange={(e) => updateStudentField(sId, "fatherNumber", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
-                                    />
-                                  </td>
-
-                                  {/* Mother Name */}
-                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
-                                    <input
-                                      type="text"
-                                      value={student.motherName || ""}
-                                      onChange={(e) => updateStudentField(sId, "motherName", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800 uppercase"
-                                    />
-                                  </td>
-
-                                  {/* Mother Phone */}
-                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
-                                    <input
-                                      type="tel"
-                                      value={student.motherNumber || ""}
-                                      onChange={(e) => updateStudentField(sId, "motherNumber", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
-                                    />
-                                  </td>
-
-                                  {/* Home State Select */}
-                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
-                                    <select
-                                      value={student.homeState || ""}
-                                      onChange={(e) => updateStudentField(sId, "homeState", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-1.5 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded cursor-pointer text-slate-800"
-                                    >
-                                      <option value="">Home State</option>
-                                      {["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"].map(st => (
-                                        <option key={st} value={st}>{st}</option>
-                                      ))}
-                                    </select>
-                                  </td>
-
-                                  {/* Pincode */}
-                                  <td className="border-r border-slate-200 p-1 sm:p-1.5">
-                                    <input
-                                      type="text"
-                                      value={student.homePinCode || student.permanentAddress || ""}
-                                      onChange={(e) => updateStudentField(sId, "homePinCode", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-semibold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
-                                    />
-                                  </td>
-
-                                  {/* Joining Date Input */}
-                                  <td className="p-1 sm:p-1.5">
-                                    <input
-                                      type="date"
-                                      value={student.joiningDate || ""}
-                                      onChange={(e) => updateStudentField(sId, "joiningDate", e.target.value)}
-                                      className="w-full h-7 sm:h-8 px-1 sm:px-2 border-0 bg-transparent text-[10px] sm:text-xs font-bold focus:bg-violet-50/50 focus:ring-1 focus:ring-violet-400 outline-none rounded text-slate-800"
-                                    />
                                   </td>
 
                                 </tr>
@@ -11405,18 +11619,40 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <p className="text-[9px] sm:text-xs text-slate-500 font-bold max-w-[50%] leading-tight sm:leading-normal">
                       💡 Click any cell to edit directly. Hit Save Changes when done.
                     </p>
-                    <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                      <button
+                        type="button"
+                        onClick={exportBulkStudentsToExcel}
+                        className="px-3 py-1.5 sm:px-4 sm:py-2 border border-emerald-200 hover:border-emerald-300 bg-emerald-50 hover:bg-emerald-100/50 text-emerald-700 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                        title="Download current grid data as Excel"
+                      >
+                        📤 Export Excel
+                      </button>
+
+                      <label
+                        className="px-3 py-1.5 sm:px-4 sm:py-2 border border-blue-200 hover:border-blue-300 bg-blue-50 hover:bg-blue-100/50 text-blue-700 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                        title="Import student data from Excel to overwrite current grid rows"
+                      >
+                        📥 Import Excel
+                        <input
+                          type="file"
+                          accept=".xlsx, .xls"
+                          onChange={handleBulkStudentsExcelUpload}
+                          className="hidden"
+                        />
+                      </label>
+
                       <button
                         type="button"
                         onClick={() => setShowBulkUpdateModal(false)}
-                        className="px-4 py-2 sm:px-5 sm:py-2.5 border-2 border-slate-200 hover:bg-white text-slate-600 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all"
+                        className="px-3 py-1.5 sm:px-4 sm:py-2 border border-slate-200 hover:bg-white text-slate-600 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
                         disabled={isBulkUpdating}
-                        className="px-4 py-2 sm:px-6 sm:py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-violet-100 flex items-center gap-1.5 sm:gap-2 whitespace-nowrap active:scale-95"
+                        className="px-4 py-1.5 sm:px-6 sm:py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-violet-100 flex items-center gap-1 sm:gap-1.5 whitespace-nowrap active:scale-95 cursor-pointer font-bold"
                       >
                         {isBulkUpdating ? (
                           <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin"></span> Saving...</>
