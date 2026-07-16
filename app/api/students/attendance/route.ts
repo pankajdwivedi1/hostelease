@@ -336,8 +336,8 @@ export async function POST(request: NextRequest) {
             console.log(`✅ GPS Verified: ${student.name} at coordinates (${lat}, ${lng})`);
 
             // ⚡ STRATEGY 1: SELF-HEALING IP WHITELIST
-            // If GPS lock is highly accurate (<= 15m), we capture the public IP and update the hostel's whitelisted IP in database
-            if (bodyAccuracy !== undefined && bodyAccuracy <= 15) {
+            // If GPS lock is highly accurate (<= 23m), we capture the public IP and update the hostel's whitelisted IP in database
+            if (bodyAccuracy !== undefined && bodyAccuracy <= 23) {
                 const forwarded = request.headers.get("x-forwarded-for");
                 let rawClientIp = forwarded ? forwarded.split(",")[0] : (request as any).ip || "127.0.0.1";
                 rawClientIp = rawClientIp.trim();
