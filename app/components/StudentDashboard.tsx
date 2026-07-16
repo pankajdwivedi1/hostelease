@@ -154,6 +154,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [isRegisteringDevice, setIsRegisteringDevice] = useState(false);
     const [isAttendanceMarked, setIsAttendanceMarked] = useState(false);
     const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
+    const [isOnCampusWifi, setIsOnCampusWifi] = useState<boolean | null>(null); // null = checking, true = on campus wifi, false = not on wifi
     const [attendanceWindow, setAttendanceWindow] = useState({ start: "21:00", end: "23:00" });
 
     const [showSoundBanner, setShowSoundBanner] = useState(false);
@@ -1633,13 +1634,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 if (watchId !== null) navigator.geolocation.clearWatch(watchId);
                 if (optimizationTimer !== null) clearTimeout(optimizationTimer);
 
+                setIsOnCampusWifi(true);
                 setIsAtHostel(true);
                 setIsLocationChecking(false);
                 setGpsLockStatus('locked');
                 setLockProgress(100);
                 alert(`Verification Success✔️ (WiFi Mode)\nYou are connected to the campus network. Permission button is now active.`);
+            } else {
+                setIsOnCampusWifi(false);
             }
-        }).catch(e => console.error("WiFi check failed", e));
+        }).catch(e => { console.error("WiFi check failed", e); setIsOnCampusWifi(false); });
 
         // Helper to finish verification
         const performVerification = (position: GeolocationPosition) => {
@@ -2582,6 +2586,23 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         </button>
                                     )}
                                 </div>
+
+                                {/* 📶 WiFi Warning Banner — shown when student is NOT on campus WiFi and attendance not yet marked */}
+                                {isOnCampusWifi === false && !isAttendanceMarked && !isParentView && (
+                                    <div className="col-span-2 lg:col-span-5 bg-amber-50 border-2 border-amber-300 rounded-2xl p-3 flex items-start gap-3 shadow-sm">
+                                        <span className="text-2xl shrink-0 mt-0.5">📶</span>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-[12px] font-black text-amber-800 uppercase tracking-wide mb-0.5">Not on Campus WiFi</p>
+                                            <p className="text-[11px] text-amber-700 font-medium leading-snug">
+                                                Connect to your <strong>hostel WiFi</strong> for smooth attendance without GPS errors.
+                                            </p>
+                                        </div>
+                                        <div className="shrink-0 flex flex-col items-center gap-1">
+                                            <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                                            <span className="text-[9px] font-black text-red-500 uppercase tracking-wider">Offline</span>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* ⭐ PROGRESS INDICATORS - Shows only when marking attendance */}
                                 {isMarkingAttendance && attendanceStep !== 'idle' && (
