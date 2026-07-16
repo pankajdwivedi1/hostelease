@@ -5,9 +5,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
     try {
-        // Get client IP
+        // Get client IP and normalize (remove ::ffff: IPv6-mapping if present)
         const forwarded = request.headers.get("x-forwarded-for");
-        const ip = forwarded ? forwarded.split(",")[0] : (request as any).ip || "127.0.0.1";
+        let rawIp = forwarded ? forwarded.split(",")[0] : (request as any).ip || "127.0.0.1";
+        rawIp = rawIp.trim();
+        const ip = rawIp.startsWith("::ffff:") ? rawIp.substring(7) : rawIp;
 
         const settings = await db.settings.get();
         const whitelist = settings?.wifiWhitelist || [];
@@ -16,18 +18,23 @@ export async function GET(request: NextRequest) {
         let matchingEntry: any = null;
         const isWhitelisted = whitelist.some((w: any) => {
             if (typeof w === 'string') {
-                return w.trim() === ip.trim();
+                let cleanW = w.trim();
+                if (cleanW.startsWith("::ffff:")) cleanW = cleanW.substring(7);
+                return cleanW === ip;
             } else if (w && typeof w === 'object') {
                 // If it's an IP entry (from manual add)
-                if (w.ip && w.ip.trim() === ip.trim()) {
-                    matchingEntry = w;
-                    return true;
+                if (w.ip) {
+                    let cleanW = w.ip.trim();
+                    if (cleanW.startsWith("::ffff:")) cleanW = cleanW.substring(7);
+                    if (cleanW === ip) {
+                        matchingEntry = w;
+                        return true;
+                    }
                 }
-                // If it's a BSSID entry, we can't verify by IP easily here unless we store IP ranges
-                // But for now, we only verify by IP if it's explicitly an IP entry
             }
             return false;
         });
+
 
         return NextResponse.json({
             success: true,

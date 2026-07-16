@@ -21,24 +21,36 @@ export async function GET(request: NextRequest) {
     if (source === 'SUPABASE') {
       const supabase = getSupabaseAdmin();
       if (supabase) {
-        // Fetch student audit logs, newest first
+        // Fetch hostel activity logs specifically (isHostelActivity flag)
+        // filtered at DB level so large datasets don't displace hostel logs
+        const targetHostel = hostelName.toLowerCase().trim();
+
         const { data, error } = await supabase
           .from("admin_audit_logs")
-          .select("*")
+          .select("id, action, entity_name, details, performed_by, created_at")
           .eq("entity_type", "student")
+          .eq("details->isHostelActivity", true)
+          .in("action", ["STUDENT_CREATED", "STUDENT_DELETED", "STUDENT_EDITED"])
           .order("created_at", { ascending: false })
           .limit(200);
 
         if (error) throw error;
 
+
         // Filter by hostelName in the details JSON field (case insensitive)
-        const targetHostel = hostelName.toLowerCase().trim();
+        // IMPORTANT: Only show entries with isHostelActivity:true to avoid duplicates
+        // (both writeAdminAuditLog and writeHostelActivityLog write to this table,
+        //  but only writeHostelActivityLog sets isHostelActivity:true)
         logs = (data || [])
           .filter((item: any) => {
             const details = item.details || {};
+            // Must be a hostel activity log (not a generic admin audit log)
+            if (!details.isHostelActivity) return false;
+            if (!details.hostelName) return false;
             const itemHostel = (details.hostelName || "").toLowerCase().trim();
             return itemHostel === targetHostel;
           })
+
           .map((item: any) => {
             const details = item.details || {};
             // Determine action type
@@ -87,3 +99,37 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { logIds } = await request.json();
+    if (!logIds || !Array.isArray(logIds) || logIds.length === 0) {
+      return NextResponse.json({ error: "Missing or invalid parameter: logIds" }, { status: 400 });
+    }
+
+    const source = await db.getSource();
+    if (source === 'SUPABASE') {
+      const supabase = getSupabaseAdmin();
+      if (!supabase) {
+        throw new Error("Supabase client could not be initialized");
+      }
+      const { error } = await supabase
+        .from("admin_audit_logs")
+        .delete()
+        .in("id", logIds);
+      if (error) throw error;
+    } else {
+      await connectDB();
+      await HostelLog.deleteMany({ _id: { $in: logIds } });
+    }
+
+    return NextResponse.json({ success: true, message: "Logs deleted successfully" });
+  } catch (error: any) {
+    console.error("Error deleting hostel activity logs:", error);
+    return NextResponse.json(
+      { error: error.message || "Failed to delete logs" },
+      { status: 500 }
+    );
+  }
+}
+

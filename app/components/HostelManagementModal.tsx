@@ -13,44 +13,82 @@ interface HostelLogItem {
   createdAt: string;
 }
 
-function HostelLogsView({ hostelName }: { hostelName: string }) {
-  const [logs, setLogs] = useState<HostelLogItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+function HostelLogsButton({ hostelName, onClick }: { hostelName: string; onClick: () => void }) {
+  const [logsCount, setLogsCount] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
-    async function loadLogs() {
+    async function loadCount() {
       try {
-        setIsLoading(true);
         const res = await fetch(`/api/hostels/logs?hostelName=${encodeURIComponent(hostelName)}`);
         const data = await res.json();
         if (data.success && active) {
-          setLogs(data.logs || []);
+          setLogsCount(data.logs?.length || 0);
         }
       } catch (err) {
-        console.error("Failed to load logs for " + hostelName, err);
-      } finally {
-        if (active) setIsLoading(false);
+        console.error("Failed to load logs count for " + hostelName, err);
       }
     }
-    loadLogs();
+    loadCount();
     return () => {
       active = false;
     };
   }, [hostelName]);
 
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-3 w-full bg-white border border-slate-200/80 hover:border-indigo-200 hover:bg-slate-50/50 transition-colors p-2.5 rounded-lg flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-slate-700 shadow-sm"
+    >
+      <span className="flex items-center gap-1.5 text-slate-700">
+        📋 Hostel Activity Logs
+      </span>
+      {logsCount !== null && (
+        <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-black border border-indigo-100">
+          {logsCount}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function HostelLogsModal({ hostelName, onClose }: { hostelName: string; onClose: () => void }) {
+  const [logs, setLogs] = useState<HostelLogItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedLogIds, setSelectedLogIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const loadLogs = async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch(`/api/hostels/logs?hostelName=${encodeURIComponent(hostelName)}`);
+      const data = await res.json();
+      if (data.success) {
+        setLogs(data.logs || []);
+        setSelectedLogIds(new Set());
+      }
+    } catch (err) {
+      console.error("Failed to load logs for " + hostelName, err);
+      showToast("Failed to load logs", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadLogs();
+  }, [hostelName]);
+
   const formatTime = (isoString: string) => {
     try {
       const d = new Date(isoString);
-      // Format: 10:15 AM
       let hours = d.getHours();
       const minutes = String(d.getMinutes()).padStart(2, '0');
       const ampm = hours >= 12 ? 'PM' : 'AM';
       hours = hours % 12;
-      hours = hours ? hours : 12; // the hour '0' should be '12'
+      hours = hours ? hours : 12;
       const timeStr = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
-      
-      // Format: 15/08/2026
       const day = String(d.getDate()).padStart(2, '0');
       const month = String(d.getMonth() + 1).padStart(2, '0');
       const year = d.getFullYear();
@@ -60,48 +98,164 @@ function HostelLogsView({ hostelName }: { hostelName: string }) {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="mt-3 flex items-center justify-center p-3 bg-white rounded-lg border border-slate-100 min-h-[60px]">
-        <span className="text-[9px] text-slate-400 font-bold uppercase animate-pulse">⏳ Loading logs...</span>
-      </div>
-    );
-  }
+  const handleSelectToggle = (id: string) => {
+    setSelectedLogIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
-  if (logs.length === 0) {
-    return (
-      <div className="mt-3 p-3 bg-white rounded-lg border border-slate-100 flex flex-col justify-center items-center min-h-[60px]">
-        <span className="text-[9px] text-slate-400 font-bold uppercase">📭 No recent logs</span>
-      </div>
-    );
-  }
+  const handleSelectAllToggle = () => {
+    if (selectedLogIds.size === logs.length) {
+      setSelectedLogIds(new Set());
+    } else {
+      setSelectedLogIds(new Set(logs.map(log => log.id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedLogIds.size === 0) return;
+    const confirmed = await showConfirm(`Are you sure you want to delete ${selectedLogIds.size} log entries?`);
+    if (!confirmed) return;
+
+    try {
+      setIsDeleting(true);
+      const res = await fetch(`/api/hostels/logs`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logIds: Array.from(selectedLogIds) })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`${selectedLogIds.size} log entries deleted successfully`, "success");
+        await loadLogs();
+      } else {
+        showToast(data.error || "Failed to delete logs", "error");
+      }
+    } catch (err: any) {
+      showToast("Network error: " + err.message, "error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
-    <div className="mt-3 bg-white rounded-lg border border-slate-200/80 overflow-hidden flex flex-col">
-      <div className="bg-slate-100/50 border-b border-slate-200 px-3 py-1.5 flex items-center justify-between">
-        <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider">📋 Hostel Activity Logs</span>
-        <span className="text-[8px] bg-slate-200 text-slate-700 px-1 rounded font-black">{logs.length}</span>
-      </div>
-      <div className="p-2 space-y-2 max-h-[140px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
-        {logs.map((log) => {
-          const emoji = log.actionType === 'ADD' ? '🟢' : log.actionType === 'DELETE' ? '🔴' : '🟡';
-          const actionText = log.actionType === 'ADD' ? 'ADDED' : log.actionType === 'DELETE' ? 'DELETED' : 'UPDATED';
-          return (
-            <div key={log.id} className="text-[9px] font-medium leading-relaxed text-slate-700 flex items-start gap-1.5 border-b border-slate-50 pb-1.5 last:border-0 last:pb-0 text-left">
-              <span className="shrink-0 mt-0.5">{emoji}</span>
-              <div>
-                <span className="font-extrabold text-slate-900">{actionText}: </span>
-                <span>"{log.studentName.toUpperCase()}" </span>
-                {log.erpId && log.erpId !== 'N/A' && <span className="text-[8px] font-black text-slate-500">({log.erpId}) </span>}
-                <span>by <span className="font-bold text-slate-800">{log.operator}</span> at {formatTime(log.createdAt)}.</span>
-              </div>
+    <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
+        
+        {/* Header */}
+        <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+          <div>
+            <h3 className="font-black text-slate-800 text-lg md:text-xl tracking-tight">📋 Activity Logs</h3>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{hostelName}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all font-bold"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Action Bar */}
+        {!isLoading && logs.length > 0 && (
+          <div className="px-4 py-3 bg-slate-50/30 border-b border-slate-100 flex items-center justify-between">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={logs.length > 0 && selectedLogIds.size === logs.length}
+                onChange={handleSelectAllToggle}
+                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer border-slate-300"
+              />
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Select All ({selectedLogIds.size}/{logs.length})</span>
+            </label>
+
+            <button
+              onClick={handleDeleteSelected}
+              disabled={selectedLogIds.size === 0 || isDeleting}
+              className={`px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                selectedLogIds.size > 0 && !isDeleting
+                  ? 'bg-red-500 text-white hover:bg-red-600 shadow-md shadow-red-100'
+                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              {isDeleting ? '⏳ Deleting...' : `🗑️ Delete Selected (${selectedLogIds.size})`}
+            </button>
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="p-4 overflow-y-auto flex-1 bg-white">
+          {isLoading ? (
+            <div className="py-12 flex flex-col items-center justify-center gap-3">
+              <span className="text-2xl animate-spin">⏳</span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider animate-pulse">Loading activity logs...</span>
             </div>
-          );
-        })}
+          ) : logs.length === 0 ? (
+            <div className="py-12 flex flex-col items-center justify-center text-center">
+              <span className="text-3xl mb-2">📭</span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">No recent logs found</span>
+              <p className="text-xs text-slate-400 mt-1 max-w-[280px]">Any student add, edit, or delete actions for this hostel will be recorded here.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {logs.map((log) => {
+                const emoji = log.actionType === 'ADD' ? '🟢' : log.actionType === 'DELETE' ? '🔴' : '🟡';
+                const actionText = log.actionType === 'ADD' ? 'ADDED' : log.actionType === 'DELETE' ? 'DELETED' : 'UPDATED';
+                const isSelected = selectedLogIds.has(log.id);
+
+                return (
+                  <div
+                    key={log.id}
+                    onClick={() => handleSelectToggle(log.id)}
+                    className={`p-3 rounded-xl border transition-all flex items-start gap-3 cursor-pointer ${
+                      isSelected
+                        ? 'border-red-200 bg-red-50/20 shadow-sm'
+                        : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50/30'
+                    }`}
+                  >
+                    {/* Checkbox */}
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      readOnly
+                      className="mt-0.5 w-4 h-4 rounded text-red-600 focus:ring-red-500 cursor-pointer border-slate-300"
+                    />
+
+
+                    {/* Emoji */}
+                    <span className="shrink-0 text-xs mt-0.5">{emoji}</span>
+
+                    {/* Text */}
+                    <div className="flex-1 text-left">
+                      <p className="text-xs font-semibold text-slate-700 leading-relaxed">
+                        <span className="font-extrabold text-slate-900 uppercase tracking-wide">{actionText}: </span>
+                        <span>"{log.studentName.toUpperCase()}" </span>
+                        {log.erpId && log.erpId !== 'N/A' && (
+                          <span className="text-[10px] font-black text-slate-500">({log.erpId}) </span>
+                        )}
+                        <span>by <span className="font-black text-slate-800">{log.operator}</span></span>
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                        ⏱️ {formatTime(log.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
+
 
 export default function HostelManagementModal({
   hostels,
@@ -123,6 +277,8 @@ export default function HostelManagementModal({
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [newAccountForm, setNewAccountForm] = useState({ username: "", password: "", hostels: [] as string[] });
+  const [activeLogHostel, setActiveLogHostel] = useState<string | null>(null);
+
 
   return (
     <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-1 sm:p-4 animate-in fade-in duration-200">
@@ -283,9 +439,18 @@ export default function HostelManagementModal({
                         {/* WiFi IP Badge */}
                         {(() => {
                            const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
-                           const ipEntry = wl.find((w: any) =>
-                             w && typeof w === 'object' && w.ip && w.name && typeof w.name === 'string' && w.name.toLowerCase().includes(hostel.name?.toLowerCase())
-                           );
+                           const ipEntry = wl.find((w: any) => {
+                             if (!w || typeof w !== 'object' || !w.ip) return false;
+                             if (w.hostelName && hostel.name && w.hostelName.toLowerCase() === hostel.name.toLowerCase()) {
+                               return true;
+                             }
+                             if (w.name && typeof w.name === 'string' && hostel.name) {
+                               const cleanWName = w.name.toLowerCase();
+                               const cleanHName = hostel.name.toLowerCase();
+                               return cleanWName.includes(cleanHName) || cleanHName.includes(cleanWName);
+                             }
+                             return false;
+                           });
                           return ipEntry ? (
                             <div className="mt-3 flex items-center gap-1.5 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1.5">
                               <span className="text-green-500 text-xs">🌐</span>
@@ -302,7 +467,11 @@ export default function HostelManagementModal({
                           );
                         })()}
                         {/* Hostel Action Logs */}
-                        <HostelLogsView hostelName={matchedHostel.name} />
+                        <HostelLogsButton
+                          hostelName={matchedHostel.name}
+                          onClick={() => setActiveLogHostel(matchedHostel.name)}
+                        />
+
                       </div>
 
                       {/* Credentials & Privileges Configuration */}
@@ -579,6 +748,12 @@ export default function HostelManagementModal({
           </div>
         </div>
       </div>
+      {activeLogHostel && (
+        <HostelLogsModal
+          hostelName={activeLogHostel}
+          onClose={() => setActiveLogHostel(null)}
+        />
+      )}
     </div>
   );
 }

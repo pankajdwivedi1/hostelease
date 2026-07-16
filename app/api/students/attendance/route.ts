@@ -225,13 +225,20 @@ export async function POST(request: NextRequest) {
         // ⚡ NEW: Public IP Verification (Fallback for WiFi)
         if (!isLocationVerified) {
             const forwarded = request.headers.get("x-forwarded-for");
-            const clientIp = forwarded ? forwarded.split(",")[0] : (request as any).ip || "127.0.0.1";
+            let rawClientIp = forwarded ? forwarded.split(",")[0] : (request as any).ip || "127.0.0.1";
+            rawClientIp = rawClientIp.trim();
+            const clientIp = rawClientIp.startsWith("::ffff:") ? rawClientIp.substring(7) : rawClientIp;
             const globalIpWhitelist = adminSettings?.wifiWhitelist || [];
 
             // If the whitelist is just strings (IPs), check them. 
             // If it's objects with bssids, check if any of them is just the IP string.
             const ipWhitelisted = globalIpWhitelist.some((item: any) => {
-                const ipToMatch = typeof item === 'string' ? item : (item.ip || item.name);
+                let ipToMatch = typeof item === 'string' ? item : (item.ip || item.name);
+                if (!ipToMatch) return false;
+                ipToMatch = ipToMatch.trim();
+                if (ipToMatch.startsWith("::ffff:")) {
+                    ipToMatch = ipToMatch.substring(7);
+                }
                 return ipToMatch === clientIp;
             });
 
@@ -332,18 +339,25 @@ export async function POST(request: NextRequest) {
             // If GPS lock is highly accurate (<= 15m), we capture the public IP and update the hostel's whitelisted IP in database
             if (bodyAccuracy !== undefined && bodyAccuracy <= 15) {
                 const forwarded = request.headers.get("x-forwarded-for");
-                const clientIp = forwarded ? forwarded.split(",")[0].trim() : (request as any).ip || "127.0.0.1";
+                let rawClientIp = forwarded ? forwarded.split(",")[0] : (request as any).ip || "127.0.0.1";
+                rawClientIp = rawClientIp.trim();
+                const clientIp = rawClientIp.startsWith("::ffff:") ? rawClientIp.substring(7) : rawClientIp;
 
                 if (clientIp && clientIp !== "127.0.0.1" && clientIp !== "::1") {
                     try {
                         const wifiWhitelist = adminSettings?.wifiWhitelist || [];
                         const hostelName = student.hostelName || "Campus WiFi";
 
-                        const ipExists = wifiWhitelist.some((wl: any) => 
-                            wl.ip && wl.ip.trim() === clientIp && 
+                        const ipExists = wifiWhitelist.some((wl: any) => {
+                            if (!wl.ip) return false;
+                            let cleanWlIp = wl.ip.trim();
+                            if (cleanWlIp.startsWith("::ffff:")) {
+                                cleanWlIp = cleanWlIp.substring(7);
+                            }
+                            return cleanWlIp === clientIp && 
                             ((wl.hostelName && wl.hostelName.toLowerCase() === hostelName.toLowerCase()) ||
-                             (wl.name && wl.name.toLowerCase().includes(hostelName.toLowerCase())))
-                        );
+                             (wl.name && wl.name.toLowerCase().includes(hostelName.toLowerCase())));
+                        });
 
                         if (!ipExists) {
                             const updatedWhitelist = [...wifiWhitelist];

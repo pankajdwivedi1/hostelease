@@ -2319,7 +2319,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     if (!checkField) return;
 
     // Length pre-validations
-    if (fieldId === "phoneNumber" && val.length < 10) return;
+    if (fieldId === "phoneNumber") {
+      if (val.length < 10) {
+        setDuplicateWarnings(prev => ({
+          ...prev,
+          [fieldId]: "⚠️ Must be exactly 10 digits"
+        }));
+        return;
+      }
+      if (!/^[6-9]/.test(val)) {
+        setDuplicateWarnings(prev => ({
+          ...prev,
+          [fieldId]: "⚠️ Must start with 6, 7, 8, or 9"
+        }));
+        return;
+      }
+    }
     if (fieldId === "email" && !val.includes("@")) return;
     if (fieldId === "erpInformation" && val.length < 3) return;
 
@@ -2391,9 +2406,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         phoneNumber
       };
 
+      const operatorNameForAdd = typeof window !== 'undefined'
+        ? (localStorage.getItem("wardenUsername") || localStorage.getItem("userName") || localStorage.getItem("userType") || "Admin")
+        : "Admin";
+
       const res = await fetch("/api/students", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-email": operatorNameForAdd,
+        },
         body: JSON.stringify(payload)
       });
 
@@ -4387,8 +4409,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const handleDeleteStudent = async (studentId: string) => {
     try {
       setDeletingStudentId(studentId);
+      const operatorName = typeof window !== 'undefined'
+        ? (localStorage.getItem("wardenUsername") || localStorage.getItem("userName") || localStorage.getItem("userType") || "admin")
+        : "admin";
+
       const response = await fetch(`/api/students/${studentId}`, {
         method: "DELETE",
+        headers: {
+          "x-admin-email": operatorName,
+        },
       });
 
       if (!response.ok) {
@@ -5808,7 +5837,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   {title === "Super Admin Dashboard" && (
                     <button
                       onClick={() => {
-                        // ⚡ FORCE REFRESH: Manually bypass all caches
+                        // ⚡ FORCE REFRESH: Clear ALL caches (localStorage + sessionStorage)
+                        // so we always get fresh data from Supabase
+                        localStorage.removeItem(CACHE_KEYS.STUDENTS);
+                        localStorage.removeItem(CACHE_KEYS.HOSTELS);
+                        localStorage.removeItem(CACHE_KEYS.TIMESTAMP);
                         sessionStorage.removeItem('hosteleaze_permissions_cache');
                         fetchPermissions(undefined, true);
                         fetchHostels(true);
@@ -5821,6 +5854,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           fetchBankSettings();
                         }
                         setLastUpdated(new Date());
+                        showToast("Data synced from server!", "success");
                       }}
                       className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-[10px] font-bold uppercase tracking-tight hover:bg-gray-100 transition-all whitespace-nowrap active:scale-95"
                     >
@@ -7234,13 +7268,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           🔍 TEST CURRENT NETWORK
                         </button>
                       </div>
-
-                      {/* Info Banner */}
-                      <div className="mt-4 bg-white/60 border border-green-200 rounded-xl p-3">
-                        <p className="text-[11px] text-green-800 font-bold leading-relaxed">
-                          ⓘ <strong>Why 127.0.0.1 appears?</strong> When the app runs on a local computer (not deployed), all requests look like they come from the same machine. To get the <strong>real campus IP</strong>, you must access this dashboard from the <strong>live deployed URL</strong> while connected to campus WiFi.
-                        </p>
-                      </div>
                     </div>
                   )}
 
@@ -7281,15 +7308,30 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {hostels.length > 0 ? hostels.map((hostel: any) => {
                           const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
-                          const hostelIpEntry = wl.find((w: any) =>
-                            w && typeof w === 'object' && w.ip && w.name && typeof w.name === 'string' && w.name.toLowerCase().includes(hostel.name?.toLowerCase())
-                          );
-                          const hostelBssidEntry = wl.find((w: any) =>
-                            w && typeof w === 'object' && (
-                              (w.hostelName && typeof w.hostelName === 'string' && w.hostelName.toLowerCase() === hostel.name?.toLowerCase()) || 
-                              (w.name && typeof w.name === 'string' && w.name.toLowerCase().includes(hostel.name?.toLowerCase()))
-                            ) && Array.isArray(w.bssids) && w.bssids.length > 0
-                          );
+                          const hostelIpEntry = wl.find((w: any) => {
+                            if (!w || typeof w !== 'object' || !w.ip) return false;
+                            if (w.hostelName && hostel.name && w.hostelName.toLowerCase() === hostel.name.toLowerCase()) {
+                              return true;
+                            }
+                            if (w.name && typeof w.name === 'string' && hostel.name) {
+                              const cleanWName = w.name.toLowerCase();
+                              const cleanHName = hostel.name.toLowerCase();
+                              return cleanWName.includes(cleanHName) || cleanHName.includes(cleanWName);
+                            }
+                            return false;
+                          });
+                          const hostelBssidEntry = wl.find((w: any) => {
+                            if (!w || typeof w !== 'object' || !Array.isArray(w.bssids) || w.bssids.length === 0) return false;
+                            if (w.hostelName && hostel.name && w.hostelName.toLowerCase() === hostel.name.toLowerCase()) {
+                              return true;
+                            }
+                            if (w.name && typeof w.name === 'string' && hostel.name) {
+                              const cleanWName = w.name.toLowerCase();
+                              const cleanHName = hostel.name.toLowerCase();
+                              return cleanWName.includes(cleanHName) || cleanHName.includes(cleanWName);
+                            }
+                            return false;
+                          });
                           const hasIp = !!hostelIpEntry;
                           const hasBssid = !!hostelBssidEntry;
                           
@@ -7328,39 +7370,192 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 </span>
                               </div>
 
-                              {hostelIpEntry && (
-                                <div className="bg-white rounded-xl p-2.5 border border-green-200 mb-2 shadow-sm">
-                                  <p className="text-[9px] font-black text-green-600 uppercase tracking-widest mb-1">🌐 Whitelisted IP</p>
-                                  <p className="text-[12px] font-mono font-bold text-gray-800">IP: {hostelIpEntry.ip}</p>
-                                  <p className="text-[9px] text-gray-500 mt-0.5">{hostelIpEntry.name}</p>
+                              {/* IP Configuration Section */}
+                              {hostelIpEntry ? (
+                                <div className="bg-white rounded-xl p-2.5 border border-green-200 mb-2 shadow-sm flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-[9px] font-black text-green-600 uppercase tracking-widest mb-1">🌐 Whitelisted IP</p>
+                                    <p className="text-[12px] font-mono font-bold text-gray-800">IP: {hostelIpEntry.ip}</p>
+                                    <p className="text-[9px] text-gray-500 mt-0.5">{hostelIpEntry.name}</p>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <button
+                                      onClick={async () => {
+                                        const ipVal = await showPrompt(`Edit whitelisted IP for ${hostel.name}:`, hostelIpEntry.ip);
+                                        if (ipVal !== null) {
+                                          const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                                          const updated = wl.map((w: any) =>
+                                            w === hostelIpEntry ? { ...w, ip: ipVal.trim() } : w
+                                          );
+                                          setWifiWhitelist(updated);
+                                          await handleUpdateSettings({ wifiWhitelist: updated });
+                                          showToast(`IP updated for ${hostel.name}`, "success");
+                                        }
+                                      }}
+                                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border border-slate-200"
+                                    >
+                                      ✏️ Edit
+                                    </button>
+                                    <button
+                                      onClick={async () => {
+                                        if (await showConfirm(`Are you sure you want to remove the whitelisted IP for ${hostel.name}?`)) {
+                                          const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                                          const updated = wl.map((w: any) => {
+                                            if (w === hostelIpEntry) {
+                                              return { ...w, ip: undefined };
+                                            }
+                                            return w;
+                                          }).filter((w: any) => w.ip || (Array.isArray(w.bssids) && w.bssids.length > 0));
+                                          
+                                          setWifiWhitelist(updated);
+                                          await handleUpdateSettings({ wifiWhitelist: updated });
+                                          showToast(`IP removed for ${hostel.name}`, "success");
+                                        }
+                                      }}
+                                      className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border border-red-100"
+                                    >
+                                      🗑️ Delete
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 mb-2 text-center">
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">No Whitelisted IP Set</p>
+                                  <button
+                                    onClick={async () => {
+                                      const ipVal = await showPrompt(`Enter whitelisted IP address for ${hostel.name} (e.g. 152.58.56.104):`, "");
+                                      if (ipVal) {
+                                        const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                                        const existingIdx = wl.findIndex((w: any) =>
+                                          w && typeof w === 'object' && (
+                                            (w.hostelName && w.hostelName.toLowerCase() === hostel.name.toLowerCase()) ||
+                                            (w.name && w.name.toLowerCase().includes(hostel.name.toLowerCase()))
+                                          )
+                                        );
+                                        let updated;
+                                        if (existingIdx >= 0) {
+                                          updated = [...wl];
+                                          updated[existingIdx] = { ...updated[existingIdx], ip: ipVal.trim(), name: `${hostel.name} IP (Manual)` };
+                                        } else {
+                                          updated = [...wl, { name: `${hostel.name} IP (Manual)`, hostelName: hostel.name, ip: ipVal.trim(), bssids: [] }];
+                                        }
+                                        setWifiWhitelist(updated);
+                                        await handleUpdateSettings({ wifiWhitelist: updated });
+                                        showToast(`IP configured for ${hostel.name}`, "success");
+                                      }
+                                    }}
+                                    className="mt-1.5 px-3 py-1 bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all"
+                                  >
+                                    ➕ Configure IP
+                                  </button>
                                 </div>
                               )}
-                              {hostelBssidEntry && (
-                                <div className="bg-white rounded-xl p-2.5 border border-amber-200 shadow-sm flex items-center justify-between gap-2">
-                                  <div>
-                                    <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">📡 BSSID Config</p>
-                                    <p className="text-[10px] font-bold text-gray-700">{hostelBssidEntry.bssids?.length || 0} routers configured</p>
-                                  </div>
-                                  
-                                  {/* Dynamic student name synced by self-healing (marked by blue pen) */}
-                                  {hostelIpEntry?.syncedByStudent && typeof hostelIpEntry.name === 'string' && !hostelIpEntry.name.toLowerCase().includes("warden") && (
-                                    <div className="hidden xs:flex flex-1 bg-blue-50/70 border border-blue-200 rounded-xl p-1.5 px-2 flex-col justify-center max-w-[150px] mx-auto text-center">
-                                      <span className="text-[7.5px] font-black text-blue-500 uppercase tracking-wider block">First Auto-Sync By</span>
-                                      <span className="text-[10px] font-bold text-blue-800 truncate" title={hostelIpEntry.syncedByStudent}>
-                                        👤 {hostelIpEntry.syncedByStudent}
-                                      </span>
-                                      {hostelIpEntry.syncedAt && (
-                                        <span className="text-[7.5px] font-medium text-blue-400 block mt-0.5">{hostelIpEntry.syncedAt}</span>
-                                      )}
-                                    </div>
-                                  )}
 
-                                  <div className="text-right shrink-0 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1">
-                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider block">Network IP</span>
-                                    <span className="text-[11px] font-mono font-bold text-slate-700">
-                                      IP: {hostelIpEntry?.ip || "None"}
-                                    </span>
+                              {/* BSSID Configuration Section */}
+                              {hostelBssidEntry ? (
+                                <div className="bg-white rounded-xl p-2.5 border border-amber-200 shadow-sm flex flex-col gap-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div>
+                                      <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">📡 BSSID Config</p>
+                                      <p className="text-[10px] font-bold text-gray-700">{hostelBssidEntry.bssids?.length || 0} routers configured</p>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <button
+                                        onClick={async () => {
+                                          const current = hostelBssidEntry.bssids?.join(", ") || "";
+                                          const bssidVal = await showPrompt(`Edit BSSIDs for ${hostel.name} (comma-separated):`, current);
+                                          if (bssidVal !== null) {
+                                            const bssids = bssidVal.split(",").map((s) => s.trim().toLowerCase()).filter((s) => s !== "");
+                                            const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                                            const updated = wl.map((w: any) =>
+                                              w === hostelBssidEntry ? { ...w, bssids } : w
+                                            );
+                                            setWifiWhitelist(updated);
+                                            await handleUpdateSettings({ wifiWhitelist: updated });
+                                            showToast(`BSSIDs updated for ${hostel.name}`, "success");
+                                          }
+                                        }}
+                                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border border-slate-200"
+                                      >
+                                        ✏️ Edit
+                                      </button>
+                                      <button
+                                        onClick={async () => {
+                                          if (await showConfirm(`Are you sure you want to remove the BSSIDs for ${hostel.name}?`)) {
+                                            const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                                            const updated = wl.map((w: any) => {
+                                              if (w === hostelBssidEntry) {
+                                                return { ...w, bssids: [] };
+                                              }
+                                              return w;
+                                            }).filter((w: any) => w.ip || (Array.isArray(w.bssids) && w.bssids.length > 0));
+                                            
+                                            setWifiWhitelist(updated);
+                                            await handleUpdateSettings({ wifiWhitelist: updated });
+                                            showToast(`BSSIDs removed for ${hostel.name}`, "success");
+                                          }
+                                        }}
+                                        className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border border-red-100"
+                                      >
+                                        🗑️ Delete
+                                      </button>
+                                    </div>
                                   </div>
+
+                                  <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-2 mt-1">
+                                    {hostelIpEntry?.syncedByStudent && typeof hostelIpEntry.name === 'string' && !hostelIpEntry.name.toLowerCase().includes("warden") ? (
+                                      <div className="flex bg-blue-50/70 border border-blue-200 rounded-lg px-2 py-1 items-center gap-1.5 max-w-[200px]">
+                                        <span className="text-[8px] font-bold text-blue-800 truncate" title={hostelIpEntry.syncedByStudent}>
+                                          👤 {hostelIpEntry.syncedByStudent}
+                                        </span>
+                                        {hostelIpEntry.syncedAt && (
+                                          <span className="text-[7px] font-medium text-blue-400 shrink-0">({hostelIpEntry.syncedAt})</span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div />
+                                    )}
+
+                                    <div className="text-right shrink-0 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1">
+                                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider block">Network IP</span>
+                                      <span className="text-[11px] font-mono font-bold text-slate-700">
+                                        IP: {hostelIpEntry?.ip || "None"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 text-center">
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">No BSSIDs Configured</p>
+                                  <button
+                                    onClick={async () => {
+                                      const bssidVal = await showPrompt(`Enter BSSID (MAC addresses) for ${hostel.name} (comma-separated):`, "");
+                                      if (bssidVal) {
+                                        const bssids = bssidVal.split(",").map((s) => s.trim().toLowerCase()).filter((s) => s !== "");
+                                        const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                                        const existingIdx = wl.findIndex((w: any) =>
+                                          w && typeof w === 'object' && (
+                                            (w.hostelName && w.hostelName.toLowerCase() === hostel.name.toLowerCase()) ||
+                                            (w.name && w.name.toLowerCase().includes(hostel.name.toLowerCase()))
+                                          )
+                                        );
+                                        let updated;
+                                        if (existingIdx >= 0) {
+                                          updated = [...wl];
+                                          updated[existingIdx] = { ...updated[existingIdx], bssids, hostelName: hostel.name };
+                                        } else {
+                                          updated = [...wl, { name: `${hostel.name} IP`, hostelName: hostel.name, bssids, ip: undefined }];
+                                        }
+                                        setWifiWhitelist(updated);
+                                        await handleUpdateSettings({ wifiWhitelist: updated });
+                                        showToast(`BSSIDs configured for ${hostel.name}`, "success");
+                                      }
+                                    }}
+                                    className="mt-1.5 px-3 py-1 bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all"
+                                  >
+                                    ➕ Configure BSSID (MACs)
+                                  </button>
                                 </div>
                               )}
 
@@ -8480,17 +8675,77 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                type={field.type === "date" ? "date" : field.type === "tel" ? "tel" : "text"}
                                                value={addStudentForm[field.id] || ""}
                                                onChange={(e) => {
-                                                 const val = e.target.value;
-                                                 setAddStudentForm(prev => ({ ...prev, [field.id]: val }));
-                                                 if (field.id === "phoneNumber" || field.id === "email" || field.id === "erpInformation") {
-                                                   checkFieldUniqueness(field.id, val);
-                                                 }
-                                               }}
-                                               onBlur={(e) => {
-                                                 if (field.id === "phoneNumber" || field.id === "email" || field.id === "erpInformation") {
-                                                   checkFieldUniqueness(field.id, e.target.value);
-                                                 }
-                                               }}
+                                                  let val = e.target.value;
+                                                  const isPhoneField = field.type === "tel" || 
+                                                                       field.id === "phoneNumber" || 
+                                                                       field.id === "fatherNumber" || 
+                                                                       field.id === "motherNumber" || 
+                                                                       field.id === "localGuardianPhoneNumber";
+                                                  
+                                                  if (isPhoneField) {
+                                                    val = val.replace(/\D/g, "");
+                                                    if (val.length > 10) val = val.slice(0, 10);
+                                                    
+                                                    if (val.length > 0 && val.length < 10) {
+                                                      setDuplicateWarnings(prev => ({
+                                                        ...prev,
+                                                        [field.id]: "⚠️ Must be exactly 10 digits"
+                                                      }));
+                                                    } else if (val.length === 10 && !/^[6-9]/.test(val)) {
+                                                      setDuplicateWarnings(prev => ({
+                                                        ...prev,
+                                                        [field.id]: "⚠️ Must start with 6, 7, 8, or 9"
+                                                      }));
+                                                    } else {
+                                                      setDuplicateWarnings(prev => {
+                                                        const updated = { ...prev };
+                                                        delete updated[field.id];
+                                                        return updated;
+                                                      });
+                                                    }
+                                                  } else if (field.id !== "email" && !field.id.toLowerCase().includes("email") && field.type !== "date" && typeof val === "string") {
+                                                    val = val.toUpperCase();
+                                                  }
+                                                  
+                                                  setAddStudentForm(prev => ({ ...prev, [field.id]: val }));
+                                                  if (field.id === "phoneNumber" || field.id === "email" || field.id === "erpInformation") {
+                                                    checkFieldUniqueness(field.id, val);
+                                                  }
+                                                }}
+                                                onBlur={(e) => {
+                                                  const val = e.target.value;
+                                                  const isPhoneField = field.type === "tel" || 
+                                                                       field.id === "phoneNumber" || 
+                                                                       field.id === "fatherNumber" || 
+                                                                       field.id === "motherNumber" || 
+                                                                       field.id === "localGuardianPhoneNumber";
+                                                  
+                                                  if (isPhoneField) {
+                                                    if (val.length > 0 && val.length < 10) {
+                                                      setDuplicateWarnings(prev => ({
+                                                        ...prev,
+                                                        [field.id]: "⚠️ Must be exactly 10 digits"
+                                                      }));
+                                                    } else if (val.length === 10 && !/^[6-9]/.test(val)) {
+                                                      setDuplicateWarnings(prev => ({
+                                                        ...prev,
+                                                        [field.id]: "⚠️ Must start with 6, 7, 8, or 9"
+                                                      }));
+                                                    } else {
+                                                      if (field.id === "phoneNumber") {
+                                                        checkFieldUniqueness(field.id, val);
+                                                      } else {
+                                                        setDuplicateWarnings(prev => {
+                                                          const updated = { ...prev };
+                                                          delete updated[field.id];
+                                                          return updated;
+                                                        });
+                                                      }
+                                                    }
+                                                  } else if (field.id === "phoneNumber" || field.id === "email" || field.id === "erpInformation") {
+                                                    checkFieldUniqueness(field.id, val);
+                                                  }
+                                                }}
                                                required={field.required}
                                                placeholder={`Enter ${field.label.toLowerCase()}...`}
                                                className={`w-full h-11 px-4 rounded-xl border-2 text-sm focus:outline-none transition-all shadow-sm ${
@@ -10322,9 +10577,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       payload.dynamicFields = dynamicFields;
                     }
 
+                    const operatorNameForEdit = typeof window !== 'undefined'
+                      ? (localStorage.getItem("wardenUsername") || localStorage.getItem("userName") || localStorage.getItem("userType") || "admin")
+                      : "admin";
+
                     const response = await fetch(`/api/students/${selectedStudent?.id}`, {
                       method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
+                      headers: {
+                        "Content-Type": "application/json",
+                        "x-admin-email": operatorNameForEdit,
+                      },
                       body: JSON.stringify({
                         ...payload,
                         joiningDate: payload.joiningDate ? new Date(payload.joiningDate).toISOString() : undefined
