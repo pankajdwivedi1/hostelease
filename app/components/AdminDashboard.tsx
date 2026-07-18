@@ -1183,7 +1183,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const canAddStudent = 
     title === "Super Admin Dashboard" || 
     (title === "Dean Dashboard" && allowDeanAddStudent) || 
-    (isWarden && !!currentWardenHostelConfig?.allowWardenAddStudent);
+    (isWarden && hostelsConfig.some(h => 
+      authorizedHostels.map(auth => auth.toLowerCase().trim()).includes(String(h.name || "").toLowerCase().trim()) && 
+      h.allowWardenAddStudent
+    ));
+
+  // Helper variables for editing/removing selected student (considering multi-hostels)
+  const getSelectedStudentHostelConfig = () => {
+    if (!selectedStudent || !selectedStudent.hostelName) return null;
+    return hostelsConfig.find(h => 
+      String(h.name || "").toLowerCase().trim() === String(selectedStudent.hostelName || "").toLowerCase().trim()
+    );
+  };
+
+  const isWardenAuthorizedForSelectedStudent = !!(isWarden && selectedStudent && 
+    authorizedHostels.map(auth => auth.toLowerCase().trim()).includes(String(selectedStudent.hostelName || "").toLowerCase().trim()));
+
+  const canWardenEditSelectedStudent = isWardenAuthorizedForSelectedStudent && !!getSelectedStudentHostelConfig()?.allowWardenEditProfile;
+  const canWardenRemoveSelectedStudent = isWardenAuthorizedForSelectedStudent && !!getSelectedStudentHostelConfig()?.allowWardenRemoveStudent;
 
   useEffect(() => {
     if (hostels.length > 0 && !activeVisualHostel) {
@@ -2371,7 +2388,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
     const email = addStudentForm.email?.trim() || "";
     const phoneNumber = addStudentForm.phoneNumber?.trim() || "";
-    const hostelName = isWarden ? (wardenHostelName || authorizedHostels[0] || "") : (addStudentForm.hostelName || "");
+    const hostelName = isWarden 
+      ? (authorizedHostels.length > 1 ? (addStudentForm.hostelName || "") : (authorizedHostels[0] || ""))
+      : (addStudentForm.hostelName || "");
     const roomNumber = addStudentForm.roomNumber?.trim() || "";
     const floorNumber = addStudentForm.floorNumber || "GND FLOOR";
 
@@ -3810,7 +3829,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const fetchAnomalyAlertsInBackground = async () => {
     try {
+      const activeFilter = currentTab === "rooms" ? "all" : attendanceHostelFilter;
       const url = new URL(`/api/admin/anomaly-alerts?_t=${Date.now()}`, window.location.origin);
+      if (isWarden) {
+        if (wardenHostelName) url.searchParams.set("hostelName", wardenHostelName);
+        if (authorizedHostels && authorizedHostels.length > 0) {
+          url.searchParams.set("authorizedHostels", JSON.stringify(authorizedHostels));
+        }
+      } else if (activeFilter && activeFilter !== "all") {
+        url.searchParams.set("hostelName", activeFilter);
+      }
       const anomalyRes = await fetch(url.href);
       if (anomalyRes.ok) {
         const anomalyData = await anomalyRes.json();
@@ -3826,7 +3854,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const fetchAnomalyAlerts = async () => {
     try {
       setAnomalyAlertsLoading(true);
+      const activeFilter = currentTab === "rooms" ? "all" : attendanceHostelFilter;
       const url = new URL(`/api/admin/anomaly-alerts?_t=${Date.now()}`, window.location.origin);
+      if (isWarden) {
+        if (wardenHostelName) url.searchParams.set("hostelName", wardenHostelName);
+        if (authorizedHostels && authorizedHostels.length > 0) {
+          url.searchParams.set("authorizedHostels", JSON.stringify(authorizedHostels));
+        }
+      } else if (activeFilter && activeFilter !== "all") {
+        url.searchParams.set("hostelName", activeFilter);
+      }
       const res = await fetch(url.href);
       if (res.ok) {
         const data = await res.json();
@@ -8543,9 +8580,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 <h3 className="text-xs font-black text-blue-600 uppercase tracking-widest border-b border-slate-100 pb-2">{sec} Details</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {secFields.map(field => {
-                                    // Custom rule: if Warden is registering, hostelName is locked to their hostel
-                                    const isHostelLocked = isWarden && field.id === "hostelName";
-                                    const lockedValue = isWarden ? (wardenHostelName || authorizedHostels[0] || "") : "";
+                                    // Custom rule: if Warden is registering, hostelName is locked to their hostel only if they manage a single hostel
+                                    const isHostelLocked = isWarden && field.id === "hostelName" && authorizedHostels.length <= 1;
+                                    const lockedValue = isWarden ? (authorizedHostels[0] || "") : "";
 
                                     return (
                                       <div key={field.id} className="space-y-1">
@@ -8639,7 +8676,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             className="w-full h-11 px-4 rounded-xl border-2 border-slate-100 text-sm focus:border-blue-500 focus:outline-none transition-all shadow-sm bg-white"
                                           >
                                             <option value="">Select {field.label}...</option>
-                                            {(field.options || []).map((opt: string) => {
+                                            {(field.options || []).filter((opt: string) => {
+                                              if (field.id === "hostelName" && isWarden) {
+                                                return authorizedHostels.map(h => h.toUpperCase().trim()).includes(opt.toUpperCase().trim());
+                                              }
+                                              return true;
+                                            }).map((opt: string) => {
                                               const val = field.id === "hostelName" ? opt.toUpperCase() : opt;
                                               return <option key={opt} value={val}>{val}</option>;
                                             })}
@@ -9575,10 +9617,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     )}
 
                     {/* Buttons for Warden / Dean based on permissions */}
-                    {(((isWarden && !!currentWardenHostelConfig?.allowWardenEditProfile) || (title === "Dean Dashboard" && allowDeanEditProfile)) || 
-                      ((isWarden && !!currentWardenHostelConfig?.allowWardenRemoveStudent) || (title === "Dean Dashboard" && allowDeanRemoveStudent))) && (
+                    {(((canWardenEditSelectedStudent) || (title === "Dean Dashboard" && allowDeanEditProfile)) || 
+                      ((canWardenRemoveSelectedStudent) || (title === "Dean Dashboard" && allowDeanRemoveStudent))) && (
                       <div className="mt-4 flex gap-3 justify-center w-full max-w-sm mx-auto">
-                        {((isWarden && !!currentWardenHostelConfig?.allowWardenEditProfile) || (title === "Dean Dashboard" && allowDeanEditProfile)) && (
+                        {((canWardenEditSelectedStudent) || (title === "Dean Dashboard" && allowDeanEditProfile)) && (
                           <button
                             onClick={() => {
                               // Find gender value from dynamic fields if not present on standard field
@@ -9589,15 +9631,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               
                               let initialGender = selectedStudent.gender || "";
                               if (!initialGender && selectedStudent.dynamicFields) {
-                                if (genderField && selectedStudent.dynamicFields[genderField.id]) {
-                                  initialGender = selectedStudent.dynamicFields[genderField.id];
-                                } else {
-                                  const keys = Object.keys(selectedStudent.dynamicFields);
-                                  const oldGenderKey = keys.find(k => k.startsWith('name_copy_') || k.toLowerCase().includes('gender') || k.toLowerCase().includes('sex'));
-                                  if (oldGenderKey) {
-                                    initialGender = selectedStudent.dynamicFields[oldGenderKey];
+                                  if (genderField && selectedStudent.dynamicFields[genderField.id]) {
+                                    initialGender = selectedStudent.dynamicFields[genderField.id];
+                                  } else {
+                                    const keys = Object.keys(selectedStudent.dynamicFields);
+                                    const oldGenderKey = keys.find(k => k.startsWith('name_copy_') || k.toLowerCase().includes('gender') || k.toLowerCase().includes('sex'));
+                                    if (oldGenderKey) {
+                                      initialGender = selectedStudent.dynamicFields[oldGenderKey];
+                                    }
                                   }
-                                }
                               }
 
                               setEditStudentForm({ 
@@ -9615,7 +9657,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             Edit Profile
                           </button>
                         )}
-                        {((isWarden && !!currentWardenHostelConfig?.allowWardenRemoveStudent) || (title === "Dean Dashboard" && allowDeanRemoveStudent)) && (
+                        {((canWardenRemoveSelectedStudent) || (title === "Dean Dashboard" && allowDeanRemoveStudent)) && (
                           <button
                             onClick={() => setShowDeleteConfirm(true)}
                             disabled={deletingStudentId === selectedStudent.id}

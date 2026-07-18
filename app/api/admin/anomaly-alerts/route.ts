@@ -19,8 +19,44 @@ const CONSECUTIVE_ABSENT_THRESHOLD = 3; // Alert after 3 consecutive absences
 
 export async function GET(request: NextRequest) {
     try {
-        // 1. Get all students
-        const students = await db.students.list({});
+        const searchParams = request.nextUrl.searchParams;
+        const hostelFilter = searchParams.get("hostelName");
+        const authHostelsParam = searchParams.get("authorizedHostels");
+
+        // Parse authorized hostels if provided
+        let authorizedHostels: string[] = [];
+        if (authHostelsParam) {
+            try {
+                authorizedHostels = JSON.parse(authHostelsParam);
+            } catch (e) {
+                authorizedHostels = [authHostelsParam];
+            }
+        } else if (hostelFilter && hostelFilter !== "all") {
+            authorizedHostels = [hostelFilter];
+        }
+
+        // 1. Get students matching the filter/authorized hostels
+        let students: any[] = [];
+        if (authorizedHostels.length > 0) {
+            const studentsListList = await Promise.all(authorizedHostels.map(async (h) => {
+                const list = await db.students.list({ hostelName: h });
+                return Array.isArray(list) ? list : [];
+            }));
+            students = studentsListList.flat();
+        } else {
+            students = await db.students.list({});
+        }
+
+        // Deduplicate students by id if needed
+        const seenIds = new Set<string>();
+        students = students.filter(student => {
+            if (!student || !student._id) return false;
+            const idStr = student._id.toString();
+            if (seenIds.has(idStr)) return false;
+            seenIds.add(idStr);
+            return true;
+        });
+
         if (!students || students.length === 0) {
             return NextResponse.json({ success: true, alerts: [], message: "No students found" });
         }

@@ -29,13 +29,14 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const { id, name, totalRooms, wardenUsername, wardenPassword, attendanceMode, allowWardenAddStudent, allowWardenEditProfile, allowWardenRemoveStudent } = body;
+        const formattedName = typeof name === 'string' ? name.trim().toUpperCase() : name;
         const trimmedWardenUsername = typeof wardenUsername === 'string' ? wardenUsername.trim() : wardenUsername;
         const trimmedWardenPassword = typeof wardenPassword === 'string' ? wardenPassword.trim() : wardenPassword;
 
         let hostel;
         if (id) {
             hostel = await db.hostels.update(id, {
-                name,
+                name: formattedName,
                 totalRooms,
                 wardenUsername: trimmedWardenUsername,
                 wardenPassword: trimmedWardenPassword,
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
             });
         } else {
             hostel = await db.hostels.create({
-                name,
+                name: formattedName,
                 totalRooms,
                 wardenUsername: trimmedWardenUsername,
                 wardenPassword: trimmedWardenPassword,
