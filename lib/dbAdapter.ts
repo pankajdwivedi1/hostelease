@@ -243,6 +243,10 @@ const mapStudentToCamelCase = (s: any) => {
     // Extract sub-tables from Joined query result
     const profile = Array.isArray(s.student_profiles) ? s.student_profiles[0] : (s.student_profiles || s.profile);
     const security = Array.isArray(s.student_security) ? s.student_security[0] : (s.student_security || s.security);
+    const profileValue = (snakeKey: string, camelKey: string) =>
+        profile?.[snakeKey] !== undefined ? profile[snakeKey] : profile?.[camelKey];
+    const securityValue = (snakeKey: string, camelKey: string) =>
+        security?.[snakeKey] !== undefined ? security[snakeKey] : security?.[camelKey];
 
     return {
         id: s._id || s.id,
@@ -270,40 +274,40 @@ const mapStudentToCamelCase = (s: any) => {
         })(),
 
         // Profile Table fields or fallback
-        dob: profile?.dob !== undefined ? profile.dob : s.dob,
-        category: profile?.category !== undefined ? profile.category : s.category,
-        fatherName: profile?.father_name !== undefined ? profile.father_name : (s.father_name || s.fatherName),
-        fatherNumber: profile?.father_number !== undefined ? profile.father_number : (s.father_number || s.fatherNumber),
-        motherName: profile?.mother_name !== undefined ? profile.mother_name : (s.mother_name || s.motherName),
-        motherNumber: profile?.mother_number !== undefined ? profile.mother_number : (s.mother_number || s.motherNumber),
-        permanentAddress: profile?.permanent_address !== undefined ? profile.permanent_address : (s.permanent_address || s.permanentAddress),
-        homePinCode: profile?.permanent_address !== undefined ? profile.permanent_address : (s.permanent_address || s.permanentAddress || s.home_pin_code || s.homePinCode),
-        homeState: profile?.home_state !== undefined ? profile.home_state : (s.home_state || s.homeState),
-        erpInformation: profile?.erp_id !== undefined ? profile.erp_id : (s.erp_id || s.erpInformation || s.erpInformation),
-        branch: profile?.branch !== undefined ? profile.branch : s.branch,
-        collegeName: profile?.college_name !== undefined ? profile.college_name : (s.college_name || s.collegeName),
-        year: profile?.year !== undefined ? profile.year : s.year,
-        semester: profile?.semester !== undefined ? profile.semester : s.semester,
-        section: profile?.section !== undefined ? profile.section : s.section,
-        floorNumber: profile?.floor_number !== undefined ? profile.floor_number : (s.floor_number || s.floorNumber),
-        joiningDate: profile?.joining_date !== undefined ? profile.joining_date : (s.joining_date || s.joiningDate),
-        localGuardianAddress: profile?.local_guardian_address !== undefined ? profile.local_guardian_address : (s.local_guardian_address || s.localGuardianAddress),
-        localGuardianPhoneNumber: profile?.local_guardian_phone_number !== undefined ? profile.local_guardian_phone_number : (s.local_guardian_phone_number || s.localGuardianPhoneNumber),
-        registrationId: profile?.registration_id !== undefined ? profile.registration_id : (s.registration_id || s.registrationId),
-        createdByErpId: profile?.created_by_erp_id !== undefined ? profile.created_by_erp_id : (s.created_by_erp_id || s.createdByErpId),
+        dob: profileValue("dob", "dob") !== undefined ? profileValue("dob", "dob") : s.dob,
+        category: profileValue("category", "category") !== undefined ? profileValue("category", "category") : s.category,
+        fatherName: profileValue("father_name", "fatherName") !== undefined ? profileValue("father_name", "fatherName") : (s.father_name || s.fatherName),
+        fatherNumber: profileValue("father_number", "fatherNumber") !== undefined ? profileValue("father_number", "fatherNumber") : (s.father_number || s.fatherNumber),
+        motherName: profileValue("mother_name", "motherName") !== undefined ? profileValue("mother_name", "motherName") : (s.mother_name || s.motherName),
+        motherNumber: profileValue("mother_number", "motherNumber") !== undefined ? profileValue("mother_number", "motherNumber") : (s.mother_number || s.motherNumber),
+        permanentAddress: profileValue("permanent_address", "permanentAddress") !== undefined ? profileValue("permanent_address", "permanentAddress") : (s.permanent_address || s.permanentAddress),
+        homePinCode: profileValue("permanent_address", "permanentAddress") !== undefined ? profileValue("permanent_address", "permanentAddress") : (s.permanent_address || s.permanentAddress || s.home_pin_code || s.homePinCode),
+        homeState: profileValue("home_state", "homeState") !== undefined ? profileValue("home_state", "homeState") : (s.home_state || s.homeState),
+        erpInformation: profileValue("erp_id", "erpId") !== undefined ? profileValue("erp_id", "erpId") : (s.erp_id || s.erpInformation || s.erpInformation),
+        branch: profileValue("branch", "branch") !== undefined ? profileValue("branch", "branch") : s.branch,
+        collegeName: profileValue("college_name", "collegeName") !== undefined ? profileValue("college_name", "collegeName") : (s.college_name || s.collegeName),
+        year: profileValue("year", "year") !== undefined ? profileValue("year", "year") : s.year,
+        semester: profileValue("semester", "semester") !== undefined ? profileValue("semester", "semester") : s.semester,
+        section: profileValue("section", "section") !== undefined ? profileValue("section", "section") : s.section,
+        floorNumber: profileValue("floor_number", "floorNumber") !== undefined ? profileValue("floor_number", "floorNumber") : (s.floor_number || s.floorNumber),
+        joiningDate: profileValue("joining_date", "joiningDate") !== undefined ? profileValue("joining_date", "joiningDate") : (s.joining_date || s.joiningDate),
+        localGuardianAddress: profileValue("local_guardian_address", "localGuardianAddress") !== undefined ? profileValue("local_guardian_address", "localGuardianAddress") : (s.local_guardian_address || s.localGuardianAddress),
+        localGuardianPhoneNumber: profileValue("local_guardian_phone_number", "localGuardianPhoneNumber") !== undefined ? profileValue("local_guardian_phone_number", "localGuardianPhoneNumber") : (s.local_guardian_phone_number || s.localGuardianPhoneNumber),
+        registrationId: profileValue("registration_id", "registrationId") !== undefined ? profileValue("registration_id", "registrationId") : (s.registration_id || s.registrationId),
+        createdByErpId: profileValue("created_by_erp_id", "createdByErpId") !== undefined ? profileValue("created_by_erp_id", "createdByErpId") : (s.created_by_erp_id || s.createdByErpId),
 
         // Security Table fields or fallback
-        deviceId: security?.device_id !== undefined ? security.device_id : (s.device_id || s.deviceId),
-        isProfileLocked: security?.is_profile_locked !== undefined ? security.is_profile_locked : (s.is_profile_locked || s.isProfileLocked),
-        faceDescriptor: security?.face_descriptor !== undefined ? security.face_descriptor : (s.face_descriptor || s.faceDescriptor),
-        attendanceMode: security?.attendance_mode !== undefined ? security.attendance_mode : (s.attendance_mode || s.attendanceMode),
-        webAuthnCredentials: security?.web_authn_credentials !== undefined ? security.web_authn_credentials : (s.web_authn_credentials || s.webAuthnCredentials),
-        deviceResetCount: security?.device_reset_count !== undefined ? security.device_reset_count : (s.device_reset_count || s.deviceResetCount),
-        deviceHistory: security?.device_history !== undefined ? security.device_history : (s.device_history || s.deviceHistory),
-        thumbImpressionId: security?.thumb_impression_id !== undefined ? security.thumb_impression_id : (s.thumb_impression_id || s.thumbImpressionId),
-        faceEnrolled: security?.face_enrolled !== undefined ? security.face_enrolled : (s.face_enrolled || s.faceEnrolled),
-        dynamicFields: security?.dynamic_fields !== undefined ? security.dynamic_fields : (s.dynamic_fields || s.dynamicFields || {}),
-        authProvider: security?.auth_provider !== undefined ? security.auth_provider : (s.auth_provider || s.authProvider)
+        deviceId: securityValue("device_id", "deviceId") !== undefined ? securityValue("device_id", "deviceId") : (s.device_id || s.deviceId),
+        isProfileLocked: securityValue("is_profile_locked", "isProfileLocked") !== undefined ? securityValue("is_profile_locked", "isProfileLocked") : (s.is_profile_locked || s.isProfileLocked),
+        faceDescriptor: securityValue("face_descriptor", "faceDescriptor") !== undefined ? securityValue("face_descriptor", "faceDescriptor") : (s.face_descriptor || s.faceDescriptor),
+        attendanceMode: securityValue("attendance_mode", "attendanceMode") !== undefined ? securityValue("attendance_mode", "attendanceMode") : (s.attendance_mode || s.attendanceMode),
+        webAuthnCredentials: securityValue("web_authn_credentials", "webAuthnCredentials") !== undefined ? securityValue("web_authn_credentials", "webAuthnCredentials") : (s.web_authn_credentials || s.webAuthnCredentials),
+        deviceResetCount: securityValue("device_reset_count", "deviceResetCount") !== undefined ? securityValue("device_reset_count", "deviceResetCount") : (s.device_reset_count || s.deviceResetCount),
+        deviceHistory: securityValue("device_history", "deviceHistory") !== undefined ? securityValue("device_history", "deviceHistory") : (s.device_history || s.deviceHistory),
+        thumbImpressionId: securityValue("thumb_impression_id", "thumbImpressionId") !== undefined ? securityValue("thumb_impression_id", "thumbImpressionId") : (s.thumb_impression_id || s.thumbImpressionId),
+        faceEnrolled: securityValue("face_enrolled", "faceEnrolled") !== undefined ? securityValue("face_enrolled", "faceEnrolled") : (s.face_enrolled || s.faceEnrolled),
+        dynamicFields: securityValue("dynamic_fields", "dynamicFields") !== undefined ? securityValue("dynamic_fields", "dynamicFields") : (s.dynamic_fields || s.dynamicFields || {}),
+        authProvider: securityValue("auth_provider", "authProvider") !== undefined ? securityValue("auth_provider", "authProvider") : (s.auth_provider || s.authProvider)
     };
 };
 
@@ -1725,7 +1729,7 @@ export const db = {
         // ⚡ DATABASE-AWARE LIST WITH FILTERS
         list: async (filters: any = {}, options: { light?: boolean; select?: string; limit?: number } = {}) => {
             const source = await getDbSource();
-            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,supabase_id,profile_picture,dynamic_fields,student_profiles(*),student_security(device_id,device_reset_count,device_history,is_profile_locked,attendance_mode,web_authn_credentials,auth_provider)';
+            const lightFields = '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,supabase_id,student_profiles(registration_id,erp_id,college_name,branch,semester,section,floor_number),student_security(device_id,device_reset_count,is_profile_locked,attendance_mode,auth_provider)';
             const selection = options.select || (options.light ? lightFields : '*, student_profiles(*), student_security(*)');
 
             if (source === 'SUPABASE') {
@@ -1837,20 +1841,54 @@ export const db = {
 
                 const data = await prisma.student.findMany({
                     where: whereClause,
-                    include: {
-                        profile: true,
-                        security: {
-                            select: {
-                                deviceId: true,
-                                deviceResetCount: true,
-                                deviceHistory: true,
-                                isProfileLocked: true,
-                                attendanceMode: true,
-                                webAuthnCredentials: true,
-                                authProvider: true
+                    ...(options.light ? {
+                        select: {
+                            id: true,
+                            firebaseUid: true,
+                            name: true,
+                            email: true,
+                            phoneNumber: true,
+                            hostelName: true,
+                            roomNumber: true,
+                            studentStatus: true,
+                            supabaseId: true,
+                            profile: {
+                                select: {
+                                    registrationId: true,
+                                    erpId: true,
+                                    collegeName: true,
+                                    branch: true,
+                                    semester: true,
+                                    section: true,
+                                    floorNumber: true
+                                }
+                            },
+                            security: {
+                                select: {
+                                    deviceId: true,
+                                    deviceResetCount: true,
+                                    isProfileLocked: true,
+                                    attendanceMode: true,
+                                    authProvider: true
+                                }
                             }
                         }
-                    },
+                    } : {
+                        include: {
+                            profile: true,
+                            security: {
+                                select: {
+                                    deviceId: true,
+                                    deviceResetCount: true,
+                                    deviceHistory: true,
+                                    isProfileLocked: true,
+                                    attendanceMode: true,
+                                    webAuthnCredentials: true,
+                                    authProvider: true
+                                }
+                            }
+                        }
+                    }),
                     orderBy: { name: 'asc' },
                     take: options.limit || 1000
                 });
@@ -1880,7 +1918,10 @@ export const db = {
                     ];
                 }
 
-                const records = await StudentModel.find(mongoFilters).sort({ name: 1 }).limit(options.limit || 1000).lean();
+                const lightMongoFields = '_id firebaseUID name email phoneNumber hostelName roomNumber studentStatus supabaseId registrationId erpInformation collegeName branch semester section floorNumber gender deviceId deviceResetCount isProfileLocked attendanceMode authProvider';
+                const query = StudentModel.find(mongoFilters);
+                if (options.light) query.select(lightMongoFields);
+                const records = await query.sort({ name: 1 }).limit(options.limit || 1000).lean();
                 return records.map(mapStudentToCamelCase);
             }
         },
@@ -5286,10 +5327,6 @@ export const db = {
         }
     }
 };
-
-
-
-
 
 
 

@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ✅ NEW: Upload base64 profile photo to Supabase storage to save database egress/bandwidth
+    // Upload base64 profile photos to storage only; never persist base64 in the database.
     let finalProfilePicture = profilePicture;
     if (profilePicture && profilePicture.startsWith("data:image/")) {
       try {
@@ -185,7 +185,8 @@ export async function POST(request: NextRequest) {
         finalProfilePicture = await uploadProfilePictureToSupabase(profilePicture, tenantId, firebaseUID);
         console.log(`[Storage] Successfully uploaded base64 profile picture to Supabase bucket. URL: ${finalProfilePicture}`);
       } catch (err: any) {
-        console.error("❌ Failed to upload profile picture to storage, saving as base64 fallback:", err.message);
+        console.error("❌ Failed to upload profile picture to storage:", err.message);
+        throw new Error("Profile picture upload failed. Please try again.");
       }
     }
 
@@ -550,4 +551,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

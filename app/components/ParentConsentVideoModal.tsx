@@ -135,7 +135,7 @@ export default function ParentConsentVideoModal({
                 ref={videoRef}
                 src={url}
                 playsInline
-                preload="auto"
+                preload="metadata"
                 muted={isMuted}
                 onTimeUpdate={(e) => {
                   const video = e.target as HTMLVideoElement;

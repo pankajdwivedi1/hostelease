@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { isDirectConsentVideoUrl } from "@/lib/r2Storage";
+import { useCallback } from "react";
 
 export function extractDriveFileId(url: string): string | null {
   if (!url) return null;
@@ -37,83 +36,14 @@ function getDirectPrefetchKey(url: string): string | null {
   return url;
 }
 
-const MAX_PREFETCH_VIDEOS = 30;
-const PREFETCH_CONCURRENCY = 3;
+const EMPTY_PREFETCHED_VIDEO_URLS: Record<string, string> = {};
 
 export function useParentConsentVideoPrefetch(
-  consentUrls: (string | null | undefined)[]
+  _consentUrls: (string | null | undefined)[]
 ) {
-  const [prefetchedVideoUrls, setPrefetchedVideoUrls] = useState<
-    Record<string, string>
-  >({});
-  const inflightRef = useRef(new Set<string>());
-  const blobUrlsRef = useRef<string[]>([]);
-
-  const prefetchVideo = useCallback((parentConsentUrl: string): Promise<void> => {
-    const fileId = extractDriveFileId(parentConsentUrl);
-    const cacheKey = fileId ?? getDirectPrefetchKey(parentConsentUrl);
-
-    if (!cacheKey || inflightRef.current.has(cacheKey)) {
-      return Promise.resolve();
-    }
-
-    inflightRef.current.add(cacheKey);
-    const streamUrl = getConsentStreamUrl(parentConsentUrl);
-    const isDirect = isDirectConsentVideoUrl(parentConsentUrl);
-
-    return fetch(streamUrl, {
-      priority: isDirect ? "high" : "low",
-    } as RequestInit)
-      .then((response) => {
-        if (!response.ok) throw new Error("Prefetch failed");
-        return response.blob();
-      })
-      .then((blob) => {
-        const blobUrl = URL.createObjectURL(blob);
-        blobUrlsRef.current.push(blobUrl);
-        setPrefetchedVideoUrls((prev) => ({ ...prev, [cacheKey]: blobUrl }));
-      })
-      .catch(() => {
-        inflightRef.current.delete(cacheKey);
-      });
+  const prefetchVideo = useCallback((_parentConsentUrl: string): Promise<void> => {
+    return Promise.resolve();
   }, []);
 
-  useEffect(() => {
-    const uniqueUrls = [
-      ...new Set(consentUrls.filter(Boolean) as string[]),
-    ].slice(0, MAX_PREFETCH_VIDEOS);
-
-    if (uniqueUrls.length === 0) return;
-
-    let cancelled = false;
-    let cursor = 0;
-
-    const runWorker = async () => {
-      while (!cancelled && cursor < uniqueUrls.length) {
-        const url = uniqueUrls[cursor];
-        cursor += 1;
-        await prefetchVideo(url);
-      }
-    };
-
-    const workers = Array.from(
-      { length: Math.min(PREFETCH_CONCURRENCY, uniqueUrls.length) },
-      () => runWorker()
-    );
-
-    void Promise.all(workers);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [consentUrls, prefetchVideo]);
-
-  useEffect(() => {
-    return () => {
-      blobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-      blobUrlsRef.current = [];
-    };
-  }, []);
-
-  return { prefetchedVideoUrls, prefetchVideo };
+  return { prefetchedVideoUrls: EMPTY_PREFETCHED_VIDEO_URLS, prefetchVideo };
 }
