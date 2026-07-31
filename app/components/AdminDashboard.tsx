@@ -31,7 +31,7 @@ const FieldEnforcementComponent = dynamic(() => import("./FieldEnforcementCompon
 });
 
 import TenantSettingsView from "./TenantSettingsView";
-import { formTemplates } from "@/lib/formTemplates";
+import { formTemplates, collegeTemplate } from "@/lib/formTemplates";
 
 import HostelManagementModal from "./HostelManagementModal";
 import ParentConsentVideoModal from "./ParentConsentVideoModal";
@@ -9232,25 +9232,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     {/* Render fields grouped by sections */}
                     {(() => {
                       // Get all unique sections
-                      const defaultFields = formBuilderFields.length > 0 ? formBuilderFields : [
-                        { id: "name", label: "Full Name", type: "text", required: true, section: "Personal" },
-                        { id: "phoneNumber", label: "Phone Number", type: "tel", required: true, section: "Personal" },
-                        { id: "email", label: "Email Address", type: "email", required: true, section: "Personal" },
-                        { id: "dob", label: "Date of Birth", type: "date", required: true, section: "Personal" },
-                        { id: "category", label: "Category", type: "select", options: ["GENERAL", "SC", "ST", "OBC"], required: true, section: "Personal" },
-                        { id: "erpInformation", label: "ERP ID", type: "text", required: true, section: "Academic" },
-                        { id: "collegeName", label: "College Name", type: "select", options: ["OIST", "OCT", "OCP", "OPM", "OIPR"], required: true, section: "Academic" },
-                        { id: "branch", label: "Branch", type: "select", options: ["CS", "AIML", "DS", "ME", "CE", "EC", "IT", "EX", "MCA", "B PHARMA", "D PHARMA", "MBA", "MTECH", "M PHARMA", "CSBS", "CYBER SECURITY"], required: true, section: "Academic" },
-                        { id: "year", label: "Year", type: "select", options: ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR"], required: true, section: "Academic" },
-                        { id: "semester", label: "Semester", type: "select", options: ["1ST SEM", "2ND SEM", "3RD SEM", "4TH SEM", "5TH SEM", "6TH SEM", "7TH SEM", "8TH SEM"], required: true, section: "Academic" },
-                        { id: "section", label: "Section", type: "select", options: ["A", "B", "C", "D", "E", "F"], required: true, section: "Academic" },
-                        { id: "fatherName", label: "Father's Name", type: "text", required: true, section: "Guardian" },
-                        { id: "fatherNumber", label: "Father's Phone", type: "tel", required: true, section: "Guardian" },
-                        { id: "motherName", label: "Mother's Name", type: "text", required: true, section: "Guardian" },
-                        { id: "motherNumber", label: "Mother's Phone", type: "tel", required: true, section: "Guardian" },
-                        { id: "homePinCode", label: "Address & Pincode", type: "text", required: true, section: "Address" },
-                        { id: "homeState", label: "Home State", type: "select", options: ["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"], required: true, section: "Address" },
-                      ];
+                      const defaultFields = formBuilderFields.length > 0 ? formBuilderFields : collegeTemplate;
 
                       // Ensure registration fields and email are present
                       const registrationFields = [
