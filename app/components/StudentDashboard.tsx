@@ -1165,10 +1165,15 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     
                     // ⚡ NEW USER: If not found, redirect to onboarding immediately
                     if (minimalResponse.status === 404) {
-                        console.log('[Dashboard] Student not found (404), redirecting to onboarding...');
-                        if (isMounted) {
+                        const cached = typeof window !== 'undefined' ? localStorage.getItem('cachedStudentData') : null;
+                        if (!cached && !studentProfile) {
+                            console.log('[Dashboard] Student not found (404), redirecting to onboarding...');
+                            if (isMounted) {
+                                setLoading(false);
+                                router.push('/onboarding');
+                            }
+                        } else if (isMounted) {
                             setLoading(false);
-                            router.push('/onboarding');
                         }
                         return;
                     }
@@ -1205,12 +1210,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         const versionCheckParam = cachedUpdatedAt ? `&versionCheck=true&updatedAt=${encodeURIComponent(cachedUpdatedAt)}` : "";
                         let fullResponse = await fetch(`/api/students?${queryParam}${versionCheckParam}${getTenantParam(false)}`, { cache: 'no-store' });
                         
-                        // ⚡ If student truly not found, redirect to onboarding
+                        // ⚡ If server returns 404 during background check, keep existing profile
                         if (fullResponse.status === 404) {
-                            console.warn(`[Profile] Student not found (404), redirecting to onboarding...`);
+                            console.warn(`[Profile] Server returned 404 during background check. Retaining existing loaded profile.`);
                             if (isMounted) {
-                                localStorage.removeItem('cachedStudentData');
-                                router.push('/onboarding');
+                                setIsFullProfileLoaded(true);
+                                setLoading(false);
                             }
                             return;
                         }
