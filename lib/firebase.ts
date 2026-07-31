@@ -49,6 +49,7 @@ export const auth = new Proxy({} as any, {
 });
 
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 let analytics;
 if (typeof window !== "undefined" && app && app.options) {

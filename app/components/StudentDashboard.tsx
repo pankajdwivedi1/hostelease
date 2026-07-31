@@ -14,6 +14,7 @@ import {
     resolveConsentVideoSrc,
     useParentConsentVideoPrefetch,
 } from "@/lib/parentConsentVideo";
+import { getInstallationId } from "@/lib/installationId";
 
 interface Permission {
     _id: string;
@@ -1001,7 +1002,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     useEffect(() => {
         const loadUnifiedDeviceId = async () => {
             try {
-                const { getInstallationId } = await import("@/lib/installationId");
                 const installId = await getInstallationId();
                 setDeviceIdState(installId);
                 // Sync to localStorage
@@ -1020,7 +1020,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         if (isFullProfileLoaded && studentProfile && !isParentView) {
             const syncDeviceId = async () => {
                 try {
-                    const { getInstallationId } = await import("@/lib/installationId");
                     const currentDeviceId = await getInstallationId();
                     
                     const isUnbound = !studentProfile.deviceId || 
