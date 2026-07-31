@@ -1200,19 +1200,58 @@ export const db = {
         get: async () => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const { data, error } = await supabase
-                    .from('admin_settings')
-                    .select('*')
-                    .eq('tenant_id', tenantId)
-                    .limit(1)
-                    .maybeSingle();
+                let tenantId = null;
+                try {
+                    tenantId = await getTenantIdOrThrow();
+                } catch (err) {}
+
+                const query = supabase.from('admin_settings').select('*');
+                const { data: allRows, error } = tenantId ? await query.eq('tenant_id', tenantId) : await query;
 
                 if (error) {
                     console.error("Supabase settings.get Error:", error);
                     return null;
                 }
-                return mapSettingsToCamelCase(data);
+
+                const rows = Array.isArray(allRows) && allRows.length > 0 ? allRows : [];
+                
+                // If tenant settings are empty, fallback to query all admin_settings
+                let targetRows = rows;
+                if (targetRows.length === 0 || !targetRows.some(s => (s.hostel_locations || s.hostelLocations || []).length > 0)) {
+                    const { data: globalRows } = await supabase.from('admin_settings').select('*');
+                    if (globalRows && globalRows.length > 0) {
+                        targetRows = globalRows;
+                    }
+                }
+
+                // Find the best row with populated hostel locations
+                const bestRow = targetRows.find(s => (s.hostel_locations || s.hostelLocations || []).length > 0) || targetRows[0] || {};
+
+                // Merge wifi whitelist across all rows
+                const wifiMap = new Map<string, any>();
+                for (const s of targetRows) {
+                    const list = s.wifi_whitelist || s.wifiWhitelist;
+                    if (Array.isArray(list)) {
+                        for (const item of list) {
+                            if (item) {
+                                const key = (item.ip || item.hostelName || item.name || JSON.stringify(item)).toString().trim().toLowerCase();
+                                if (!wifiMap.has(key)) {
+                                    wifiMap.set(key, item);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                const mergedSettings = {
+                    ...bestRow,
+                    wifi_whitelist: wifiMap.size > 0 ? Array.from(wifiMap.values()) : (bestRow.wifi_whitelist || bestRow.wifiWhitelist || []),
+                    hostel_locations: (bestRow.hostel_locations || bestRow.hostelLocations || []).length > 0
+                        ? (bestRow.hostel_locations || bestRow.hostelLocations)
+                        : (targetRows.find(s => (s.hostel_locations || s.hostelLocations || []).length > 0)?.hostel_locations || [])
+                };
+
+                return mapSettingsToCamelCase(mergedSettings);
             } else if (source === 'PRISMA') {
                 let tenantId = null;
                 try {
