@@ -215,18 +215,12 @@ export default function OnboardingPage() {
             const response = await fetch(`/api/students?email=${encodeURIComponent(currentUser.email || "")}`);
             const data = await response.json();
             if (data.student) {
-              // ⚡ If profile locked by admin → skip onboarding, go straight to dashboard
-              if (data.student.isProfileLocked) {
-                console.log('[Onboarding] Profile locked by admin — redirecting to dashboard');
-                localStorage.setItem("userType", "student");
-                localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
-                router.push("/");
-                return;
-              }
+              const isRegistered = data.student.isProfileLocked || 
+                                   !!data.student.firebaseUID || 
+                                   (!!data.student.name && !!data.student.hostelName && !!data.student.roomNumber);
 
-              // ⚡ If already fully registered (has firebaseUID) → go to dashboard
-              if (data.student.firebaseUID) {
-                console.log('[Onboarding] Already registered — redirecting to dashboard');
+              if (isRegistered) {
+                console.log('[Onboarding] Student profile already registered — redirecting to dashboard');
                 localStorage.setItem("userType", "student");
                 localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
                 router.push("/");

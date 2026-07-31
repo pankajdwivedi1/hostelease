@@ -113,9 +113,11 @@ export default function Dashboard() {
                     try {
                       const response = await fetch(`/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email || "")}&minimal=true`);
                       if (response.status === 404) {
-                        // Student doesn't exist in DB → clear cache and go to onboarding
-                        localStorage.removeItem("cachedStudentData");
-                        router.push("/onboarding");
+                        // Only redirect if NO valid student cache exists
+                        const cached = localStorage.getItem("cachedStudentData");
+                        if (!cached) {
+                          router.push("/onboarding");
+                        }
                       } else if (response.ok) {
                         const data = await response.json();
                         if (data.student) {
@@ -159,9 +161,12 @@ export default function Dashboard() {
             try {
               const response = await fetch(`/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email || "")}&minimal=true`);
               if (response.status === 404) {
-                router.push("/onboarding");
-                setLoading(false);
-                return;
+                const cached = localStorage.getItem("cachedStudentData");
+                if (!cached) {
+                  router.push("/onboarding");
+                  setLoading(false);
+                  return;
+                }
               }
               if (response.ok) {
                 const data = await response.json();
