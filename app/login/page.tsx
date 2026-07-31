@@ -285,39 +285,55 @@ function LoginForm() {
 
       setLoadingText("Verifying Account...");
 
-      // ⚡ FAST DB CHECK: Look up student in Railway DB by firebaseUID or email
-      const response = await fetch(
-        `/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email)}&minimal=true`
-      );
+      // ⚡ FAST DB CHECK: Look up student by firebaseUID or email
+      let studentDataObj: any = null;
+      let tenantSlugRes: string | null = null;
 
-      if (response.status === 404) {
-        // New student — INSTANT ROUTING to onboarding (SPA transition)
-        router.push("/onboarding");
-        return;
+      try {
+        const response = await fetch(
+          `/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email)}&minimal=true`
+        );
+        if (response.ok) {
+          const resJson = await response.json();
+          studentDataObj = resJson.student;
+          tenantSlugRes = resJson.tenantSlug;
+        }
+      } catch (err) {
+        console.warn("Primary student verification error:", err);
       }
 
-      if (!response.ok) throw new Error("Failed to verify student account");
+      // Fallback query by email alone if primary check returned nothing
+      if (!studentDataObj && user.email) {
+        try {
+          const fallbackRes = await fetch(`/api/students?email=${encodeURIComponent(user.email)}`);
+          if (fallbackRes.ok) {
+            const fallbackJson = await fallbackRes.json();
+            studentDataObj = fallbackJson.student;
+            tenantSlugRes = fallbackJson.tenantSlug;
+          }
+        } catch (fallbackErr) {
+          console.warn("Fallback email student verification error:", fallbackErr);
+        }
+      }
 
-      const data = await response.json();
-      if (data.student) {
+      if (studentDataObj) {
         // Existing student found — cache and open dashboard
         const cached = localStorage.getItem("cachedStudentData");
         const existing = cached ? JSON.parse(cached) : {};
-        const merged = { ...existing, ...data.student };
+        const merged = { ...existing, ...studentDataObj };
         localStorage.setItem("cachedStudentData", JSON.stringify(merged));
-        
-        // ⚡ If profile is locked by admin → go straight to dashboard (not onboarding)
-        // This covers admin-pre-created students logging in for the first time
-        if (data.student.isProfileLocked) {
-          setLoadingText("Opening your dashboard...");
-          router.push("/");
-          return;
+
+        if (tenantSlugRes) {
+          document.cookie = `tenant-slug=${tenantSlugRes}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
         }
 
-        // ⚡ INSTANT ROUTING (SPA transition) - Replaces slow window.location.href
+        setLoadingText("Opening your dashboard...");
         router.push("/");
+        return;
       } else {
+        // Truly new student — route to onboarding
         router.push("/onboarding");
+        return;
       }
 
     } catch (error: any) {
