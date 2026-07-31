@@ -54,9 +54,12 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      { url: "/apple-touch-icon.png", type: "image/png" },
+      { url: "/logo.jpeg", type: "image/jpeg" },
       { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-512x512.png", sizes: "512x512", type: "image/png" },
     ],
+    shortcut: ["/apple-touch-icon.png"],
     apple: [
       { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
     ],
@@ -81,6 +84,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" href="/apple-touch-icon.png" type="image/png" />
+        <link rel="shortcut icon" href="/apple-touch-icon.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+      </head>
       <body className={`${lora.variable} antialiased`} suppressHydrationWarning>
         <InstallPWA />
         <AppBootstrap />

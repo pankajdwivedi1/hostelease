@@ -57,16 +57,21 @@ export async function GET(request: NextRequest) {
         }
 
         // Fetch this student's field completion progress
-        // Try by studentId first, fallback to firebaseUID to handle ID format differences
-        let progress = await db.studentFieldProgress.find({ studentId: student._id });
+        // Try by studentId first (both string & raw), fallback to firebaseUID
+        const strId = student._id.toString();
+        let progress = await db.studentFieldProgress.find({ studentId: strId });
         if (!progress || progress.length === 0) {
-            progress = await db.studentFieldProgress.find({ firebaseUID: student.firebaseUID });
+            progress = await db.studentFieldProgress.find({ studentId: student._id });
         }
+        if (!progress || progress.length === 0) {
+            progress = await db.studentFieldProgress.find({ firebaseUID: student.firebaseUID || strId });
+        }
+        if (!progress) progress = [];
 
         // ─────────────────────────────────────────────────────────────────
         // BLOCKER CHECK
         // A field blocks the student if they have not yet submitted a
-        // completed progress record for it (for the current enforcement config).
+        // completed progress record AND the field is missing from their profile.
         // ─────────────────────────────────────────────────────────────────
         const enabledFields = enforcement.enforcedFields.filter((f: any) => f.isEnabled);
         const missingFields: any[] = [];
@@ -76,14 +81,18 @@ export async function GET(request: NextRequest) {
                 (p: any) => p.fieldId === field.fieldId
             );
 
+            // Check if student profile already has a non-empty value for this field
+            const profileVal = (student as any)[field.fieldId] ?? student.dynamicFields?.[field.fieldId] ?? "";
+            const hasValueInProfile = profileVal !== null && profileVal !== undefined && String(profileVal).trim() !== "";
+
             let isBlocker: boolean;
 
             if (field.skipCompleted === false) {
                 // Admin wants this re-submitted every cycle (e.g., current year update)
                 isBlocker = !progressRecord?.isCompleted;
             } else {
-                // Default: show once until student confirms, then never again
-                isBlocker = !progressRecord || !progressRecord.isCompleted;
+                // Blocker only if NOT completed in progress AND missing from profile
+                isBlocker = (!progressRecord || !progressRecord.isCompleted) && !hasValueInProfile;
             }
 
             if (isBlocker) {
@@ -94,6 +103,21 @@ export async function GET(request: NextRequest) {
                     durationDays: field.durationDays,
                     order: field.order || 0,
                 });
+            } else if (hasValueInProfile && (!progressRecord || !progressRecord.isCompleted)) {
+                // Auto-heal: Profile already has data saved! Backfill progress record in DB.
+                try {
+                    db.studentFieldProgress.upsert({
+                        studentId: strId,
+                        firebaseUID: student.firebaseUID || strId,
+                        hostelName: studentHostel,
+                        fieldId: field.fieldId,
+                        fieldLabel: field.fieldLabel,
+                        isCompleted: true,
+                        completedAt: new Date(),
+                    }).catch(e => console.error("Auto-heal progress error:", e));
+                } catch (autoErr) {
+                    console.error("Auto-heal progress exception:", autoErr);
+                }
             }
         }
 

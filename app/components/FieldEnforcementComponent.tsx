@@ -145,10 +145,12 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
       const tenantParam = getTenantParam();
       const response = await fetch(`/api/admin/field-enforcement${tenantParam}`);
       const data = await response.json();
-      if (data.success) {
+      if (data.success && Array.isArray(data.data)) {
         const rulesMap: Record<string, EnforcementRule> = {};
         data.data.forEach((rule: EnforcementRule) => {
-          rulesMap[rule.hostelName.toLowerCase().trim()] = rule;
+          if (rule && rule.hostelName) {
+            rulesMap[rule.hostelName.toLowerCase().trim()] = rule;
+          }
         });
         setEnforcementRules(rulesMap);
       }

@@ -245,6 +245,10 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
     const [selectedStudent, setSelectedStudent] = useState<any>(null);
     const [lastOuting, setLastOuting] = useState<OutingRecord | null>(null);
     const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+    const [profileError, setProfileError] = useState<string | null>(null);
+    // ⚡ In-memory cache: avoids re-fetching same student on repeat clicks
+    const profileCache = useRef<Map<string, { student: any; lastOuting: any; ts: number }>>(new Map());
+    const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -291,55 +295,96 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
     }, [gateName]);
 
     // ===================== Fetch live data =====================
-    const fetchStudentProfile = async (idOrObject: any) => {
-        const studentId = typeof idOrObject === 'object' ? idOrObject._id || idOrObject.id : idOrObject;
+    // ===================== Fetch student profile (Instant 0ms Display) =====================
+    const fetchStudentProfile = async (idOrObject: any, fallbackRecord?: any) => {
+        const studentId = typeof idOrObject === 'object' 
+            ? idOrObject._id || idOrObject.id || idOrObject.studentId 
+            : idOrObject;
+
         if (!studentId || studentId === "[object Object]") return;
 
-        setIsLoadingProfile(true);
-        setIsProfileModalOpen(true);
-        try {
-            const response = await fetch(`/api/students/${studentId}`);
-            const data = await response.json();
-
-            if (data.student) {
-                setSelectedStudent(data.student);
-
-                // ⚡ Fetch last history record
-                try {
-                    const historyRes = await fetch(`/api/getpass/history?studentId=${studentId}&limit=1`);
-                    const historyData = await historyRes.json();
-                    if (historyData.success && historyData.records && historyData.records.length > 0) {
-                        setLastOuting(historyData.records[0]);
-                    } else {
-                        setLastOuting(null);
-                    }
-                } catch (hErr) {
-                    console.error("Error fetching student history:", hErr);
-                    setLastOuting(null);
-                }
-            } else {
-                console.error("Student not found");
-                setSelectedStudent(null);
-                setLastOuting(null);
-            }
-        } catch (err) {
-            console.error("Error fetching student profile:", err);
-            setSelectedStudent(null);
-            setLastOuting(null);
-        } finally {
+        // ✅ Check cache first — instant load (0ms) for revisited students
+        const cached = profileCache.current.get(studentId);
+        if (cached && Date.now() - cached.ts < CACHE_TTL) {
+            setSelectedStudent(cached.student);
+            setLastOuting(cached.lastOuting);
+            setIsProfileModalOpen(true);
             setIsLoadingProfile(false);
+            setProfileError(null);
+            return;
+        }
+
+        // ⚡ INSTANT DISPLAY (0ms):
+        // Immediately render modal with all available record fields (Name, Hostel, Room, Reg ID, Status, etc.)
+        const initialStudent: any = {
+            _id: studentId,
+            id: studentId,
+            name: fallbackRecord?.studentName || fallbackRecord?.name || selectedStudent?.name || "Student",
+            hostelName: fallbackRecord?.hostelName || "",
+            roomNumber: fallbackRecord?.roomNumber || "",
+            registrationId: fallbackRecord?.registrationId || "",
+            phoneNumber: fallbackRecord?.phoneNumber || "",
+            fatherName: fallbackRecord?.fatherName || "",
+            fatherNumber: fallbackRecord?.fatherNumber || "",
+            motherName: fallbackRecord?.motherName || "",
+            motherNumber: fallbackRecord?.motherNumber || "",
+            erpInformation: fallbackRecord?.erpId || fallbackRecord?.erpInformation || "",
+            studentStatus: fallbackRecord?.status === "out" ? "out" : "in",
+            collegeName: fallbackRecord?.collegeName || "",
+            branch: fallbackRecord?.branch || "",
+            year: fallbackRecord?.year || "",
+            semester: fallbackRecord?.semester || "",
+            homePinCode: fallbackRecord?.homePinCode || fallbackRecord?.permanentAddress || "",
+            profilePicture: fallbackRecord?.profilePicture || fallbackRecord?.photo || "",
+        };
+
+        setSelectedStudent(initialStudent);
+        if (fallbackRecord && (fallbackRecord.checkOutTime || fallbackRecord.checkInTime)) {
+            setLastOuting(fallbackRecord);
+        }
+        setIsProfileModalOpen(true);
+        setProfileError(null);
+        setIsLoadingProfile(false); // ⚡ NEVER BLOCK WITH SPINNER
+
+        // Asynchronous background fetch for full detailed fields
+        try {
+            const res = await fetch(`/api/students/${studentId}`);
+
+            if (res.ok) {
+                const data = await res.json();
+                if (data.student) {
+                    profileCache.current.set(studentId, {
+                        student: data.student,
+                        lastOuting: data.lastOuting || null,
+                        ts: Date.now(),
+                    });
+                    setSelectedStudent(data.student);
+                    if (data.lastOuting) setLastOuting(data.lastOuting);
+                    setProfileError(null);
+                }
+            }
+        } catch (err: any) {
+            console.warn('[Profile] Background fetch error:', err?.message);
         }
     };
 
-    const handleStudentClick = (studentId: string) => {
-        if (!studentId) return;
+    const handleStudentClick = (rawId: any, fallbackRecord?: any) => {
+        let studentId = typeof rawId === 'object' 
+            ? (rawId?._id || rawId?.id || rawId?.studentId) 
+            : rawId;
+
+        if ((!studentId || studentId === "[object Object]") && fallbackRecord) {
+            studentId = fallbackRecord.studentId || (fallbackRecord as any).student_id || fallbackRecord._id || fallbackRecord.id;
+        }
+
+        if (!studentId || studentId === "[object Object]") return;
         setSelectedStudentId(studentId);
-        fetchStudentProfile(studentId);
+        fetchStudentProfile(studentId, fallbackRecord);
     };
 
     const fetchLiveData = useCallback(async (isMinimal = false) => {
         try {
-            const res = await fetch(`/api/getpass/live?minimal=${isMinimal}`);
+            const res = await fetch(`/api/getpass/live?minimal=${isMinimal}&t=${Date.now()}`);
             const data = await res.json();
 
             if (data.success) {
@@ -387,19 +432,42 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         return () => clearInterval(qrInterval);
     }, [fetchNewQR]);
 
-    // ===================== Timer: Refresh live data every 5 minutes =====================
+    // ===================== Timer: Refresh live data with Lightweight Heartbeat =====================
+    const lastUpdateRef = useRef<number>(0);
+
+    const fetchActivityHeartbeat = useCallback(async () => {
+        try {
+            const res = await fetch(`/api/getpass/heartbeat?t=${Date.now()}`);
+            const data = await res.json();
+            if (data.success && data.lastUpdate) {
+                if (lastUpdateRef.current === 0) {
+                    lastUpdateRef.current = data.lastUpdate;
+                } else if (data.lastUpdate > lastUpdateRef.current) {
+                    // A scan happened! Fetch full update so Outside and Returns Today columns update instantly.
+                    lastUpdateRef.current = data.lastUpdate;
+                    fetchLiveData(false);
+                    
+                    // Trigger generic audio chime since heartbeat doesn't know direction
+                    // (Supabase realtime handles targeted audio, this is fallback)
+                    playSuccessChime();
+                }
+            }
+        } catch (err) {
+            // ignore network errors for heartbeat
+        }
+    }, [fetchLiveData]);
+
     useEffect(() => {
         // ⚡ Initial load is ALWAYS FULL for instant visibility
         fetchLiveData(false);
         const liveInterval = setInterval(() => {
             if (document.visibilityState === 'visible') {
-                // Background updates are MINIMAL and infrequent (5m) to save 90% bandwidth
-                // Realtime handles the instant updates for scans.
-                fetchLiveData(true);
+                // Heartbeat handles instant updates for Prisma/Mongo with almost 0 bandwidth
+                fetchActivityHeartbeat();
             }
-        }, 300000); // 5 Minutes (Massive Bandwidth Saving)
+        }, 1000); // 1 second for sub-second updates
         return () => clearInterval(liveInterval);
-    }, [fetchLiveData]);
+    }, [fetchLiveData, fetchActivityHeartbeat]);
 
     // ===================== Supabase Realtime Subscription =====================
     // ⚡ Provides INSTANT scan feedback with ZERO idle bandwidth
@@ -1137,46 +1205,49 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                         <div className="flex-1 overflow-y-auto border border-[rgba(255,255,255,0.05)] rounded-xl p-2 bg-[#0a0a1a]/30 custom-scrollbar">
                             {liveData?.currentlyOut && liveData.currentlyOut.length > 0 ? (
                                 <div className="flex flex-col gap-1.5">
-                                    {liveData.currentlyOut.map((record) => (
-                                        <div key={record._id} className="flex justify-between items-center py-1.5 px-2.5 bg-[#161b2e] rounded-xl border border-[#ff6b6b15] transition-all hover:border-[#ff6b6b30] group">
-                                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                                <div
-                                                    onClick={() => handleStudentClick(record.studentId)}
-                                                    className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#ff6b6b] to-[#ee5253] flex items-center justify-center font-black text-[10px] text-white cursor-pointer shadow-[0_4px_12px_rgba(238,82,83,0.3)] transition-transform hover:scale-105 shrink-0"
-                                                >
-                                                    {record.studentName?.charAt(0)?.toUpperCase() || "?"}
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <h4
-                                                            onClick={() => handleStudentClick(record.studentId)}
-                                                            className="text-[12px] font-bold text-white m-0 cursor-pointer hover:text-[#ff6b6b] transition-colors leading-tight truncate tracking-wide"
-                                                        >
-                                                            {record.studentName}
-                                                        </h4>
-                                                        <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${record.type === "leave"
-                                                            ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                                                            : "bg-blue-500/20 text-blue-400 border-blue-500/30"
-                                                            }`}>
-                                                            <span className="text-[9px]">{record.type === "leave" ? "🏠" : "🎫"}</span>
-                                                            <span>{record.type === "leave" ? "H-LEAVE" : "G-PASS"}</span>
-                                                        </span>
+                                    {liveData.currentlyOut.map((record, index) => {
+                                        const targetId = record.studentId || (record as any).student_id || record._id || record.id;
+                                        return (
+                                            <div key={record._id || (record as any).id || `out-${record.studentId || index}`} className="flex justify-between items-center py-1.5 px-2.5 bg-[#161b2e] rounded-xl border border-[#ff6b6b15] transition-all hover:border-[#ff6b6b30] group">
+                                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                    <div
+                                                        onClick={() => handleStudentClick(targetId, record)}
+                                                        className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#ff6b6b] to-[#ee5253] flex items-center justify-center font-black text-[10px] text-white cursor-pointer shadow-[0_4px_12px_rgba(238,82,83,0.3)] transition-transform hover:scale-105 shrink-0"
+                                                    >
+                                                        {record.studentName?.charAt(0)?.toUpperCase() || "?"}
                                                     </div>
-                                                    <p className="text-[9px] text-[rgba(255,255,255,0.3)] tracking-tight uppercase m-0 mt-0.5 font-bold truncate">
-                                                        {formatHostelDisplay(record.hostelName)} • {record.roomNumber}
-                                                    </p>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <h4
+                                                                onClick={() => handleStudentClick(targetId, record)}
+                                                                className="text-[12px] font-bold text-white m-0 cursor-pointer hover:text-[#ff6b6b] transition-colors leading-tight truncate tracking-wide"
+                                                            >
+                                                                {record.studentName}
+                                                            </h4>
+                                                            <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${record.type === "leave"
+                                                                ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                                                : "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                                                                }`}>
+                                                                <span className="text-[9px]">{record.type === "leave" ? "🏠" : "🎫"}</span>
+                                                                <span>{record.type === "leave" ? "H-LEAVE" : "G-PASS"}</span>
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-[9px] text-[rgba(255,255,255,0.3)] tracking-tight uppercase m-0 mt-0.5 font-bold truncate">
+                                                            {formatHostelDisplay(record.hostelName)} • {record.roomNumber}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col items-end shrink-0">
+                                                    <span className="text-[12px] font-black text-[#ff6b6b] tabular-nums tracking-tighter">
+                                                        {record.currentDurationText || formatDuration(record.currentDurationMinutes || 0)}
+                                                    </span>
+                                                    <span className="text-[8px] text-[rgba(255,255,255,0.25)] font-bold uppercase tracking-widest">
+                                                        {record.checkOutISTTime}
+                                                    </span>
                                                 </div>
                                             </div>
-                                            <div className="flex flex-col items-end shrink-0">
-                                                <span className="text-[12px] font-black text-[#ff6b6b] tabular-nums tracking-tighter">
-                                                    {record.currentDurationText || formatDuration(record.currentDurationMinutes || 0)}
-                                                </span>
-                                                <span className="text-[8px] text-[rgba(255,255,255,0.25)] font-bold uppercase tracking-widest">
-                                                    {record.checkOutISTTime}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full gap-2 py-6">
@@ -1198,37 +1269,40 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                         <div className="flex-1 overflow-y-auto border border-[rgba(255,255,255,0.05)] rounded-xl p-2 bg-[#0a0a1a]/30 custom-scrollbar">
                             {liveData?.recentActivity && liveData.recentActivity.length > 0 ? (
                                 <div className="flex flex-col gap-1.5">
-                                    {liveData.recentActivity.map((record) => (
-                                        <div key={record._id} className="flex justify-between items-center py-1.5 px-2.5 bg-[#161b2e] rounded-xl border border-[#00ff8815] transition-all hover:border-[#00ff8830] group">
-                                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                                <div
-                                                    onClick={() => handleStudentClick(record.studentId)}
-                                                    className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#00ff88] to-[#00cc6a] flex items-center justify-center font-black text-[10px] text-white cursor-pointer shadow-[0_4px_12px_rgba(0,255,136,0.3)] transition-transform hover:scale-105 shrink-0"
-                                                >
-                                                    {record.studentName?.charAt(0)?.toUpperCase() || "?"}
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <h4
-                                                        onClick={() => handleStudentClick(record.studentId)}
-                                                        className="text-[12px] font-bold text-white m-0 cursor-pointer hover:text-[#00ff88] transition-colors leading-tight truncate tracking-wide"
+                                    {liveData.recentActivity.map((record, index) => {
+                                        const targetId = record.studentId || (record as any).student_id || record._id || record.id;
+                                        return (
+                                            <div key={record._id || (record as any).id || `recent-${record.studentId || index}`} className="flex justify-between items-center py-1.5 px-2.5 bg-[#161b2e] rounded-xl border border-[#00ff8815] transition-all hover:border-[#00ff8830] group">
+                                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                    <div
+                                                        onClick={() => handleStudentClick(targetId, record)}
+                                                        className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#00ff88] to-[#00cc6a] flex items-center justify-center font-black text-[10px] text-white cursor-pointer shadow-[0_4px_12px_rgba(0,255,136,0.3)] transition-transform hover:scale-105 shrink-0"
                                                     >
-                                                        {record.studentName}
-                                                    </h4>
-                                                    <p className="text-[9px] text-[rgba(255,255,255,0.3)] tracking-tight uppercase m-0 mt-0.5 font-bold truncate">
-                                                        {formatHostelDisplay(record.hostelName)} • {record.roomNumber}
-                                                    </p>
+                                                        {record.studentName?.charAt(0)?.toUpperCase() || "?"}
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h4
+                                                            onClick={() => handleStudentClick(targetId, record)}
+                                                            className="text-[12px] font-bold text-white m-0 cursor-pointer hover:text-[#00ff88] transition-colors leading-tight truncate tracking-wide"
+                                                        >
+                                                            {record.studentName}
+                                                        </h4>
+                                                        <p className="text-[9px] text-[rgba(255,255,255,0.3)] tracking-tight uppercase m-0 mt-0.5 font-bold truncate">
+                                                            {formatHostelDisplay(record.hostelName)} • {record.roomNumber}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col items-end shrink-0">
+                                                    <span className="text-[12px] font-black text-[#00ff88] tabular-nums tracking-tighter">
+                                                        {record.durationMinutes !== undefined ? formatDuration(record.durationMinutes) : '-'}
+                                                    </span>
+                                                    <span className="text-[8px] text-[rgba(255,255,255,0.25)] font-bold uppercase tracking-widest">
+                                                        {record.checkInISTTime}
+                                                    </span>
                                                 </div>
                                             </div>
-                                            <div className="flex flex-col items-end shrink-0">
-                                                <span className="text-[12px] font-black text-[#00ff88] tabular-nums tracking-tighter">
-                                                    {record.durationMinutes !== undefined ? formatDuration(record.durationMinutes) : '-'}
-                                                </span>
-                                                <span className="text-[8px] text-[rgba(255,255,255,0.25)] font-bold uppercase tracking-widest">
-                                                    {record.checkInISTTime}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full gap-2 py-6">
@@ -1244,88 +1318,110 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
             {/* Student Profile Modal */}
             {isProfileModalOpen && (
                 <div
-                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in fade-in transition-all cursor-pointer"
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/90 backdrop-blur-xl animate-in fade-in transition-all cursor-pointer"
                     onClick={() => setIsProfileModalOpen(false)}
                 >
                     <div
-                        className="bg-white rounded-3xl w-full max-w-5xl max-h-[95vh] overflow-y-auto shadow-[0_0_100px_rgba(0,0,0,0.5)] flex flex-col relative animate-in zoom-in-95 cursor-default text-gray-900 custom-scrollbar"
+                        className="bg-white rounded-none sm:rounded-3xl w-full h-full sm:h-auto max-w-5xl max-h-none sm:max-h-[95vh] overflow-y-auto shadow-[0_0_100px_rgba(0,0,0,0.5)] flex flex-col relative animate-in zoom-in-95 cursor-default text-gray-900 no-scrollbar"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {isLoadingProfile ? (
-                            <div className="h-[400px] flex flex-col items-center justify-center gap-4 p-8">
+                            <div className="h-full sm:h-[400px] flex flex-col items-center justify-center gap-4 p-8">
                                 <div className="w-12 h-12 border-4 border-gray-100 border-t-blue-600 rounded-full animate-spin" />
                                 <p className="font-bold text-gray-400 uppercase tracking-widest text-[10px]">Searching Profile...</p>
                             </div>
+                        ) : profileError ? (
+                            <div className="h-full sm:h-[400px] flex flex-col items-center justify-center gap-4 p-8 text-center">
+                                <span className="text-5xl">⚠️</span>
+                                <p className="font-bold text-red-500 text-sm">Failed to Load Profile</p>
+                                <p className="text-gray-400 text-xs max-w-xs">{profileError}</p>
+                                <button
+                                    onClick={() => selectedStudentId && fetchStudentProfile(selectedStudentId)}
+                                    className="mt-2 px-5 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition-all"
+                                >
+                                    Try Again
+                                </button>
+                            </div>
                         ) : selectedStudent ? (
-                            <div className="flex flex-col">
+                            <div className="flex flex-col min-h-full sm:min-h-0">
                                 {/* Header Banner */}
-                                <div className="h-14 bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-950 shrink-0 relative">
+                                <div className="h-12 sm:h-14 bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-950 shrink-0 relative">
                                     <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white/20 via-transparent to-transparent" />
-
-                                    {/* Sticky Close Button inside scrollable area */}
                                     <button
                                         onClick={() => setIsProfileModalOpen(false)}
-                                        className="absolute top-4 right-4 w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md flex items-center justify-center text-white transition-all z-[110] border border-white/10"
+                                        className="absolute top-2.5 sm:top-4 right-3 sm:right-4 w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md flex items-center justify-center text-white transition-all z-[110] border border-white/10"
                                     >
-                                        <span className="text-xl">✕</span>
+                                        <span className="text-base sm:text-xl">✕</span>
                                     </button>
                                 </div>
 
-                                {/* Profile Section */}
-                                <div className="px-5 sm:px-10 pb-8 flex flex-col sm:flex-row items-center sm:items-end gap-6 sm:gap-10 relative">
-                                    {/* Profile Picture Box */}
-                                    <div className="w-32 h-32 sm:w-48 sm:h-48 rounded-[2rem] bg-white p-2 shadow-[0_20px_50px_rgba(0,0,0,0.2)] -mt-8 shrink-0 z-10 border border-white/50">
-                                        <div className="w-full h-full rounded-[1.6rem] bg-gray-50 flex items-center justify-center text-4xl sm:text-7xl font-black text-blue-600 overflow-hidden shadow-inner ring-1 ring-black/5">
-                                            {selectedStudent.profilePicture ? (
-                                                <img src={selectedStudent.profilePicture} alt={selectedStudent.name} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <span className="bg-gradient-to-br from-blue-600 to-indigo-700 bg-clip-text text-transparent">
-                                                    {selectedStudent.name?.charAt(0).toUpperCase()}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
+                                {/* Profile Section — Mobile: LEFT info | RIGHT photo */}
+                                <div className="px-4 sm:px-10 pb-3 sm:pb-8 flex flex-row sm:flex-row items-start sm:items-end gap-4 sm:gap-10 relative">
 
-                                    <div className="flex-1 text-center sm:text-left pt-2 sm:pt-0">
-                                        <div className="flex flex-col sm:flex-row items-center sm:items-baseline gap-2 sm:gap-4 mb-3 sm:mb-4">
-                                            <h2 className="text-2xl sm:text-5xl font-black text-gray-900 tracking-tight leading-tight uppercase">{selectedStudent.name}</h2>
-                                            <span className={`px-4 py-1 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm ${selectedStudent.studentStatus === 'out' ? 'bg-red-500 text-white shadow-red-200' : 'bg-green-500 text-white shadow-green-200'}`}>
+                                    {/* LEFT: All text info */}
+                                    <div className="flex-1 order-1 sm:order-2 pt-3 sm:pt-0 text-left">
+                                        {/* Name + Status */}
+                                        <div className="flex flex-col sm:flex-row items-start sm:items-baseline gap-1 sm:gap-4 mb-2 sm:mb-4">
+                                            <h2 className="text-base sm:text-5xl font-black text-gray-900 tracking-tight leading-tight uppercase">{selectedStudent.name}</h2>
+                                            <span className={`px-2.5 py-0.5 sm:px-4 sm:py-1 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm ${selectedStudent.studentStatus === 'out' ? 'bg-red-500 text-white shadow-red-200' : 'bg-green-500 text-white shadow-green-200'}`}>
                                                 {selectedStudent.studentStatus === 'out' ? 'Outside' : 'Inside Campus'}
                                             </span>
                                         </div>
-                                        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-10">
-                                            <div className="flex flex-col items-center sm:items-start group">
-                                                <p className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1 group-hover:text-blue-500 transition-colors">Registration ID</p>
-                                                <p className="text-blue-600 font-extrabold text-lg sm:text-2xl tracking-tight">{selectedStudent.registrationId || "N/A"}</p>
-                                            </div>
-                                            <div className="hidden sm:block w-px h-10 sm:h-12 bg-gray-100/80" />
-                                            <div className="flex flex-col items-center sm:items-start group">
-                                                <p className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1 group-hover:text-blue-500 transition-colors">Hostel & Room</p>
-                                                <p className="text-gray-900 font-extrabold text-lg sm:text-2xl tracking-tight">{formatHostelDisplay(selectedStudent.hostelName)} • {selectedStudent.roomNumber}</p>
+
+                                        {/* Registration ID + Hostel & Room + Recent History in 1 Row (Mobile & Desktop) */}
+                                        <div className="flex flex-wrap items-center gap-2 sm:gap-6 mt-1 sm:mt-2">
+                                            <div className="flex flex-col items-start group">
+                                                <p className="text-[7.5px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Registration ID</p>
+                                                <p className="text-blue-600 font-extrabold text-[10px] sm:text-2xl tracking-tight">{selectedStudent.registrationId || "N/A"}</p>
                                             </div>
 
-                                            {/* ⚡ Recent History Section */}
-                                            {lastOuting && (
-                                                <>
-                                                    <div className="hidden sm:block w-px h-10 sm:h-12 bg-gray-100/80" />
-                                                    <div className="flex flex-col items-center sm:items-start p-2 sm:p-3 bg-red-50/50 rounded-2xl border border-red-100/50 group hover:bg-red-50 transition-colors min-w-[140px]">
-                                                        <p className="text-[8px] sm:text-[9px] font-black text-red-500 uppercase tracking-widest mb-1 group-hover:text-red-600 transition-colors">Recent History</p>
-                                                        <div className="flex flex-col items-center sm:items-start gap-1">
-                                                            <p className="text-gray-900 font-extrabold text-[11px] sm:text-sm tracking-tight leading-none">
-                                                                Date: <span className="text-red-600">{lastOuting.checkInISTDate || lastOuting.checkOutISTDate || "N/A"}</span>
-                                                            </p>
-                                                            <p className="text-gray-900 font-extrabold text-[11px] sm:text-sm tracking-tight leading-none">
-                                                                Time: <span className="text-red-600">{lastOuting.checkInISTTime || lastOuting.checkOutISTTime || "N/A"}</span>
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </>
-                                            )}
+                                            <div className="w-[1px] h-6 sm:h-10 bg-slate-200" />
+
+                                            <div className="flex flex-col items-start group">
+                                                <p className="text-[7.5px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Hostel & Room</p>
+                                                <p className="text-gray-900 font-extrabold text-[10px] sm:text-2xl tracking-tight">{formatHostelDisplay(selectedStudent.hostelName)} • {selectedStudent.roomNumber}</p>
+                                            </div>
+
+                                            <div className="w-[1px] h-6 sm:h-10 bg-slate-200" />
+
+                                            {/* Recent History — shifted to right side (left of photo on mobile) */}
+                                            <div className="flex flex-col items-start px-2 py-1 sm:px-3 sm:py-2 bg-red-50/60 rounded-lg sm:rounded-2xl border border-red-100/60 shrink-0">
+                                                <p className="text-[7px] sm:text-[9px] font-black text-red-500 uppercase tracking-widest">Recent History</p>
+                                                {lastOuting ? (
+                                                    <>
+                                                        <p className="text-gray-900 font-extrabold text-[8.5px] sm:text-xs tracking-tight leading-snug">
+                                                            Date: <span className="text-red-600">{lastOuting.checkInISTDate || lastOuting.checkOutISTDate || "N/A"}</span>
+                                                        </p>
+                                                        <p className="text-gray-900 font-extrabold text-[8.5px] sm:text-xs tracking-tight leading-snug">
+                                                            Time: <span className="text-red-600">{lastOuting.checkInISTTime || lastOuting.checkOutISTTime || "N/A"}</span>
+                                                        </p>
+                                                    </>
+                                                ) : (
+                                                    <p className="text-[8px] sm:text-xs text-gray-400 font-semibold italic">No gate pass history yet</p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                    </div>
+
+                                    {/* RIGHT: Profile Picture */}
+                                    <div className="order-2 sm:order-1 shrink-0 mt-3 sm:-mt-8 z-10">
+                                        <div className="w-24 h-24 sm:w-48 sm:h-48 rounded-2xl sm:rounded-[2rem] ring-[3px] ring-blue-500 shadow-[0_10px_30px_rgba(0,0,0,0.15)] sm:shadow-[0_20px_50px_rgba(0,0,0,0.2)]">
+                                            <div className="w-full h-full rounded-2xl sm:rounded-[2rem] bg-gray-50 flex items-center justify-center text-3xl sm:text-7xl font-black text-blue-600 overflow-hidden">
+                                                {selectedStudent.profilePicture ? (
+                                                    <img src={selectedStudent.profilePicture} alt={selectedStudent.name} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <span className="bg-gradient-to-br from-blue-600 to-indigo-700 bg-clip-text text-transparent">
+                                                        {selectedStudent.name?.charAt(0).toUpperCase()}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="px-4 sm:px-10 pb-8 grid grid-cols-2 lg:grid-cols-3 gap-x-4 sm:gap-x-12 gap-y-4 sm:gap-y-8 bg-gray-50/50 pt-6 sm:pt-8 border-t border-gray-100">
+                                {/* Info Cards Grid — 2 cols on mobile */}
+                                <div className="flex-1 px-4 sm:px-10 pb-6 sm:pb-8 grid grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-x-12 sm:gap-y-8 bg-gray-50/50 pt-4 sm:pt-8 border-t border-gray-100">
                                     {[
                                         { label: "College Name", value: selectedStudent.collegeName || "N/A", icon: "🎓" },
                                         { label: "ERP ID", value: selectedStudent.erpInformation || "N/A", icon: "🆔", valueClass: "text-blue-600" },
@@ -1339,20 +1435,18 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                         { label: "Mother Mobile", value: selectedStudent.motherNumber || "N/A", icon: "📱" },
                                         { label: "Permanent Address", value: `${selectedStudent.permanentAddress || "N/A"}${selectedStudent.homeState ? `, ${selectedStudent.homeState}` : ""}`, icon: "🏠", fullWidth: true },
                                     ].map((item: any, idx) => (
-                                        <div key={idx} className={`flex gap-3 sm:gap-4 items-start bg-white/60 p-2.5 sm:p-0 rounded-xl sm:bg-transparent border border-white sm:border-0 shadow-sm sm:shadow-none ${item.fullWidth ? 'col-span-2 lg:col-span-3' : ''}`}>
-                                            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-white shadow-sm flex items-center justify-center text-base sm:text-lg shrink-0 border border-gray-50">{item.icon}</div>
+                                        <div key={idx} className={`flex gap-2 sm:gap-4 items-start bg-white p-2.5 sm:p-0 sm:bg-transparent rounded-xl sm:rounded-none border border-gray-100 sm:border-0 shadow-sm sm:shadow-none ${item.fullWidth ? 'col-span-2 lg:col-span-3' : ''}`}>
+                                            <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gray-50 sm:bg-white shadow-sm flex items-center justify-center text-sm sm:text-lg shrink-0 border border-gray-100">{item.icon}</div>
                                             <div className="min-w-0 flex-1">
-                                                <p className="text-[7px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1">{item.label}</p>
+                                                <p className="text-[8px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest mb-0.5">{item.label}</p>
                                                 <p className={`text-[10px] sm:text-sm font-black m-0 break-words ${item.fullWidth ? '' : 'line-clamp-2'} ${item.valueClass || 'text-gray-900'}`}>
                                                     {item.value !== "N/A" && (item.label.toLowerCase().includes("mobile") || item.label.toLowerCase().includes("phone")) ? (
-                                                        <a href={`tel:${item.value}`} className="hover:text-blue-600 transition-colors flex items-center gap-1.5 group/link">
+                                                        <a href={`tel:${item.value}`} className="hover:text-blue-600 transition-colors">
                                                             {item.value}
-                                                            <span className="text-[10px] sm:text-[12px] text-[#FBBC05] group-hover/link:text-yellow-600 transition-colors">📞</span>
                                                         </a>
                                                     ) : item.value !== "N/A" && item.label.toLowerCase().includes("email") ? (
-                                                        <a href={`mailto:${item.value}`} className="hover:text-blue-600 transition-colors flex items-center gap-1.5 group/link">
+                                                        <a href={`mailto:${item.value}`} className="hover:text-blue-600 transition-colors">
                                                             {item.value}
-                                                            <span className="text-[10px] sm:text-[12px] text-[#FBBC05] group-hover/link:text-yellow-600 transition-colors">✉️</span>
                                                         </a>
                                                     ) : (
                                                         item.value

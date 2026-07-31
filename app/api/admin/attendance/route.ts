@@ -96,7 +96,8 @@ export async function POST(request: Request) {
             // Prepare bulk data
             attendanceRecords.push({
                 studentId: student._id.toString(),
-                firebaseUID: student.firebaseUID,
+                firebaseUid: student.firebaseUid || student.firebaseUID || student._id.toString(),
+                firebaseUID: student.firebaseUid || student.firebaseUID || student._id.toString(),
                 name: student.name,
                 hostelName: student.hostelName,
                 roomNumber: student.roomNumber,

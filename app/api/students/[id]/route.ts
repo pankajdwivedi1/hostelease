@@ -174,6 +174,12 @@ export async function PATCH(
       }
     }
 
+    // 🔒 OPTION A ENFORCEMENT: If profile picture is updated without explicit new faceDescriptor, clear old vector array
+    if (body.profilePicture && (!body.faceDescriptor || !Array.isArray(body.faceDescriptor) || body.faceDescriptor.length === 0)) {
+      body.faceDescriptor = [];
+      console.log(`🔒 [Option A Enforcement] Profile picture updated for ${studentId}. Cleared old faceDescriptor vector array.`);
+    }
+
     // Use the Database Adapter for a database-aware update (Mongo/Supabase)
     const updatedStudent = await db.students.update(studentId, body);
 
@@ -297,13 +303,24 @@ export async function GET(
       );
     }
 
-    // Check for open gate pass to ensure status is accurate
-    const openGatePass = await db.gatePasses.findOne({ studentId, status: "out" });
-    if (openGatePass && student.studentStatus !== 'out') {
-      student.studentStatus = 'out';
+    // Fast lookup for latest gate pass history using skipCount
+    let lastOuting = null;
+    try {
+      const historyRes = await db.gatePasses.list(
+        { studentId },
+        { limit: 1, sortField: 'createdAt', sortOrder: 'desc', skipCount: true }
+      );
+      if (historyRes.records && historyRes.records.length > 0) {
+        lastOuting = historyRes.records[0];
+        if (lastOuting.status === 'out' || lastOuting.action === 'CHECK_OUT') {
+          student.studentStatus = 'out';
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch last outing for student:", e);
     }
 
-    return NextResponse.json({ success: true, student }, { status: 200 });
+    return NextResponse.json({ success: true, student, lastOuting }, { status: 200 });
   } catch (error: any) {
     console.error("Error fetching student:", error);
     return NextResponse.json(

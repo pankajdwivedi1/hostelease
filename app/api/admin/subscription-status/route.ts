@@ -26,6 +26,12 @@ export async function GET(request: NextRequest) {
             razorpayKeyId: "",
             razorpayKeySecret: "",
             pricePerStudentPerMonth: 30,
+            discount1Month: 0,
+            discount3Month: 5,
+            discount6Month: 10,
+            discount12Month: 20,
+            bankTransferDiscount: 2.5,
+            supportWhatsappNumber: "8269418956",
             customQrCodeUrl: ""
         };
 

@@ -35,15 +35,12 @@ export async function registerPushNotifications(
 
   try {
     // 1. Register the Service Worker file
-    const registration = await navigator.serviceWorker.register("/sw.js", {
+    await navigator.serviceWorker.register("/sw.js", {
       scope: "/"
     });
 
-    // 2. Wait for Service Worker to be active
-    const activeSW = registration.active || registration.installing || registration.waiting;
-    if (!activeSW) {
-      console.warn("Service worker state could not be resolved.");
-    }
+    // 2. Wait for Service Worker to be fully active and ready
+    const registration = await navigator.serviceWorker.ready;
 
     // 3. Request push notification permissions
     const permission = await Notification.requestPermission();
@@ -53,15 +50,21 @@ export async function registerPushNotifications(
     }
 
     // 4. Check if subscription already exists
-    let subscription = await registration.pushManager.getSubscription();
+    let subscription = null;
+    try {
+      subscription = await registration.pushManager.getSubscription();
 
-    if (!subscription) {
-      // 5. Create new subscription
-      const subscribeOptions = {
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
-      };
-      subscription = await registration.pushManager.subscribe(subscribeOptions);
+      if (!subscription) {
+        // 5. Create new subscription
+        const subscribeOptions = {
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+        };
+        subscription = await registration.pushManager.subscribe(subscribeOptions);
+      }
+    } catch (pushErr: any) {
+      console.warn("PushManager subscription skipped or failed:", pushErr?.message || pushErr);
+      return;
     }
 
     // 6. Send the subscription object to our server-side API

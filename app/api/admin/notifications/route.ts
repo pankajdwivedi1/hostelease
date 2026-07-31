@@ -6,7 +6,7 @@ import { db } from "@/lib/dbAdapter";
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { senderId, targetType, targetHostel, message, priority, expiresAt } = body;
+        const { senderId, targetType, targetHostel, message, priority, expiresAt, senderRole, senderHostel } = body;
         let { targetStudentId } = body;
 
         if (!senderId || !targetType || !message) {
@@ -36,6 +36,8 @@ export async function POST(request: NextRequest) {
 
         const notification = await db.notifications.create({
             senderId,
+            senderRole: senderRole || "warden",
+            senderHostel: senderHostel || targetHostel || null,
             targetType,
             targetHostel,
             targetStudentId: targetStudentId || null,
@@ -56,14 +58,23 @@ export async function GET(request: NextRequest) {
         const id = searchParams.get("id");
 
         if (id) {
-            const notification = await db.notifications.getById(id);
-            return NextResponse.json({ success: true, notification });
+            try {
+                const notification = await db.notifications.getById(id);
+                return NextResponse.json({ success: true, notification });
+            } catch (err: any) {
+                return NextResponse.json({ success: true, notification: null });
+            }
         }
 
-        const notifications = await db.notifications.list({}, { limit: 50 });
-        return NextResponse.json({ success: true, notifications });
+        try {
+            const notifications = await db.notifications.list({}, { limit: 50 });
+            return NextResponse.json({ success: true, notifications: notifications || [] });
+        } catch (err: any) {
+            console.error("Warning fetching notifications, returning empty array fallback:", err?.message || err);
+            return NextResponse.json({ success: true, notifications: [] });
+        }
     } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ success: true, notifications: [] });
     }
 }
 
@@ -86,8 +97,17 @@ export async function DELETE(request: NextRequest) {
         }
 
         if (id) {
-            // Support both Mongo and Supabase via dbAdapter patterns
-            // Use deleteMany with id filter as it's already implemented in dbAdapter
+            const role = searchParams.get("role");
+            if (role === "warden") {
+                try {
+                    const existingNotif = await db.notifications.getById(id);
+                    if (existingNotif && (existingNotif.senderRole === "dean" || existingNotif.senderRole === "superadmin" || existingNotif.targetType === "all")) {
+                        return NextResponse.json({ error: "Wardens cannot delete broadcasts issued by Deans or Super Admins" }, { status: 403 });
+                    }
+                } catch (e) {
+                    // proceed if getById fails
+                }
+            }
             await db.notifications.deleteMany({ _id: id });
             return NextResponse.json({ success: true, message: "Notification deleted" });
         }

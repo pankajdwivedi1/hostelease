@@ -67,13 +67,30 @@ export default function StudentScannerPage() {
         const init = async () => {
             try {
                 // 1. Get student info from localStorage
-                const storedUID = localStorage.getItem("firebaseUID") || "";
-                const storedName = localStorage.getItem("studentName") || "";
-                const storedStatus = localStorage.getItem("studentStatus") as "in" | "out" || "in";
+                let storedUID = localStorage.getItem("firebaseUID") || localStorage.getItem("getpass_uid") || "";
+                let storedName = localStorage.getItem("studentName") || "";
+                let storedStatus = localStorage.getItem("studentStatus") as "in" | "out" | null;
+
+                // Fallback to cachedStudentData if missing
+                if (!storedUID || !storedName || !storedStatus) {
+                    try {
+                        const cachedStr = localStorage.getItem("cachedStudentData");
+                        if (cachedStr) {
+                            const parsed = JSON.parse(cachedStr);
+                            if (!storedUID) storedUID = parsed.firebaseUID || parsed.supabaseId || parsed._id || "";
+                            if (!storedName) storedName = parsed.name || "";
+                            if (!storedStatus && parsed.studentStatus) storedStatus = parsed.studentStatus as "in" | "out";
+                        }
+                    } catch (e) {
+                        console.error("Failed to parse cachedStudentData", e);
+                    }
+                }
+                
+                const finalStatus = storedStatus || "in";
 
                 setFirebaseUID(storedUID);
                 setStudentName(storedName);
-                setCurrentStatus(storedStatus);
+                setCurrentStatus(finalStatus);
 
                 if (storedUID) {
                     fetchOutingHistory(storedUID);
@@ -99,7 +116,7 @@ export default function StudentScannerPage() {
     const fetchOutingHistory = async (uid: string) => {
         setLoadingHistory(true);
         try {
-            const res = await fetch(`/api/getpass/history?firebaseUID=${uid}&limit=10`);
+            const res = await fetch(`/api/getpass/history?firebaseUID=${uid}&limit=10&t=${Date.now()}`);
             const data = await res.json();
             if (data.success) {
                 setOutingHistory(data.records);
@@ -336,6 +353,47 @@ export default function StudentScannerPage() {
         };
     }, [syncOfflineScans]);
 
+    const playAudioFeedback = (action: string) => {
+        try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+            
+            osc.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            
+            if (action === "checkout") {
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(800, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.5);
+                
+                const utterance = new SpeechSynthesisUtterance("Checked Out");
+                utterance.rate = 1.1;
+                utterance.pitch = 1.2;
+                window.speechSynthesis.speak(utterance);
+            } else if (action === "checkin") {
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(1200, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.5);
+                
+                const utterance = new SpeechSynthesisUtterance("Checked In");
+                utterance.rate = 1.1;
+                utterance.pitch = 1.2;
+                window.speechSynthesis.speak(utterance);
+            }
+        } catch (e) {
+            console.error("Audio feedback error:", e);
+        }
+    };
+
     // ===================== Handle QR Code Detection =====================
     const handleQRCodeDetected = useCallback(async (qrData: string) => {
         if (processingRef.current) return;
@@ -364,6 +422,7 @@ export default function StudentScannerPage() {
         // Fallback instantly if navigator reports offline
         if (!navigator.onLine) {
             queueOfflineScan(qrData);
+            playAudioFeedback(currentStatus === "in" ? "checkout" : "checkin");
             processingRef.current = false;
             setProcessing(false);
             return;
@@ -383,6 +442,8 @@ export default function StudentScannerPage() {
             const data = await res.json();
 
             if (data.success) {
+                playAudioFeedback(data.action);
+                
                 setScanResult({
                     success: true,
                     action: data.action,

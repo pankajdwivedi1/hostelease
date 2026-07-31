@@ -80,25 +80,107 @@ export async function loadFaceApiModels(accurate: boolean = false) {
 /**
  * Calculate match score based on distance
  * Uses an industrial-grade exponential weight to reduce false positives
+ * Distance <= 0.32 maps to Score >= 90% (SSD-MobileNet PRO High Confidence)
  */
 export function calculateScore(distance: number): number {
-    // Distance 0.0 -> 100%
-    // Distance 0.5 -> 80%
-    // Distance 0.6 -> 70% (Standard cutoff)
-    // Distance 0.7 -> 40% (Aggressive drop to prevent false positives)
-    // Distance 1.0 -> 0%
-
     let score;
-    if (distance <= 0.6) {
-        score = 100 - (distance * 50); // Linear high-confidence (0.6 -> 70)
+    if (distance <= 0.32) {
+        score = 100 - (distance * 31.25); // Distance 0.0 -> 100%, 0.32 -> 90%
+    } else if (distance <= 0.45) {
+        score = 90 - ((distance - 0.32) * 230.7); // Steep drop: 0.32 -> 90%, 0.45 -> 60%
     } else {
-        score = 70 - ((distance - 0.6) * 175); // Steep drop for uncertainty
+        score = Math.max(0, 60 - ((distance - 0.45) * 120)); // 0.45+ drops quickly to 0%
     }
 
     const matchPercentage = Math.round(Math.max(0, Math.min(100, score)));
     console.log(`📏 Face Match: Distance=${distance.toFixed(3)}, Score=${matchPercentage}%`);
     return matchPercentage;
 }
+
+/**
+ * Mobile Display Screen & Video Replay Anti-Spoof Analyzer
+ * Detects mobile phone display pixel grids (Moiré patterns) and specular glass glare.
+ * Blocks static photos AND recorded video replays played on mobile screens.
+ */
+export function detectMobileScreenDisplay(
+    inputElement: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement,
+    box: any
+): { isSpoof: boolean; reason?: string } {
+    try {
+        if (!inputElement || !box) return { isSpoof: false };
+
+        const width = (inputElement as HTMLVideoElement).videoWidth || inputElement.width || 0;
+        const height = (inputElement as HTMLVideoElement).videoHeight || inputElement.height || 0;
+
+        if (width === 0 || height === 0) return { isSpoof: false };
+
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = width;
+        offCanvas.height = height;
+        const ctx = offCanvas.getContext('2d');
+        if (!ctx) return { isSpoof: false };
+
+        ctx.drawImage(inputElement, 0, 0, width, height);
+
+        const bx = Math.max(0, Math.floor(box.x));
+        const by = Math.max(0, Math.floor(box.y));
+        const bw = Math.min(width - bx, Math.floor(box.width));
+        const bh = Math.min(height - by, Math.floor(box.height));
+
+        if (bw < 30 || bh < 30) return { isSpoof: false };
+
+        const imgData = ctx.getImageData(bx, by, bw, bh);
+        const data = imgData.data;
+        const totalPixels = bw * bh;
+
+        let saturatedPixelCount = 0;
+        let highFreqGridDiffs = 0;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            if (r >= 238 && g >= 238 && b >= 238) {
+                saturatedPixelCount++;
+            }
+
+            const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+
+            if (i > 4 && i % (bw * 4) !== 0) {
+                const prevR = data[i - 4];
+                const prevG = data[i - 3];
+                const prevB = data[i - 2];
+                const prevBrightness = 0.299 * prevR + 0.587 * prevG + 0.114 * prevB;
+                const diff = Math.abs(brightness - prevBrightness);
+                if (diff > 30) {
+                    highFreqGridDiffs++;
+                }
+            }
+        }
+
+        const glareRatio = saturatedPixelCount / totalPixels;
+        const moireRatio = highFreqGridDiffs / totalPixels;
+
+        console.log(`🛡️ Mobile Screen Detector: GlareRatio=${(glareRatio * 100).toFixed(2)}%, MoireRatio=${(moireRatio * 100).toFixed(2)}%`);
+
+        if (glareRatio > 0.030) {
+            return { isSpoof: true, reason: "Mobile Device Screen / Glare Detected. Photos/Videos on mobile screens are strictly prohibited." };
+        }
+
+        if (moireRatio > 0.12) {
+            return { isSpoof: true, reason: "Mobile Display Screen Detected. Video/Photo replays on screens are strictly prohibited." };
+        }
+
+        return { isSpoof: false };
+    } catch (e) {
+        console.error("Mobile screen detection error:", e);
+        return { isSpoof: false };
+    }
+}
+
+// Alias for backwards compatibility
+export const detectScreenSpoof = detectMobileScreenDisplay;
 
 /**
  * Detect face in an image

@@ -17,71 +17,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter();
 
     useEffect(() => {
-        // ⚡ SILENT HANDOFF LOGIC
+        // ⚡ SILENT HANDOFF LOGIC (Deprecated: Students use Firebase directly now)
         const performSilentHandoff = async () => {
-            const storedUserType = localStorage.getItem("userType");
-            if (storedUserType !== "student") return;
-
-            // 1. Check if we already have a Supabase session
-            const { data: { session: supabaseSession } } = await supabase.auth.getSession();
-            if (supabaseSession) {
-                console.log("✅ Supabase session active. Skipping migration check.");
-                return;
-            }
-
-            console.log("🔍 No Supabase session. Checking for legacy Firebase session...");
-
-            // 2. Monitor Firebase Auth
-            const unsubscribe = onAuthStateChanged(firebaseAuth, async (fbUser) => {
-                if (fbUser) {
-                    console.log("📦 Found Firebase user! Initiating silent migration...");
-                    setIsMigrating(true);
-
-                    try {
-                        const idToken = await fbUser.getIdToken();
-                        
-                        // 3. Call Migration API
-                        const response = await fetch("/api/auth/migrate", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ idToken })
-                        });
-
-                        if (!response.ok) {
-                            throw new Error("Migration API failed");
-                        }
-
-                        const { email, password } = await response.json();
-
-                        // 4. Log into Supabase with the generated credentials
-                        const { error: signInError } = await supabase.auth.signInWithPassword({
-                            email,
-                            password
-                        });
-
-                        if (signInError) throw signInError;
-
-                        console.log("🚀 Silent Migration Success! Switched to Supabase.");
-                        
-                        // 5. Clean up Firebase (optional but recommended)
-                        // Note: We don't sign out immediately to avoid race conditions, 
-                        // but Supabase is now the primary.
-                        localStorage.setItem("auth_provider", "supabase");
-                        
-                        // Refresh to apply new session state
-                        window.location.reload();
-
-                    } catch (err: any) {
-                        console.error("❌ Migration failed:", err);
-                        setError("Migration failed. Please try logging in again.");
-                        setIsMigrating(false);
-                    }
-                } else {
-                    console.log("ℹ️ No Firebase session found either.");
-                }
-            });
-
-            return () => unsubscribe();
+            console.log("ℹ️ Student Firebase login active. Supabase migration disabled.");
+            return;
         };
 
         performSilentHandoff();

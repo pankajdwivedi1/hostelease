@@ -32,12 +32,19 @@ export async function GET(request: NextRequest) {
 
         const filters: any = {};
 
-        if (studentId) {
-            filters.studentId = studentId;
-        }
+        if (studentId || firebaseUID) {
+            const student = await db.students.findOne({
+                ...(studentId ? { _id: studentId } : {}),
+                ...(firebaseUID ? { firebaseUID } : {})
+            }, { minimal: true });
 
-        if (firebaseUID) {
-            filters.firebaseUID = firebaseUID;
+            if (student) {
+                filters.studentId = (student._id || student.id || studentId)?.toString();
+                if (student.firebaseUID) filters.firebaseUID = student.firebaseUID;
+            } else {
+                if (studentId) filters.studentId = studentId;
+                if (firebaseUID) filters.firebaseUID = firebaseUID;
+            }
         }
 
         if (hostelName && hostelName !== "all") {

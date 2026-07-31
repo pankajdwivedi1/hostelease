@@ -156,8 +156,8 @@ export default function SuperAdminDashboard() {
 
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
     const [loadingLogs, setLoadingLogs] = useState(false);
-
-
+    const [selectedAuditTimestamps, setSelectedAuditTimestamps] = useState<string[]>([]);
+    const [isDeletingLogs, setIsDeletingLogs] = useState(false);
 
     const fetchAuditLogs = async () => {
         setLoadingLogs(true);
@@ -166,11 +166,78 @@ export default function SuperAdminDashboard() {
             const data = await res.json();
             if (data.success) {
                 setAuditLogs(data.logs);
+                setSelectedAuditTimestamps([]);
             }
         } catch (error) {
             console.error("Failed to fetch audit logs", error);
         } finally {
             setLoadingLogs(false);
+        }
+    };
+
+    const handleToggleAuditLog = (timestamp: string) => {
+        setSelectedAuditTimestamps(prev => 
+            prev.includes(timestamp) ? prev.filter(t => t !== timestamp) : [...prev, timestamp]
+        );
+    };
+
+    const handleSelectAllAuditLogs = () => {
+        if (selectedAuditTimestamps.length === auditLogs.length && auditLogs.length > 0) {
+            setSelectedAuditTimestamps([]);
+        } else {
+            setSelectedAuditTimestamps(auditLogs.map(l => l.timestamp));
+        }
+    };
+
+    const handleDeleteSelectedAuditLogs = async () => {
+        if (selectedAuditTimestamps.length === 0) return;
+        if (!confirm(`Are you sure you want to delete ${selectedAuditTimestamps.length} selected audit log(s) permanently from Supabase server?`)) return;
+
+        setIsDeletingLogs(true);
+        try {
+            const res = await fetch("/api/super-admin/audit-logs", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ timestamps: selectedAuditTimestamps })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setAuditLogs(data.logs || []);
+                setSelectedAuditTimestamps([]);
+                alert(`Successfully deleted ${selectedAuditTimestamps.length} audit logs from Supabase server!`);
+            } else {
+                alert("Failed to delete logs: " + data.error);
+            }
+        } catch (e: any) {
+            alert("Failed to delete selected audit logs");
+        } finally {
+            setIsDeletingLogs(false);
+        }
+    };
+
+    const handleClearAllAuditLogs = async () => {
+        if (auditLogs.length === 0) return;
+        if (!confirm("⚠️ WARNING: Are you sure you want to PERMANENTLY PURGE ALL audit logs from Supabase server? This will free up memory and cannot be undone.")) return;
+
+        setIsDeletingLogs(true);
+        try {
+            const res = await fetch("/api/super-admin/audit-logs", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ clearAll: true })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setAuditLogs([]);
+                setSelectedAuditTimestamps([]);
+                alert("All audit logs successfully purged from Supabase server!");
+            } else {
+                alert("Failed to clear logs: " + data.error);
+            }
+        } catch (e: any) {
+            alert("Failed to clear audit logs");
+        } finally {
+            setIsDeletingLogs(false);
         }
     };
 
@@ -226,6 +293,12 @@ export default function SuperAdminDashboard() {
         razorpayKeyId: "",
         razorpayKeySecret: "",
         pricePerStudentPerMonth: 30,
+        discount1Month: 0,
+        discount3Month: 5,
+        discount6Month: 10,
+        discount12Month: 20,
+        bankTransferDiscount: 2.5,
+        supportWhatsappNumber: "8269418956",
         customQrCodeUrl: "",
         globalPushEnabled: true,
         parentCurfewAbsentEnabled: true,
@@ -1056,21 +1129,51 @@ export default function SuperAdminDashboard() {
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                                     <div>
                                         <h3 className="font-black text-gray-900 uppercase tracking-tight text-sm">Security Audit Trail</h3>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Real-time log of administrative and infrastructure events</p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                                            Real-time log of administrative and infrastructure events • Stored in Supabase
+                                        </p>
                                     </div>
-                                    <button 
-                                        onClick={fetchAuditLogs}
-                                        disabled={loadingLogs}
-                                        className="bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all w-full sm:w-auto flex items-center justify-center gap-2"
-                                    >
-                                        {loadingLogs ? 'Syncing...' : '🔄 Refresh Logs'}
-                                    </button>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {selectedAuditTimestamps.length > 0 ? (
+                                            <button
+                                                onClick={handleDeleteSelectedAuditLogs}
+                                                disabled={isDeletingLogs}
+                                                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-red-500/20 disabled:opacity-50 flex items-center gap-1.5 animate-in fade-in"
+                                            >
+                                                🗑️ Delete Selected ({selectedAuditTimestamps.length})
+                                            </button>
+                                        ) : auditLogs.length > 0 ? (
+                                            <button
+                                                onClick={handleClearAllAuditLogs}
+                                                disabled={isDeletingLogs}
+                                                className="bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 border border-slate-200 hover:border-red-200 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all disabled:opacity-50"
+                                            >
+                                                🧹 Clear All Logs
+                                            </button>
+                                        ) : null}
+
+                                        <button 
+                                            onClick={fetchAuditLogs}
+                                            disabled={loadingLogs}
+                                            className="bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2"
+                                        >
+                                            {loadingLogs ? 'Syncing...' : '🔄 Refresh Logs'}
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left border-collapse text-[10px]">
                                         <thead>
-                                            <tr className="border-b border-slate-100 text-slate-400 font-black uppercase tracking-wider text-[8px]">
+                                            <tr className="border-b border-slate-100 text-slate-400 font-black uppercase tracking-wider text-[8px] bg-slate-50/50">
+                                                <th className="py-3 px-4 w-10 text-center">
+                                                    <input 
+                                                        type="checkbox"
+                                                        checked={auditLogs.length > 0 && selectedAuditTimestamps.length === auditLogs.length}
+                                                        onChange={handleSelectAllAuditLogs}
+                                                        className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                    />
+                                                </th>
                                                 <th className="py-3 px-4">Timestamp</th>
                                                 <th className="py-3 px-4">Operator</th>
                                                 <th className="py-3 px-4">Event Type</th>
@@ -1080,25 +1183,36 @@ export default function SuperAdminDashboard() {
                                         <tbody className="divide-y divide-slate-50 font-bold">
                                             {auditLogs.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={4} className="py-12 text-center text-slate-400 italic">No audit records found.</td>
+                                                    <td colSpan={5} className="py-12 text-center text-slate-400 italic">No audit records found on Supabase server.</td>
                                                 </tr>
-                                            ) : auditLogs.map((log: any, idx: number) => (
-                                                <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                                    <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{new Date(log.timestamp).toLocaleString()}</td>
-                                                    <td className="py-3 px-4 text-blue-600 font-black">{log.user}</td>
-                                                    <td className="py-3 px-4">
-                                                        <span className={`px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-tighter ${
-                                                            log.action?.includes('DESTROY') || log.action?.includes('DELETE') ? 'bg-red-50 text-red-600 border border-red-100' :
-                                                            log.action?.includes('PROVISION') || log.action?.includes('RESTORE') ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                                                            log.action?.includes('SWITCH') ? 'bg-orange-50 text-orange-600 border border-orange-100' :
-                                                            'bg-slate-50 text-slate-600 border border-slate-100'
-                                                        }`}>
-                                                            {log.action}
-                                                        </span>
-                                                    </td>
-                                                    <td className="py-3 px-4 text-slate-700 leading-normal">{log.details}</td>
-                                                </tr>
-                                            ))}
+                                            ) : auditLogs.map((log: any, idx: number) => {
+                                                const isSelected = selectedAuditTimestamps.includes(log.timestamp);
+                                                return (
+                                                    <tr key={log.timestamp || idx} className={`transition-colors ${isSelected ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}>
+                                                        <td className="py-3 px-4 text-center">
+                                                            <input 
+                                                                type="checkbox"
+                                                                checked={isSelected}
+                                                                onChange={() => handleToggleAuditLog(log.timestamp)}
+                                                                className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                            />
+                                                        </td>
+                                                        <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{new Date(log.timestamp).toLocaleString()}</td>
+                                                        <td className="py-3 px-4 text-blue-600 font-black">{log.user}</td>
+                                                        <td className="py-3 px-4">
+                                                            <span className={`px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-tighter ${
+                                                                log.action?.includes('DESTROY') || log.action?.includes('DELETE') ? 'bg-red-50 text-red-600 border border-red-100' :
+                                                                log.action?.includes('PROVISION') || log.action?.includes('RESTORE') ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                                                log.action?.includes('SWITCH') ? 'bg-orange-50 text-orange-600 border border-orange-100' :
+                                                                'bg-slate-50 text-slate-600 border border-slate-100'
+                                                            }`}>
+                                                                {log.action}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-3 px-4 text-slate-700 leading-normal">{log.details}</td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
@@ -2154,6 +2268,87 @@ export default function SuperAdminDashboard() {
                                                 </div>
                                                 <p className="text-[10px] text-indigo-600 mt-2 font-medium">This will be multiplied by the college's student count and automatically billed via Razorpay Orders.</p>
                                             </div>
+
+                                            {/* Discount Percentages Controls */}
+                                            <div className="pt-4 border-t border-indigo-100">
+                                                <label className="block text-xs font-black text-indigo-900 uppercase tracking-widest mb-1">
+                                                    🏷️ Global Subscription Plan Discount Controls (%)
+                                                </label>
+                                                <p className="text-[10px] text-indigo-600 mb-3 font-medium">
+                                                    Set discount percentages for each subscription duration. Changes update instantly across all campus portals.
+                                                </p>
+
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+                                                    <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-indigo-100">
+                                                        <label className="block text-[7.5px] sm:text-[8.5px] font-black text-slate-500 uppercase tracking-tight whitespace-nowrap overflow-hidden text-ellipsis mb-1">1 Month Discount</label>
+                                                        <div className="relative">
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                value={paymentSettings.discount1Month ?? 0}
+                                                                onChange={e => setPaymentSettings({...paymentSettings, discount1Month: Number(e.target.value)})}
+                                                                className="w-full border border-slate-200 rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-black outline-none bg-slate-50 text-slate-900 focus:bg-white focus:border-indigo-500 pr-6"
+                                                            />
+                                                            <span className="absolute right-2 top-1.5 text-xs font-bold text-slate-400">%</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-indigo-100">
+                                                        <label className="block text-[7.5px] sm:text-[8.5px] font-black text-slate-500 uppercase tracking-tight whitespace-nowrap overflow-hidden text-ellipsis mb-1">3 Months Discount</label>
+                                                        <div className="relative">
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                value={paymentSettings.discount3Month ?? 5}
+                                                                onChange={e => setPaymentSettings({...paymentSettings, discount3Month: Number(e.target.value)})}
+                                                                className="w-full border border-slate-200 rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-black outline-none bg-slate-50 text-slate-900 focus:bg-white focus:border-indigo-500 pr-6"
+                                                            />
+                                                            <span className="absolute right-2 top-1.5 text-xs font-bold text-slate-400">%</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-indigo-100">
+                                                        <label className="block text-[7.5px] sm:text-[8.5px] font-black text-slate-500 uppercase tracking-tight whitespace-nowrap overflow-hidden text-ellipsis mb-1">6 Months Discount</label>
+                                                        <div className="relative">
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                value={paymentSettings.discount6Month ?? 10}
+                                                                onChange={e => setPaymentSettings({...paymentSettings, discount6Month: Number(e.target.value)})}
+                                                                className="w-full border border-slate-200 rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-black outline-none bg-slate-50 text-slate-900 focus:bg-white focus:border-indigo-500 pr-6"
+                                                            />
+                                                            <span className="absolute right-2 top-1.5 text-xs font-bold text-slate-400">%</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-indigo-100">
+                                                        <label className="block text-[7.5px] sm:text-[8.5px] font-black text-slate-500 uppercase tracking-tight whitespace-nowrap overflow-hidden text-ellipsis mb-1">1 Year Discount</label>
+                                                        <div className="relative">
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                value={paymentSettings.discount12Month ?? 20}
+                                                                onChange={e => setPaymentSettings({...paymentSettings, discount12Month: Number(e.target.value)})}
+                                                                className="w-full border border-slate-200 rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-black outline-none bg-slate-50 text-slate-900 focus:bg-white focus:border-indigo-500 pr-6"
+                                                            />
+                                                            <span className="absolute right-2 top-1.5 text-xs font-bold text-slate-400">%</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Live Rate Preview Card */}
+                                                <div className="mt-3 p-3 bg-indigo-900 text-white rounded-xl text-[10px] font-mono flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1">
+                                                    <span className="font-sans font-bold text-indigo-200">Live Sample Calculation (500 Students @ ₹{paymentSettings.pricePerStudentPerMonth || 30}/mo):</span>
+                                                    <span className="font-bold text-emerald-300">
+                                                        1 Mo: ₹{(500 * (paymentSettings.pricePerStudentPerMonth || 30) * 1 * (100 - (paymentSettings.discount1Month ?? 0)) / 100).toLocaleString('en-IN')} | 
+                                                        1 Yr: ₹{(500 * (paymentSettings.pricePerStudentPerMonth || 30) * 12 * (100 - (paymentSettings.discount12Month ?? 20)) / 100).toLocaleString('en-IN')}
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -2385,7 +2580,7 @@ export default function SuperAdminDashboard() {
                                                 className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold uppercase font-mono tracking-wider"
                                             />
                                         </div>
-                                        <div className="sm:col-span-2">
+                                        <div>
                                             <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">UPI ID</label>
                                             <input
                                                 type="text"
@@ -2395,6 +2590,39 @@ export default function SuperAdminDashboard() {
                                                 className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold text-blue-600"
                                                 placeholder="username@bank"
                                             />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Support WhatsApp Mobile Number</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={paymentSettings.supportWhatsappNumber || "8269418956"}
+                                                onChange={e => setPaymentSettings({...paymentSettings, supportWhatsappNumber: e.target.value})}
+                                                className="w-full border-2 border-emerald-100 rounded-xl px-4 py-2.5 text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-bold text-emerald-800"
+                                                placeholder="8269418956"
+                                            />
+                                        </div>
+                                        <div className="sm:col-span-2 bg-emerald-50/60 border border-emerald-200/80 p-4 rounded-2xl">
+                                            <label className="block text-xs font-black text-emerald-950 uppercase tracking-widest mb-1 flex items-center justify-between">
+                                                <span>🎁 Direct Bank Transfer Extra Cash Discount (%)</span>
+                                                <span className="text-[9px] px-2.5 py-0.5 bg-emerald-200 text-emerald-900 rounded-full font-bold">UTR Cash Offer</span>
+                                            </label>
+                                            <p className="text-[10px] text-emerald-700 font-medium mb-2">
+                                                Give colleges an additional instant discount percentage when paying directly to your bank account / QR code.
+                                            </p>
+                                            <div className="relative">
+                                                <input
+                                                    type="number"
+                                                    step="0.1"
+                                                    min="0"
+                                                    max="50"
+                                                    value={paymentSettings.bankTransferDiscount ?? 2.5}
+                                                    onChange={e => setPaymentSettings({...paymentSettings, bankTransferDiscount: Number(e.target.value)})}
+                                                    className="w-full border-2 border-emerald-200 rounded-xl px-4 py-2.5 text-sm font-black outline-none bg-white text-emerald-950 focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 pr-8"
+                                                    placeholder="2.5"
+                                                />
+                                                <span className="absolute right-3 top-2.5 text-sm font-black text-emerald-600">%</span>
+                                            </div>
                                         </div>
                                         <div className="sm:col-span-2">
                                             <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1.5">Custom QR Code Image (Optional)</label>

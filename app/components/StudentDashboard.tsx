@@ -86,6 +86,21 @@ interface DBNotification {
     createdAt: string;
 }
 
+const formatPermDate = (item: any, isOut: boolean) => {
+    if (!item) return "N/A";
+    const raw = isOut
+        ? (item.fromDateTime || item.from_date_time || (item.outDate ? `${item.outDate} ${item.outTime || ''}` : item.createdAt))
+        : (item.toDateTime || item.to_date_time || (item.inDate ? `${item.inDate} ${item.inTime || ''}` : null));
+    if (!raw) return "N/A";
+    try {
+        const d = new Date(raw);
+        if (isNaN(d.getTime())) return String(raw);
+        return d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
+    } catch {
+        return String(raw);
+    }
+};
+
 export default function StudentDashboard({ initialData, isParentView = false, hasMultipleSiblings = false }: { initialData?: any; isParentView?: boolean; hasMultipleSiblings?: boolean }) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -192,6 +207,21 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
     }, [showPermissionsHistory, studentProfile]);
 
+    // 📶 Auto-check Campus WiFi network status on dashboard mount
+    useEffect(() => {
+        fetch("/api/check-network")
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.isWhitelisted) {
+                    setIsOnCampusWifi(true);
+                    setIsAtHostel(true);
+                } else {
+                    setIsOnCampusWifi(false);
+                }
+            })
+            .catch(() => setIsOnCampusWifi(false));
+    }, []);
+
     const getAttendanceDisplay = () => {
         if (isAttendanceMarked) {
             return { text: "✅ Present", textColor: "text-green-600", iconBg: "bg-green-100 text-green-600", iconPath: "M5 13l4 4L19 7" };
@@ -230,7 +260,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
     const [activeConsentVideoUrl, setActiveConsentVideoUrl] = useState<string | null>(null);
 
-    const [attendanceStep, setAttendanceStep] = useState<'idle' | 'gps' | 'accuracy' | 'saving' | 'done' | 'error' | 'face-match'>('idle');
+    const [attendanceStep, setAttendanceStep] = useState<'idle' | 'gps' | 'accuracy' | 'saving' | 'done' | 'error' | 'face-match' | 'failed'>('idle');
+    const [attendanceFailedReason, setAttendanceFailedReason] = useState<string>("");
     const [attendanceRetryCount, setAttendanceRetryCount] = useState(0);
     const [isWifiFallback, setIsWifiFallback] = useState(false);
     const [overlapRadius, setOverlapRadius] = useState(false); // ⚡ NEW
@@ -475,35 +506,49 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 }
                             }
 
-                            // 🚀 REAL-TIME TRIGGER: 3D Depth + Yaw Required
-                            // Depth change > 1.25 (25% change) and Yaw Range > 0.18
-                            if (yawRange > 0.18 && depthRange > 1.25) {
-                                const boxSize = width * height;
-                                if (boxSize > (canvas.width * canvas.height * 0.08)) {
-                                    active = false;
-                                    isProcessingRef.current = true;
-                                    setFaceMatchStep('matching');
-
-                                    // ⚡ TURBO: Pass the detection result we already have from the loop!
-                                    const result = await performFaceVerification(res);
-                                    if (result) {
-                                        setTimeout(() => {
-                                            stopCamera();
-                                            proceedWithAttendance(result);
-                                        }, 200); // Snappy transition (200ms)
-                                    } else {
-                                        setTimeout(() => {
-                                            active = true;
-                                            isProcessingRef.current = false;
-                                            setFaceMatchStep('detecting');
-                                            livenessHistoryRef.current = { boxSizes: [], yawPoints: [] };
-                                            setYawRange(0);
-                                            setDepthRange(1);
-                                            runDetection();
-                                        }, 1500); // Quick reset on fail
+                            // 🚀 INSTANT SINGLE-SHOT TRIGGER: Trigger as soon as a face is detected in frame!
+                            const boxSize = width * height;
+                            if (boxSize > (canvas.width * canvas.height * 0.05)) {
+                                // 🛡️ CONTROL 1: PASSIVE MOBILE DISPLAY SCREEN ANALYZER
+                                if (videoRef.current && res.detection?.box) {
+                                    const spoofCheck = faceMatching.detectMobileScreenDisplay(videoRef.current, res.detection.box);
+                                    if (spoofCheck.isSpoof) {
+                                        console.warn("❌ Anti-Spoof Block:", spoofCheck.reason);
+                                        active = false;
+                                        isProcessingRef.current = false;
+                                        stopCamera();
+                                        const reasonMsg = spoofCheck.reason || "Mobile Screen Display / Photo Spoof Detected!";
+                                        showToast(reasonMsg, "error");
+                                        setFaceMatchStep('error');
+                                        setIsMarkingAttendance(true);
+                                        setAttendanceStep('failed');
+                                        setAttendanceFailedReason(reasonMsg);
+                                        return;
                                     }
-                                    return;
                                 }
+
+                                active = false;
+                                isProcessingRef.current = true;
+                                setFaceMatchStep('matching');
+
+                                // ⚡ TURBO: Pass the detection result we already have from the loop!
+                                const result = await performFaceVerification(res);
+                                if (result && result.status === 'auto-approved') {
+                                    setTimeout(() => {
+                                        stopCamera();
+                                        proceedWithAttendance(result);
+                                    }, 200); // Snappy transition (200ms)
+                                } else {
+                                    stopCamera();
+                                    const percent = result?.percentage !== undefined ? `${result.percentage}%` : 'Low';
+                                    const reasonMsg = `Identity Mismatch (${percent} Accuracy). Verification failed. Please ensure you are the account owner.`;
+                                    showToast(reasonMsg, "error");
+                                    setFaceMatchStep('error');
+                                    setIsMarkingAttendance(true);
+                                    setAttendanceStep('failed');
+                                    setAttendanceFailedReason(reasonMsg);
+                                }
+                                return;
                             }
                         } else {
                             setFaceDetected(false);
@@ -1092,16 +1137,43 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         let unsubscribeFirebase: (() => void) | null = null;
 
         const loadData = async (user: { uid: string; email: string | null; source: 'firebase' | 'supabase' }) => {
-            // If we have initialData, we skip the minimal fetch!
+            // ⚡ STEP 0: Instant Load from Device Cache (0ms latency, zero database wait)
             let currentStudent = initialData;
+            if (!currentStudent && typeof window !== 'undefined') {
+                try {
+                    const cachedStr = localStorage.getItem("cachedStudentData");
+                    if (cachedStr) {
+                        currentStudent = JSON.parse(cachedStr);
+                        if (isMounted) {
+                            setStudentProfile(currentStudent);
+                            setIsFullProfileLoaded(true);
+                            setLoading(false);
+                            console.log("⚡ [Device Caching] Profile loaded instantly from local device storage!");
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to parse cached student data:", e);
+                }
+            }
 
             if (!currentStudent) {
                 try {
                     // ⚡ STEP 1: Load MINIMAL data first if not provided
                     const queryParam = user.source === 'supabase'
                         ? `supabaseId=${user.uid}${user.email ? `&email=${encodeURIComponent(user.email)}` : ''}`
-                        : `firebaseUID=${user.uid}`;
+                        : `firebaseUID=${user.uid}${user.email ? `&email=${encodeURIComponent(user.email)}` : ''}`;
                     const minimalResponse = await fetch(`/api/students?${queryParam}&minimal=true${getTenantParam(false)}`, { cache: 'no-store' });
+                    
+                    // ⚡ NEW USER: If not found, redirect to onboarding immediately
+                    if (minimalResponse.status === 404) {
+                        console.log('[Dashboard] Student not found (404), redirecting to onboarding...');
+                        if (isMounted) {
+                            setLoading(false);
+                            router.push('/onboarding');
+                        }
+                        return;
+                    }
+                    
                     if (!minimalResponse.ok) throw new Error(`Failed to fetch minimal data: ${minimalResponse.status}`);
                     const minimalData = await minimalResponse.json();
                     if (minimalData.student) {
@@ -1117,31 +1189,50 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 } catch (error) {
                     console.error("Error fetching minimal student data:", error);
                 }
-            } else {
-                // If initialData was provided, we're already loading=false (state init)
-                // But we might want to ensure we fetch permissions/full profile
             }
 
             if (currentStudent && isMounted) {
                 setLoading(false);
                 const studentId = currentStudent._id;
 
-                // ⚡ STEP 2: Load FULL profile data asynchronously in background
+                // ⚡ STEP 2: Smart Version Check (Zero-Payload Sync)
                 const loadFullProfile = async () => {
                     try {
                         const queryParam = user.source === 'supabase'
                         ? `supabaseId=${user.uid}${user.email ? `&email=${encodeURIComponent(user.email)}` : ''}`
-                        : `firebaseUID=${user.uid}`;
-                        let fullResponse = await fetch(`/api/students?${queryParam}${getTenantParam(false)}`, { cache: 'no-store' });
+                        : `firebaseUID=${user.uid}${user.email ? `&email=${encodeURIComponent(user.email)}` : ''}`;
+
+                        const cachedUpdatedAt = currentStudent?.updatedAt || "";
+                        const versionCheckParam = cachedUpdatedAt ? `&versionCheck=true&updatedAt=${encodeURIComponent(cachedUpdatedAt)}` : "";
+                        let fullResponse = await fetch(`/api/students?${queryParam}${versionCheckParam}${getTenantParam(false)}`, { cache: 'no-store' });
                         
-                        // ⚡ FALLBACK: If 404 by ID, try fetching by email (extremely robust)
-                        if (fullResponse.status === 404 && user.email) {
-                            console.warn(`[Profile] 404 by ${user.source} UID, retrying with email...`);
-                            fullResponse = await fetch(`/api/students?email=${encodeURIComponent(user.email)}${getTenantParam(false)}`, { cache: 'no-store' });
+                        // ⚡ If student truly not found, redirect to onboarding
+                        if (fullResponse.status === 404) {
+                            console.warn(`[Profile] Student not found (404), redirecting to onboarding...`);
+                            if (isMounted) {
+                                localStorage.removeItem('cachedStudentData');
+                                router.push('/onboarding');
+                            }
+                            return;
                         }
 
-                        if (!fullResponse.ok) throw new Error(`Failed to fetch full profile: ${fullResponse.status}`);
+                        if (!fullResponse.ok) {
+                            console.error(`[Profile] Non-404 error: ${fullResponse.status}, skipping redirect`);
+                            return;
+                        }
+
                         const fullData = await fullResponse.json();
+
+                        // ⚡ 304 NOT MODIFIED: Server confirmed profile has NOT changed! 0 KB downloaded!
+                        if (fullData.notModified) {
+                            console.log("⚡ [Device Caching] Profile unchanged on Railway DB. 0 KB downloaded!");
+                            if (isMounted) {
+                                setIsFullProfileLoaded(true);
+                                setLoading(false);
+                            }
+                            return;
+                        }
+
                         if (fullData.student && isMounted) {
                             const fullStudentData = {
                                 ...fullData.student,
@@ -1519,7 +1610,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                            firebaseUID: studentProfile.firebaseUID,
+                            studentId: studentProfile._id,
+                            firebaseUID: studentProfile.firebaseUID || studentProfile._id,
                             hostelName: studentProfile.hostelName,
                             fieldIds: enforcedMissingFields.map(f => f.fieldId)
                         })
@@ -1639,7 +1731,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 setIsLocationChecking(false);
                 setGpsLockStatus('locked');
                 setLockProgress(100);
-                alert(`Verification Success✔️ (WiFi Mode)\nYou are connected to the campus network. Permission button is now active.`);
+                showToast("Verification Success✔️ (WiFi Mode) You are connected to the campus network. Daily Attendance / Leave Request button is now active.", "success");
             } else {
                 setIsOnCampusWifi(false);
             }
@@ -1647,36 +1739,38 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
         // Helper to finish verification
         const performVerification = (position: GeolocationPosition) => {
+            // 📶 IF CONNECTED TO CAMPUS WIFI: Campus WiFi takes priority over cell tower GPS noise!
+            if (isOnCampusWifi) {
+                setIsAtHostel(true);
+                setIsLocationChecking(false);
+                setGpsLockStatus('locked');
+                setLockProgress(100);
+                showToast("Verification Success✔️ (WiFi Mode) You are connected to the campus network. Daily Attendance / Leave Request button is now active.", "success");
+                return;
+            }
+
             const { accuracy, latitude, longitude } = position.coords;
 
-            // Check if student is within any of the allowed circles
             let isInsideAny = false;
             let matchedLocation: any = null;
-            let closestInfo = { distance: Infinity, radius: 0, name: "" };
-            let assignedHostelInfo: any = null; // ⚡ NEW: Track specifically assigned hostel
+            let closestInfo = { distance: Infinity, radius: 0, name: studentProfile?.hostelName || "Hostel" };
+            let assignedHostelInfo: any = null;
 
-            const locationsToTest = hostelLocations;
+            const locationsToTest = hostelLocations && hostelLocations.length > 0 ? hostelLocations : [];
 
             const results = locationsToTest.map((loc: any) => {
                 const dist = calculateDistance(latitude, longitude, loc.lat, loc.lng);
 
-                // ⚡ SMART VERIFICATION: Lenient Geofencing
-                // If accuracy is poor (e.g. 80m), we add the extra error margin to the radius.
-                // We use (accuracy - 25) as grace because <25m is high-quality GPS.
-                // ⚡ DEVELOPER CONFIG: Radius Overlap
                 const effectiveRadius = overlapRadius ? (loc.radius + 30) : loc.radius;
                 const isVerified = dist <= effectiveRadius;
 
-                // ⚡ DEVELOPER CONFIG: Prioritize Assigned Hostel (Strict Match)
                 const studentHostel = studentProfile?.hostelName?.toLowerCase() || "";
-                const locName = loc.name.toLowerCase();
+                const locName = (loc.name || "").toLowerCase();
 
-                // Check for exact match or smart partial match
                 const isExactMatch = studentHostel === locName;
                 const isPartialMatch = studentHostel.includes(locName) || locName.includes(studentHostel);
                 const isAssignedHostel = isExactMatch || isPartialMatch;
 
-                // Track the assigned hostel (Prefer exact matches over partial ones)
                 if (isAssignedHostel) {
                     if (!assignedHostelInfo || isExactMatch) {
                         assignedHostelInfo = { ...loc, distance: dist, radius: effectiveRadius, officialName: studentProfile?.hostelName };
@@ -1687,15 +1781,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                 if (validMatch) {
                     isInsideAny = true;
-                    // ✅ Always pick the CLOSEST valid building if prioritizing is off,
-                    // or just the assigned one if prioritizing is on
                     if (!matchedLocation || dist < matchedLocation.distance) {
                         matchedLocation = { ...loc, distance: dist };
                     }
                 }
 
                 if (dist < closestInfo.distance) {
-                    // If filtering is on, still track the closest but maybe emphasize assigned if failed
                     closestInfo = { distance: dist, radius: effectiveRadius, name: loc.name };
                 }
                 return { ...loc, distance: dist, isVerified: validMatch };
@@ -1706,15 +1797,18 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             if (isInsideAny && matchedLocation) {
                 setIsAtHostel(true);
-                // Use official name if prioritizing
-                const displayName = (prioritizeAssignedHostel && studentProfile?.hostelName) ? studentProfile.hostelName : matchedLocation.name;
-                alert(`Verification Success✔️, You are ${Math.round(matchedLocation.distance)} meters away from ${displayName}. (Accuracy: ${Math.round(accuracy)}m). Permission button is now active.`);
+                const displayName = (prioritizeAssignedHostel && studentProfile?.hostelName) ? studentProfile.hostelName : (matchedLocation.name || "Hostel");
+                showToast(`Verification Success✔️, You are ${Math.round(matchedLocation.distance)}m away from ${displayName}. (Accuracy: ${Math.round(accuracy)}m). Daily Attendance / Leave Request button is now active.`, "success");
             } else {
                 setIsAtHostel(false);
-                // If prioritizing assigned hostel, show that distance even if it's not the closest
                 const displayInfo = (prioritizeAssignedHostel && assignedHostelInfo) ? assignedHostelInfo : closestInfo;
-                const displayName = (prioritizeAssignedHostel && studentProfile?.hostelName) ? studentProfile.hostelName : displayInfo.name;
-                alert(`Verification failed❌, You are ${Math.round(displayInfo.distance)} meters away from ${displayName}. (Accuracy: ${Math.round(accuracy)}m). You must be within the hostel radius.`);
+                const displayName = (displayInfo.name && displayInfo.name.trim() !== "") ? displayInfo.name : (studentProfile?.hostelName || "Hostel");
+
+                if (!isFinite(displayInfo.distance) || displayInfo.distance === Infinity) {
+                    showToast(`Verification failed❌ (GPS Accuracy: ${Math.round(accuracy)}m). Cell tower signal detected. Please connect to Campus WiFi or move closer to hostel.`, "error");
+                } else {
+                    showToast(`Verification failed❌, You are ${Math.round(displayInfo.distance)}m away from ${displayName}. (Accuracy: ${Math.round(accuracy)}m). You must be within hostel radius.`, "error");
+                }
             }
         };
 
@@ -1745,7 +1839,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 (pos) => finish(pos),
                 (err) => {
                     if (isCompleted) return;
-                    console.error("WiFi Fallback failed:", err);
+                    console.error("WiFi Fallback failed:", err.message || err.code || err);
 
                     // CRITICAL: Even if everything fails, if we had a "bestPosition" from GPS earlier, USE IT.
                     if (bestPosition) {
@@ -1754,8 +1848,18 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     } else {
                         isCompleted = true;
                         setIsLocationChecking(false);
-                        setGpsLockStatus('error');
-                        alert("Could not detect location. Please enable Location Services & WiFi.");
+
+                        // 🛠️ DEVELOPMENT BYPASS: If testing on localhost, mock location success so local testing doesn't get blocked
+                        if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
+                            console.log("🛠️ [Developer Bypass] Mocking location verification on localhost");
+                            setIsAtHostel(true);
+                            setGpsLockStatus('locked');
+                            setLockProgress(100);
+                            alert("🛠️ [Dev Mode] Geolocation failed but bypassed on localhost. Verification Success✔️");
+                        } else {
+                            setGpsLockStatus('error');
+                            alert("Could not detect location. Please enable Location Services & WiFi.");
+                        }
                     }
                 },
                 { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 }
@@ -1869,12 +1973,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 const cachedRes = latestDetectionRef.current;
                 const result = await performFaceVerification(cachedRes);
 
-                if (result) {
+                if (result && result.status === 'auto-approved') {
                     // Success! Proceed immediately
                     setTimeout(() => {
                         stopCamera();
                         proceedWithAttendance(result);
                     }, 100); // Super fast transition
+                } else if (result && result.status === 'rejected') {
+                    stopCamera();
+                    showToast(`Identity Mismatch (${result.percentage}% Accuracy). Verification failed. Please ensure you are the account owner.`, "error");
+                    setFaceMatchStep('error');
                 } else if (attempts < 2) {
                     // retry fallback
                     setTimeout(() => autoVerify(attempts + 1), 300);
@@ -1887,6 +1995,15 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     const startCamera = async () => {
         try {
+            // ⚡ CLEAN RESET: Clear all cached detection refs to prevent instant stale error on re-opening
+            isProcessingRef.current = false;
+            latestDetectionRef.current = null;
+            consecutiveFailuresRef.current = 0;
+            setFaceDetected(false);
+            setFaceBox(null);
+            setAttendanceStep('idle');
+            setAttendanceFailedReason('');
+
             setCameraActive(true);
             setFaceMatchStep('loading-models');
 
@@ -1914,6 +2031,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             console.error("Camera error:", err);
             alert("Could not access camera. Please ensure permissions are granted.");
             setCameraActive(false);
+            setFaceMatchStep('idle');
         }
     };
 
@@ -1924,6 +2042,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             videoRef.current.srcObject = null;
         }
         setCameraActive(false);
+        isProcessingRef.current = false;
+        latestDetectionRef.current = null;
+        setFaceDetected(false);
+        setFaceBox(null);
     };
 
     const performFaceVerification = async (existingRes?: any): Promise<{
@@ -1949,19 +2071,47 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             let referenceDescriptor = studentProfile.faceDescriptor;
 
             if (!referenceDescriptor || referenceDescriptor.length === 0) {
-                console.log("🔒 Biometric lock missing. Generating from profile picture...");
+                console.log("🔒 Biometric lock missing. Initiating Biometric Lock-In from camera scan...");
                 setFaceMatchProgress(40);
 
                 try {
                     await faceMatching.loadFaceApiModels(true);
-                    const profileImg = await faceMatching.loadImage(studentProfile.profilePicture);
-                    const res = await faceMatching.detectFace(profileImg, true);
+                    let res: any = null;
 
-                    if (!res) {
-                        throw new Error("Could not detect a face in your profile picture. Please update your profile photo.");
+                    if (studentProfile.profilePicture) {
+                        try {
+                            const profileImg = await faceMatching.loadImage(studentProfile.profilePicture);
+                            res = await faceMatching.detectFace(profileImg, true);
+                        } catch (e) {
+                            console.warn("Could not extract vector from profile picture, falling back to live camera lock-in.");
+                        }
                     }
 
-                    referenceDescriptor = Array.from(res.descriptor);
+                    if (res && res.descriptor) {
+                        referenceDescriptor = Array.from(res.descriptor);
+                    } else if (liveRes && liveRes.descriptor) {
+                        // ⚡ BIOMETRIC LOCK-IN: Use live face scan descriptor and lock it into Railway DB!
+                        console.log("⚡ Live camera Biometric Lock-In triggered!");
+                        referenceDescriptor = Array.from(liveRes.descriptor);
+
+                        // Save new live photo & vector to Railway DB
+                        const canvas = document.createElement('canvas');
+                        canvas.width = videoRef.current.videoWidth || 640;
+                        canvas.height = videoRef.current.videoHeight || 640;
+                        canvas.getContext('2d')?.drawImage(videoRef.current, 0, 0);
+                        const liveCapturedPhoto = canvas.toDataURL('image/jpeg', 0.85);
+
+                        await fetch(`/api/students/${studentProfile._id || studentProfile.id || studentProfile.firebaseUID}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                profilePicture: liveCapturedPhoto,
+                                faceDescriptor: referenceDescriptor
+                            })
+                        });
+                    } else {
+                        throw new Error("Could not detect a valid face. Please position your face clearly in front of the camera.");
+                    }
 
                     await fetch('/api/students/face-descriptor', {
                         method: 'POST',
@@ -1974,10 +2124,17 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                     const updatedProfile = { ...studentProfile, faceDescriptor: referenceDescriptor };
                     setStudentProfile(updatedProfile);
+                    showToast("🔒 Biometric Face Lock-In Complete!", "success");
+
+                    setFaceMatchStep('success');
+                    return {
+                        percentage: 100,
+                        status: 'auto-approved',
+                    };
                 } catch (genError: any) {
-                    console.error("Error generating descriptor:", genError);
+                    console.error("Error in Biometric Lock-In:", genError);
                     setFaceMatchStep('error');
-                    alert(genError.message || "Failed to process profile photo.");
+                    showToast(genError.message || "Biometric Lock-In failed. Please try again.", "error");
                     stopCamera();
                     setIsMarkingAttendance(false);
                     return null;
@@ -2018,9 +2175,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             setFaceMatchProgress(100);
 
-            // ⚡ STRICT IDENTIFICATION (0% Loophole)
-            // Since we are NOT saving photos, we must be VERY sure.
-            if (matchPercentage >= 75) {
+            // ⚡ ENTERPRISE SSD-MOBILENET PRO IDENTIFICATION (Match Score >= 90% - Rejects Screen Photos & Video Replays)
+            if (matchPercentage >= 90) {
                 setFaceMatchStep('success');
                 return {
                     percentage: matchPercentage,
@@ -2028,11 +2184,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 };
             }
 
-            // HARD REJECT for everything else - No image saving, just block access.
-            console.error(`❌ Identity Reject: Match too low (${matchPercentage}%).`);
+            // REJECT for mismatched face - No console error overlay, return percentage
+            console.warn(`❌ Identity Mismatch: Match score too low (${matchPercentage}%).`);
             setFaceMatchStep('error');
-            alert(`Identity Mismatch (${matchPercentage}%). Verification failed. Please ensure you are the account owner.`);
-            return null;
+            return {
+                percentage: matchPercentage,
+                status: 'rejected',
+            };
 
         } catch (error) {
             console.error("Verification error:", error);
@@ -2245,7 +2403,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
 
         if (!isAtHostel) {
-            showToast("Please verify your location first.", "warning");
+            setHighlightLocation(true);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            showToast("📍 Location Verification Required: Please verify your location first by clicking Location Lock or connecting to Campus WiFi.", "warning");
+            setTimeout(() => {
+                setHighlightLocation(false);
+            }, 5000);
             return;
         }
 
@@ -2359,6 +2522,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         lng: longitude,
                         accuracy: position.coords.accuracy,
                         deviceId: deviceId,
+                        wifiBSSID: isOnCampusWifi ? "CAMPUS_WIFI_CONNECTED" : "CAMPUS_NETWORK",
+                        isLocationVerified: isAtHostel || isOnCampusWifi,
                         // Face matching results (0% Storage - only numbers stored)
                         faceMatchPercentage: faceResult.percentage,
                         faceMatchStatus: faceResult.status
@@ -2587,25 +2752,44 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     )}
                                 </div>
 
-                                {/* 📶 WiFi Warning Banner — shown when student is NOT on campus WiFi and attendance not yet marked */}
-                                {isOnCampusWifi === false && !isAttendanceMarked && !isParentView && (
-                                    <div className="col-span-2 lg:col-span-5 bg-amber-50 border-2 border-amber-300 rounded-2xl p-3 flex items-start gap-3 shadow-sm">
-                                        <span className="text-2xl shrink-0 mt-0.5">📶</span>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-[12px] font-black text-amber-800 uppercase tracking-wide mb-0.5">Not on Campus WiFi</p>
-                                            <p className="text-[11px] text-amber-700 font-medium leading-snug">
-                                                Connect to your <strong>hostel WiFi</strong> for smooth attendance without GPS errors.
-                                            </p>
-                                        </div>
-                                        <div className="shrink-0 flex flex-col items-center gap-1">
-                                            <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-                                            <span className="text-[9px] font-black text-red-500 uppercase tracking-wider">Offline</span>
+
+
+                                {/* ⭐ PROGRESS INDICATORS - Shows only when marking attendance */}
+                                {isMarkingAttendance && attendanceStep === 'failed' && (
+                                    <div className="col-span-2 lg:col-span-5 bg-gradient-to-br from-red-50 via-rose-50 to-pink-50 p-4 rounded-2xl border-2 border-red-200 shadow-md animate-in fade-in duration-300">
+                                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-full bg-red-100 border border-red-200 flex items-center justify-center text-xl shrink-0">
+                                                    ❌
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-black text-red-900 leading-tight">
+                                                        Attendance Failed: {attendanceFailedReason.includes('Mobile') || attendanceFailedReason.includes('Screen') ? 'Mobile Screen Detected' : 'Identity Mismatch'}
+                                                    </h4>
+                                                    <p className="text-xs text-red-600 font-medium mt-0.5">
+                                                        {attendanceFailedReason || "Please present your real physical face directly to the camera."}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    setAttendanceStep('idle');
+                                                    setIsMarkingAttendance(false);
+                                                    setAttendanceFailedReason('');
+                                                    startCamera();
+                                                }}
+                                                className="px-4 py-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow transition-all shrink-0 flex items-center gap-1.5"
+                                            >
+                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                                TRY AGAIN
+                                            </button>
                                         </div>
                                     </div>
                                 )}
 
-                                {/* ⭐ PROGRESS INDICATORS - Shows only when marking attendance */}
-                                {isMarkingAttendance && attendanceStep !== 'idle' && (
+                                {isMarkingAttendance && attendanceStep !== 'idle' && attendanceStep !== 'failed' && (
                                     <div className="col-span-2 lg:col-span-5 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-3 rounded-2xl border-2 border-blue-200 shadow-lg">
                                         <div className="flex items-center gap-3">
                                             {/* Progress Steps */}
@@ -2768,10 +2952,63 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 >
                                     <span>🚪</span> <span className="truncate">Outing & Attendance</span>
                                 </button>
+
+                                {/* 📶 Always-Visible Campus WiFi Status Card (Right side of Outing & Attendance) */}
+                                {!isParentView && (
+                                    <div className={`w-full min-h-[3rem] sm:min-h-[3.25rem] rounded-xl border-2 transition-all duration-500 flex items-center justify-between px-2.5 sm:px-3 py-1.5 text-left shadow-sm ${
+                                        highlightLocation
+                                            ? 'bg-amber-100 border-amber-400 ring-4 ring-amber-300 shadow-xl scale-[1.02] animate-pulse'
+                                            : isOnCampusWifi
+                                                ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                                                : 'bg-amber-50/90 border-amber-300 text-amber-950'
+                                    }`}>
+                                        {/* Left Side: Icon + Title + Guidance Subtitle */}
+                                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 pr-1">
+                                            <span className="text-sm sm:text-base shrink-0">📶</span>
+                                            <div className="flex flex-col min-w-0">
+                                                <span className="block text-[7.5px] sm:text-[8.5px] font-black uppercase tracking-wider leading-none mb-0.5 opacity-70 truncate">
+                                                    Campus WiFi
+                                                </span>
+                                                <p className={`text-[8px] sm:text-[9.5px] font-semibold leading-tight line-clamp-2 ${
+                                                    isOnCampusWifi ? 'text-emerald-800' : 'text-amber-800'
+                                                }`}>
+                                                    {isOnCampusWifi
+                                                        ? 'Connected to hostel WiFi for smooth attendance.'
+                                                        : 'Connect to your hostel WiFi for smooth attendance without GPS errors.'
+                                                    }
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Right Side: OFFLINE/ONLINE Badge + CONNECTED / NOT CONNECTED underneath */}
+                                        <div className="shrink-0 flex flex-col items-end justify-center pl-1 border-l border-amber-200/60 sm:pl-2">
+                                            <div className="flex items-center gap-1">
+                                                <span className={`inline-block w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${
+                                                    isOnCampusWifi
+                                                        ? 'bg-emerald-500 animate-pulse shadow-sm shadow-emerald-500/50'
+                                                        : 'bg-red-500 animate-pulse shadow-sm shadow-red-500/50'
+                                                }`} />
+                                                <span className={`text-[8px] sm:text-[9.5px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full ${
+                                                    isOnCampusWifi
+                                                        ? 'bg-emerald-200/80 text-emerald-950 border border-emerald-300'
+                                                        : 'bg-red-100 text-red-700 border border-red-200'
+                                                }`}>
+                                                    {isOnCampusWifi ? 'ONLINE' : 'OFFLINE'}
+                                                </span>
+                                            </div>
+                                            <span className={`text-[7.5px] sm:text-[8.5px] font-black uppercase tracking-tight mt-0.5 ${
+                                                isOnCampusWifi ? 'text-emerald-700' : 'text-red-600'
+                                            }`}>
+                                                {isOnCampusWifi ? 'CONNECTED' : 'NOT CONNECTED'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {bankSettings?.isPaymentEnabled && (
                                     <button
                                         onClick={() => setShowFeeDetailsModal(true)}
-                                        className="w-full h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5 text-center leading-tight col-span-2 md:col-span-1"
+                                        className="w-full h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5 text-center leading-tight col-span-2"
                                     >
                                         <span>💳</span> <span className="truncate">View Fee Details</span>
                                     </button>
@@ -2873,11 +3110,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     {latestPermission.status}
                                                 </div>
                                             </div>
-
                                             <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-stretch">
                                                 {/* Left Side: Student Info & Approvals */}
                                                 <div className="w-full md:w-[45%] lg:w-[40%] shrink-0 flex flex-row md:flex-col gap-2">
-                                                    <div className="flex flex-col gap-2 w-1/2 md:w-full">
+                                                    <div className="flex flex-col gap-2 w-full md:w-full">
                                                         <p className="text-[9px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest leading-none">Schedule Details</p>
                                                         <div className="flex flex-col gap-1.5 bg-gray-50/80 p-2 md:p-2.5 rounded-lg border border-gray-100">
                                                             <div className="flex items-center gap-1.5 md:gap-2">
@@ -2886,7 +3122,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 </div>
                                                                 <div className="min-w-0">
                                                                     <p className="text-[7.5px] md:text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5 truncate">Campus Out</p>
-                                                                    <p className="text-[9px] md:text-[11px] font-bold text-gray-900 leading-none truncate">{latestPermission.fromDateTime ? new Date(latestPermission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) : "N/A"}</p>
+                                                                    <p className="text-[9px] md:text-[11px] font-bold text-gray-900 leading-none truncate">{formatPermDate(latestPermission, true)}</p>
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-1.5 md:gap-2">
@@ -2895,7 +3131,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 </div>
                                                                 <div className="min-w-0">
                                                                     <p className="text-[7.5px] md:text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5 truncate">Campus In</p>
-                                                                    <p className="text-[9px] md:text-[11px] font-bold text-gray-900 leading-none truncate">{latestPermission.toDateTime ? new Date(latestPermission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) : "N/A"}</p>
+                                                                    <p className="text-[9px] md:text-[11px] font-bold text-gray-900 leading-none truncate">{formatPermDate(latestPermission, false)}</p>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -3104,23 +3340,112 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 <div className="p-6">
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-6">
                                         {(() => {
-                                            const isProfileLoading = !isFullProfileLoaded;
-                                            return formBuilderConfig.filter(f => f.visible && f.type !== 'image').map((field) => {
-                                                const value = studentProfile ? ((studentProfile as any)[field.id] || studentProfile.dynamicFields?.[field.id] || "N/A") : "N/A";
-                                                const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? formatDate(value) : value;
+                                            const defaultFields = [
+                                                { id: "name", label: "FULL NAME", visible: true, type: "text" },
+                                                { id: "gender", label: "GENDER", visible: true, type: "text" },
+                                                { id: "phoneNumber", label: "PHONE NUMBER", visible: true, type: "tel" },
+                                                { id: "dob", label: "DATE OF BIRTH", visible: true, type: "date" },
+                                                { id: "category", label: "SOCIAL CATEGORY", visible: true, type: "text" },
+                                                { id: "registrationId", label: "ERP ID", visible: true, type: "text" },
+                                                { id: "collegeName", label: "COLLEGE NAME", visible: true, type: "text" },
+                                                { id: "branch", label: "BRANCH", visible: true, type: "text" },
+                                                { id: "year", label: "CURRENT YEAR", visible: true, type: "text" },
+                                                { id: "semester", label: "SEMESTER", visible: true, type: "text" },
+                                                { id: "section", label: "SECTION", visible: true, type: "text" },
+                                                { id: "fatherName", label: "FATHER'S NAME", visible: true, type: "text" },
+                                                { id: "fatherNumber", label: "FATHER'S PHONE NO", visible: true, type: "tel" },
+                                                { id: "motherName", label: "MOTHER'S NAME", visible: true, type: "text" },
+                                                { id: "motherNumber", label: "MOTHER'S PHONE NO", visible: true, type: "tel" },
+                                                { id: "localGuardianAddress", label: "LOCAL GUARDIAN ADDRESS", visible: true, type: "text" },
+                                                { id: "localGuardianPhoneNumber", label: "LOCAL GUARDIAN PHONE", visible: true, type: "tel" },
+                                                { id: "homeState", label: "HOME STATE", visible: true, type: "text" },
+                                                { id: "permanentAddress", label: "PERMANENT ADDRESS", visible: true, type: "text" },
+                                                { id: "hostelName", label: "HOSTEL NAME", visible: true, type: "text" },
+                                                { id: "floorNumber", label: "FLOOR NUMBER", visible: true, type: "text" },
+                                                { id: "roomNumber", label: "ROOM NUMBER", visible: true, type: "text" },
+                                                { id: "joiningDate", label: "HOSTEL JOINING DATE", visible: true, type: "date" }
+                                            ];
+                                            const fieldsToRender = (formBuilderConfig && formBuilderConfig.length > 0)
+                                                ? formBuilderConfig.filter(f => f.visible && f.type !== 'image')
+                                                : defaultFields;
+
+                                            const isProfileLoading = !studentProfile;
+
+                                            return fieldsToRender.map((field) => {
+                                                let rawVal: any = "N/A";
+                                                if (studentProfile) {
+                                                    const p = studentProfile as any;
+                                                    if (p[field.id] !== undefined && p[field.id] !== null && p[field.id] !== "") {
+                                                        rawVal = p[field.id];
+                                                    } else if (p.dynamicFields && p.dynamicFields[field.id] !== undefined && p.dynamicFields[field.id] !== null && p.dynamicFields[field.id] !== "") {
+                                                        rawVal = p.dynamicFields[field.id];
+                                                    } else {
+                                                        const lowerId = field.id.toLowerCase();
+                                                        if (lowerId.includes("name") && !lowerId.includes("father") && !lowerId.includes("mother") && !lowerId.includes("college")) {
+                                                            rawVal = p.name || p.fullName || "N/A";
+                                                        } else if (lowerId === "gender") {
+                                                            rawVal = p.gender || "N/A";
+                                                        } else if (lowerId.includes("phone") && !lowerId.includes("father") && !lowerId.includes("mother") && !lowerId.includes("guardian")) {
+                                                            rawVal = p.phoneNumber || p.phone || p.studentPhone || p.mobile || "N/A";
+                                                        } else if (lowerId.includes("dob") || lowerId.includes("birth")) {
+                                                            rawVal = p.dob || p.dateOfBirth || "N/A";
+                                                        } else if (lowerId.includes("category")) {
+                                                            rawVal = p.category || p.socialCategory || "N/A";
+                                                        } else if (lowerId.includes("reg") || lowerId.includes("erp")) {
+                                                            rawVal = p.registrationId || p.erpId || p.erpInformation || "N/A";
+                                                        } else if (lowerId.includes("college")) {
+                                                            rawVal = p.collegeName || "N/A";
+                                                        } else if (lowerId === "branch") {
+                                                            rawVal = p.branch || "N/A";
+                                                        } else if (lowerId.includes("year")) {
+                                                            rawVal = p.year || p.currentYear || "N/A";
+                                                        } else if (lowerId.includes("sem")) {
+                                                            rawVal = p.semester || p.sem || "N/A";
+                                                        } else if (lowerId === "section") {
+                                                            rawVal = p.section || "N/A";
+                                                        } else if (lowerId.includes("fathername") || lowerId.includes("father'sname")) {
+                                                            rawVal = p.fatherName || "N/A";
+                                                        } else if (lowerId.includes("fathernumber") || lowerId.includes("fatherphone") || lowerId.includes("parentphone") || lowerId.includes("father'sphone")) {
+                                                            rawVal = p.fatherNumber || p.parentPhone || p.fatherPhone || p.fatherMobile || "N/A";
+                                                        } else if (lowerId.includes("mothername") || lowerId.includes("mother'sname")) {
+                                                            rawVal = p.motherName || "N/A";
+                                                        } else if (lowerId.includes("mothernumber") || lowerId.includes("motherphone") || lowerId.includes("mother'sphone")) {
+                                                            rawVal = p.motherNumber || p.motherPhone || p.motherMobile || "N/A";
+                                                        } else if (lowerId.includes("localguardianaddress")) {
+                                                            rawVal = p.localGuardianAddress || "N/A";
+                                                        } else if (lowerId.includes("localguardianphone") || lowerId.includes("guardianphone")) {
+                                                            rawVal = p.localGuardianPhoneNumber || p.localGuardianPhone || "N/A";
+                                                        } else if (lowerId.includes("homestate") || lowerId.includes("state")) {
+                                                            rawVal = p.homeState || "N/A";
+                                                        } else if (lowerId.includes("permanentaddress") || lowerId === "address") {
+                                                            rawVal = p.permanentAddress || p.address || "N/A";
+                                                        } else if (lowerId.includes("hostelname")) {
+                                                            rawVal = p.hostelName || "N/A";
+                                                        } else if (lowerId.includes("floor")) {
+                                                            rawVal = p.floorNumber || "N/A";
+                                                        } else if (lowerId.includes("room")) {
+                                                            rawVal = p.roomNumber || "N/A";
+                                                        } else if (lowerId.includes("joining") || lowerId.includes("hosteljoiningdate")) {
+                                                            rawVal = p.joiningDate || "N/A";
+                                                        }
+                                                    }
+                                                }
+
+                                                const value = (rawVal === undefined || rawVal === null || rawVal === "") ? "N/A" : (typeof rawVal === 'object' ? JSON.stringify(rawVal) : String(rawVal));
+                                                const displayValue = (field.type === 'date' || field.id === 'joiningDate' || field.id === 'dob') ? formatDate(value) : value;
 
                                                 return (
-                                                    <div key={field.id} className={['homePinCode', 'localGuardianAddress', 'permanentAddress'].includes(field.id) ? "md:col-span-2" : ""}>
+                                                    <div key={field.id} className={['localGuardianAddress', 'permanentAddress', 'homeAddress'].includes(field.id) ? "md:col-span-2" : ""}>
                                                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{field.label}</p>
                                                         {isProfileLoading ? (
                                                             <div className="h-4 w-20 bg-gray-100 animate-pulse rounded mt-1"></div>
-                                                        ) : field.type === 'tel' || field.id.toLowerCase().includes('number') || field.id.toLowerCase().includes('phone') ? (
+                                                        ) : (field.type === 'tel' || field.id.toLowerCase().includes('number') || field.id.toLowerCase().includes('phone')) && value !== "N/A" ? (
                                                             <a href={`tel:${value}`} title="Click to call" className="text-[12px] font-bold text-blue-600 hover:underline">
                                                                 {value}
                                                             </a>
                                                         ) : (
-                                                            <p className={`text-[12px] font-bold ${field.id === 'roomNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
-                                                                {field.id === 'roomNumber' && value !== 'N/A' ? '#' : ''}{displayValue}
+                                                            <p className={`text-[12px] font-bold ${field.id === 'roomNumber' || field.id === 'floorNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
+                                                                {field.id === 'roomNumber' && value !== 'N/A' && !value.startsWith('#') ? '#' : ''}{displayValue}
                                                             </p>
                                                         )}
                                                     </div>

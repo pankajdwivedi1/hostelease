@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, startTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import * as XLSX from "xlsx";
@@ -125,7 +125,7 @@ const DeveloperTools = ({ hostels, developerPassword, students = [], refreshStud
       });
       const data = await res.json();
       if (data.success) {
-        alert(`Successfully deleted ${data.deletedCount} students.`);
+        showToast(`${data.deletedCount} student(s) have been removed from database`, "success");
         setSelectedStudentIds([]);
         setSelectedSemester("");
         if (refreshStudents) {
@@ -916,7 +916,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   
   // ⚡ DELETED auto-show Effect to follow user preference for manual button trigger
   
-  const [currentTab, setCurrentTab] = useState<"permissions" | "attendance" | "messaging" | "payments" | "settings" | "rooms" | "alerts">("permissions");
+  const [currentTab, setCurrentTab] = useState<"permissions" | "attendance" | "messaging" | "payments" | "settings" | "rooms" | "alerts" | "wifi_sync" | "add_student">("permissions");
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [selectedRoomStudents, setSelectedRoomStudents] = useState<StudentDetails[]>([]);
   const [activeVisualHostel, setActiveVisualHostel] = useState<string>("");
@@ -952,11 +952,66 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const ist = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
     return ist.toISOString().split('T')[0];
   });
+  const [selectedEndDate, setSelectedEndDate] = useState(() => {
+    const d = new Date();
+    const ist = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+    return ist.toISOString().split('T')[0];
+  });
+  const [isGeneratingMatrix, setIsGeneratingMatrix] = useState(false);
   const [attendanceHostelFilter, setAttendanceHostelFilter] = useState("all");
   const [showExportPreview, setShowExportPreview] = useState(false);
   const [exportPreviewData, setExportPreviewData] = useState<any[]>([]);
-  const [exportType, setExportType] = useState<'students' | 'attendance'>('students');
+  const [exportType, setExportType] = useState<'students' | 'attendance' | 'attendance_matrix'>('students');
   const [exportOption, setExportOption] = useState<'present' | 'absent' | 'all' | null>(null);
+
+  // ── 📊 EXPORT COLUMN SELECTOR CONFIGURATION & REORDERING ──
+  const [exportColumnsList, setExportColumnsList] = useState([
+    { id: 'sno', label: 'S.NO.' },
+    { id: 'studentName', label: 'STUDENT NAME' },
+    { id: 'mobile', label: 'MOBILE' },
+    { id: 'regId', label: 'REG. ID' },
+    { id: 'erpId', label: 'ERP ID' },
+    { id: 'hostel', label: 'HOSTEL' },
+    { id: 'room', label: 'ROOM' },
+    { id: 'college', label: 'COLLEGE' },
+    { id: 'branch', label: 'BRANCH' },
+    { id: 'year', label: 'YEAR' },
+    { id: 'semester', label: 'SEMESTER' },
+    { id: 'status', label: 'STATUS' },
+    { id: 'time', label: 'TIME' },
+    { id: 'fatherName', label: 'FATHER NAME' },
+    { id: 'fatherMobile', label: 'FATHER MOBILE' },
+    { id: 'motherName', label: 'MOTHER NAME' },
+    { id: 'motherMobile', label: 'MOTHER MOBILE' },
+  ]);
+  const EXPORT_COLUMNS = exportColumnsList;
+
+  const [selectedExportColumns, setSelectedExportColumns] = useState<string[]>([
+    'sno', 'studentName', 'mobile', 'regId', 'erpId', 'hostel', 'room', 'college', 'branch', 'year', 'semester', 'status', 'time', 'fatherName', 'fatherMobile', 'motherName', 'motherMobile'
+  ]);
+  const [draggedColumnIndex, setDraggedColumnIndex] = useState<number | null>(null);
+
+  const handlePillDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedColumnIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handlePillDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handlePillDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedColumnIndex === null || draggedColumnIndex === targetIndex) return;
+
+    const updated = [...exportColumnsList];
+    const [moved] = updated.splice(draggedColumnIndex, 1);
+    updated.splice(targetIndex, 0, moved);
+
+    setExportColumnsList(updated);
+    setDraggedColumnIndex(null);
+  };
   const [isListExpanded, setIsListExpanded] = useState(false);
   const [showGatepassOverlay, setShowGatepassOverlay] = useState(false);
   const [showAllPresent, setShowAllPresent] = useState(false);
@@ -1214,6 +1269,130 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null); // ⚡ NEW: Subscription tracking
   const [billingHistory, setBillingHistory] = useState<any[]>([]); // ⚡ Billing history state
   const [loadingBillingHistory, setLoadingBillingHistory] = useState(false); // ⚡ Billing history loading
+  const [showRenewalModal, setShowRenewalModal] = useState(false);
+  const [selectedPlanMonths, setSelectedPlanMonths] = useState<number>(3);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"razorpay" | "bank">("razorpay");
+  const [utrNumber, setUtrNumber] = useState("");
+  const [isSubmittingDirect, setIsSubmittingDirect] = useState(false);
+
+  const handleDirectPaymentSubmit = async (finalAmount: number) => {
+    if (!utrNumber.trim()) {
+      alert("Please enter the Bank / UPI Payment UTR or Reference Transaction ID!");
+      return;
+    }
+    setIsSubmittingDirect(true);
+    try {
+      const res = await fetch("/api/admin/submit-direct-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId: subscriptionStatus?.tenantId || subscriptionStatus?.id,
+          utrNumber: utrNumber.trim(),
+          months: selectedPlanMonths,
+          amount: finalAmount,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert("🎉 Direct Bank/UPI Payment Logged Successfully!\nYour subscription has been extended.");
+        setShowRenewalModal(false);
+        setUtrNumber("");
+        window.location.reload();
+      } else {
+        alert("Submission failed: " + (data.error || "Unknown error"));
+      }
+    } catch (err: any) {
+      alert("Error submitting payment: " + err.message);
+    } finally {
+      setIsSubmittingDirect(false);
+    }
+  };
+
+  const handleRazorpayRenewal = async (months: number) => {
+    setIsProcessingPayment(true);
+    try {
+      if (typeof (window as any).Razorpay === "undefined") {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://checkout.razorpay.com/v1/checkout.js";
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error("Failed to load Razorpay SDK"));
+          document.body.appendChild(script);
+        });
+      }
+
+      const res = await fetch("/api/admin/create-razorpay-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId: subscriptionStatus?.tenantId || subscriptionStatus?.id,
+          months,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.error || "Failed to create payment order");
+        setIsProcessingPayment(false);
+        return;
+      }
+
+      const options = {
+        key: data.keyId,
+        amount: data.amount,
+        currency: data.currency,
+        name: "Hosteleaze Inc.",
+        description: `Subscription Renewal (${months} Month${months > 1 ? 's' : ''}) - ${data.collegeName}`,
+        order_id: data.orderId,
+        handler: async function (response: any) {
+          setIsProcessingPayment(true);
+          try {
+            const verifyRes = await fetch("/api/admin/verify-razorpay-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+                tenantId: subscriptionStatus?.tenantId || subscriptionStatus?.id,
+                months,
+              }),
+            });
+            const verifyData = await verifyRes.json();
+            if (verifyData.success) {
+              alert("🎉 Subscription Renewed Successfully!");
+              setShowRenewalModal(false);
+              window.location.reload();
+            } else {
+              alert("Payment verification failed: " + (verifyData.error || "Unknown error"));
+            }
+          } catch (err: any) {
+            alert("Payment verification error: " + err.message);
+          } finally {
+            setIsProcessingPayment(false);
+          }
+        },
+        prefill: {
+          name: subscriptionStatus?.name || title || "",
+        },
+        theme: {
+          color: "#2563eb",
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on("payment.failed", function (response: any) {
+        alert("Payment Failed: " + response.error.description);
+        setIsProcessingPayment(false);
+      });
+      rzp.open();
+    } catch (err: any) {
+      alert("Error initiating payment: " + err.message);
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
 
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]); // ⚡ NEW: Manual Selection
   const [isBulkMarking, setIsBulkMarking] = useState(false); // ⚡ NEW: Loading State
@@ -1435,41 +1614,147 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const exportBulkStudentsToExcel = () => {
+  const exportBulkStudentsToExcel = async () => {
     try {
-      const dataToExport = bulkStudentsEditList.map((s, index) => ({
-        "Database ID": s.id || s._id || "",
-        "Full Name": s.name || "",
-        "Phone Number": s.phoneNumber || "",
-        "Email Address": s.email || "",
-        "GENDER": s.gender || "",
-        "Date of Birth": s.dob || "",
-        "Social Category": s.category || "",
-        "ERP ID": s.erpId || s.erpInformation || "",
-        "College Name": s.collegeName || "",
-        "Branch": s.branch || "",
-        "Current Year": s.year || "",
-        "Semester": s.semester || "",
-        "Section": s.section || "",
-        "Father's Name": s.fatherName || "",
-        "Father's Phone No": s.fatherNumber || "",
-        "Mother's Name": s.motherName || "",
-        "Mother's Phone No": s.motherNumber || "",
-        "Local Guardian Address": s.localGuardianAddress || "",
-        "Local Guardian Phone": s.localGuardianPhoneNumber || "",
-        "Home State": s.homeState || "",
-        "Permanent Address": s.permanentAddress || s.homePinCode || "",
-        "Hostel Name": s.hostelName || "",
-        "Floor Number": s.floorNumber || "",
-        "Room Number": s.roomNumber || "",
-        "Joining Date": s.joiningDate || "",
-        "Student Status": s.studentStatus || ""
-      }));
+      const XLSXStyle = await import('xlsx-js-style');
 
-      const ws = XLSX.utils.json_to_sheet(dataToExport);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Bulk Edit Students");
-      XLSX.writeFile(wb, `bulk_students_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      const headers = [
+        "Database ID",
+        "Full Name",
+        "Phone Number",
+        "Email Address",
+        "GENDER",
+        "Date of Birth",
+        "Social Category",
+        "ERP ID",
+        "College Name",
+        "Branch",
+        "Current Year",
+        "Semester",
+        "Section",
+        "Father's Name",
+        "Father's Phone No",
+        "Mother's Name",
+        "Mother's Phone No",
+        "Local Guardian Address",
+        "Local Guardian Phone",
+        "Home State",
+        "Permanent Address",
+        "Hostel Name",
+        "Floor Number",
+        "Room Number",
+        "Joining Date",
+        "Student Status"
+      ];
+
+      const formatDateToDDMMYYYY = (dateVal: any) => {
+        if (!dateVal) return "";
+        const str = String(dateVal).trim();
+        if (!str) return "";
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+          const [y, m, d] = str.split('-');
+          return `${d}-${m}-${y}`;
+        }
+        if (str.includes('T')) {
+          const datePart = str.split('T')[0];
+          if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+            const [y, m, d] = datePart.split('-');
+            return `${d}-${m}-${y}`;
+          }
+        }
+        if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(str)) {
+          return str.replace(/\//g, '-');
+        }
+        const dObj = new Date(str);
+        if (!isNaN(dObj.getTime())) {
+          const day = String(dObj.getDate()).padStart(2, '0');
+          const month = String(dObj.getMonth() + 1).padStart(2, '0');
+          const year = dObj.getFullYear();
+          return `${day}-${month}-${year}`;
+        }
+        return str;
+      };
+
+      const dataRows = bulkStudentsEditList.map((s) => [
+        s.id || s._id || "",
+        s.name || "",
+        s.phoneNumber || "",
+        s.email || "",
+        s.gender || "",
+        formatDateToDDMMYYYY(s.dob),
+        s.category || "",
+        s.erpId || s.erpInformation || "",
+        s.collegeName || "",
+        s.branch || "",
+        s.year || "",
+        s.semester || "",
+        s.section || "",
+        s.fatherName || "",
+        s.fatherNumber || "",
+        s.motherName || "",
+        s.motherNumber || "",
+        s.localGuardianAddress || "",
+        s.localGuardianPhoneNumber || "",
+        s.homeState || "",
+        s.permanentAddress || s.homePinCode || "",
+        s.hostelName || "",
+        s.floorNumber || "",
+        s.roomNumber || "",
+        formatDateToDDMMYYYY(s.joiningDate),
+        s.studentStatus || ""
+      ]);
+
+      const sheetAOA = [headers, ...dataRows];
+      const wb = XLSXStyle.utils.book_new();
+      const ws = XLSXStyle.utils.aoa_to_sheet(sheetAOA);
+
+      // Auto-fit Column Widths according to data length
+      const colWidths = headers.map((header, colIdx) => {
+        let maxLen = header.length;
+        dataRows.forEach((row) => {
+          const val = row[colIdx] ? String(row[colIdx]) : '';
+          if (val.length > maxLen) maxLen = val.length;
+        });
+        return { wch: Math.max(maxLen + 3, 12) };
+      });
+      ws['!cols'] = colWidths;
+
+      // Define standard black border style for all 4 sides
+      const fullBlackBorder = {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } },
+      };
+
+      const range = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1');
+
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSXStyle.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+
+          if (R === 0) {
+            // Header Row (Dark Navy with White Bold Text and 4-Side Black Borders)
+            ws[cellAddress].s = {
+              font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11, name: "Calibri" },
+              fill: { fgColor: { rgb: "0F172A" } },
+              alignment: { horizontal: "center", vertical: "center" },
+              border: fullBlackBorder
+            };
+          } else {
+            // Data Rows (Centered Alignment + 4-Side Black Borders on ALL cells)
+            ws[cellAddress].s = {
+              font: { sz: 10, name: "Calibri" },
+              alignment: { horizontal: "center", vertical: "center" },
+              border: fullBlackBorder
+            };
+          }
+        }
+      }
+
+      XLSXStyle.utils.book_append_sheet(wb, ws, "Bulk Edit Students");
+      XLSXStyle.writeFile(wb, `bulk_students_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
       showToast("Spreadsheet data exported successfully!", "success");
     } catch (err: any) {
       console.error(err);
@@ -1542,8 +1827,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   const date = new Date((val - 25569) * 86400 * 1000);
                   return isNaN(date.getTime()) ? "" : date.toISOString().split('T')[0];
                 }
+                const str = String(val).trim();
+                if (!str) return "";
+                if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(str)) {
+                  const parts = str.split(/[-/]/);
+                  return `${parts[2]}-${parts[1]}-${parts[0]}`;
+                }
                 const date = new Date(val);
-                return isNaN(date.getTime()) ? String(val).trim() : date.toISOString().split('T')[0];
+                return isNaN(date.getTime()) ? str : date.toISOString().split('T')[0];
               };
 
               return {
@@ -1552,7 +1843,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 phoneNumber: String(findValue(matchingRow, ["Phone Number", "Phone", "phoneNumber", "Mobile"]) || s.phoneNumber || "").trim(),
                 email: String(findValue(matchingRow, ["Email Address", "Email", "email"]) || s.email || "").trim(),
                 gender: String(findValue(matchingRow, ["GENDER", "gender"]) || s.gender || "").trim().toUpperCase(),
-                dob: parseDateValue(findValue(matchingRow, ["Date of Birth", "dob", "dobDate"])),
+                dob: parseDateValue(findValue(matchingRow, ["Date of Birth", "dob", "dobDate"])) || s.dob || "",
                 category: String(findValue(matchingRow, ["Social Category", "Category", "category"]) || s.category || "").trim().toUpperCase(),
                 erpId: String(findValue(matchingRow, ["ERP ID", "erpId", "ERP_ID"]) || s.erpId || s.erpInformation || "").trim().toUpperCase(),
                 collegeName: String(findValue(matchingRow, ["College Name", "College", "collegeName"]) || s.collegeName || "").trim().toUpperCase(),
@@ -1572,7 +1863,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 hostelName: String(findValue(matchingRow, ["Hostel Name", "Hostel", "hostelName"]) || s.hostelName || "").trim().toUpperCase(),
                 floorNumber: String(findValue(matchingRow, ["Floor Number", "Floor", "floorNumber"]) || s.floorNumber || "").trim().toUpperCase(),
                 roomNumber: String(findValue(matchingRow, ["Room Number", "Room", "roomNumber"]) || s.roomNumber || "").trim().toUpperCase(),
-                joiningDate: parseDateValue(findValue(matchingRow, ["Joining Date", "joiningDate"])),
+                joiningDate: parseDateValue(findValue(matchingRow, ["Joining Date", "joiningDate"])) || s.joiningDate || "",
                 studentStatus: String(findValue(matchingRow, ["Student Status", "Status", "studentStatus"]) || s.studentStatus || "").trim().toLowerCase()
               };
             }
@@ -3941,11 +4232,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         expiresAt.setHours(expiresAt.getHours() + parseInt(newMessage.expiryHours));
       }
 
+      const senderRole = isWarden ? "warden" : (title === "Super Admin Dashboard" ? "superadmin" : "dean");
       const url = "/api/admin/notifications";
       const method = editingNotificationId ? "PATCH" : "POST";
       const body = editingNotificationId
-        ? { id: editingNotificationId, message: newMessage.message, priority: newMessage.priority, expiryHours: newMessage.expiryHours }
-        : { ...newMessage, senderId, expiresAt };
+        ? { id: editingNotificationId, message: newMessage.message, priority: newMessage.priority, expiryHours: newMessage.expiryHours, senderRole }
+        : { ...newMessage, senderId, senderRole, senderHostel: wardenHostelName || "", expiresAt };
 
       const response = await fetch(url, {
         method,
@@ -3978,34 +4270,46 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const handleDeleteNotification = async (id: string) => {
+    if (!id || id === 'undefined') {
+      showToast("Error: Missing broadcast ID", "error");
+      return;
+    }
     if (!await showConfirm("Are you sure you want to delete this broadcast? This action cannot be undone.")) return;
     try {
-      const res = await fetch(`/api/admin/notifications?id=${id}`, { method: "DELETE" });
+      const roleQuery = isWarden ? "&role=warden" : "&role=admin";
+      const res = await fetch(`/api/admin/notifications?id=${id}${roleQuery}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
+        showToast("✅ Broadcast message deleted successfully!", "success");
         fetchAdminNotifications();
       } else {
-        alert(data.error || "Failed to delete notification");
+        showToast(data.error || "Failed to delete notification", "error");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error deleting notification:", e);
+      showToast("Error deleting notification: " + e.message, "error");
     }
   };
 
   const handleCleanup = async (type: "attendance" | "notifications") => {
-    if (!await showConfirm(`Are you sure you want to clean up ${type}? This will delete old records.`)) return;
+    if (!await showConfirm(`Are you sure you want to clean up old ${type}? Note: "Clear History (30+ Days)" will only remove records created more than 30 days ago.`)) return;
     try {
       const endpoint = type === "attendance" ? "/api/admin/attendance-cleanup" : "/api/admin/notifications?action=cleanup";
       const response = await fetch(endpoint, { method: "DELETE" });
       if (!response.ok) throw new Error(`Cleanup failed: ${response.status}`);
       const data = await response.json();
       if (data.success) {
-        alert(`${type} cleanup successful! ${data.deletedCount} records removed.`);
+        if (data.deletedCount === 0) {
+          showToast(`Cleanup finished: 0 records older than 30 days were found. To delete a recent broadcast, click its red DELETE button below.`, "warning");
+        } else {
+          showToast(`✅ ${type} cleanup successful! ${data.deletedCount} old records removed.`, "success");
+        }
         if (type === "attendance") fetchAttendanceLogs();
         else fetchAdminNotifications();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error cleaning up ${type}:`, error);
+      showToast(`Error cleaning up ${type}: ` + error.message, "error");
     }
   };
 
@@ -4164,24 +4468,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   }, [title]);
 
   useEffect(() => {
-    // ⚡ INSTANT UPDATE: Fetch summary and logs when date, hostel filter, or tab changes
-    fetchAttendanceSummary();
-
+    // ⚡ INSTANT TAB SWITCH: Fetch attendance summary and logs only when viewing attendance or rooms
     if (currentTab === "attendance" || currentTab === "rooms") {
+      fetchAttendanceSummary();
       fetchAttendanceLogs();
     }
   }, [selectedDate, attendanceHostelFilter, currentTab]);
 
   useEffect(() => {
-    // Silently revalidate students list in the background only when tab switches
+    // ⚡ INSTANT TAB SWITCH: Use in-memory cached students list for 0ms tab switching
     if (currentTab === "attendance" || currentTab === "rooms") {
       if (students.length === 0) {
         fetchStudents();
-      } else {
-        fetchStudents(true);
       }
     }
     
+    if (currentTab === 'permissions' && permissions.length === 0) {
+      fetchPermissions('all');
+    }
+
     if (currentTab === 'payments' && (!payments || payments.length === 0)) {
       fetchAdminPayments();
       fetchBankSettings();
@@ -4462,10 +4767,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         throw new Error(`Failed to delete student: ${response.status} - ${text}`);
       }
 
-      const data = JSON.parse(await response.text() || "{}");
+      const studentName = selectedStudent?.name || "Student";
       setSelectedStudent(null);
       setShowDeleteConfirm(false);
       await Promise.all([fetchPermissions(undefined, true), fetchStudents(true)]);
+      showToast(`${studentName} has been removed from database`, "success");
     } catch (error: any) {
       console.error("Error deleting student:", error);
       alert(error.message || "Failed to delete student. Please try again.");
@@ -4607,17 +4913,36 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const exportToExcel = () => {
-    const data = filteredStudents.map(s => ({
-      "Student ID": s.registrationId || "N/A",
-      Name: s.name,
-      Room: s.roomNumber,
-      Mobile: s.phoneNumber || "N/A",
-      Hostel: formatHostelDisplay(s.hostelName),
-      College: s.collegeName,
-      Branch: s.branch,
-      Year: s.year,
-      Semester: s.semester
-    }));
+    setSelectedExportColumns([
+      'sno', 'studentName', 'mobile', 'regId', 'erpId', 'hostel', 'room', 'college', 'branch', 'year', 'semester', 'fatherName', 'fatherMobile', 'motherName', 'motherMobile'
+    ]);
+    const data = filteredStudents.map((s, idx) => {
+      const erpIdValue = s.erpInformation || (s as any).erpId || (s as any).enrollmentNo || (s as any).erp_id || "N/A";
+      const fatherNameVal = s.fatherName || (s as any).father_name || (s as any).fatherName || "N/A";
+      const fatherMobileVal = s.fatherNumber || (s as any).father_number || (s as any).fatherMobile || (s as any).fatherPhone || "N/A";
+      const motherNameVal = s.motherName || (s as any).mother_name || (s as any).motherName || "N/A";
+      const motherMobileVal = s.motherNumber || (s as any).mother_number || (s as any).motherMobile || (s as any).motherPhone || "N/A";
+      const yearVal = s.year || (s as any).year || (s as any).academicYear || "N/A";
+      const semVal = s.semester || (s as any).semester || (s as any).sem || "N/A";
+
+      return {
+        "S.NO.": idx + 1,
+        "STUDENT NAME": s.name || "N/A",
+        "MOBILE": s.phoneNumber || "N/A",
+        "REG. ID": s.registrationId || "N/A",
+        "ERP ID": erpIdValue,
+        "HOSTEL": formatHostelDisplay(s.hostelName || "N/A"),
+        "ROOM": s.roomNumber || "N/A",
+        "COLLEGE": s.collegeName || "N/A",
+        "BRANCH": s.branch || "N/A",
+        "YEAR": yearVal,
+        "SEMESTER": semVal,
+        "FATHER NAME": fatherNameVal,
+        "FATHER MOBILE": fatherMobileVal,
+        "MOTHER NAME": motherNameVal,
+        "MOTHER MOBILE": motherMobileVal,
+      };
+    });
     setExportPreviewData(data);
     setExportType('students');
     setShowExportPreview(true);
@@ -4627,42 +4952,111 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     setShowExportOptionsModal(true);
   };
 
-  const handleExportOption = (option: 'present' | 'absent' | 'all') => {
+  const handleExportOption = async (option: 'present' | 'absent' | 'all') => {
     setShowExportOptionsModal(false);
     setExportOption(option);
 
+    if (selectedEndDate > selectedDate) {
+      // ── MULTI-DAY ATTENDANCE REGISTER MATRIX EXPORT ──
+      setIsGeneratingMatrix(true);
+      try {
+        const dateList: string[] = [];
+        const curr = new Date(selectedDate);
+        const end = new Date(selectedEndDate);
+        while (curr <= end) {
+          dateList.push(curr.toISOString().split('T')[0]);
+          curr.setDate(curr.getDate() + 1);
+        }
+
+        const res = await fetch(`/api/admin/attendance?startDate=${selectedDate}&endDate=${selectedEndDate}&hostelName=${attendanceHostelFilter}&_t=${Date.now()}`);
+        const dataJson = await res.json();
+        const logs: any[] = dataJson.attendance || [];
+
+        const attendanceLookup = new Set<string>();
+        logs.forEach(l => {
+          const sid = typeof l.studentId === 'object' ? (l.studentId?._id || l.studentId?.id) : l.studentId;
+          if (sid && l.date) {
+            attendanceLookup.add(`${sid}_${l.date}`);
+          }
+        });
+
+        let targetStudents = students;
+        if (attendanceHostelFilter !== 'all') {
+          targetStudents = students.filter(s => {
+            const rawName = s.hostelName || (s as any).hostel_name || "";
+            const hName = (getHostelCategory(rawName) || rawName).trim().toLowerCase();
+            return hName === attendanceHostelFilter.trim().toLowerCase();
+          });
+        }
+
+        const matrixData = targetStudents.map((s, idx) => {
+          const erpIdValue = s.erpInformation || (s as any).erpId || (s as any).enrollmentNo || (s as any).erp_id || "N/A";
+          const rowObj: any = {
+            "S.NO.": idx + 1,
+            "STUDENT NAME": s.name || "N/A",
+            "REG. ID": s.registrationId || "N/A",
+            "ERP ID": erpIdValue,
+            "HOSTEL": formatHostelDisplay(s.hostelName || "N/A"),
+            "ROOM": s.roomNumber || "N/A",
+            "MOBILE": s.phoneNumber || "N/A",
+          };
+
+          let presentCount = 0;
+          dateList.forEach(dStr => {
+            const dateParts = dStr.split('-');
+            const dayMonthHeader = `${dateParts[2]}/${dateParts[1]}`;
+            const key = `${s.id}_${dStr}`;
+            const isPresent = attendanceLookup.has(key);
+            if (isPresent) {
+              rowObj[dayMonthHeader] = "P";
+              presentCount++;
+            } else {
+              rowObj[dayMonthHeader] = "A";
+            }
+          });
+
+          const absentCount = dateList.length - presentCount;
+          const percentage = dateList.length > 0 ? Math.round((presentCount / dateList.length) * 100) : 0;
+
+          rowObj["TOTAL PRESENT"] = presentCount;
+          rowObj["TOTAL ABSENT"] = absentCount;
+          rowObj["ATTENDANCE %"] = `${percentage}%`;
+
+          return rowObj;
+        });
+
+        setExportPreviewData(matrixData);
+        setExportType('attendance_matrix');
+        setShowExportPreview(true);
+      } catch (err) {
+        console.error("Error generating attendance matrix:", err);
+      } finally {
+        setIsGeneratingMatrix(false);
+      }
+      return;
+    }
+
+    // Auto-select essential single-day attendance columns by default
+    setSelectedExportColumns([
+      'sno', 'studentName', 'regId', 'erpId', 'mobile', 'hostel', 'room', 'status', 'time', 'college', 'branch'
+    ]);
+
+    let targetStudents: any[] = [];
+
     if (option === 'present') {
       let logsToExport = filteredAttendanceLogs;
-      
-      // If we're exporting a specific hostel, make sure we filter the ALL logs down to it
       if (attendanceHostelFilter !== 'all') {
-         logsToExport = attendanceLogs.filter(log => {
-           const studentHostel = getHostelCategory(log.hostelName || "") || log.hostelName || "";
-           return studentHostel.toLowerCase() === attendanceHostelFilter.toLowerCase();
-         });
+        logsToExport = attendanceLogs.filter(log => {
+          const studentHostel = getHostelCategory(log.hostelName || "") || log.hostelName || "";
+          return studentHostel.toLowerCase() === attendanceHostelFilter.toLowerCase();
+        });
       } else {
-         logsToExport = attendanceLogs;
+        logsToExport = attendanceLogs;
       }
-
-      const data = logsToExport.map(log => {
-        const sid = typeof log.studentId === 'string' ? log.studentId : (log.studentId?._id || log.studentId?.id);
-        const st = students.find(s => s.id === sid);
-        
-        const isStudentIdObj = typeof log.studentId === 'object' && log.studentId !== null;
-        
-        return {
-          "Student ID": (isStudentIdObj ? log.studentId?.registrationId : null) || st?.registrationId || "N/A",
-          "Name": log.name || st?.name || (isStudentIdObj ? log.studentId?.name : null) || "Unknown",
-          "Room": log.roomNumber || st?.roomNumber || (isStudentIdObj ? log.studentId?.roomNumber : null) || "N/A",
-          "Mobile": (isStudentIdObj ? log.studentId?.phoneNumber : null) || st?.phoneNumber || "N/A",
-          Hostel: formatHostelDisplay(log.hostelName || st?.hostelName || (isStudentIdObj ? log.studentId?.hostelName : null) || "N/A"),
-          Time: log.istTime,
-          Accuracy: log.location?.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"
-        };
-      });
-      setExportPreviewData(data);
-      setExportType('attendance');
-      setShowExportPreview(true);
+      const presentStudentIds = new Set(
+        logsToExport.map(log => typeof log.studentId === 'string' ? log.studentId : (log.studentId?._id || log.studentId?.id))
+      );
+      targetStudents = students.filter(s => presentStudentIds.has(s.id));
     } else if (option === 'absent') {
       let filteredAbsentees = absentees;
       if (attendanceHostelFilter !== 'all') {
@@ -4672,21 +5066,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           return hName === attendanceHostelFilter.trim().toLowerCase();
         });
       }
-
-      const absenteesToExport = filteredAbsentees;
-
-      const data = absenteesToExport.map(s => ({
-        "Student ID": s.registrationId || "N/A",
-        "Name": s.name || "Unknown",
-        "Mobile": s.phoneNumber || "N/A",
-        "Hostel": formatHostelDisplay(s.hostelName || (s as any).hostel_name || "N/A"),
-        "Status": "Absent"
-      }));
-      setExportPreviewData(data);
-      setExportType('attendance');
-      setShowExportPreview(true);
+      targetStudents = filteredAbsentees;
     } else if (option === 'all') {
-      // Get all students for the selected hostel filter
       let filteredStudents = students;
       if (attendanceHostelFilter !== 'all') {
         filteredStudents = students.filter(s => {
@@ -4695,30 +5076,47 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           return hName === attendanceHostelFilter.trim().toLowerCase();
         });
       }
+      targetStudents = filteredStudents;
+    }
 
-      const data = filteredStudents.map(s => {
-        // Find if they marked attendance today
-        const log = attendanceLogs.find(l => {
-          const sid = typeof l.studentId === 'string' ? l.studentId : (l.studentId?._id || l.studentId?.id);
-          return sid === s.id;
-        });
+    const data = targetStudents.map((s, idx) => {
+      const erpIdValue = s.erpInformation || (s as any).erpId || (s as any).enrollmentNo || (s as any).erp_id || "N/A";
+      const fatherNameVal = s.fatherName || (s as any).father_name || (s as any).fatherName || "N/A";
+      const fatherMobileVal = s.fatherNumber || (s as any).father_number || (s as any).fatherMobile || (s as any).fatherPhone || "N/A";
+      const motherNameVal = s.motherName || (s as any).mother_name || (s as any).motherName || "N/A";
+      const motherMobileVal = s.motherNumber || (s as any).mother_number || (s as any).motherMobile || (s as any).motherPhone || "N/A";
+      const yearVal = s.year || (s as any).year || (s as any).academicYear || "N/A";
+      const semVal = s.semester || (s as any).semester || (s as any).sem || "N/A";
 
-        return {
-          "Student ID": s.registrationId || "N/A",
-          "Name": s.name || "Unknown",
-          "Room": s.roomNumber || "N/A",
-          "Mobile": s.phoneNumber || "N/A",
-          "Hostel": formatHostelDisplay(s.hostelName || "N/A"),
-          "Status": log ? "Present" : "Absent",
-          "Time": log ? log.istTime : "N/A",
-          "Accuracy": log?.location?.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"
-        };
+      const log = attendanceLogs.find(l => {
+        const sid = typeof l.studentId === 'string' ? l.studentId : (l.studentId?._id || l.studentId?.id);
+        return sid === s.id;
       });
 
-      setExportPreviewData(data);
-      setExportType('attendance');
-      setShowExportPreview(true);
-    }
+      return {
+        "S.NO.": idx + 1,
+        "STUDENT NAME": s.name || "N/A",
+        "MOBILE": s.phoneNumber || "N/A",
+        "REG. ID": s.registrationId || "N/A",
+        "ERP ID": erpIdValue,
+        "HOSTEL": formatHostelDisplay(s.hostelName || "N/A"),
+        "ROOM": s.roomNumber || "N/A",
+        "COLLEGE": s.collegeName || "N/A",
+        "BRANCH": s.branch || "N/A",
+        "YEAR": yearVal,
+        "SEMESTER": semVal,
+        "STATUS": log ? "Present" : "Absent",
+        "TIME": log ? log.istTime : "N/A",
+        "FATHER NAME": fatherNameVal,
+        "FATHER MOBILE": fatherMobileVal,
+        "MOTHER NAME": motherNameVal,
+        "MOTHER MOBILE": motherMobileVal,
+      };
+    });
+
+    setExportPreviewData(data);
+    setExportType('attendance');
+    setShowExportPreview(true);
   };
 
   const confirmDownload = async () => {
@@ -4728,12 +5126,252 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const reportPrefix = exportOption === 'absent' ? "absentees" : exportOption === 'all' ? "all_students" : "attendance";
     const hostelNameSuffix = attendanceHostelFilter !== "all" ? `_${attendanceHostelFilter}` : "";
 
-    if (exportType === 'students') {
-      // ── Simple styled Students export ──
+    if (exportType === 'attendance_matrix') {
+      // ── MULTI-DAY ATTENDANCE REGISTER MATRIX STYLED EXCEL EXPORT ──
+      const sampleRow = exportPreviewData[0] || {};
+      const activeHeaders = Object.keys(sampleRow);
+      const lastColIdx = Math.max(activeHeaders.length - 1, 0);
+
+      const hostelTitle = attendanceHostelFilter && attendanceHostelFilter !== "all"
+        ? formatHostelDisplay(attendanceHostelFilter).toUpperCase()
+        : "ALL HOSTELS";
+
+      const titleRow = [`HOSTELEAZE - MULTI-DAY ATTENDANCE REGISTER MATRIX (${selectedDate} TO ${selectedEndDate})`].concat(Array(lastColIdx).fill(""));
+      const infoRow1 = [`HOSTEL SCOPE: ${hostelTitle}   •   TOTAL STUDENTS: ${exportPreviewData.length}   •   PERIOD: ${selectedDate} TO ${selectedEndDate}`].concat(Array(lastColIdx).fill(""));
+      const infoRow2 = [`GENERATED DATE: ${new Date().toLocaleDateString('en-IN')}   •   SYSTEM: SUPER ADMIN DASHBOARD`].concat(Array(lastColIdx).fill(""));
+      const emptyRow = Array(activeHeaders.length).fill("");
+
+      const dataRows = exportPreviewData.map((row: any) => {
+        return activeHeaders.map(h => row[h] !== undefined ? String(row[h]) : "");
+      });
+
+      const sheetAOA = [
+        titleRow,
+        infoRow1,
+        infoRow2,
+        emptyRow,
+        activeHeaders,
+        ...dataRows
+      ];
+
+      const wbMatrix = XLSXStyle.utils.book_new();
+      const wsMatrix = XLSXStyle.utils.aoa_to_sheet(sheetAOA);
+
+      wsMatrix['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: lastColIdx } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: lastColIdx } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: lastColIdx } },
+      ];
+
+      const colWidths = activeHeaders.map((header) => {
+        if (header === 'S.NO.') return { wch: 7 };
+        if (header === 'STUDENT NAME') return { wch: 22 };
+        if (header === 'REG. ID' || header === 'ERP ID') return { wch: 14 };
+        if (header === 'HOSTEL' || header === 'ROOM' || header === 'MOBILE') return { wch: 12 };
+        if (header === 'TOTAL PRESENT' || header === 'TOTAL ABSENT' || header === 'ATTENDANCE %') return { wch: 15 };
+        return { wch: 8 };
+      });
+      wsMatrix['!cols'] = colWidths;
+
+      const fullBlackBorder = {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } },
+      };
+
+      const range = XLSXStyle.utils.decode_range(wsMatrix['!ref'] || 'A1');
+
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSXStyle.utils.encode_cell({ r: R, c: C });
+          if (!wsMatrix[cellAddress]) continue;
+
+          if (R === 0) {
+            wsMatrix[cellAddress].s = {
+              font: { bold: true, color: { rgb: "FFFFFF" }, sz: 13, name: "Calibri" },
+              fill: { fgColor: { rgb: "0F172A" } },
+              alignment: { horizontal: "center", vertical: "center" },
+              border: fullBlackBorder
+            };
+          } else if (R === 1 || R === 2) {
+            wsMatrix[cellAddress].s = {
+              font: { bold: true, color: { rgb: "0F172A" }, sz: 10.5, name: "Calibri" },
+              fill: { fgColor: { rgb: "F1F5F9" } },
+              alignment: { horizontal: "center", vertical: "center" },
+              border: fullBlackBorder
+            };
+          } else if (R === 3) {
+            wsMatrix[cellAddress].s = { fill: { fgColor: { rgb: "FFFFFF" } } };
+          } else if (R === 4) {
+            wsMatrix[cellAddress].s = {
+              font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11, name: "Calibri" },
+              fill: { fgColor: { rgb: "0F172A" } },
+              alignment: { horizontal: "center", vertical: "center" },
+              border: fullBlackBorder
+            };
+          } else {
+            const cellVal = String(wsMatrix[cellAddress].v || "").trim();
+            if (cellVal === 'P') {
+              wsMatrix[cellAddress].s = {
+                font: { bold: true, color: { rgb: "15803D" }, sz: 10, name: "Calibri" },
+                fill: { fgColor: { rgb: "DCFCE7" } },
+                alignment: { horizontal: "center", vertical: "center" },
+                border: fullBlackBorder
+              };
+            } else if (cellVal === 'A') {
+              wsMatrix[cellAddress].s = {
+                font: { bold: true, color: { rgb: "B91C1C" }, sz: 10, name: "Calibri" },
+                fill: { fgColor: { rgb: "FEE2E2" } },
+                alignment: { horizontal: "center", vertical: "center" },
+                border: fullBlackBorder
+              };
+            } else if (cellVal === 'L') {
+              wsMatrix[cellAddress].s = {
+                font: { bold: true, color: { rgb: "B45309" }, sz: 10, name: "Calibri" },
+                fill: { fgColor: { rgb: "FEF9C3" } },
+                alignment: { horizontal: "center", vertical: "center" },
+                border: fullBlackBorder
+              };
+            } else {
+              wsMatrix[cellAddress].s = {
+                font: { sz: 10, name: "Calibri" },
+                alignment: { horizontal: "center", vertical: "center" },
+                border: fullBlackBorder
+              };
+            }
+          }
+        }
+      }
+
+      const fileName = `attendance_matrix_${attendanceHostelFilter}_${selectedDate}_to_${selectedEndDate}.xlsx`;
+      XLSXStyle.utils.book_append_sheet(wbMatrix, wsMatrix, "Attendance Register");
+      XLSXStyle.writeFile(wbMatrix, fileName);
+      setShowExportPreview(false);
+      return;
+    }
+
+    if (exportType === 'students' || exportType === 'attendance') {
+      // ── Styled, Informative & Column-Filtered Report Export ──
+      const isAttendance = exportType === 'attendance';
+      const activeCols = EXPORT_COLUMNS.filter(col => selectedExportColumns.includes(col.id));
+      const activeHeaders = activeCols.map(col => col.label);
+
+      // Create Informative Header Banner Rows (Fully Merged Across Table Width)
+      const activeSelectedHostel = isAttendance ? attendanceHostelFilter : hostelFilter;
+      const hostelTitle = activeSelectedHostel && activeSelectedHostel !== "all" 
+        ? formatHostelDisplay(activeSelectedHostel).toUpperCase() 
+        : "ALL HOSTELS";
+      const lastColIdx = Math.max(activeHeaders.length - 1, 0);
+
+      const titleBannerText = isAttendance
+        ? `HOSTELEAZE - DAILY ATTENDANCE MONITORING REPORT (${selectedDate})`
+        : `HOSTELEAZE - OFFICIAL STUDENT DIRECTORY REPORT`;
+
+      const titleRow = [titleBannerText].concat(Array(lastColIdx).fill(""));
+      const infoRow1 = [`HOSTEL SCOPE: ${hostelTitle}   •   TOTAL RECORDS: ${exportPreviewData.length} STUDENTS`].concat(Array(lastColIdx).fill(""));
+      const infoRow2 = [`REPORT DATE: ${isAttendance ? selectedDate : new Date().toLocaleDateString('en-IN')}   •   SYSTEM: SUPER ADMIN DASHBOARD`].concat(Array(lastColIdx).fill(""));
+      const emptyRow = Array(activeHeaders.length).fill("");
+
+      const dataRows = exportPreviewData.map((row: any) => {
+        return activeCols.map(col => row[col.label] !== undefined ? String(row[col.label]) : "N/A");
+      });
+
+      const sheetAOA = [
+        titleRow,       // Row 0 -> Excel Row 1 (Title)
+        infoRow1,       // Row 1 -> Excel Row 2 (Info 1)
+        infoRow2,       // Row 2 -> Excel Row 3 (Info 2)
+        emptyRow,       // Row 3 -> Excel Row 4 (Spacing)
+        activeHeaders,  // Row 4 -> Excel Row 5 (Headers)
+        ...dataRows     // Row 5+ -> Excel Row 6+ (Data)
+      ];
+
       const wb2 = XLSXStyle.utils.book_new();
-      const ws2 = XLSXStyle.utils.json_to_sheet(exportPreviewData);
-      XLSXStyle.utils.book_append_sheet(wb2, ws2, "Students");
-      XLSXStyle.writeFile(wb2, "students_data.xlsx");
+      const ws2 = XLSXStyle.utils.aoa_to_sheet(sheetAOA);
+
+      // Merge Title Row 1, Info Row 2, and Info Row 3 across all columns
+      ws2['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: lastColIdx } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: lastColIdx } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: lastColIdx } },
+      ];
+
+      // Auto-fit Column Widths precisely according to data length (compact & robust for S.NO.)
+      const colWidths = activeCols.map((col, colIdx) => {
+        if (col.id === 'sno') {
+          return { wch: 7 }; // Tight compact width for S.NO. (no extra blank space)
+        }
+        let maxLen = col.label.length;
+        dataRows.forEach((row: any) => {
+          const val = row[colIdx] ? String(row[colIdx]) : '';
+          if (val.length > maxLen) maxLen = val.length;
+        });
+        return { wch: Math.max(maxLen + 2, 7) }; // Tight +2 padding according to data length
+      });
+      ws2['!cols'] = colWidths;
+
+      // Define standard black border style for all 4 sides
+      const fullBlackBorder = {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } },
+      };
+
+      const range = XLSXStyle.utils.decode_range(ws2['!ref'] || 'A1');
+
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSXStyle.utils.encode_cell({ r: R, c: C });
+          if (!ws2[cellAddress]) continue;
+
+          if (R === 0) {
+            // Row 1: Title Banner (Merged & Centered)
+            ws2[cellAddress].s = {
+              font: { bold: true, color: { rgb: "FFFFFF" }, sz: 13, name: "Calibri" },
+              fill: { fgColor: { rgb: "0F172A" } },
+              alignment: { horizontal: "center", vertical: "center" },
+              border: fullBlackBorder
+            };
+          } else if (R === 1 || R === 2) {
+            // Row 2 & 3: Info Rows (Fully Merged & Centered Across Table Width)
+            ws2[cellAddress].s = {
+              font: { bold: true, color: { rgb: "0F172A" }, sz: 10.5, name: "Calibri" },
+              fill: { fgColor: { rgb: "F1F5F9" } },
+              alignment: { horizontal: "center", vertical: "center" },
+              border: fullBlackBorder
+            };
+          } else if (R === 3) {
+            // Row 4: Empty spacing row
+            ws2[cellAddress].s = {
+              fill: { fgColor: { rgb: "FFFFFF" } }
+            };
+          } else if (R === 4) {
+            // Row 5: Table Header (Dark Navy with White Bold Text and 4-Side Black Borders)
+            ws2[cellAddress].s = {
+              font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11, name: "Calibri" },
+              fill: { fgColor: { rgb: "0F172A" } },
+              alignment: { horizontal: "center", vertical: "center" },
+              border: fullBlackBorder
+            };
+          } else {
+            // Row 6+: Data Rows (Centered Alignment + 4-Side Black Borders on ALL cells)
+            ws2[cellAddress].s = {
+              font: { sz: 10, name: "Calibri" },
+              alignment: { horizontal: "center", vertical: "center" },
+              border: fullBlackBorder
+            };
+          }
+        }
+      }
+
+      const sheetName = isAttendance ? "Attendance Report" : "Students Directory";
+      const fileName = isAttendance 
+        ? `daily_attendance_${exportOption}_${attendanceHostelFilter}_${selectedDate}.xlsx` 
+        : `students_directory_${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+      XLSXStyle.utils.book_append_sheet(wb2, ws2, sheetName);
+      XLSXStyle.writeFile(wb2, fileName);
       setShowExportPreview(false);
       return;
     }
@@ -5522,31 +6160,41 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       <main className="w-full max-w-4xl mx-auto">
         {/* ⚡ SUBSCRIPTION WARNING BANNER */}
         {subscriptionStatus && (subscriptionStatus.isWarning || subscriptionStatus.isExpired) && (
-          <div className={`m-4 p-4 rounded-2xl border flex items-center justify-between gap-4 animate-in slide-in-from-top duration-500 ${subscriptionStatus.isExpired
+          <div className={`m-2 sm:m-4 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border flex items-center justify-between gap-2 sm:gap-4 animate-in slide-in-from-top duration-500 ${subscriptionStatus.isExpired
             ? "bg-red-50 border-red-100 text-red-700"
             : "bg-amber-50 border-amber-100 text-amber-700"
             }`}>
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${subscriptionStatus.isExpired ? "bg-red-100" : "bg-amber-100"
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className={`w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 text-xs sm:text-base animate-pulse ${subscriptionStatus.isExpired ? "bg-red-100" : "bg-amber-100"
                 }`}>
                 {subscriptionStatus.isExpired ? "🚨" : "⏳"}
               </div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-tight">
+              <div className="min-w-0">
+                <style>{`
+                  @keyframes digitalBlink {
+                    0%, 49% { opacity: 1; }
+                    50%, 100% { opacity: 0.15; }
+                  }
+                `}</style>
+                <p className="text-[10px] sm:text-xs font-black uppercase tracking-tight truncate">
                   {subscriptionStatus.isExpired ? "Subscription Expired" : "Subscription Expiring Soon"}
                 </p>
-                <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest mt-0.5">
+                <p 
+                  className="text-[7.5px] sm:text-[9.5px] font-black text-red-600 sm:text-amber-900 uppercase tracking-wider mt-0.5 whitespace-nowrap truncate"
+                  style={{ animation: "digitalBlink 1s steps(2, start) infinite" }}
+                >
                   {subscriptionStatus.isExpired
-                    ? "Your access has been restricted. Please contact Hosteleaze HQ."
-                    : `Only ${subscriptionStatus.daysRemaining} days remaining in your ${subscriptionStatus.status} period.`}
+                    ? "Access Restricted - Contact Hosteleaze HQ"
+                    : `Only ${subscriptionStatus.daysRemaining} days remaining in active period`}
                 </p>
               </div>
             </div>
-            {subscriptionStatus.isWarning && (
-              <button className="px-4 py-2 bg-white/50 backdrop-blur-sm border border-current rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-white transition-all">
-                Renew Now
-              </button>
-            )}
+            <button
+              onClick={() => setShowRenewalModal(true)}
+              className="px-2.5 py-1.5 sm:px-4.5 sm:py-2 bg-white/90 hover:bg-white backdrop-blur-sm border border-current rounded-lg sm:rounded-xl text-[9px] sm:text-xs font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 text-slate-800 whitespace-nowrap shrink-0"
+            >
+              Renew Now ⚡
+            </button>
           </div>
         )}
 
@@ -6073,93 +6721,97 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     ) : (
                       <p className="text-center text-gray-400 italic py-2 border-b border-dashed border-gray-200 mb-2">Click the GPS test button above to verify proximity</p>
                     )}
-
-
                   </div>
                 </div>
               )}
 
-              {/* Tab Navigation */}
-              <div className="flex items-center flex-wrap justify-center gap-1 md:gap-2 bg-filler p-1 rounded-xl mb-6 w-full">
-                <button
-                  onClick={() => setCurrentTab('permissions')}
-                  className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'permissions' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
-                >
-                  Leave Permissions
-                </button>
-                <button
-                  onClick={() => setCurrentTab('attendance')}
-                  className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'attendance' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
-                >
-                  Attendance
-                </button>
-                <button
-                  onClick={() => setCurrentTab('rooms')}
-                  className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'rooms' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
-                >
-                  Visual Rooms
-                </button>
-                {canAddStudent && (
+              <div className="bg-[#EFEFEF]/80 p-1.5 md:p-3 rounded-2xl border border-gray-200/50 shadow-sm mb-6 w-full space-y-1.5 md:space-y-2">
+                
+                {/* Main Navigation Tabs (3 columns on mobile, 5 columns on desktop) */}
+                <div className="grid grid-cols-3 md:grid-cols-5 gap-1 md:gap-2 w-full text-center">
                   <button
-                    onClick={() => setCurrentTab('add_student')}
-                    className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'add_student' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                    onClick={() => startTransition(() => setCurrentTab('permissions'))}
+                    className={`px-1 md:px-5 py-2 md:py-2.5 text-[10px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'permissions' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
                   >
-                    Add Student
+                    Leave Permissions
                   </button>
-                )}
-                {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
                   <button
-                    onClick={() => setCurrentTab('alerts')}
-                    className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'alerts' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                    onClick={() => startTransition(() => setCurrentTab('attendance'))}
+                    className={`px-1 md:px-5 py-2 md:py-2.5 text-[10px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'attendance' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
                   >
-                    Security Alerts
+                    Attendance
                   </button>
-                )}
-                <button
-                  onClick={() => setCurrentTab('messaging')}
-                  className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'messaging' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
-                >
-                  Broadcast
-                </button>
-                {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
                   <button
-                    onClick={() => setShowGatepassOverlay(true)}
-                    className="px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-black transition-all text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-1.5 whitespace-nowrap flex-grow group"
+                    onClick={() => startTransition(() => setCurrentTab('rooms'))}
+                    className={`px-1 md:px-5 py-2 md:py-2.5 text-[10px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'rooms' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
                   >
-                    <div className="relative flex h-1.5 w-1.5 md:h-2 md:w-2 flex-shrink-0">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 md:h-2 md:w-2 bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]"></span>
-                    </div>
-                    GATEPASS
+                    Visual Rooms
                   </button>
-                )}
-                {!isWarden && (title === "Super Admin Dashboard" || (title === "Dean Dashboard" && bankFormData.isPaymentEnabled)) && (
+                  {canAddStudent && (
+                    <button
+                      onClick={() => startTransition(() => setCurrentTab('add_student'))}
+                      className={`px-1 md:px-5 py-2 md:py-2.5 text-[10px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'add_student' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                      Add Student
+                    </button>
+                  )}
+                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
+                    <button
+                      onClick={() => startTransition(() => setCurrentTab('alerts'))}
+                      className={`px-1 md:px-5 py-2 md:py-2.5 text-[10px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'alerts' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                      Security Alerts
+                    </button>
+                  )}
+                </div>
+
+                {/* Secondary Navigation Tabs (4 columns on mobile, 5 columns on desktop) */}
+                <div className="grid grid-cols-4 md:grid-cols-5 gap-1 md:gap-2 w-full text-center">
                   <button
-                    onClick={() => setCurrentTab('payments')}
-                    className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'payments' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                    onClick={() => startTransition(() => setCurrentTab('messaging'))}
+                    className={`px-0.5 md:px-5 py-2 md:py-2.5 text-[9.5px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'messaging' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
                   >
-                    Payments
+                    Broadcast
                   </button>
-                )}
-                <button
-                  onClick={() => setCurrentTab('wifi_sync')}
-                  className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'wifi_sync' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
-                >
-                  WiFi Network
-                </button>
-                {!isWarden && (title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
+                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
+                    <button
+                      onClick={() => setShowGatepassOverlay(true)}
+                      className="px-0.5 md:px-5 py-2 md:py-2.5 text-[9.5px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-1 touch-manipulation active:scale-95 group"
+                    >
+                      <div className="relative flex h-1.5 w-1.5 md:h-2 md:w-2 flex-shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 md:h-2 md:w-2 bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]"></span>
+                      </div>
+                      GATEPASS
+                    </button>
+                  )}
+                  {!isWarden && (title === "Super Admin Dashboard" || (title === "Dean Dashboard" && bankFormData.isPaymentEnabled)) && (
+                    <button
+                      onClick={() => startTransition(() => setCurrentTab('payments'))}
+                      className={`px-0.5 md:px-5 py-2 md:py-2.5 text-[9.5px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'payments' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                      Payments
+                    </button>
+                  )}
                   <button
-                    onClick={() => setCurrentTab('settings')}
-                    className={`px-3 md:px-6 py-2 md:py-2.5 rounded-lg text-[11px] md:text-sm font-semibold transition-all whitespace-nowrap flex-grow ${currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm shadow-blue-100' : 'text-secondary hover:text-foreground'}`}
+                    onClick={() => startTransition(() => setCurrentTab('wifi_sync'))}
+                    className={`px-0.5 md:px-5 py-2 md:py-2.5 text-[9.5px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'wifi_sync' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
                   >
-                    Settings
+                    WiFi Network
                   </button>
-                )}
+                  {!isWarden && (title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
+                    <button
+                      onClick={() => startTransition(() => setCurrentTab('settings'))}
+                      className={`px-0.5 md:px-5 py-2 md:py-2.5 text-[9.5px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                      Settings
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {currentTab === 'permissions' && (
-                <>
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className={currentTab === 'permissions' ? 'block space-y-6' : 'hidden'}>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex bg-[#F3F4F6] p-1 rounded-xl w-full max-w-sm md:max-w-md">
                       <button
                         onClick={() => {
@@ -6476,11 +7128,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </button>
                     </div>
                   )}
-                </>
-              )}
+              </div>
 
-              {currentTab === 'attendance' && (
-                <div className="space-y-6">
+              <div className={currentTab === 'attendance' ? 'block space-y-6' : 'hidden'}>
                   {/* View Mode Toggle */}
                   <div className="flex justify-center mb-6">
                     <div className="bg-gray-100 p-1 rounded-xl inline-flex">
@@ -6501,20 +7151,41 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                   {attendanceViewMode === "daily" ? (
                     <>
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
-                          <div>
-                            <h2 className="text-lg font-bold text-foreground">Daily Attendance Monitoring</h2>
-                            <p className="text-sm text-secondary">Student entries and absentees for {selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? 'today' : selectedDate}</p>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3 w-full sm:w-auto sm:flex sm:items-center">
+                      <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+                        <div>
+                          <h2 className="text-lg font-bold text-foreground">Daily Attendance Monitoring</h2>
+                          <p className="text-sm text-secondary">
+                            {selectedDate === selectedEndDate
+                              ? `Student entries and absentees for ${selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? 'today' : selectedDate}`
+                              : `Date range report: ${selectedDate} to ${selectedEndDate}`}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-gray-200 shadow-sm">
                             <input
                               type="date"
                               value={selectedDate}
-                              onChange={(e) => setSelectedDate(e.target.value)}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setSelectedDate(val);
+                                if (selectedEndDate < val) setSelectedEndDate(val);
+                              }}
                               max={new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0]}
-                              className="h-11 px-4 rounded-xl border border-gray-200 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500 bg-white shadow-sm cursor-pointer hover:border-blue-300 transition-colors w-full sm:w-auto sm:min-w-[160px]"
+                              className="h-9 px-2 text-xs font-bold text-gray-700 bg-transparent focus:outline-none cursor-pointer"
+                              title="Start Date"
                             />
+                            <span className="text-xs font-bold text-gray-400 px-0.5">to</span>
+                            <input
+                              type="date"
+                              value={selectedEndDate}
+                              min={selectedDate}
+                              max={new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0]}
+                              onChange={(e) => setSelectedEndDate(e.target.value)}
+                              className="h-9 px-2 text-xs font-bold text-gray-700 bg-transparent focus:outline-none cursor-pointer"
+                              title="End Date"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 flex-nowrap">
                             <select
                               value={attendanceHostelFilter}
                               onChange={(e) => {
@@ -6524,7 +7195,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 setAttendanceHostelFilter(normalized);
                               }}
                               disabled={isWarden && authorizedHostels.length <= 1}
-                              className={`w-full bg-blue-50 border-0 text-blue-900 px-4 py-2.5 rounded-xl font-bold text-sm focus:ring-0 focus:outline-none ${isWarden && authorizedHostels.length <= 1 ? 'opacity-70 cursor-not-allowed' : ''}`}
+                              className={`bg-blue-50 border-0 text-blue-900 px-3 py-2 rounded-xl font-bold text-xs focus:ring-0 focus:outline-none h-9 ${isWarden && authorizedHostels.length <= 1 ? 'opacity-70 cursor-not-allowed' : ''}`}
                             >
                               <option value="all">All Hostels</option>
                               {Object.keys(hostelStats).map((hostelName) => {
@@ -6535,41 +7206,39 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 );
                               })}
                             </select>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={exportAttendanceToExcel}
-                            className="px-4 py-2 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-2"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                            Export Excel
-                          </button>
-                          {(userType === "admin" || userType === "superadmin") && (
                             <button
-                              onClick={() => handleCleanup("attendance")}
-                              className="px-4 py-2 text-xs font-semibold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                              onClick={exportAttendanceToExcel}
+                              className="px-3 py-2 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1.5 h-9 whitespace-nowrap"
                             >
-                              Purge Logs
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                              Export Excel
                             </button>
-                          )}
+                            {(userType === "admin" || userType === "superadmin") && (
+                              <button
+                                onClick={() => handleCleanup("attendance")}
+                                className="px-3 py-2 text-xs font-semibold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors h-9 whitespace-nowrap"
+                              >
+                                Purge Logs
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
 
                       {/* ⚠️ CURFEW ANOMALY DETECTED PANEL */}
                       {anomalyAlerts.length > 0 && (() => {
                         return (
-                          <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-100 rounded-3xl p-4 md:p-6 space-y-4 shadow-sm animate-in slide-in-from-top duration-300">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-2xl bg-red-500 text-white flex items-center justify-center shrink-0 shadow-lg shadow-red-200">
-                                  <svg className="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                          <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-100 rounded-2xl md:rounded-3xl p-3 md:p-6 space-y-3 md:space-y-4 shadow-sm animate-in slide-in-from-top duration-300">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 md:gap-3">
+                              <div className="flex items-center gap-2.5 md:gap-3">
+                                <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl bg-red-500 text-white flex items-center justify-center shrink-0 shadow-lg shadow-red-200">
+                                  <svg className="w-4 h-4 md:w-5 md:h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                                 </div>
                                 <div>
-                                  <h3 className="text-sm font-black text-red-950 uppercase tracking-wider">
+                                  <h3 className="text-xs md:text-sm font-black text-red-950 uppercase tracking-wider">
                                     ⚠️ Attendance Anomalies Detected
                                   </h3>
-                                  <p className="text-[11px] text-red-700 font-medium">
+                                  <p className="text-[9px] md:text-[11px] text-red-700 font-medium">
                                     {anomalyAlerts.length} student{anomalyAlerts.length > 1 ? 's' : ''} have been absent for 3+ consecutive days.
                                   </p>
                                 </div>
@@ -6577,11 +7246,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <button
                                 onClick={handleNotifyAnomalies}
                                 disabled={isNotifyingAnomalies}
-                                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-red-500/25 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                className="w-full sm:w-auto px-4 md:px-5 py-2 md:py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-[10px] md:text-xs uppercase tracking-widest active:scale-95 transition-all shadow-md md:shadow-lg shadow-red-500/25 flex items-center justify-center gap-1.5 disabled:opacity-50"
                               >
                                 {isNotifyingAnomalies ? (
                                   <>
-                                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                    <div className="w-3 h-3 md:w-3.5 md:h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                                     <span>Notifying...</span>
                                   </>
                                 ) : (
@@ -6593,8 +7262,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             </div>
 
                             {/* Collapsible Details list */}
-                            <details className="group border-t border-red-200/50 pt-3">
-                              <summary className="text-[10px] font-black text-red-600 uppercase tracking-widest cursor-pointer select-none flex items-center gap-1 hover:text-red-800 transition-colors">
+                            <details className="group border-t border-red-200/50 pt-2 md:pt-3">
+                              <summary className="text-[9px] md:text-[10px] font-black text-red-600 uppercase tracking-widest cursor-pointer select-none flex items-center gap-1 hover:text-red-800 transition-colors">
                                 <span className="transition-transform group-open:rotate-90 inline-block font-bold">▶</span>
                                 View Affected Students ({anomalyAlerts.length})
                               </summary>
@@ -6815,12 +7484,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               </thead>
                               <tbody className="divide-y divide-gray-50">
                                 {attendanceLogsLoading ? (
-                                  <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">Refreshing database...</td></tr>
+                                  <tr key="loading-entry-logs"><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">Refreshing database...</td></tr>
                                 ) : filteredAttendanceLogs.length === 0 ? (
-                                  <tr><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">No entries found for {selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? '9:00 PM onwards' : selectedDate}.</td></tr>
+                                  <tr key="empty-entry-logs"><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">No entries found for {selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? `${(() => { const [h, m] = (attendanceTimeSettings.startTime || '21:00').split(':'); const hr = parseInt(h, 10); return `${hr % 12 || 12}:${m || '00'} ${hr >= 12 ? 'PM' : 'AM'}`; })()} onwards` : selectedDate}.</td></tr>
                                 ) : (
-                                  (showAllEntryLogs ? filteredAttendanceLogs : filteredAttendanceLogs.slice(0, 10)).map((log) => (
-                                    <tr key={log._id} className="hover:bg-filler/50 transition-colors">
+                                  (showAllEntryLogs ? filteredAttendanceLogs : filteredAttendanceLogs.slice(0, 10)).map((log, idx) => (
+                                    <tr key={log._id || log.id || `log-${idx}-${typeof log.studentId === 'object' ? (log.studentId?._id || log.studentId?.id) : log.studentId}`} className="hover:bg-filler/50 transition-colors">
                                       <td className="px-2 md:px-4 py-3">
                                         <div className="flex flex-col min-w-0">
                                           <span className="font-bold text-gray-900 text-[9px] md:text-[13px] uppercase truncate tracking-tight">{log.name || log.studentId?.name || "Unknown"}</span>
@@ -6828,7 +7497,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             <span className="text-[8px] font-bold uppercase truncate text-gray-400">
                                               {log.hostelName || log.studentId?.hostelName || "N/A"} - {log.roomNumber || log.studentId?.roomNumber || "N/A"}
                                             </span>
-                                            {(log.faceMatchPercentage !== undefined || log.markedBy || log.deviceId) && (
+                                            {((typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null) || log.markedBy || log.deviceId) && (
                                               <span
                                                 onClick={(e) => {
                                                   e.stopPropagation();
@@ -6838,8 +7507,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                   log.faceMatchStatus === 'manual-override' ? 'bg-amber-50 text-amber-600 px-1' : 'text-blue-500'
                                                   }`}
                                               >
-                                                {log.faceMatchPercentage !== undefined ? `${log.faceMatchPercentage}% Match ${log.faceMatchStatus === 'flagged' ? '🚩' : ''}` : ''}
-                                                {log.markedBy ? `${log.faceMatchPercentage !== undefined ? ' • ' : ''}Marked by ${log.markedBy}` : log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? `Marked by DEAN` : log.faceMatchPercentage === undefined && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? `Marked by WARDEN` : ''}
+                                                {typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null ? `${log.faceMatchPercentage}% Match ${log.faceMatchStatus === 'flagged' ? '🚩' : ''}` : ''}
+                                                {log.markedBy ? `${(typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null) ? ' • ' : ''}Marked by ${log.markedBy}` : (typeof log.faceMatchPercentage !== 'number' || log.faceMatchPercentage === null) && (log.deviceId === 'marked-by-dean' || (log.deviceId === 'admin-override' && !isWarden)) ? `Marked by DEAN` : (typeof log.faceMatchPercentage !== 'number' || log.faceMatchPercentage === null) && (log.deviceId === 'marked-by-warden' || (log.deviceId === 'admin-override' && isWarden)) ? `Marked by WARDEN` : ''}
                                               </span>
                                             )}
                                           </div>
@@ -6853,7 +7522,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       </td>
                                       <td className="px-1 md:px-4 py-2 md:py-3 text-center hidden md:table-cell">
                                         <div className="flex items-center justify-center gap-2">
-                                          {log.faceMatchPercentage !== undefined ? (
+                                          {typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null ? (
                                             <button
                                               onClick={() => log.faceMatchStatus === 'flagged' && setReviewingLog(log)}
                                               disabled={log.faceMatchStatus !== 'flagged'}
@@ -6895,9 +7564,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             }
                                             return null;
                                           })()}
-                                          <span className={`text-[8px] md:text-[9px] font-bold ${(log.location?.accuracy || 0) < 50 ? "text-green-500" : "text-orange-400"}`}>
-                                            Acc: {log.location?.accuracy ? `${Math.round(log.location.accuracy)}m` : "N/A"}
-                                          </span>
+                                          {(() => {
+                                            const isAuthorityMarked = Boolean(log.markedBy || log.deviceId === 'marked-by-warden' || log.deviceId === 'marked-by-dean' || log.deviceId === 'marked-by-admin' || log.deviceId === 'admin-override');
+                                            if (log.location?.accuracy) {
+                                              return (
+                                                <span className={`text-[8px] md:text-[9px] font-bold ${log.location.accuracy < 50 ? "text-green-500" : "text-orange-400"}`}>
+                                                  GPS, Acc: {Math.round(log.location.accuracy)}m
+                                                </span>
+                                              );
+                                            }
+                                            if (isAuthorityMarked) {
+                                              return (
+                                                <span className="text-[8px] md:text-[9px] font-bold text-green-500">
+                                                  Acc: N/A
+                                                </span>
+                                              );
+                                            }
+                                            return (
+                                              <span className="text-[8px] md:text-[9px] font-bold text-emerald-600 font-extrabold">
+                                                Campus WiFi
+                                              </span>
+                                            );
+                                          })()}
                                         </div>
                                       </td>
                                     </tr>
@@ -6954,16 +7642,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                           {(showAllAbsentees ? displayedAbsentees : displayedAbsentees.slice(0, 9)).map(s => (
                             <div key={s.id} className="bg-white p-3 rounded-lg border border-red-100 flex flex-col gap-2 shadow-sm hover:shadow-md transition-shadow">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-[10px] font-black">
+                              <div className="flex items-start gap-2">
+                                <div className="w-6 h-6 rounded-md bg-red-100 text-red-600 flex items-center justify-center text-[9px] font-black flex-shrink-0 self-start mt-0.5">
                                   {getInitials(s.name)}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-[9px] font-bold text-foreground truncate">{s.name}</p>
-                                  <p className="text-[8px] text-secondary truncate uppercase">{s.roomNumber} • {s.floorNumber ? normalizeFloorName(s.floorNumber) : s.hostelName}</p>
+                                  <p className="text-[9px] font-bold text-foreground break-words leading-tight">{s.name}</p>
+                                  <p className="text-[8px] text-secondary truncate uppercase leading-tight whitespace-nowrap">{s.roomNumber} • {s.floorNumber ? normalizeFloorName(s.floorNumber) : s.hostelName}</p>
                                 </div>
-                                <a href={`tel:${s.phoneNumber}`} className="w-7 h-7 bg-green-50 text-green-600 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors flex-shrink-0">
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                                <a href={`tel:${s.phoneNumber}`} className="w-5 h-5 bg-green-50 text-green-600 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors flex-shrink-0">
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
                                 </a>
                               </div>
 
@@ -7122,14 +7810,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             </thead>
                             <tbody className="divide-y divide-gray-50">
                               {attendanceHistoryLogs.length === 0 ? (
-                                <tr>
+                                <tr key="no-attendance-history">
                                   <td colSpan={4} className="px-4 py-12 text-center text-gray-400 italic text-xs">
                                     {attendanceHistoryStudentId ? "No attendance records found for selected range" : "Select a student to view history"}
                                   </td>
                                 </tr>
                               ) : (
-                                attendanceHistoryLogs.map((log) => (
-                                  <tr key={log._id} className="hover:bg-blue-50/30 transition-colors">
+                                attendanceHistoryLogs.map((log, idx) => (
+                                  <tr key={log._id || log.id || `hist-${idx}`} className="hover:bg-blue-50/30 transition-colors">
                                     <td className="px-4 py-3">
                                       <p className="font-bold text-gray-800 text-xs">{new Date(log.date).toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                                       <div className="md:hidden flex flex-col mt-0.5">
@@ -7137,7 +7825,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <p className="text-[9px] text-gray-400 font-medium">ROOM {log.roomNumber}</p>
                                       </div>
                                     </td>
-                                    <td className="px-4 py-3 text-center">
+                              <td className="px-4 py-3 text-center">
                                       <span className="inline-block px-1.5 py-0.5 bg-green-50 text-green-700 rounded-lg text-[10px] md:text-xs font-black border border-green-100 shadow-sm">
                                         {log.istTime}
                                       </span>
@@ -7148,7 +7836,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     </td>
                                     <td className="px-4 py-3 text-right">
                                       <div className="flex flex-col items-end gap-1">
-                                        {log.faceMatchPercentage !== undefined && (
+                                        {typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null && (
                                           <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${log.faceMatchStatus === 'flagged' ? 'bg-red-100 text-red-600' : (log.faceMatchStatus === 'manual-override' ? 'bg-amber-100 text-amber-600' : 'bg-green-50 text-green-600')}`}>
                                             Face: {log.faceMatchPercentage}%
                                           </span>
@@ -7157,8 +7845,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           <span className={`text-[10px] font-black ${log.location?.accuracy < 50 ? "text-green-600" : "text-amber-500"}`}>
                                             GPS: {Math.round(log.location.accuracy)}m
                                           </span>
-                                        ) : (
-                                          <span className="text-[9px] text-gray-400 font-medium">No GPS</span>
+                                        ) : (log.markedBy || log.deviceId === 'marked-by-warden' || log.deviceId === 'marked-by-dean' || log.deviceId === 'admin-override') ? (
+                                           <span className="text-[9px] text-green-500 font-bold">Acc: N/A</span>
+                                         ) : (
+                                           <span className="text-[9px] text-emerald-600 font-bold">Campus WiFi</span>
+                                         )}
+                                        {(log.markedBy || log.deviceId === 'marked-by-warden' || log.deviceId === 'marked-by-dean' || log.deviceId === 'admin-override') && (
+                                          <span className="text-[9px] text-purple-600 font-black uppercase">Manual Entry</span>
                                         )}
                                       </div>
                                     </td>
@@ -7171,10 +7864,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
                     </div>
                   )}
-                </div>
-              )}
-              {currentTab === 'settings' && (
-                <div className="space-y-6 fade-in">
+              </div>
+
+              <div className={currentTab === 'settings' ? 'block space-y-6' : 'hidden'}>
                   {/* Settings Sub-Navigation */}
                   <div className="flex border-b border-gray-200">
                     {title === "Super Admin Dashboard" && (
@@ -7210,105 +7902,100 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <TenantSettingsView />
                     )}
                   </div>
-                </div>
-              )}
+              </div>
 
-              {currentTab === 'wifi_sync' && (
-                <div className="space-y-6 fade-in">
+              <div className={currentTab === 'wifi_sync' ? 'block space-y-6' : 'hidden'}>
                   {/* Header */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <h2 className="text-lg font-black text-gray-900 tracking-tight">📶 Campus WiFi Network Verification</h2>
                       <p className="text-xs text-gray-500 mt-1 font-medium">
-                        {isWarden
-                          ? `Sync and verify your hostel's public IP. Once verified, students connected to your WiFi will be automatically verified without GPS.`
-                          : `View and manage whitelisted IPs for all hostels across campus.`}
+                        Sync and verify your hostel's public IP. Once verified, students connected to your WiFi will be automatically verified without GPS.
                       </p>
                     </div>
                   </div>
 
-                  {/* Warden: Detect & Test Current IP */}
-                  {isWarden && (
-                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-2xl p-5">
-                      <div className="flex items-start gap-4 mb-4">
-                        <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center text-white text-xl shrink-0">📡</div>
-                        <div>
-                          <h3 className="font-black text-green-900 text-base">Step 1: Detect Your Hostel IP</h3>
-                          <p className="text-xs text-green-700 font-medium mt-0.5">Make sure you are connected to your <strong>hostel's WiFi</strong>, then click the button below.</p>
-                        </div>
-                      </div>
-
-                      {/* IP Detect + Test + Save buttons */}
-                      <div className="flex flex-col sm:flex-row gap-3">
-                        <button
-                          onClick={async () => {
-                            try {
-                              const res = await fetch("/api/check-network");
-                              const data = await res.json();
-                              if (data.success && data.ip) {
-                                const ip = data.ip;
-                                if (ip === "127.0.0.1" || ip === "::1") {
-                                  showToast("⚠️ Detected IP is localhost (127.0.0.1). You are running on your local PC, not on the real campus network. To get your real IP, access this app from the live deployed URL on campus WiFi.", "warning");
-                                  return;
-                                }
-                                const confirmResult = await showConfirm(
-                                  `Your hostel's detected public IP is:\n\n${ip}\n\nThis is your live public IP address. Do you want to verify it is correct, then save it to the server for ${wardenHostelName || "your hostel"}?`
-                                );
-                                if (confirmResult) {
-                                  const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
-                                  const hostelEntry = wl.find((w: any) =>
-                                    w && typeof w === 'object' && w.name && typeof w.name === 'string' && w.name.toLowerCase().includes((wardenHostelName || "").toLowerCase())
-                                  );
-                                  const updated = hostelEntry
-                                    ? wl.map((w: any) =>
-                                        w && typeof w === 'object' && w.name && typeof w.name === 'string' && w.name.toLowerCase().includes((wardenHostelName || "").toLowerCase())
-                                          ? { ...w, ip, name: `${wardenHostelName} IP (Warden Synced)` }
-                                          : w
-                                      )
-                                    : [...wl, { name: `${wardenHostelName} IP (Warden Synced)`, ip }];
-                                  setWifiWhitelist(updated);
-                                  await handleUpdateSettings({ wifiWhitelist: updated });
-                                  showToast(`✅ IP ${ip} saved successfully for ${wardenHostelName}!`, "success");
-                                }
-                              } else {
-                                showToast("Could not detect IP. Please check your internet connection.", "error");
-                              }
-                            } catch (e: any) {
-                              showToast("Error detecting IP: " + e.message, "error");
-                            }
-                          }}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-green-700 transition-all shadow-lg shadow-green-200 animate-pulse hover:animate-none"
-                        >
-                          ⚡ DETECT & SAVE MY HOSTEL IP
-                        </button>
-
-                        <button
-                          onClick={async () => {
-                            try {
-                              const res = await fetch("/api/check-network");
-                              const data = await res.json();
-                              if (data.success) {
-                                if (data.ip === "127.0.0.1" || data.ip === "::1") {
-                                  showToast(`⚠️ Test Result: IP is ${data.ip} (LOCALHOST). This only happens when you run the app locally on your PC. On the deployed server with campus WiFi, the real IP will be detected correctly.`, "warning");
-                                } else if (data.isWhitelisted) {
-                                  showToast(`✅ TEST PASSED! Your IP (${data.ip}) is whitelisted. Students on this network will be verified instantly.`, "success");
-                                } else {
-                                  showToast(`❌ TEST FAILED: Your IP (${data.ip}) is NOT whitelisted yet. Click "DETECT & SAVE MY HOSTEL IP" to add it.`, "error");
-                                }
-                              }
-                            } catch (e: any) {
-                              showToast("Test failed: " + e.message, "error");
-                            }
-                          }}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
-                        >
-                          🔍 TEST CURRENT NETWORK
-                        </button>
+                  {/* Detect & Test Current IP */}
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-2xl p-5">
+                    <div className="flex items-start gap-4 mb-4">
+                      <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center text-white text-xl shrink-0">📡</div>
+                      <div>
+                        <h3 className="font-black text-green-900 text-base">Step 1: Detect Your Hostel IP</h3>
+                        <p className="text-xs text-green-700 font-medium mt-0.5">Make sure you are connected to your <strong>hostel's WiFi</strong>, then click the button below.</p>
                       </div>
                     </div>
-                  )}
 
-                  {/* Super Admin & Dean: All Hostels Network Status */}
+                    {/* IP Detect + Test + Save buttons */}
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await fetch("/api/check-network");
+                            const data = await res.json();
+                            if (data.success && data.ip) {
+                              const ip = data.ip;
+                              if (ip === "127.0.0.1" || ip === "::1") {
+                                showToast("⚠️ Detected IP is localhost (127.0.0.1). You are running on your local PC, not on the real campus network. To get your real IP, access this app from the live deployed URL on campus WiFi.", "warning");
+                                return;
+                              }
+                              const targetName = wardenHostelName || "Campus Hostel";
+                              const confirmResult = await showConfirm(
+                                `Your detected public IP is:\n\n${ip}\n\nThis is your live public IP address. Do you want to verify it is correct, then save it to the server for ${targetName}?`
+                              );
+                              if (confirmResult) {
+                                const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                                const hostelEntry = wl.find((w: any) =>
+                                  w && typeof w === 'object' && w.name && typeof w.name === 'string' && w.name.toLowerCase().includes((targetName || "").toLowerCase())
+                                );
+                                const updated = hostelEntry
+                                  ? wl.map((w: any) =>
+                                      w && typeof w === 'object' && w.name && typeof w.name === 'string' && w.name.toLowerCase().includes((targetName || "").toLowerCase())
+                                        ? { ...w, ip, name: `${targetName} IP (${isWarden ? 'Warden' : 'Admin'} Synced)` }
+                                        : w
+                                    )
+                                  : [...wl, { name: `${targetName} IP (${isWarden ? 'Warden' : 'Admin'} Synced)`, ip }];
+                                setWifiWhitelist(updated);
+                                await handleUpdateSettings({ wifiWhitelist: updated });
+                                showToast(`✅ IP ${ip} saved successfully for ${targetName}!`, "success");
+                              }
+                            } else {
+                              showToast("Could not detect IP. Please check your internet connection.", "error");
+                            }
+                          } catch (e: any) {
+                            showToast("Error detecting IP: " + e.message, "error");
+                          }
+                        }}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-green-700 transition-all shadow-lg shadow-green-200 animate-pulse hover:animate-none"
+                      >
+                        ⚡ DETECT & SAVE MY HOSTEL IP
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await fetch("/api/check-network");
+                            const data = await res.json();
+                            if (data.success) {
+                              if (data.ip === "127.0.0.1" || data.ip === "::1") {
+                                showToast(`⚠️ Test Result: IP is ${data.ip} (LOCALHOST). This only happens when you run the app locally on your PC. On the deployed server with campus WiFi, the real IP will be detected correctly.`, "warning");
+                              } else if (data.isWhitelisted) {
+                                showToast(`✅ TEST PASSED! Your IP (${data.ip}) is whitelisted. Students on this network will be verified instantly.`, "success");
+                              } else {
+                                showToast(`❌ TEST FAILED: Your IP (${data.ip}) is NOT whitelisted yet. Click "DETECT & SAVE MY HOSTEL IP" to add it.`, "error");
+                              }
+                            }
+                          } catch (e: any) {
+                            showToast("Test failed: " + e.message, "error");
+                          }
+                        }}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+                      >
+                        🔍 TEST CURRENT NETWORK
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* All Hostels WiFi IP & BSSID Network Status (Confidential: Only visible to Super Admin & Dean) */}
                   {!isWarden && (
                     <div className="space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
@@ -7604,12 +8291,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
                     </div>
                   )}
-                </div>
-              )}
+              </div>
 
-              {currentTab === 'messaging' && (
-
-                <div className="space-y-6">
+              <div className={currentTab === 'messaging' ? 'block space-y-6' : 'hidden'}>
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-lg font-bold text-foreground">{isWarden ? "Warden Messaging System" : "Dean Messaging System"}</h2>
@@ -7689,7 +8373,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             {isWarden ? (
                               <>
                                 <option value="hostel">
-                                  {authorizedHostels.length > 1 ? "Auth Hostels" : `Hostel`}
+                                  {authorizedHostels.length > 1 ? "Auth Hostels" : (wardenHostelName || "Hostel")}
                                 </option>
                                 {authorizedHostels.length > 1 && (
                                   <option value="specific_hostel">Specific</option>
@@ -7802,8 +8486,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     {adminNotifications.length === 0 ? (
                       <p className="text-secondary text-sm italic">No recent messages sent</p>
                     ) : (
-                      adminNotifications.map((notif) => (
-                        <div key={notif._id} className="bg-white p-4 rounded-xl border border-gray-200 flex items-start gap-4">
+                      adminNotifications.map((notif, idx) => (
+                        <div key={notif._id || notif.id || `admin-notif-${idx}`} className="bg-white p-4 rounded-xl border border-gray-200 flex items-start gap-4">
                           <div
                             className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${notif.priority === "critical"
                               ? "bg-red-500"
@@ -7832,31 +8516,46 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             )}
                             <div className="flex justify-between items-end mt-2">
                               <div className="text-[10px] font-bold text-blue-600">Acknowledged by: {notif.acknowledgedBy?.length || 0} students</div>
-                              <div className="flex gap-4">
-                                <button
-                                  onClick={() => {
-                                    setEditingNotificationId(notif._id);
-                                    setNewMessage({
-                                      message: notif.message,
-                                      targetType: notif.targetType,
-                                      targetHostel: notif.targetHostel || "",
-                                      targetStudentId: typeof notif.targetStudentId === 'string' ? notif.targetStudentId : (notif.targetStudentId?.registrationId || ""),
-                                      priority: notif.priority || "normal",
-                                      image: notif.image || "",
-                                      expiryHours: "24" // Default or extract from record if available
-                                    });
-                                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                                  }}
-                                  className="text-[10px] font-black text-amber-600 uppercase hover:underline"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteNotification(notif._id)}
-                                  className="text-[10px] font-black text-red-600 uppercase hover:underline"
-                                >
-                                  Delete
-                                </button>
+                              <div className="flex gap-4 items-center">
+                                {(() => {
+                                  const isDeanOrAdminBroadcast = notif.senderRole === "dean" || notif.senderRole === "superadmin" || notif.targetType === "all";
+                                  const canDelete = !isWarden || (!isDeanOrAdminBroadcast && (notif.senderRole === "warden" || notif.senderHostel === wardenHostelName || notif.targetHostel === wardenHostelName));
+                                  if (isWarden && !canDelete) {
+                                    return (
+                                      <span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-100 uppercase tracking-wider">
+                                        Dean Broadcast
+                                      </span>
+                                    );
+                                  }
+                                  return (
+                                    <>
+                                      <button
+                                        onClick={() => {
+                                          setEditingNotificationId(notif._id || notif.id);
+                                          setNewMessage({
+                                            message: notif.message,
+                                            targetType: notif.targetType,
+                                            targetHostel: notif.targetHostel || "",
+                                            targetStudentId: typeof notif.targetStudentId === 'string' ? notif.targetStudentId : (notif.targetStudentId?.registrationId || ""),
+                                            priority: notif.priority || "normal",
+                                            image: notif.image || "",
+                                            expiryHours: "24"
+                                          });
+                                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                                        }}
+                                        className="text-[10px] font-black text-amber-600 uppercase hover:underline"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteNotification(notif._id || notif.id)}
+                                        className="text-[10px] font-black text-red-600 uppercase hover:underline"
+                                      >
+                                        Delete
+                                      </button>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             </div>
                           </div>
@@ -7864,11 +8563,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       ))
                     )}
                   </div>
-                </div>
-              )}
+              </div>
 
-              {currentTab === 'payments' && (
-                <div className="space-y-6">
+              <div className={currentTab === 'payments' ? 'block space-y-6' : 'hidden'}>
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                     <div>
                       <h2 className="text-lg font-bold text-foreground">Hostel/Mess Fee Payment Details</h2>
@@ -7967,11 +8664,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                           {paymentsLoading ? (
-                            <tr>
+                            <tr key="loading-payments">
                               <td colSpan={9} className="py-20 text-center text-secondary">Loading transactions...</td>
                             </tr>
                           ) : payments.length === 0 ? (
-                            <tr>
+                            <tr key="empty-payments">
                               <td colSpan={9} className="py-20 text-center text-secondary">No payment claims found...</td>
                             </tr>
                           ) : payments.filter(p => {
@@ -8015,8 +8712,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 }
                                 return true;
                               })
-                              .map((p) => (
-                              <tr key={p._id} className="hover:bg-gray-50/50 transition-colors group">
+                              .map((p, pIdx) => (
+                              <tr key={p._id || p.id || p.utrNumber || `payment-${pIdx}`} className="hover:bg-gray-50/50 transition-colors group">
                                 <td className="px-2 py-4 min-w-[120px] text-center">
                                   <div className="flex flex-col leading-tight items-center">
                                     <span 
@@ -8184,10 +8881,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
                     </div>
                   </div>
-                )}
 
-                {currentTab === 'rooms' && (
-                <div className="space-y-6 animate-in fade-in duration-300">
+              <div className={currentTab === 'rooms' ? 'block space-y-6' : 'hidden'}>
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2">
@@ -8280,15 +8975,29 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             >
                                               {r.name.slice(0, 1).toUpperCase()}
                                             </div>
-                                            {/* Blinking attendance dot - same size as status dot */}
-                                            {hasMarkedAttendance && showFlashingBlueDot ? (
-                                              <span 
-                                                className="w-2 h-2 md:w-2.5 md:h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 shadow-sm"
-                                                title="Night Attendance Marked"
-                                              />
+                                            {/* Attendance dot - Blue if marked, Red if not marked */}
+                                            {showFlashingBlueDot ? (
+                                              hasMarkedAttendance ? (
+                                                <span 
+                                                  className="w-2 h-2 md:w-2.5 md:h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 shadow-sm"
+                                                  title={`${r.name}: Night Attendance Marked`}
+                                                />
+                                              ) : (
+                                                <span 
+                                                  className="w-2 h-2 md:w-2.5 md:h-2.5 bg-red-500 rounded-full animate-pulse shrink-0 shadow-sm"
+                                                  title={`${r.name}: Night Attendance Not Marked`}
+                                                />
+                                              )
                                             ) : (
-                                              // Spacer dot to prevent text alignment shifts
-                                              <span className="w-2 h-2 md:w-2.5 md:h-2.5 bg-transparent shrink-0" />
+                                              hasMarkedAttendance ? (
+                                                <span 
+                                                  className="w-2 h-2 md:w-2.5 md:h-2.5 bg-blue-600 rounded-full shrink-0 shadow-sm"
+                                                  title={`${r.name}: Night Attendance Marked`}
+                                                />
+                                              ) : (
+                                                // Spacer dot to prevent text alignment shifts
+                                                <span className="w-2 h-2 md:w-2.5 md:h-2.5 bg-transparent shrink-0" />
+                                              )
                                             )}
                                           </div>
                                         );
@@ -8342,12 +9051,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-2">
                                       <h4 className="font-bold text-slate-800 text-sm leading-snug truncate">{student.name}</h4>
-                                      {hasMarkedAttendance && showFlashingBlueDot && (
-                                        <span 
-                                          className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 shadow-sm"
-                                          title="Night Attendance Marked"
-                                        />
-                                      )}
+                                       {showFlashingBlueDot ? (hasMarkedAttendance ? (<span className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 shadow-sm" title="Night Attendance Marked" />) : (<span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shrink-0 shadow-sm" title="Night Attendance Not Marked" />)) : (hasMarkedAttendance && (<span className="w-2.5 h-2.5 bg-blue-600 rounded-full shrink-0 shadow-sm" title="Night Attendance Marked" />))}
+
                                     </div>
                                     <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
                                       Reg ID: {student.registrationId || "N/A"}
@@ -8404,11 +9109,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
                     </div>
                   )}
-                </div>
-              )}
+              </div>
 
-              {currentTab === 'alerts' && (
-                <div className="space-y-6 animate-in fade-in duration-300">
+              <div className={currentTab === 'alerts' ? 'block space-y-6' : 'hidden'}>
                   <div>
                     <h2 className="text-lg font-bold text-foreground">Dean Disciplinary & Security Alerts Console</h2>
                     <p className="text-sm text-secondary">Audit system-wide security alerts, failed face matches, and device resets</p>
@@ -8517,11 +9220,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         ))
                     )}
                   </div>
-                </div>
-              )}
+              </div>
 
-              {currentTab === 'add_student' && (
-                <div className="space-y-6 animate-in fade-in duration-300">
+              <div className={currentTab === 'add_student' ? 'block space-y-6' : 'hidden'}>
                   <div>
                     <h2 className="text-lg font-black text-foreground uppercase tracking-wide">Manual Student Registration</h2>
                     <p className="text-xs text-secondary font-bold uppercase tracking-tight">Pre-register a student directly in the database. They can link their credentials later by logging in with their email.</p>
@@ -8845,7 +9546,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     })()}
                   </form>
                 </div>
-              )}
             </>
           ) : (
             <>
@@ -9487,372 +10187,419 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       </main>
 
       {selectedStudent && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedStudent(null)}>
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 md:p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-base font-semibold text-foreground">Student Details</h2>
-                <button
-                  onClick={() => setSelectedStudent(null)}
-                  className="w-8 h-8 rounded-full border border-solid border-[#9CA3AF] bg-white text-foreground flex items-center justify-center transition-colors hover:bg-filler"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => setSelectedStudent(null)}>
+          <div className="bg-white w-full max-w-2xl rounded-t-3xl sm:rounded-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-gray-100 animate-in slide-in-from-bottom-5 duration-200" onClick={(e) => e.stopPropagation()}>
+            
+            {/* Modal Sticky Header */}
+            <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-gray-100 flex items-center justify-between bg-white sticky top-0 z-20">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+                <h2 className="text-sm sm:text-base font-bold text-gray-900">Student Details</h2>
+              </div>
+              <button
+                onClick={() => setSelectedStudent(null)}
+                className="w-8 h-8 rounded-full border border-gray-200 bg-gray-50 text-gray-500 hover:text-gray-900 flex items-center justify-center transition-all hover:bg-gray-100"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Scrollable Content Container */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
+              
+              {/* Hero Card with Barcode Ticket in Red Box Area */}
+              <div className="bg-gradient-to-br from-blue-50/70 via-slate-50 to-indigo-50/40 rounded-2xl p-3.5 sm:p-4 border border-blue-100/80 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+                  
+                  {/* Left Side: Avatar & Name Info */}
+                  <div className="flex items-start gap-3.5 sm:gap-4 min-w-0 flex-1">
+                    {/* Profile Picture */}
+                    <div
+                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-white shadow-md overflow-hidden flex-shrink-0 cursor-pointer relative group bg-gray-100"
+                      onClick={() => selectedStudent.profilePicture && setZoomedImage(selectedStudent.profilePicture)}
+                    >
+                      {selectedStudent.profilePicture ? (
+                        <>
+                          <img
+                            src={selectedStudent.profilePicture}
+                            alt={selectedStudent.name}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                            <svg className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="w-full h-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-lg sm:text-xl">
+                          {getInitials(selectedStudent.name)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Name, Status & Email */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                        <h3 className="text-base sm:text-lg font-black text-gray-900 leading-snug truncate">{selectedStudent.name}</h3>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${selectedStudent.studentStatus === 'out' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-green-50 text-green-600 border-green-200'}`}>
+                          {selectedStudent.studentStatus || 'in'}
+                        </span>
+                        {Array.isArray(presentStudentIds) && presentStudentIds.includes(selectedStudent.id) && (
+                          <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[9px] font-black rounded-full border border-green-200 uppercase tracking-wide flex items-center gap-0.5">
+                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                            Present
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-gray-500 font-medium truncate mb-2">{selectedStudent.email}</p>
+
+                      {/* Profile Lock Status & Toggle */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => handleToggleProfileLock(selectedStudent.id, !!selectedStudent.isProfileLocked)}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-2xs border ${selectedStudent.isProfileLocked
+                            ? "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200"
+                            : "bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200"
+                            }`}
+                        >
+                          {selectedStudent.isProfileLocked ? (
+                            <>
+                              <svg className="w-3 h-3 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                              </svg>
+                              Locked (Click to Unlock)
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3 h-3 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                              </svg>
+                              Unlocked (Click to Lock)
+                            </>
+                          )}
+                        </button>
+
+                        {selectedStudent.studentStatus === 'out' && (
+                          <button
+                            onClick={() => handleManualToggle(selectedStudent.id, "out")}
+                            disabled={isTogglingStatus}
+                            className="px-2.5 py-1 rounded-lg bg-amber-500 text-white text-[10px] font-black uppercase tracking-wider hover:bg-amber-600 transition-all active:scale-95 flex items-center gap-1 shadow-2xs"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+                            Mark IN
+                          </button>
+                        )}
+                      </div>
+                      {selectedStudent.isProfileLocked && (
+                        <p className="text-[9px] text-amber-600 font-bold uppercase tracking-tight mt-1">Student cannot edit profile anymore</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Side: Registration ID & ERP Barcode Ticket (Moved into Red Box Area) */}
+                  {(selectedStudent.registrationId || selectedStudent.erpInformation) && (
+                    <div className="w-full sm:w-auto sm:min-w-[230px] sm:max-w-[260px] bg-white/95 rounded-xl border border-blue-100 p-2.5 shadow-2xs">
+                      <div className="grid grid-cols-2 gap-2 text-left mb-1">
+                        {selectedStudent.registrationId && (
+                          <div>
+                            <p className="text-[8px] font-black text-blue-500 tracking-widest uppercase">Registration ID</p>
+                            <p className="text-xs font-black text-blue-900 leading-tight">{selectedStudent.registrationId}</p>
+                          </div>
+                        )}
+                        {selectedStudent.erpInformation && (
+                          <div className="text-right">
+                            <p className="text-[8px] font-black text-blue-500 tracking-widest uppercase">ERP ID</p>
+                            <p className="text-xs font-black text-blue-900 leading-tight">{selectedStudent.erpInformation}</p>
+                          </div>
+                        )}
+                      </div>
+                      {selectedStudent.registrationId && (
+                        <div className="pt-1.5 border-t border-blue-50 flex justify-center">
+                          <div className="w-full max-w-[220px] overflow-hidden flex justify-center h-[26px]">
+                            <Barcode
+                              value={String(selectedStudent.registrationId)}
+                              width={1.5}
+                              height={26}
+                              fontSize={9}
+                              displayValue={false}
+                              margin={0}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                </div>
+
+                {/* Warden / Dean Action Buttons */}
+                {(((canWardenEditSelectedStudent) || (title === "Dean Dashboard" && allowDeanEditProfile)) || 
+                  ((canWardenRemoveSelectedStudent) || (title === "Dean Dashboard" && allowDeanRemoveStudent))) && (
+                  <div className="mt-2.5 flex gap-2 w-full">
+                    {((canWardenEditSelectedStudent) || (title === "Dean Dashboard" && allowDeanEditProfile)) && (
+                      <button
+                        onClick={() => {
+                          const genderField = (Array.isArray(savedFormBuilderConfig) ? savedFormBuilderConfig : []).find(f => {
+                            const label = String(f.label || "").toLowerCase().trim();
+                            return label === 'gender' || label === 'sex';
+                          });
+                          
+                          let initialGender = selectedStudent.gender || "";
+                          if (!initialGender && selectedStudent.dynamicFields) {
+                              if (genderField && selectedStudent.dynamicFields[genderField.id]) {
+                                initialGender = selectedStudent.dynamicFields[genderField.id];
+                              } else {
+                                const keys = Object.keys(selectedStudent.dynamicFields);
+                                const oldGenderKey = keys.find(k => k.startsWith('name_copy_') || k.toLowerCase().includes('gender') || k.toLowerCase().includes('sex'));
+                                if (oldGenderKey) {
+                                  initialGender = selectedStudent.dynamicFields[oldGenderKey];
+                                }
+                              }
+                          }
+
+                          setEditStudentForm({ 
+                            ...selectedStudent,
+                            gender: initialGender 
+                          });
+                          setEditErrors({});
+                          setShowEditStudentModal(true);
+                        }}
+                        className="flex-1 py-1.5 rounded-lg border border-blue-600 text-blue-600 font-black uppercase tracking-wider hover:bg-blue-50 text-[10px] active:scale-95 transition-all flex items-center justify-center gap-1 bg-white shadow-2xs"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Edit Profile
+                      </button>
+                    )}
+                    {((canWardenRemoveSelectedStudent) || (title === "Dean Dashboard" && allowDeanRemoveStudent)) && (
+                      <button
+                        onClick={() => setShowDeleteConfirm(true)}
+                        disabled={deletingStudentId === selectedStudent.id}
+                        className="flex-1 py-1.5 rounded-lg bg-red-600 text-white font-black uppercase tracking-wider hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-[10px] active:scale-95 transition-all flex items-center justify-center gap-1 shadow-2xs"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Remove Student
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-6">
-                <div className="flex flex-col items-center">
-                  <div
-                    className="w-20 h-20 md:w-24 md:h-24 rounded-full border-4 border-white shadow-lg overflow-hidden mb-3 cursor-pointer relative group"
-                    onClick={() => selectedStudent.profilePicture && setZoomedImage(selectedStudent.profilePicture)}
-                  >
-                    {selectedStudent.profilePicture ? (
-                      <>
-                        <img
-                          src={selectedStudent.profilePicture}
-                          alt={selectedStudent.name}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                          <svg className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="w-full h-full bg-gray-100 flex items-center justify-center font-bold text-xl text-gray-400">
-                        {getInitials(selectedStudent.name)}
+              {/* Balanced Details Grid (2-Column Responsive Layout) */}
+              <div className="bg-slate-50/80 rounded-2xl p-3 sm:p-4 border border-slate-200/70 space-y-2.5">
+                
+                {/* Contact & Hostel Combined Single Card */}
+                <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3 text-sm divide-x divide-slate-100">
+                    
+                    {/* Column 1: Contact & Profile */}
+                    <div className="space-y-1.5 min-w-0 pr-1.5 sm:pr-2">
+                      <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Contact & Profile</p>
+                      <div>
+                        <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase">Phone Number</p>
+                        <a href={`tel:${selectedStudent.phoneNumber}`} className="text-[11px] sm:text-xs text-blue-600 font-bold hover:underline block truncate">
+                          {selectedStudent.phoneNumber}
+                        </a>
                       </div>
-                    )}
-                  </div>
-
-                  <div className="text-center w-full">
-                    <h3 className="text-xl font-bold text-gray-900 mb-1">{selectedStudent.name}</h3>
-                    <div className="flex items-center justify-center gap-2 mb-2">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${selectedStudent.studentStatus === 'out' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
-                        {selectedStudent.studentStatus || 'in'}
-                      </span>
-                      {presentStudentIds.includes(selectedStudent.id) && (
-                        <span className="px-2 py-0.5 bg-green-50 text-green-600 text-[10px] font-bold rounded-full border border-green-100 uppercase tracking-wide flex items-center gap-1">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                          Present
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-500 font-medium">{selectedStudent.email}</p>
-
-                    <div className="mt-4 flex flex-col items-center gap-2">
-                      <button
-                        onClick={() => handleToggleProfileLock(selectedStudent.id, !!selectedStudent.isProfileLocked)}
-                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm border ${selectedStudent.isProfileLocked
-                          ? "bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200"
-                          : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-                          }`}
-                      >
-                        {selectedStudent.isProfileLocked ? (
-                          <>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                            </svg>
-                            Locked (Click to Unlock)
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                            </svg>
-                            Unlocked (Click to Lock)
-                          </>
-                        )}
-                      </button>
-                      {selectedStudent.isProfileLocked && (
-                        <p className="text-[10px] text-amber-600 font-bold uppercase tracking-tight">Student cannot edit profile anymore</p>
-                      )}
-
-                      {/* ⚡ NEW: Manual Campus Toggle for Wardens/Admins in Details View */}
-                      {selectedStudent.studentStatus === 'out' && (
-                        <button
-                          onClick={() => handleManualToggle(selectedStudent.id, "out")}
-                          disabled={isTogglingStatus}
-                          className="w-full max-w-[240px] py-3 mt-1 rounded-xl bg-amber-500 text-white text-[11px] font-black uppercase tracking-widest hover:bg-amber-600 shadow-lg shadow-amber-100 transition-all active:scale-95 flex items-center justify-center gap-2"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
-                          Mark as IN (Campus)
-                        </button>
-                      )}
-                    </div>
-
-                    {(selectedStudent.registrationId || selectedStudent.erpInformation) && (
-                      <div className="mt-5 mx-auto max-w-sm bg-blue-50/50 rounded-xl border border-blue-100 p-3 shadow-sm relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 w-16 h-16 bg-blue-100 rounded-full -mr-8 -mt-8 opacity-50 transition-transform group-hover:scale-110"></div>
-                        <div className="grid grid-cols-2 gap-4 relative z-10 mb-2 text-left">
-                          {selectedStudent.registrationId && (
-                            <div>
-                              <p className="text-[9px] font-black text-blue-500 tracking-widest uppercase mb-0.5">Registration ID</p>
-                              <p className="text-sm font-black text-blue-900 leading-tight">{selectedStudent.registrationId}</p>
-                            </div>
-                          )}
-                          {selectedStudent.erpInformation && (
-                            <div>
-                              <p className="text-[9px] font-black text-blue-500 tracking-widest uppercase mb-0.5">ERP ID</p>
-                              <p className="text-sm font-black text-blue-900 leading-tight">{selectedStudent.erpInformation}</p>
-                            </div>
-                          )}
-                        </div>
-                        {selectedStudent.registrationId && (
-                          <div className="bg-white rounded p-2 inline-block shadow-sm border border-gray-100 relative z-10 w-full">
-                            <div className="w-full overflow-hidden flex justify-center h-[30px]">
-                              <Barcode
-                                value={selectedStudent.registrationId}
-                                width={1.8}
-                                height={30}
-                                fontSize={10}
-                                displayValue={false}
-                                margin={0}
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Buttons for Warden / Dean based on permissions */}
-                    {(((canWardenEditSelectedStudent) || (title === "Dean Dashboard" && allowDeanEditProfile)) || 
-                      ((canWardenRemoveSelectedStudent) || (title === "Dean Dashboard" && allowDeanRemoveStudent))) && (
-                      <div className="mt-4 flex gap-3 justify-center w-full max-w-sm mx-auto">
-                        {((canWardenEditSelectedStudent) || (title === "Dean Dashboard" && allowDeanEditProfile)) && (
-                          <button
-                            onClick={() => {
-                              // Find gender value from dynamic fields if not present on standard field
-                              const genderField = savedFormBuilderConfig.find(f => {
-                                const label = String(f.label || "").toLowerCase().trim();
-                                return label === 'gender' || label === 'sex';
-                              });
-                              
-                              let initialGender = selectedStudent.gender || "";
-                              if (!initialGender && selectedStudent.dynamicFields) {
-                                  if (genderField && selectedStudent.dynamicFields[genderField.id]) {
-                                    initialGender = selectedStudent.dynamicFields[genderField.id];
-                                  } else {
-                                    const keys = Object.keys(selectedStudent.dynamicFields);
-                                    const oldGenderKey = keys.find(k => k.startsWith('name_copy_') || k.toLowerCase().includes('gender') || k.toLowerCase().includes('sex'));
-                                    if (oldGenderKey) {
-                                      initialGender = selectedStudent.dynamicFields[oldGenderKey];
-                                    }
-                                  }
-                              }
-
-                              setEditStudentForm({ 
-                                ...selectedStudent,
-                                gender: initialGender 
-                              });
-                              setEditErrors({});
-                              setShowEditStudentModal(true);
-                            }}
-                            className="flex-1 py-2.5 rounded-xl border-2 border-blue-600 text-blue-600 font-black uppercase tracking-widest hover:bg-blue-50 text-[10px] active:scale-95 transition-all flex items-center justify-center gap-2"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                            Edit Profile
-                          </button>
-                        )}
-                        {((canWardenRemoveSelectedStudent) || (title === "Dean Dashboard" && allowDeanRemoveStudent)) && (
-                          <button
-                            onClick={() => setShowDeleteConfirm(true)}
-                            disabled={deletingStudentId === selectedStudent.id}
-                            className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-black uppercase tracking-widest hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-[10px] active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-100"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                            Remove Student
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 rounded-xl p-4 md:p-5 border border-gray-100">
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-4 md:gap-y-5 text-sm">
-                    <div className="col-span-1">
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-0.5">Contact</p>
-                      <a href={`tel:${selectedStudent.phoneNumber}`} className="text-[12px] text-gray-900 font-semibold hover:text-blue-600 transition-colors block truncate">
-                        {selectedStudent.phoneNumber}
-                      </a>
                       {selectedStudent.dob && (
-                        <p className="text-[10px] text-gray-500 mt-0.5 font-bold">DOB: <span className="text-gray-900">{formatDate(selectedStudent.dob)}</span></p>
+                        <div>
+                          <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase">Date of Birth</p>
+                          <p className="text-[11px] sm:text-xs text-slate-900 font-bold">{formatDate(selectedStudent.dob)}</p>
+                        </div>
+                      )}
+                      {(selectedStudent.gender || selectedStudent.category) && (
+                        <div className="grid grid-cols-2 gap-1 pt-0.5">
+                          {selectedStudent.gender && (
+                            <div>
+                              <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase">Gender</p>
+                              <p className="text-[11px] sm:text-xs text-indigo-600 font-bold uppercase">{selectedStudent.gender}</p>
+                            </div>
+                          )}
+                          {selectedStudent.category && (
+                            <div>
+                              <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase">Category</p>
+                              <p className="text-[11px] sm:text-xs text-blue-600 font-bold uppercase">{selectedStudent.category}</p>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
 
-                    <div className="col-span-1">
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-0.5">Hostel & Category</p>
-                      <p className="text-[12px] text-gray-900 font-semibold leading-tight">
-                        {getHostelCategory(selectedStudent.hostelName) || selectedStudent.hostelName} <span className="text-gray-400 font-light mx-1">|</span> Room {selectedStudent.roomNumber}
-                      </p>
+                    {/* Column 2: Hostel & Room */}
+                    <div className="space-y-1.5 min-w-0 pl-2 sm:pl-3">
+                      <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Hostel & Room</p>
+                      <div>
+                        <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase">Hostel & Room</p>
+                        <p className="text-[11px] sm:text-xs text-slate-900 font-bold leading-tight">
+                          {getHostelCategory(selectedStudent.hostelName) || selectedStudent.hostelName} <span className="text-slate-400">|</span> Room {selectedStudent.roomNumber}
+                        </p>
+                      </div>
                       {selectedStudent.floorNumber && (
-                        <p className="text-[10px] text-gray-500 mt-0.5 font-bold">Floor: <span className="text-gray-900">{normalizeFloorName(selectedStudent.floorNumber)}</span></p>
-                      )}
-                      {selectedStudent.category && (
-                        <p className="text-[10px] text-blue-600 font-bold mt-0.5 uppercase">Category: {selectedStudent.category}</p>
-                      )}
-                      {selectedStudent.gender && (
-                        <p className="text-[10px] text-indigo-600 font-bold mt-0.5 uppercase">Gender: {selectedStudent.gender}</p>
+                        <div>
+                          <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase">Floor</p>
+                          <p className="text-[11px] sm:text-xs text-slate-900 font-bold">{normalizeFloorName(selectedStudent.floorNumber)}</p>
+                        </div>
                       )}
                       {selectedStudent.joiningDate && (
-                        <p className="text-[9px] text-gray-500 mt-1 font-medium italic">Joined: {new Date(selectedStudent.joiningDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                        <div>
+                          <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase">Joined Date</p>
+                          <p className="text-[10px] sm:text-xs text-slate-700 font-bold">{new Date(selectedStudent.joiningDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                        </div>
                       )}
                     </div>
 
-                    {(selectedStudent.collegeName || selectedStudent.branch || selectedStudent.year) && (
-                      <div className="col-span-2 md:col-span-2 pt-2 border-t border-gray-100 mt-1">
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                          {selectedStudent.collegeName && (
-                            <div>
-                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-0.5">College</p>
-                              <p className="text-[12px] text-gray-900 font-semibold truncate">{selectedStudent.collegeName}</p>
-                            </div>
-                          )}
-                          {selectedStudent.branch && (
-                            <div>
-                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-0.5">Branch</p>
-                              <p className="text-[12px] text-gray-900 font-semibold truncate">{selectedStudent.branch}</p>
-                            </div>
-                          )}
-                          {selectedStudent.year && (
-                            <div>
-                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-0.5">Year</p>
-                              <p className="text-[12px] text-gray-900 font-semibold">{selectedStudent.year}</p>
-                            </div>
-                          )}
-                          {selectedStudent.semester && (
-                            <div>
-                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-0.5">Sem</p>
-                              <p className="text-[12px] text-gray-900 font-semibold">{selectedStudent.semester}</p>
-                            </div>
-                          )}
-                          {selectedStudent.section && (
-                            <div>
-                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-0.5">Section</p>
-                              <p className="text-[12px] text-gray-900 font-semibold">{selectedStudent.section}</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {(selectedStudent.fatherName || selectedStudent.motherName) && (
-                      <div className="col-span-2 pt-2 border-t border-gray-100 mt-1">
-                        <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-2">Guardian Info</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {selectedStudent.fatherName && (
-                            <div className="bg-white p-2 rounded border border-gray-100">
-                              <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Father</p>
-                              <p className="text-[12px] text-gray-900 font-semibold mb-1 truncate">{selectedStudent.fatherName}</p>
-                              {selectedStudent.fatherNumber && (
-                                <a href={`tel:${selectedStudent.fatherNumber}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[12px] font-medium inline-block hover:underline">
-                                  {selectedStudent.fatherNumber}
-                                </a>
-                              )}
-                            </div>
-                          )}
-                          {selectedStudent.motherName && (
-                            <div className="bg-white p-2 rounded border border-gray-100">
-                              <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Mother</p>
-                              <p className="text-[12px] text-gray-900 font-semibold mb-1 truncate">{selectedStudent.motherName}</p>
-                              {selectedStudent.motherNumber && (
-                                <a href={`tel:${selectedStudent.motherNumber}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[12px] font-medium inline-block hover:underline">
-                                  {selectedStudent.motherNumber}
-                                </a>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {(selectedStudent.homePinCode || selectedStudent.homeState) && (
-                      <div className="col-span-2 pt-2 border-t border-gray-100 mt-1">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {selectedStudent.homeState && (
-                            <div>
-                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">Home State</p>
-                              <p className="text-[12px] text-gray-900 font-semibold leading-relaxed">
-                                {selectedStudent.homeState}
-                              </p>
-                            </div>
-                          )}
-                          {selectedStudent.homePinCode && (
-                            <div>
-                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">Permanent Address (Pincode)</p>
-                              <p className="text-[12px] text-gray-700 leading-relaxed">
-                                {selectedStudent.homePinCode}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {(selectedStudent.localGuardianAddress || selectedStudent.localGuardianPhoneNumber) && (
-                      <div className="col-span-2 pt-2 border-t border-gray-100 mt-1">
-                        <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">Local Guardian Details</p>
-                        <div className="space-y-1">
-                          {selectedStudent.localGuardianAddress && (
-                            <p className="text-[12px] text-gray-700 leading-relaxed">
-                              {selectedStudent.localGuardianAddress}
-                            </p>
-                          )}
-                          {selectedStudent.localGuardianPhoneNumber && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-gray-400 uppercase font-semibold">Phone:</span>
-                              <a href={`tel:${selectedStudent.localGuardianPhoneNumber}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[12px] font-medium inline-block hover:underline">
-                                {selectedStudent.localGuardianPhoneNumber}
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* ⚡ NEW: Dynamic Custom Onboarding Fields Display in Sidebar */}
-                    {(() => {
-                      const standardFieldIds = new Set([
-                        'name', 'email', 'phoneNumber', 'gender', 'dob', 'category', 'erpInformation',
-                        'registrationId', 'collegeName', 'branch', 'year', 'semester', 'section', 'hostelName',
-                        'roomNumber', 'floorNumber', 'joiningDate', 'fatherName', 'fatherNumber',
-                        'motherName', 'motherNumber', 'homePinCode', 'homeState',
-                        'localGuardianAddress', 'localGuardianPhoneNumber', 'profilePicture'
-                      ]);
-                      const customFields = savedFormBuilderConfig.filter(f => {
-                        if (!f.visible) return false;
-                        if (standardFieldIds.has(f.id)) return false;
-                        const labelLower = (f.label || "").toLowerCase().trim();
-                        if (labelLower === 'gender' || labelLower === 'sex') return false;
-                        return true;
-                      });
-
-                      const populatedCustomFields = customFields.filter(f => selectedStudent.dynamicFields?.[f.id]);
-                      if (populatedCustomFields.length === 0) return null;
-
-                      return (
-                        <div className="col-span-2 pt-2 border-t border-gray-100 mt-1">
-                          <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-2">Custom Fields</p>
-                          <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-xl border border-gray-100">
-                            {populatedCustomFields.map(f => (
-                              <div key={f.id}>
-                                <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">{f.label}</p>
-                                <p className="text-[12px] text-gray-900 font-bold uppercase">{selectedStudent.dynamicFields[f.id]}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })()}
                   </div>
                 </div>
 
+                {/* Academic Details */}
+                {(selectedStudent.collegeName || selectedStudent.branch || selectedStudent.year) && (
+                  <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs">
+                    <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">Academic Details</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      {selectedStudent.collegeName && (
+                        <div>
+                          <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">College</p>
+                          <p className="text-[11px] sm:text-xs text-slate-900 font-bold break-words">{selectedStudent.collegeName}</p>
+                        </div>
+                      )}
+                      {selectedStudent.branch && (
+                        <div>
+                          <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">Branch</p>
+                          <p className="text-[11px] sm:text-xs text-slate-900 font-bold break-words">{selectedStudent.branch}</p>
+                        </div>
+                      )}
+                      {selectedStudent.year && (
+                        <div>
+                          <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">Year</p>
+                          <p className="text-[11px] sm:text-xs text-slate-900 font-bold">{selectedStudent.year}</p>
+                        </div>
+                      )}
+                      {selectedStudent.semester && (
+                        <div>
+                          <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">Sem</p>
+                          <p className="text-[11px] sm:text-xs text-slate-900 font-bold">{selectedStudent.semester}</p>
+                        </div>
+                      )}
+                      {selectedStudent.section && (
+                        <div>
+                          <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">Section</p>
+                          <p className="text-[11px] sm:text-xs text-slate-900 font-bold">{selectedStudent.section}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Guardian Info (Father & Mother Side-by-Side on Mobile) */}
+                {(selectedStudent.fatherName || selectedStudent.motherName) && (
+                  <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs">
+                    <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">Guardian Information</p>
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                      {selectedStudent.fatherName && (
+                        <div className="bg-slate-50/70 p-2 sm:p-2.5 rounded-lg border border-slate-100 min-w-0">
+                          <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">Father</p>
+                          <p className="text-[10px] sm:text-xs text-slate-900 font-bold break-words leading-tight">{selectedStudent.fatherName}</p>
+                          {selectedStudent.fatherNumber && (
+                            <a href={`tel:${selectedStudent.fatherNumber}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-bold inline-block hover:underline mt-0.5 break-all max-w-full">
+                              {selectedStudent.fatherNumber}
+                            </a>
+                          )}
+                        </div>
+                      )}
+                      {selectedStudent.motherName && (
+                        <div className="bg-slate-50/70 p-2 sm:p-2.5 rounded-lg border border-slate-100 min-w-0">
+                          <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">Mother</p>
+                          <p className="text-[10px] sm:text-xs text-slate-900 font-bold break-words leading-tight">{selectedStudent.motherName}</p>
+                          {selectedStudent.motherNumber && (
+                            <a href={`tel:${selectedStudent.motherNumber}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-bold inline-block hover:underline mt-0.5 break-all max-w-full">
+                              {selectedStudent.motherNumber}
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Home State & Permanent Address */}
+                {(selectedStudent.homePinCode || selectedStudent.homeState) && (
+                  <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs space-y-2">
+                    {selectedStudent.homeState && (
+                      <div>
+                        <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Home State</p>
+                        <p className="text-[11px] sm:text-xs text-slate-900 font-bold break-words">{selectedStudent.homeState}</p>
+                      </div>
+                    )}
+                    {selectedStudent.homePinCode && (
+                      <div>
+                        <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Permanent Address (Pincode)</p>
+                        <p className="text-[10px] sm:text-xs text-slate-800 font-bold leading-normal break-words whitespace-pre-wrap">{selectedStudent.homePinCode}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Local Guardian Details */}
+                {(selectedStudent.localGuardianAddress || selectedStudent.localGuardianPhoneNumber) && (
+                  <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs">
+                    <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 border-b border-slate-100 pb-1">Local Guardian Details</p>
+                    <div className="space-y-1">
+                      {selectedStudent.localGuardianAddress && (
+                        <p className="text-[10px] sm:text-xs text-slate-700 font-medium leading-relaxed break-words whitespace-pre-wrap">
+                          {selectedStudent.localGuardianAddress}
+                        </p>
+                      )}
+                      {selectedStudent.localGuardianPhoneNumber && (
+                        <div className="flex items-center gap-2 pt-0.5">
+                          <span className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">Phone:</span>
+                          <a href={`tel:${selectedStudent.localGuardianPhoneNumber}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-bold inline-block hover:underline break-all">
+                            {selectedStudent.localGuardianPhoneNumber}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Custom Fields */}
+                {(() => {
+                  const standardFieldIds = new Set([
+                    'name', 'email', 'phoneNumber', 'gender', 'dob', 'category', 'erpInformation',
+                    'registrationId', 'collegeName', 'branch', 'year', 'semester', 'section', 'hostelName',
+                    'roomNumber', 'floorNumber', 'joiningDate', 'fatherName', 'fatherNumber',
+                    'motherName', 'motherNumber', 'homePinCode', 'homeState',
+                    'localGuardianAddress', 'localGuardianPhoneNumber', 'profilePicture'
+                  ]);
+                  const customFields = (Array.isArray(savedFormBuilderConfig) ? savedFormBuilderConfig : []).filter(f => {
+                    if (!f.visible) return false;
+                    if (standardFieldIds.has(f.id)) return false;
+                    const labelLower = (f.label || "").toLowerCase().trim();
+                    if (labelLower === 'gender' || labelLower === 'sex') return false;
+                    return true;
+                  });
+
+                  const populatedCustomFields = customFields.filter(f => selectedStudent.dynamicFields?.[f.id]);
+                  if (populatedCustomFields.length === 0) return null;
+
+                  return (
+                    <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs">
+                      <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">Custom Fields</p>
+                      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                        {populatedCustomFields.map(f => (
+                          <div key={f.id}>
+                            <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">{f.label}</p>
+                            <p className="text-[10px] sm:text-xs text-slate-900 font-bold uppercase break-words">{selectedStudent.dynamicFields[f.id]}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
               </div>
 
@@ -10079,8 +10826,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleDeleteStudent(selectedStudent.id)}
-                  disabled={deletingStudentId === selectedStudent.id}
+                  onClick={() => handleDeleteStudent(selectedStudent._id || selectedStudent.id)}
+                  disabled={deletingStudentId === (selectedStudent._id || selectedStudent.id)}
                   className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium transition-colors hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {deletingStudentId === selectedStudent.id ? "Removing..." : "Remove Student"}
@@ -10254,65 +11001,229 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
       {
         showExportPreview && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-              <div className="p-4 border-b flex items-center justify-between bg-white sticky top-0">
-                <div>
-                  <h3 className="text-lg font-bold text-foreground">Export Preview</h3>
-                  <p className="text-sm text-secondary">Verify data before downloading ({exportPreviewData.length} records)</p>
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[9999] flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
+            <div className="bg-[#0b0f19] border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-white">
+              
+              {/* Header Bar */}
+              <div className="p-3 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-[#0e1424] shrink-0 gap-2">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm sm:text-lg font-black tracking-tight text-white flex items-center gap-1.5 truncate">
+                    <span>🕹️</span> Export Data Preview
+                  </h3>
+                  <p className="text-[10px] sm:text-xs text-slate-400 font-medium truncate mt-0.5">
+                    Reviewing {exportPreviewData.length} records
+                  </p>
                 </div>
-                <button
-                  onClick={() => setShowExportPreview(false)}
-                  className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
+
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  <button
+                    onClick={() => setShowExportPreview(false)}
+                    className="hidden sm:block px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-all active:scale-95"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDownload}
+                    className="px-3 sm:px-5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-[10px] sm:text-xs uppercase tracking-wider shadow-lg shadow-blue-600/30 transition-all flex items-center gap-1 active:scale-95"
+                  >
+                    <span>🔥 CONFIRM & DOWNLOAD</span>
+                  </button>
+                  <button
+                    onClick={() => setShowExportPreview(false)}
+                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-xs sm:text-sm transition-all"
+                    title="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
 
-              <div className="flex-1 overflow-auto p-4">
-                <div className="inline-block min-w-full align-middle">
-                  <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-                    <table className="min-w-full divide-y divide-gray-200 text-sm">
-                      <thead className="bg-[#fcfcfc]">
-                        <tr>
-                          {exportPreviewData.length > 0 && Object.keys(exportPreviewData[0]).map((header) => (
-                            <th key={header} className="px-4 py-3 text-left font-bold text-secondary uppercase tracking-wider text-[10px]">
-                              {header}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-100">
-                        {exportPreviewData.map((row, i) => (
-                          <tr key={i} className="hover:bg-gray-50/50 transition-colors">
-                            {Object.values(row).map((val: any, j) => (
-                              <td key={j} className="px-4 py-2.5 text-foreground whitespace-nowrap">
-                                {val}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+              {/* Informative Hostel & Summary Metadata Bar */}
+              <div className="bg-[#0e172a] px-3 sm:px-4 py-2 sm:py-2.5 border-b border-slate-800 flex items-center justify-between gap-1.5 sm:gap-2 flex-wrap text-xs shrink-0">
+                <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
+                  <div className="flex items-center gap-1 bg-blue-950/80 border border-blue-800/60 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg text-blue-300 font-bold text-[9px] sm:text-[11px]">
+                    <span className="hidden sm:inline">🏢 HOSTEL:</span>
+                    <span className="sm:hidden">🏢</span>
+                    <span className="text-white font-black">
+                      {(exportType === 'attendance' || exportType === 'attendance_matrix' ? attendanceHostelFilter : hostelFilter) && (exportType === 'attendance' || exportType === 'attendance_matrix' ? attendanceHostelFilter : hostelFilter) !== 'all'
+                        ? formatHostelDisplay(exportType === 'attendance' || exportType === 'attendance_matrix' ? attendanceHostelFilter : hostelFilter).toUpperCase()
+                        : 'ALL HOSTELS'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-emerald-950/80 border border-emerald-800/60 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg text-emerald-300 font-bold text-[9px] sm:text-[11px]">
+                    <span className="hidden sm:inline">👥 RECORDS:</span>
+                    <span className="sm:hidden">👥</span>
+                    <span className="text-white font-black">{exportPreviewData.length} STUDENTS</span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-purple-950/80 border border-purple-800/60 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg text-purple-300 font-bold text-[9px] sm:text-[11px]">
+                    <span className="hidden sm:inline">📅 {exportType === 'attendance_matrix' ? 'PERIOD:' : 'DATE:'}</span>
+                    <span className="sm:hidden">📅</span>
+                    <span className="text-white font-black">
+                      {exportType === 'attendance_matrix' ? `${selectedDate.split('-').reverse().join('-')} to ${selectedEndDate.split('-').reverse().join('-')}` : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
+                    </span>
                   </div>
                 </div>
+                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider hidden md:block">
+                  {exportType === 'attendance_matrix' ? 'MULTI-DAY ATTENDANCE REGISTER MATRIX' : exportType === 'attendance' ? 'DAILY ATTENDANCE MONITORING EXPORT' : 'HOSTELEAZE DIRECTORY EXPORT'}
+                </div>
               </div>
 
-              <div className="p-4 border-t bg-gray-50 flex items-center justify-end gap-3 sticky bottom-0">
-                <button
-                  onClick={() => setShowExportPreview(false)}
-                  className="px-6 py-2.5 rounded-xl border border-gray-200 bg-white text-foreground font-semibold hover:bg-gray-100 transition-all text-sm shadow-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmDownload}
-                  className="px-8 py-2.5 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700 transition-all text-sm shadow-lg shadow-green-100 flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                  Download Excel
-                </button>
+              {/* Column Selector Section (1. SELECT COLUMNS TO INCLUDE & REORDER) */}
+              {exportType === 'attendance_matrix' ? (
+                <div className="p-2 sm:p-3.5 bg-[#0e1424] border-b border-slate-800 shrink-0 flex items-center justify-between gap-1.5 flex-wrap text-[9px] sm:text-xs text-blue-300">
+                  <span className="font-bold flex items-center gap-1">
+                    <span>📅</span> <span className="hidden sm:inline">Dynamic Date Matrix Auto-Generated for Period: </span><span className="sm:hidden">Matrix: </span><strong className="text-white font-black">{selectedDate.split('-').reverse().join('-')}</strong> to <strong className="text-white font-black">{selectedEndDate.split('-').reverse().join('-')}</strong>
+                  </span>
+                  <div className="flex items-center gap-1.5 text-[8px] sm:text-[10px] font-bold">
+                    <span className="px-1.5 sm:px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">P = Present</span>
+                    <span className="px-1.5 sm:px-2 py-0.5 rounded bg-red-950 text-red-400 border border-red-800">A = Absent</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-[#0e1424]/60 border-b border-slate-800 shrink-0 space-y-2.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                      <span>1. SELECT & REORDER COLUMNS (DRAG PILLS TO REORDER)</span>
+                    </label>
+                    <span className="text-[9px] text-slate-500 font-semibold italic">
+                      Tip: Click to toggle • Drag & drop pills to reorder table columns in real time
+                    </span>
+                  </div>
+
+                  {/* Column Toggle & Drag-Reorder Pills Container */}
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2 max-h-[120px] overflow-y-auto custom-scrollbar p-1">
+                    {EXPORT_COLUMNS.map((col, idx) => {
+                      const isChecked = selectedExportColumns.includes(col.id);
+                      const isDragging = draggedColumnIndex === idx;
+                      return (
+                        <button
+                          key={col.id}
+                          type="button"
+                          draggable={true}
+                          onDragStart={(e) => handlePillDragStart(e, idx)}
+                          onDragOver={handlePillDragOver}
+                          onDrop={(e) => handlePillDrop(e, idx)}
+                          onClick={() => {
+                            if (isChecked) {
+                              if (selectedExportColumns.length > 1) {
+                                setSelectedExportColumns(selectedExportColumns.filter(id => id !== col.id));
+                              }
+                            } else {
+                              setSelectedExportColumns([...selectedExportColumns, col.id]);
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-xl border text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-grab active:cursor-grabbing active:scale-95 ${
+                            isDragging
+                              ? "opacity-40 border-dashed border-blue-400 bg-blue-900/40"
+                              : isChecked
+                              ? "bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-600/30 ring-1 ring-blue-400/50"
+                              : "bg-slate-800/80 border-slate-700/80 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                          }`}
+                          title="Drag to reorder column position"
+                        >
+                          <span className="text-slate-400 hover:text-white text-[11px] font-black cursor-grab">⋮⋮</span>
+                          <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] font-black ${
+                            isChecked ? "bg-white text-blue-700" : "bg-slate-700 text-slate-400"
+                          }`}>
+                            {isChecked ? "✓" : ""}
+                          </span>
+                          <span>{col.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Dynamic Live Preview Table with Smooth Horizontal & Vertical Scrolling */}
+              <div className="flex-1 overflow-auto p-4 bg-[#070a12] custom-scrollbar">
+                <div className="border border-slate-800/90 rounded-2xl overflow-x-auto custom-scrollbar shadow-2xl bg-[#0b0f19]">
+                  <table className="min-w-max w-full text-left text-xs border-collapse">
+                    <thead className="bg-[#111728] sticky top-0 z-10 border-b border-slate-800">
+                      <tr>
+                        {exportType === 'students' || exportType === 'attendance' ? (
+                          EXPORT_COLUMNS.filter(col => selectedExportColumns.includes(col.id)).map(col => (
+                            <th key={col.id} className="px-4 py-3 text-[10px] font-black uppercase text-slate-400 tracking-wider whitespace-nowrap border-r border-slate-800/50 last:border-r-0">
+                              {col.label}
+                            </th>
+                          ))
+                        ) : (
+                          exportPreviewData.length > 0 && Object.keys(exportPreviewData[0]).map((header) => (
+                            <th key={header} className={`px-4 py-3 text-[10px] font-black uppercase tracking-wider whitespace-nowrap border-r border-slate-800/50 last:border-r-0 ${
+                              header.includes('/') ? 'text-center bg-blue-950/40 text-blue-300' : 'text-slate-400'
+                            }`}>
+                              {header}
+                            </th>
+                          ))
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-medium">
+                      {exportPreviewData.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
+                          {exportType === 'students' || exportType === 'attendance' ? (
+                            EXPORT_COLUMNS.filter(col => selectedExportColumns.includes(col.id)).map(col => {
+                              const val = row[col.label] ?? "N/A";
+                              return (
+                                <td key={col.id} className="px-4 py-2.5 whitespace-nowrap border-r border-slate-800/30 last:border-r-0">
+                                  {col.id === 'sno' ? (
+                                    <span className="font-mono text-emerald-400 font-bold">{val}</span>
+                                  ) : col.id === 'studentName' ? (
+                                    <span className="font-bold text-white uppercase">{val}</span>
+                                  ) : col.id === 'mobile' ? (
+                                    <span className="font-mono text-blue-400 font-bold">{val}</span>
+                                  ) : col.id === 'regId' ? (
+                                    <span className="font-mono text-slate-300 font-bold">{val}</span>
+                                  ) : col.id === 'erpId' ? (
+                                    <span className="font-mono text-indigo-400 font-black">{val}</span>
+                                  ) : col.id === 'hostel' ? (
+                                    <span className="text-slate-300 font-semibold">{val}</span>
+                                  ) : col.id === 'status' ? (
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                                      val === 'Present' ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60' : 'bg-red-950/80 text-red-400 border border-red-800/60'
+                                    }`}>{val}</span>
+                                  ) : col.id === 'time' ? (
+                                    <span className="font-mono text-cyan-400 font-bold">{val}</span>
+                                  ) : (
+                                    <span className="text-slate-400">{val}</span>
+                                  )}
+                                </td>
+                              );
+                            })
+                          ) : exportType === 'attendance_matrix' ? (
+                            Object.entries(row).map(([k, val]: [string, any], j) => (
+                              <td key={j} className="px-3 py-2 text-center whitespace-nowrap border-r border-slate-800/30 last:border-r-0">
+                                {val === 'P' ? (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-950/90 text-emerald-400 border border-emerald-800/70 shadow-sm">P</span>
+                                ) : val === 'A' ? (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-red-950/90 text-red-400 border border-red-800/70 shadow-sm">A</span>
+                                ) : val === 'L' ? (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-950/90 text-amber-400 border border-amber-800/70 shadow-sm">L</span>
+                                ) : k === 'TOTAL PRESENT' ? (
+                                  <span className="font-bold text-emerald-400">{val}</span>
+                                ) : k === 'TOTAL ABSENT' ? (
+                                  <span className="font-bold text-red-400">{val}</span>
+                                ) : k === 'ATTENDANCE %' ? (
+                                  <span className="font-bold text-cyan-400">{val}</span>
+                                ) : (
+                                  <span className="text-slate-300 text-xs font-semibold">{val}</span>
+                                )}
+                              </td>
+                            ))
+                          ) : (
+                            Object.values(row).map((val: any, j) => (
+                              <td key={j} className="px-4 py-2.5 text-slate-300 whitespace-nowrap border-r border-slate-800/30 last:border-r-0">
+                                {val}
+                              </td>
+                            ))
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
+
             </div>
           </div>
         )
@@ -10623,6 +11534,34 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       ? (localStorage.getItem("wardenUsername") || localStorage.getItem("userName") || localStorage.getItem("userType") || "admin")
                       : "admin";
 
+                    // ⚡ OPTIMIZATION: Compress profile picture base64 to max 800px to prevent 15MB payload timeouts
+                    if (payload.profilePicture && payload.profilePicture.startsWith("data:image/")) {
+                      try {
+                        const img = new Image();
+                        img.src = payload.profilePicture;
+                        await new Promise((res) => { img.onload = res; img.onerror = res; });
+                        if (img.width > 0 && img.height > 0) {
+                          let w = img.width;
+                          let h = img.height;
+                          const maxDim = 800;
+                          if (w > maxDim || h > maxDim) {
+                            if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+                            else { w = Math.round((w * maxDim) / h); h = maxDim; }
+                          }
+                          const canvas = document.createElement("canvas");
+                          canvas.width = w;
+                          canvas.height = h;
+                          const ctx = canvas.getContext("2d");
+                          if (ctx) {
+                            ctx.drawImage(img, 0, 0, w, h);
+                            payload.profilePicture = canvas.toDataURL("image/jpeg", 0.8);
+                          }
+                        }
+                      } catch (e) {
+                        console.warn("Client image compression warning:", e);
+                      }
+                    }
+
                     const response = await fetch(`/api/students/${selectedStudent?.id}`, {
                       method: "PATCH",
                       headers: {
@@ -10635,7 +11574,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       }),
                     });
 
-                    if (!response.ok) throw new Error("Update failed");
+                    if (!response.ok) {
+                      const errData = await response.json().catch(() => ({}));
+                      alert(`Update failed: ${errData.error || response.statusText || "Server error"}`);
+                      setIsUpdatingStudent(false);
+                      return;
+                    }
 
                     const data = await response.json();
                     if (data.success) {
@@ -13555,6 +14499,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
                     )}
 
+                    <button
+                      onClick={() => setShowRenewalModal(true)}
+                      className="w-full py-4 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2 active:scale-98"
+                    >
+                      <span>⚡ Renew / Extend Subscription Plan</span>
+                    </button>
+
                     {/* Ledger Logs Table */}
                     <div className="space-y-3 pt-4">
                       <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest px-1">Payment History & Invoices</h3>
@@ -14456,6 +15407,492 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       {showGatepassOverlay && (
         <div className="fixed inset-0 z-[9999] bg-[#0a0a1a] overflow-y-auto animate-in fade-in duration-300">
           <GatepassView onClose={() => window.history.back()} />
+        </div>
+      )}
+
+      {/* ⚡ SUBSCRIPTION RENEWAL MODAL */}
+      {showRenewalModal && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-1 sm:p-2.5 overflow-y-auto lg:overflow-hidden animate-in fade-in duration-200">
+          <div className={`bg-white border border-slate-200 w-full rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden transition-all duration-300 animate-in zoom-in-95 max-h-[92vh] lg:h-[96vh] flex flex-col ${paymentMethod === 'bank' ? 'max-w-5xl' : 'max-w-4xl'}`}>
+            {/* Sticky Modal Header (Clean & Compact) */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 px-4 sm:px-5 py-2.5 sm:py-3 text-white flex items-center justify-between shrink-0 sticky top-0 z-20 shadow-md">
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-base sm:text-lg shadow-inner">
+                  💳
+                </div>
+                <h3 className="font-black text-xs sm:text-base tracking-tight uppercase">Subscription Plan Renewal</h3>
+              </div>
+              <button
+                onClick={() => setShowRenewalModal(false)}
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-xs sm:text-sm transition-all shrink-0 active:scale-95 shadow-md ml-2"
+                title="Close Renewal Window"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body (Scrollable on Mobile, One-Shot with NO Scrollbar on Desktop) */}
+            {(() => {
+              const totalStudents = Math.max(1, students?.length || 454);
+              const pricePerMonth = subscriptionStatus?.paymentSettings?.pricePerStudentPerMonth ?? 25;
+              
+              let baseDiscount = 0;
+              if (selectedPlanMonths === 1) baseDiscount = Number(subscriptionStatus?.paymentSettings?.discount1Month) || 0;
+              else if (selectedPlanMonths === 3) baseDiscount = subscriptionStatus?.paymentSettings?.discount3Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount3Month) : 10;
+              else if (selectedPlanMonths === 6) baseDiscount = subscriptionStatus?.paymentSettings?.discount6Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount6Month) : 20;
+              else if (selectedPlanMonths >= 12) baseDiscount = subscriptionStatus?.paymentSettings?.discount12Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount12Month) : 30;
+
+              const bankBonus = paymentMethod === "bank" ? (subscriptionStatus?.paymentSettings?.bankTransferDiscount ?? 2.5) : 0;
+              const totalDiscountPercent = baseDiscount + bankBonus;
+
+              const baseTotal = totalStudents * pricePerMonth * selectedPlanMonths;
+              const discountAmount = Math.round((baseTotal * totalDiscountPercent) / 100);
+              const finalTotal = baseTotal - discountAmount;
+
+              const bankName = subscriptionStatus?.paymentSettings?.bankName || "PNB Bank";
+              const accountName = subscriptionStatus?.paymentSettings?.accountName || "DR. PANKAJ DWIVEDI";
+              const accountNumber = subscriptionStatus?.paymentSettings?.accountNumber || "06102413001048";
+              const ifsc = subscriptionStatus?.paymentSettings?.ifsc || "PUNB0061010";
+              const upiId = subscriptionStatus?.paymentSettings?.upiId || "pankaj86.dwivedi-1@okicici";
+              const qrUrl = subscriptionStatus?.paymentSettings?.customQrCodeUrl || `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(`upi://pay?pa=${upiId}&pn=${accountName}&am=${finalTotal}&cu=INR&tn=Hosteleaze Renewal`)}`;
+
+              const durationSection = (
+                <div className="space-y-2.5 sm:space-y-3 lg:flex-1 lg:flex lg:flex-col lg:justify-between">
+                  {/* College & Student Stats Banner */}
+                  <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Active Students Count</p>
+                      <p className="text-base sm:text-lg font-black text-slate-800">{students?.length || 454} Students</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Base Tariff</p>
+                      <p className="text-lg sm:text-xl font-black text-blue-600">
+                        ₹{subscriptionStatus?.paymentSettings?.pricePerStudentPerMonth ?? 25} <span className="text-[10px] font-medium text-slate-500">/ student / month</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Plan Options Selector (1M, 3M, 6M, 12M) */}
+                  <div className="lg:flex-1 lg:flex lg:flex-col lg:justify-center">
+                    <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1">
+                      Select Subscription Duration
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 lg:flex-1">
+                      {(() => {
+                        const bankDiscountVal = subscriptionStatus?.paymentSettings?.bankTransferDiscount ?? 2.5;
+                        return [
+                          {
+                            months: 1,
+                            label: "1 Month",
+                            tag: "Monthly",
+                            discount: subscriptionStatus?.paymentSettings?.discount1Month ?? 0,
+                            points: [
+                              "Standard Base Tariff",
+                              `+${bankDiscountVal}% Direct Bank Bonus`,
+                              "GPS/WIFI Attendance, Gatepass Management",
+                              "Warden Controls, Parents Monitoring"
+                            ]
+                          },
+                          {
+                            months: 3,
+                            label: "3 Months",
+                            tag: "Quarterly",
+                            discount: subscriptionStatus?.paymentSettings?.discount3Month ?? 10,
+                            points: [
+                              `${subscriptionStatus?.paymentSettings?.discount3Month ?? 10}% Plan Discount`,
+                              `+${bankDiscountVal}% Direct Bank Bonus`,
+                              "GPS/WIFI Attendance, Gatepass Management",
+                              "Warden Controls, Parents Monitoring"
+                            ]
+                          },
+                          {
+                            months: 6,
+                            label: "6 Months",
+                            tag: "Half-Yearly",
+                            discount: subscriptionStatus?.paymentSettings?.discount6Month ?? 20,
+                            badge: "Popular",
+                            points: [
+                              `${subscriptionStatus?.paymentSettings?.discount6Month ?? 20}% Plan Discount`,
+                              `+${bankDiscountVal}% Direct Bank Bonus`,
+                              "GPS/WIFI Attendance, Gatepass Management",
+                              "Warden Controls, Parents Monitoring"
+                            ]
+                          },
+                          {
+                            months: 12,
+                            label: "12 Months",
+                            tag: "Annual Plan",
+                            discount: subscriptionStatus?.paymentSettings?.discount12Month ?? 30,
+                            badge: `Best Value (${subscriptionStatus?.paymentSettings?.discount12Month ?? 30}% OFF)`,
+                            points: [
+                              `${subscriptionStatus?.paymentSettings?.discount12Month ?? 30}% Maximum Discount`,
+                              `+${bankDiscountVal}% Direct Bank Bonus`,
+                              "GPS/WIFI Attendance, Gatepass Management",
+                              "Warden Controls, Parents Monitoring"
+                            ]
+                          },
+                        ];
+                      })().map((plan) => {
+                        const isSelected = selectedPlanMonths === plan.months;
+                        return (
+                          <button
+                            key={plan.months}
+                            type="button"
+                            onClick={() => setSelectedPlanMonths(plan.months)}
+                            className={`relative p-2.5 sm:p-3 rounded-xl border-2 transition-all text-left flex flex-col justify-between ${
+                              isSelected
+                                ? "border-blue-600 bg-blue-50/50 shadow-sm ring-1 ring-blue-600/20"
+                                : "border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50/50"
+                            }`}
+                          >
+                            {plan.badge && (
+                              <span className={`absolute -top-2 right-1.5 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded-full shadow-sm ${
+                                plan.months === 12 ? "bg-amber-500 text-white" : "bg-blue-600 text-white"
+                              }`}>
+                                {plan.badge}
+                              </span>
+                            )}
+                            <div>
+                              <p className={`text-xs font-black uppercase ${isSelected ? "text-blue-700" : "text-slate-800"}`}>
+                                {plan.label}
+                              </p>
+                              <p className="text-[9px] text-slate-400 font-medium mt-0.5">{plan.tag}</p>
+                            </div>
+
+                            {/* Inner Feature Points */}
+                            <ul className="my-1 space-y-0.5 text-[7.5px] sm:text-[8px] lg:text-[8.5px] font-semibold text-slate-600 leading-tight">
+                              {plan.points.map((pt, idx) => (
+                                <li key={idx} className="flex items-start gap-0.5">
+                                  <span className="text-blue-600 font-bold shrink-0">✓</span>
+                                  <span className="truncate">{pt}</span>
+                                </li>
+                              ))}
+                            </ul>
+
+                            <div className="pt-1 border-t border-slate-100">
+                              {plan.discount > 0 ? (
+                                <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                                  {plan.discount}% OFF
+                                </span>
+                              ) : (
+                                <span className="text-[8px] font-bold text-slate-400">Standard</span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Payment Method Switcher (Razorpay vs Direct Transfer) */}
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1">
+                      Payment Method
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod("razorpay")}
+                        className={`py-2 sm:py-2.5 px-3 rounded-xl border-2 font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                          paymentMethod === "razorpay"
+                            ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                            : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        <span>⚡ Pay via Razorpay</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod("bank")}
+                        className={`py-2 sm:py-2.5 px-3 rounded-xl border-2 font-bold text-xs flex items-center justify-center gap-1 transition-all relative ${
+                          paymentMethod === "bank"
+                            ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+                            : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        <span>🏦 Direct Transfer / UPI</span>
+                        <span className="bg-amber-400 text-slate-900 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full shadow-sm">
+                          +{subscriptionStatus?.paymentSettings?.bankTransferDiscount ?? 2.5}% OFF
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+
+              const summarySection = (
+                <div className="bg-slate-900 text-white p-3 sm:p-3.5 rounded-xl space-y-2 shadow-md shrink-0">
+                  <div className="flex items-center justify-between text-xs text-slate-300">
+                    <span>Subtotal ({totalStudents} students × {selectedPlanMonths} months)</span>
+                    <span>₹{baseTotal.toLocaleString("en-IN")}</span>
+                  </div>
+                  {totalDiscountPercent > 0 && (
+                    <div className="flex items-center justify-between text-[11px] text-emerald-400 font-bold">
+                      <span>
+                        {paymentMethod === "bank" && bankBonus > 0
+                          ? (baseDiscount > 0
+                              ? `Discount (${baseDiscount}% Plan OFF + ${bankBonus}% Direct Bonus = ${totalDiscountPercent}% Total OFF)`
+                              : `Discount (${bankBonus}% Direct Bonus OFF)`
+                            )
+                          : `Discount (${baseDiscount}% Plan OFF)`
+                        }
+                      </span>
+                      <span>-₹{discountAmount.toLocaleString("en-IN")}</span>
+                    </div>
+                  )}
+                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Total Amount Payable</p>
+                      <p className="text-lg sm:text-xl font-black text-emerald-400">₹{finalTotal.toLocaleString("en-IN")}</p>
+                    </div>
+
+                    {paymentMethod === "razorpay" ? (
+                      <button
+                        onClick={() => handleRazorpayRenewal(selectedPlanMonths)}
+                        disabled={isProcessingPayment}
+                        className="px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md shadow-blue-500/25 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                      >
+                        {isProcessingPayment ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Processing...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Pay & Renew via Razorpay ⚡</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleDirectPaymentSubmit(finalTotal)}
+                        disabled={isSubmittingDirect || !utrNumber.trim()}
+                        className="px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md shadow-emerald-500/25 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                      >
+                        {isSubmittingDirect ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Verifying...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Submit Direct Payment & Renew 🚀</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+
+              const bankDetailsCard = (
+                <div className="bg-emerald-50/60 border-2 border-emerald-200/80 p-3 sm:p-3.5 rounded-xl space-y-2.5 animate-in fade-in duration-300 lg:flex-1 lg:flex lg:flex-col lg:justify-between">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-black text-emerald-800 uppercase tracking-wide">
+                      🏦 Direct Bank & UPI Transfer Details
+                    </p>
+                    <span className="text-[9px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                      Extra {bankBonus}% Instant Discount Applied!
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 items-center lg:flex-1">
+                    {/* Account Info List */}
+                    <div className="space-y-1 sm:space-y-1.5 text-[10px] font-bold text-slate-700 bg-white p-2 sm:p-2.5 rounded-lg border border-emerald-100 shadow-sm flex flex-col justify-between h-full">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-0.5 gap-2">
+                        <span className="text-slate-400 font-extrabold uppercase text-[10px]">Bank:</span>
+                        <span className="text-slate-900 font-black text-[10px]">{bankName}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-0.5 gap-2">
+                        <span className="text-slate-400 font-extrabold uppercase text-[10px]">Account Holder:</span>
+                        <span className="text-slate-900 font-black text-[10px]">{accountName}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-0.5 gap-2">
+                        <span className="text-slate-400 font-extrabold uppercase text-[10px]">Account No:</span>
+                        <span className="font-mono font-black text-blue-700 text-[10px]">{accountNumber}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-0.5 gap-2">
+                        <span className="text-slate-400 font-extrabold uppercase text-[10px]">IFSC:</span>
+                        <span className="font-mono font-black text-blue-700 text-[10px]">{ifsc}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-slate-400 font-extrabold uppercase text-[10px]">UPI ID:</span>
+                        <span className="font-mono font-black text-emerald-700 text-[10px] truncate max-w-[150px]">{upiId}</span>
+                      </div>
+                    </div>
+
+                    {/* QR Code Container */}
+                    <div className="flex flex-col items-center justify-center p-1.5 sm:p-2 bg-white rounded-lg border border-emerald-100 shadow-sm text-center h-full w-full">
+                      <img
+                        src={qrUrl}
+                        alt="Payment QR Code"
+                        className="w-full max-w-[160px] sm:max-w-[185px] lg:max-w-[210px] aspect-square rounded border p-0.5 bg-white shadow-inner object-contain"
+                      />
+                      <p className="text-[8px] font-bold text-slate-500 mt-1 uppercase tracking-wider">
+                        Scan with PhonePe, GPay, or Paytm
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Instructional Notice Line */}
+                  <div className="bg-amber-50 border border-amber-200 p-2 sm:p-2.5 rounded-lg flex items-start gap-1.5 text-[10px] text-amber-900 shadow-sm">
+                    <span className="text-sm leading-none">📱</span>
+                    <div className="flex-1 leading-tight">
+                      <p className="font-bold uppercase tracking-wide text-amber-900 text-[9px]">
+                        Instructions & WhatsApp Verification:
+                      </p>
+                      <p className="font-medium text-amber-800 mt-0.5 text-[9px]">
+                        Make payment via Bank/QR code. Enter 12-digit <strong>UTR Number</strong> below & send screenshot to{" "}
+                        {(() => {
+                          const planNameStr = selectedPlanMonths === 1 ? 'Monthly' : selectedPlanMonths === 3 ? 'Quarterly' : selectedPlanMonths === 6 ? 'Half-Yearly' : 'Annual Plan';
+                          const collegeNameStr = subscriptionStatus?.name || title || 'Oriental Group of Institutes (OGI)';
+                          const waLines = [
+                            `Hello, I have completed the direct transfer payment for *${collegeNameStr}*.`,
+                            ``,
+                            `*Subscription Details*:`,
+                            `- *College*: ${collegeNameStr}`,
+                            `- *Total Active Students*: ${totalStudents} Students`,
+                            `- *Selected Plan*: ${selectedPlanMonths} Month(s) (${planNameStr})`,
+                            `- *Billing Formula*: ${totalStudents} students × ${selectedPlanMonths} month(s) @ ₹${pricePerMonth}/mo`,
+                            `- *Subtotal*: ₹${baseTotal.toLocaleString('en-IN')}`,
+                            `- *Discount Applied*: ${paymentMethod === 'bank' && bankBonus > 0 ? (baseDiscount > 0 ? `${baseDiscount}% Plan OFF + ${bankBonus}% Direct Bonus = ${totalDiscountPercent}% Total OFF` : `${bankBonus}% Direct Bonus OFF`) : `${baseDiscount}% Plan OFF`} (-₹${discountAmount.toLocaleString('en-IN')})`,
+                            `- *Total Amount Paid*: ₹${finalTotal.toLocaleString('en-IN')}`,
+                            `- *Payment UTR / Ref No*: ${utrNumber.trim() || '[Pending]'}`,
+                            ``,
+                            `Please verify and activate our subscription plan. Receipt screenshot attached.`
+                          ];
+                          const waEncodedUrl = `https://wa.me/91${(subscriptionStatus?.paymentSettings?.supportWhatsappNumber || '8269418956').replace(/[^0-9]/g, '')}?text=${waLines.map(l => encodeURIComponent(l)).join('%0A')}`;
+                          return (
+                            <a
+                              href={waEncodedUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-black text-green-700 underline hover:text-green-800 inline-flex items-center gap-0.5 ml-0.5"
+                            >
+                              +91 {subscriptionStatus?.paymentSettings?.supportWhatsappNumber || '8269418956'} 💬
+                            </a>
+                          );
+                        })()}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* UTR Input Form */}
+                  <div>
+                    <label className="block text-[9px] font-black uppercase text-slate-600 tracking-wider mb-0.5">
+                      Enter Payment UTR / Reference ID after transfer
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 420819385012 or UPI Ref No."
+                      value={utrNumber}
+                      onChange={(e) => setUtrNumber(e.target.value)}
+                      className="w-full px-3 py-1.5 sm:py-2 border-2 border-emerald-300 focus:border-emerald-600 rounded-lg text-xs font-bold uppercase tracking-wider outline-none transition-all shadow-inner"
+                    />
+                  </div>
+                </div>
+              );
+
+              const razorpayServicesCard = (
+                <div className="bg-gradient-to-br from-blue-50/90 via-indigo-50/50 to-slate-50 border-2 border-blue-200/90 p-3.5 sm:p-4 rounded-xl space-y-3 animate-in fade-in duration-300 flex-1 flex flex-col justify-between shadow-sm">
+                  {/* Header */}
+                  <div className="flex items-center justify-between border-b border-blue-100 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs font-black shadow-sm">⚡</span>
+                      <p className="text-[11px] sm:text-xs font-black text-blue-950 uppercase tracking-wide">
+                        Supported Razorpay Payment Options
+                      </p>
+                    </div>
+                    <span className="text-[9px] font-black bg-blue-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                      Instant Renewal
+                    </span>
+                  </div>
+
+                  {/* Services Grid (2 Columns on Mobile & Desktop) */}
+                  <div className="grid grid-cols-2 gap-2 sm:gap-2.5 flex-1 items-center">
+                    {/* 1. UPI */}
+                    <div className="bg-white p-2 sm:p-2.5 rounded-xl border border-blue-100 shadow-sm flex items-center gap-1.5 sm:gap-2.5">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs sm:text-sm font-bold shrink-0">
+                        📱
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] sm:text-[10px] font-black uppercase text-slate-900 tracking-tight">UPI & QR</p>
+                        <p className="text-[7.5px] sm:text-[8.5px] text-slate-500 font-semibold truncate">GPay, PhonePe, Paytm</p>
+                      </div>
+                    </div>
+
+                    {/* 2. Cards */}
+                    <div className="bg-white p-2 sm:p-2.5 rounded-xl border border-blue-100 shadow-sm flex items-center gap-1.5 sm:gap-2.5">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs sm:text-sm font-bold shrink-0">
+                        💳
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] sm:text-[10px] font-black uppercase text-slate-900 tracking-tight">Cards</p>
+                        <p className="text-[7.5px] sm:text-[8.5px] text-slate-500 font-semibold truncate">Visa, Mastercard, RuPay</p>
+                      </div>
+                    </div>
+
+                    {/* 3. Netbanking */}
+                    <div className="bg-white p-2 sm:p-2.5 rounded-xl border border-blue-100 shadow-sm flex items-center gap-1.5 sm:gap-2.5">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs sm:text-sm font-bold shrink-0">
+                        🏦
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] sm:text-[10px] font-black uppercase text-slate-900 tracking-tight">Netbanking</p>
+                        <p className="text-[7.5px] sm:text-[8.5px] text-slate-500 font-semibold truncate">SBI, HDFC, ICICI, Axis</p>
+                      </div>
+                    </div>
+
+                    {/* 4. Wallet & EMI */}
+                    <div className="bg-white p-2 sm:p-2.5 rounded-xl border border-blue-100 shadow-sm flex items-center gap-1.5 sm:gap-2.5">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center text-xs sm:text-sm font-bold shrink-0">
+                        👛
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] sm:text-[10px] font-black uppercase text-slate-900 tracking-tight">Wallet & EMI</p>
+                        <p className="text-[7.5px] sm:text-[8.5px] text-slate-500 font-semibold truncate">Paytm, Mobikwik, EMI</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Security Footer Note */}
+                  <div className="bg-blue-100/60 border border-blue-200/70 p-2 rounded-lg flex items-center justify-between text-[9px] text-blue-900 font-bold">
+                    <span className="flex items-center gap-1">
+                      🔒 256-Bit SSL Encrypted & Compliant
+                    </span>
+                    <span className="text-blue-700 font-black">Razorpay Checkout</span>
+                  </div>
+                </div>
+              );
+
+              return (
+                <div className="p-3 sm:p-4 overflow-y-auto lg:overflow-hidden flex-1 flex flex-col justify-between">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 lg:items-stretch flex-1 h-full">
+                    {/* Left Column: Stats + Plans + Payment Selector */}
+                    <div className="lg:col-span-5 space-y-2.5 sm:space-y-3 lg:flex lg:flex-col lg:justify-between h-full">
+                      {durationSection}
+                    </div>
+
+                    {/* Right Column: Bank Details OR Razorpay Services Options + Summary Box */}
+                    <div className="lg:col-span-7 space-y-2.5 sm:space-y-3 lg:flex lg:flex-col lg:justify-between h-full">
+                      {paymentMethod === "bank" ? (
+                        <>
+                          {bankDetailsCard}
+                          {summarySection}
+                        </>
+                      ) : (
+                        <>
+                          {razorpayServicesCard}
+                          {summarySection}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
         </div>
       )}
 

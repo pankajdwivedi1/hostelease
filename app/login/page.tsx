@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
-import { supabase } from "@/lib/supabase";
+// Supabase removed — using Firebase Auth for all logins
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
@@ -45,6 +45,7 @@ function LoginForm() {
   const [superAdminNewPassword, setSuperAdminNewPassword] = useState("");
   const [superAdminConfirmPassword, setSuperAdminConfirmPassword] = useState("");
   const [superAdminResetLoading, setSuperAdminResetLoading] = useState(false);
+  const [loadingText, setLoadingText] = useState("");
 
   // ⚡ INSTANT BRANDING SYNC: Initialize from URL or Local Storage to prevent flickering
   const [tenantName, setTenantName] = useState("Hosteleaze");
@@ -268,32 +269,62 @@ function LoginForm() {
   const handleGoogleLogin = async () => {
     try {
       setLoading(true);
+      setLoadingText("");
       setError("");
 
-      console.log("Initiating Supabase Login...");
-      
-      // ⚡ IMPORTANT: Set userType to student so the dashboard knows how to handle the session
+      console.log("Initiating Firebase Google Login for Student...");
+
+      // Use Firebase Google sign-in (same provider as Dean/Warden)
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+
+      if (!user?.email) throw new Error("No email returned from Google login");
+
+      // Mark as student in localStorage
       localStorage.setItem("userType", "student");
 
-      // Preserve tenant context in redirect
-      const tenant = searchParams.get('tenant');
-      const redirectUrl = new URL(`${window.location.origin}/auth/callback`);
-      if (Capacitor.isNativePlatform()) {
-        redirectUrl.searchParams.set('native', 'true');
-      }
-      
-      const { data, error: sbError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUrl.toString()
-        }
-      });
+      setLoadingText("Verifying Account...");
 
-      if (sbError) throw sbError;
-      
+      // ⚡ FAST DB CHECK: Look up student in Railway DB by firebaseUID or email
+      const response = await fetch(
+        `/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email)}&minimal=true`
+      );
+
+      if (response.status === 404) {
+        // New student — INSTANT ROUTING to onboarding (SPA transition)
+        router.push("/onboarding");
+        return;
+      }
+
+      if (!response.ok) throw new Error("Failed to verify student account");
+
+      const data = await response.json();
+      if (data.student) {
+        // Existing student found — cache and open dashboard
+        const cached = localStorage.getItem("cachedStudentData");
+        const existing = cached ? JSON.parse(cached) : {};
+        const merged = { ...existing, ...data.student };
+        localStorage.setItem("cachedStudentData", JSON.stringify(merged));
+        
+        // ⚡ If profile is locked by admin → go straight to dashboard (not onboarding)
+        // This covers admin-pre-created students logging in for the first time
+        if (data.student.isProfileLocked) {
+          setLoadingText("Opening your dashboard...");
+          router.push("/");
+          return;
+        }
+
+        // ⚡ INSTANT ROUTING (SPA transition) - Replaces slow window.location.href
+        router.push("/");
+      } else {
+        router.push("/onboarding");
+      }
+
     } catch (error: any) {
-      console.error("Supabase Login error:", error);
-      const errMsg = `Supabase Error: ${error.message || "Failed to initialize login"}`;
+      console.error("Google Login error:", error);
+      const errMsg = error.code === 'auth/popup-closed-by-user'
+        ? "Login cancelled. Please try again."
+        : (error.message || "Failed to sign in with Google");
       setError(errMsg);
       showToast(errMsg, "error");
       setLoading(false);
@@ -582,10 +613,10 @@ function LoginForm() {
               <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
             </div>
             <p className="text-gray-400 text-xs font-black uppercase tracking-widest animate-pulse">
-              Connecting to Google...
+              {loadingText || "Connecting to Google..."}
             </p>
             <p className="text-gray-500 text-[10px] uppercase tracking-wider font-semibold">
-              Please select your account in the popup
+              {loadingText ? "Checking database for student records" : "Please select your account in the popup"}
             </p>
           </div>
         </div>

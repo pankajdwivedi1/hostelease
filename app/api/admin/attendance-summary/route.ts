@@ -94,17 +94,18 @@ export async function GET(request: NextRequest) {
         const result = await db.attendance.summary(date);
         console.log(`[ATTENDANCE_SUMMARY] result.presentStudentIds count:`, result?.presentStudentIds?.length);
 
-        if (!result) {
-            console.error("[ATTENDANCE_SUMMARY] db.attendance.summary returned null/undefined");
-            throw new Error("Database returned no result for summary");
+        let summaryData = result;
+        if (!summaryData) {
+            console.warn("[ATTENDANCE_SUMMARY] db.attendance.summary returned null/undefined, using fallback empty summary");
+            summaryData = { presentStudentIds: [], summary: [] };
         }
 
-        let presentStudentIds: string[] = result.presentStudentIds || [];
+        let presentStudentIds: string[] = summaryData.presentStudentIds || [];
 
         // 6. Aggregate results into categories using the summary returned by the adapter
-        if (result.summary && Array.isArray(result.summary)) {
-            // result.summary is [{_id: 'Hostel Name', count: 10}]
-            result.summary.forEach((item: any) => {
+        if (summaryData.summary && Array.isArray(summaryData.summary)) {
+            // summaryData.summary is [{_id: 'Hostel Name', count: 10}]
+            summaryData.summary.forEach((item: any) => {
                 const category = getHostelCategory(item._id);
                 // Filter by authorized hostels if provided
                 if (authorizedHostels.length > 0 && !authorizedHostels.includes(category)) return;

@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
-import { getSupabaseAdmin } from './supabaseServer';
 import { cache } from 'react';
+import { prisma } from './prisma';
 
 /**
  * Resolves the current tenant from the request headers
@@ -59,27 +59,22 @@ export const getTenantFromRequest = cache(async () => {
         }
     }
 
-    // 🛠️ DEVELOPMENT FALLBACK: If resolving via plain localhost (no subdomain), 
-    // pick the first active tenant so the app doesn't crash with a 500 error.
-    if ((!slug || slug === 'default' || slug === 'www' || slug.includes(':')) && process.env.NODE_ENV === 'development') {
-        // We can't easily cache this part as slug is unstable here
-        const supabase = getSupabaseAdmin();
-        const { data: firstTenant } = await supabase
-            .from('tenants')
-            .select('slug')
-            .eq('is_active', true)
-            .limit(1)
-            .maybeSingle();
-        
-        if (firstTenant) {
-            slug = firstTenant.slug;
-            console.log(`🛠️ [Tenant] Dev Fallback: No subdomain found, defaulting to "${slug}"`);
+    // 🛠️ FALLBACK: If resolving via main domain/localhost (no specific subdomain),
+    // default to NEXT_PUBLIC_TENANT_SLUG or the main active tenant ("ogi") so production works seamlessly.
+    if (!slug || slug === 'default' || slug === 'www' || slug.includes(':')) {
+        const envSlug = process.env.NEXT_PUBLIC_TENANT_SLUG;
+        if (envSlug) {
+            slug = envSlug;
+        } else {
+            const firstTenant = await prisma.tenant.findFirst({
+                where: { isActive: true, isDeleted: false },
+                select: { slug: true }
+            });
+            if (firstTenant) {
+                slug = firstTenant.slug;
+                console.log(`🛠️ [Tenant] Fallback: No subdomain found, defaulting to "${slug}"`);
+            }
         }
-    }
-
-    if (!slug || slug === 'default') {
-        console.warn(`⚠️ [Tenant] No tenant slug found in headers (slug: "${slug}")`);
-        return null;
     }
 
     let normalizedSlug = slug.toLowerCase();
@@ -96,31 +91,27 @@ export const getTenantFromRequest = cache(async () => {
 
     console.log(`🔍 [Tenant] Searching for tenant with slug: "${normalizedSlug}"`);
 
-    const supabase = getSupabaseAdmin();
-    const { data: tenant, error } = await supabase
-        .from('tenants')
-        .select('*')
-        .eq('slug', normalizedSlug)
-        .eq('is_active', true)
-        .single();
+    const tenant = await prisma.tenant.findFirst({
+        where: { slug: normalizedSlug, isActive: true, isDeleted: false }
+    });
 
-    if (error || !tenant) {
+    if (!tenant) {
         return null;
     }
 
-    // Map Supabase snake_case to camelCase for compatibility with rest of app logic
+    // Map Prisma tenant to camelCase structure expected by app
     const resolvedTenant = {
         _id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
-        logo: tenant.logo_url,
-        primaryColor: tenant.primary_color,
-        secondaryColor: tenant.secondary_color,
-        subscriptionStatus: tenant.subscription_status,
-        subscriptionEndDate: tenant.subscription_end_date,
-        isActive: tenant.is_active,
-        adminEmail: tenant.admin_email,
-        createdAt: tenant.created_at
+        logo: tenant.logoUrl,
+        primaryColor: tenant.primaryColor,
+        secondaryColor: tenant.secondaryColor,
+        subscriptionStatus: tenant.subscriptionStatus,
+        subscriptionEndDate: tenant.subscriptionEndDate,
+        isActive: tenant.isActive,
+        adminEmail: tenant.adminEmail,
+        createdAt: tenant.createdAt
     };
 
     // Store in cache
@@ -170,18 +161,16 @@ export async function getSubscriptionStatus() {
     const tenant = await getTenantFromRequest();
     if (!tenant) return null;
 
-    const supabase = getSupabaseAdmin();
     // ⚡ ALWAYS fetch fresh subscription status to bypass 1-minute tenantCache
-    const { data: freshTenant } = await supabase
-        .from('tenants')
-        .select('subscription_status, subscription_end_date, is_active')
-        .eq('id', tenant._id)
-        .maybeSingle();
+    const freshTenant = await prisma.tenant.findUnique({
+        where: { id: tenant._id },
+        select: { subscriptionStatus: true, subscriptionEndDate: true, isActive: true }
+    });
 
     if (freshTenant) {
-        tenant.subscriptionStatus = freshTenant.subscription_status;
-        tenant.subscriptionEndDate = freshTenant.subscription_end_date;
-        tenant.isActive = freshTenant.is_active;
+        tenant.subscriptionStatus = freshTenant.subscriptionStatus;
+        tenant.subscriptionEndDate = freshTenant.subscriptionEndDate;
+        tenant.isActive = freshTenant.isActive;
     }
 
     const now = new Date();
@@ -193,13 +182,12 @@ export async function getSubscriptionStatus() {
         daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     }
 
-    const { data: settings } = await supabase
-        .from('admin_settings')
-        .select('university_bank_details')
-        .eq('tenant_id', tenant._id)
-        .maybeSingle();
+    const settings = await prisma.adminSettings.findFirst({
+        where: { tenantId: tenant._id },
+        select: { universityBankDetails: true }
+    });
 
-    const bankDetails = settings?.university_bank_details || {};
+    const bankDetails: any = settings?.universityBankDetails || {};
     const renewalUtr = bankDetails.renewalUtr || null;
     const renewalStatus = bankDetails.renewalStatus || null;
     const renewalSubmittedAt = bankDetails.renewalSubmittedAt || null;
@@ -219,25 +207,24 @@ export async function getSubscriptionStatus() {
         renewalSubmittedAt
     };
 }
+
 /**
  * Finds a tenant by its internal ID.
  */
 export async function getTenantById(id: string) {
     if (!id) return null;
-    const supabase = getSupabaseAdmin();
-    const { data: tenant } = await supabase
-        .from('tenants')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
+    const tenant = await prisma.tenant.findUnique({
+        where: { id }
+    });
     
     if (!tenant) return null;
     return {
         _id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
-        createdAt: tenant.created_at,
-        subscriptionEndDate: tenant.subscription_end_date,
-        subscriptionStatus: tenant.subscription_status
+        createdAt: tenant.createdAt,
+        subscriptionEndDate: tenant.subscriptionEndDate,
+        subscriptionStatus: tenant.subscriptionStatus
     };
 }
+

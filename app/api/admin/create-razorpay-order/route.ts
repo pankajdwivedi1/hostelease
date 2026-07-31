@@ -48,9 +48,18 @@ export async function POST(request: NextRequest) {
         // Or if we just want monthly, let's just do monthly for now or Annual? Let's just do 12 months for standard subscription
         // The user said "RS 30 per student for monthly". Usually software is billed annually to avoid monthly transaction fees.
         // I will calculate 12 months.
-        const months = 12;
+        const months = Number(body.months) || 12;
         const billableStudents = Math.max(1, studentCount || 0); // Minimum 1 student to avoid 0 amount
-        const totalAmountINR = billableStudents * (settings.pricePerStudentPerMonth || 30) * months;
+        
+        let discountPercent = 0;
+        if (months === 1) discountPercent = Number(settings.discount1Month) || 0;
+        else if (months === 3) discountPercent = settings.discount3Month !== undefined ? Number(settings.discount3Month) : 5;
+        else if (months === 6) discountPercent = settings.discount6Month !== undefined ? Number(settings.discount6Month) : 10;
+        else if (months >= 12) discountPercent = settings.discount12Month !== undefined ? Number(settings.discount12Month) : 20;
+
+        const discountMultiplier = (100 - discountPercent) / 100;
+        const pricePerMonth = settings.pricePerStudentPerMonth || 30;
+        const totalAmountINR = Math.round(billableStudents * pricePerMonth * months * discountMultiplier);
         
         if (totalAmountINR <= 0) {
             return NextResponse.json({ success: false, error: "Calculated amount is 0. Cannot create order." }, { status: 400 });

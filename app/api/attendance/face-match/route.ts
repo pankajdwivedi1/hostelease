@@ -126,15 +126,23 @@ export async function POST(request: NextRequest) {
                 new Float32Array(student.faceDescriptor)
             );
 
-            // Score Formula (Standard 0.6 cutoff)
-            const score = Math.round(Math.max(0, Math.min(100, 115 - (distance * 75))));
+            // Score Formula (SSD-MobileNet PRO 0.32 cutoff = 90%)
+            let score;
+            if (distance <= 0.32) {
+                score = 100 - (distance * 31.25);
+            } else if (distance <= 0.45) {
+                score = 90 - ((distance - 0.32) * 230.7);
+            } else {
+                score = Math.max(0, 60 - ((distance - 0.45) * 120));
+            }
+            score = Math.round(Math.max(0, Math.min(100, score)));
 
             return NextResponse.json({
                 success: true,
                 distance,
                 score,
-                isMatch: score >= 70,
-                message: score >= 70 ? "Identity Verified" : "Identity Mismatch"
+                isMatch: score >= 90,
+                message: score >= 90 ? "Identity Verified" : "Identity Mismatch"
             });
         } catch (modelError: any) {
             console.error('❌ Face recognition system error:', modelError.message);

@@ -242,8 +242,9 @@ export async function POST(request: NextRequest) {
                 console.log(`[SCAN_OUT] Found ${openPasses.length} stale passes for ${student.name}. Resolving...`);
                 for (const oldPass of openPasses) {
                     if (!oldPass) continue;
+                    const oldPassId = oldPass._id || oldPass.id;
                     const diffMs = now.getTime() - new Date(oldPass.checkOutTime).getTime();
-                    await db.gatePasses.update(oldPass._id, {
+                    await db.gatePasses.update(oldPassId, {
                         checkInTime: now,
                         checkInISTTime: istTime,
                         checkInISTDate: istDate,
@@ -302,8 +303,8 @@ export async function POST(request: NextRequest) {
 
             // Create new gate pass (check-out)
             const gatePass = await db.gatePasses.create({
-                studentId: student._id.toString(),
-                firebaseUID: student.firebaseUID,
+                studentId: (student._id || student.id).toString(),
+                firebaseUID: student.firebaseUID || student.firebase_uid || (student as any).firebaseUid || "",
                 studentName: student.name,
                 hostelName: student.hostelName,
                 roomNumber: student.roomNumber,
@@ -384,6 +385,7 @@ export async function POST(request: NextRequest) {
             for (let i = 0; i < openPasses.length; i++) {
                 const pass = openPasses[i];
                 if (!pass) continue;
+                const passId = pass._id || pass.id;
                 const diffMs = now.getTime() - new Date(pass.checkOutTime).getTime();
                 const durationMinutes = Math.round(diffMs / 60000);
                 totalDuration = durationMinutes; // Use the most relevant duration
@@ -392,7 +394,7 @@ export async function POST(request: NextRequest) {
                 // Subsequent ones are marked as "auto-resolved" to hide them from the dashboard
                 const isMainRecord = i === 0;
 
-                const updated = await db.gatePasses.update(pass._id, {
+                const updated = await db.gatePasses.update(passId, {
                     checkInTime: now,
                     checkInISTTime: istTime,
                     checkInISTDate: istDate,

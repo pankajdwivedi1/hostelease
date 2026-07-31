@@ -28,6 +28,9 @@ export default function OutingHistoryPage() {
     const [selectedStudent, setSelectedStudent] = useState<any>(null);
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
     const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+    const [lastOuting, setLastOuting] = useState<any>(null);
+    const [profileError, setProfileError] = useState<string | null>(null);
+    const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
     // Export Modal State
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -148,23 +151,61 @@ export default function OutingHistoryPage() {
         setFilters(prev => ({ ...prev, [name]: value }));
     };
 
-    const fetchStudentProfile = async (idOrObject: any) => {
+    const fetchStudentProfile = async (idOrObject: any, fallbackRecord?: any) => {
         const studentId = typeof idOrObject === 'object' ? idOrObject._id || idOrObject.id : idOrObject;
         if (!studentId || studentId === "[object Object]") return;
 
-        setIsLoadingProfile(true);
-        setIsProfileModalOpen(true);
+        setSelectedStudentId(studentId);
+
+        let initialStudent: any = null;
+        if (fallbackRecord) {
+            initialStudent = {
+                _id: studentId,
+                id: studentId,
+                name: fallbackRecord.studentName || fallbackRecord.name || "Student",
+                hostelName: fallbackRecord.hostelName || "",
+                roomNumber: fallbackRecord.roomNumber || "",
+                registrationId: fallbackRecord.registrationId || "",
+                phoneNumber: fallbackRecord.phoneNumber || "",
+                fatherName: fallbackRecord.fatherName || "",
+                fatherNumber: fallbackRecord.fatherNumber || "",
+                motherName: fallbackRecord.motherName || "",
+                motherNumber: fallbackRecord.motherNumber || "",
+                erpInformation: fallbackRecord.erpId || fallbackRecord.erpInformation || "",
+                studentStatus: fallbackRecord.status === "out" ? "out" : "in",
+            };
+            setSelectedStudent(initialStudent);
+            if (fallbackRecord.checkOutISTDate || fallbackRecord.checkOutTime) {
+                setLastOuting(fallbackRecord);
+            }
+            setIsProfileModalOpen(true);
+            setProfileError(null);
+            setIsLoadingProfile(false);
+        } else {
+            setIsLoadingProfile(true);
+            setIsProfileModalOpen(true);
+            setProfileError(null);
+            setSelectedStudent(null);
+            setLastOuting(null);
+        }
+
         try {
             const response = await fetch(`/api/students/${studentId}`);
             const data = await response.json();
             if (data.success && data.student) {
                 setSelectedStudent(data.student);
-            } else {
+                if (data.lastOuting) setLastOuting(data.lastOuting);
+                setProfileError(null);
+            } else if (!fallbackRecord) {
                 setSelectedStudent(null);
+                setProfileError(data.error || "Failed to load profile");
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("Error fetching student profile:", err);
-            setSelectedStudent(null);
+            if (!fallbackRecord) {
+                setSelectedStudent(null);
+                setProfileError(err.message || "Network error fetching profile");
+            }
         } finally {
             setIsLoadingProfile(false);
         }
@@ -493,7 +534,7 @@ export default function OutingHistoryPage() {
                                 <div key={record._id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3 px-3 bg-[#121421]/90 rounded-2xl border border-white/5 transition-all hover:bg-[#161a29]/90 hover:border-blue-500/20 group gap-2.5">
                                     <div className="flex items-center gap-3 w-full">
                                         <div
-                                            onClick={() => fetchStudentProfile(record.studentId)}
+                                            onClick={() => fetchStudentProfile(record.studentId, record)}
                                             className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-base text-white cursor-pointer transition-all hover:scale-105 shadow-xl shrink-0 ${record.status === 'out' ? 'bg-[#ff6b6b] shadow-red-500/20' : 'bg-[#00ff88] shadow-green-500/20'}`}
                                         >
                                             {record.studentName?.charAt(0).toUpperCase() || "?"}
@@ -501,7 +542,7 @@ export default function OutingHistoryPage() {
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-1.5 flex-wrap">
                                                 <p
-                                                    onClick={() => fetchStudentProfile(record.studentId)}
+                                                    onClick={() => fetchStudentProfile(record.studentId, record)}
                                                     className="text-sm font-bold text-white m-0 cursor-pointer hover:text-blue-400 transition-colors leading-tight truncate"
                                                 >
                                                     {record.studentName}
@@ -605,91 +646,143 @@ export default function OutingHistoryPage() {
                 )}
             </div>
 
-            {/* Profile Modal - Reusing logic but styled for dark mode */}
+            {/* Student Profile Modal */}
             {isProfileModalOpen && (
                 <div
-                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in fade-in transition-all cursor-pointer"
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/90 backdrop-blur-xl animate-in fade-in transition-all cursor-pointer"
                     onClick={() => setIsProfileModalOpen(false)}
                 >
                     <div
-                        className="bg-white rounded-3xl w-full max-w-5xl overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] flex flex-col relative animate-in zoom-in-95 cursor-default text-gray-900"
+                        className="bg-white rounded-none sm:rounded-3xl w-full h-full sm:h-auto max-w-5xl max-h-none sm:max-h-[95vh] overflow-y-auto shadow-[0_0_100px_rgba(0,0,0,0.5)] flex flex-col relative animate-in zoom-in-95 cursor-default text-gray-900 no-scrollbar"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {isLoadingProfile ? (
-                            <div className="h-[400px] flex flex-col items-center justify-center gap-4 p-8">
+                            <div className="h-full sm:h-[400px] flex flex-col items-center justify-center gap-4 p-8">
                                 <div className="w-12 h-12 border-4 border-gray-100 border-t-blue-600 rounded-full animate-spin" />
                                 <p className="font-bold text-gray-400 uppercase tracking-widest text-[10px]">Searching Profile...</p>
                             </div>
+                        ) : profileError ? (
+                            <div className="h-full sm:h-[400px] flex flex-col items-center justify-center gap-4 p-8 text-center">
+                                <span className="text-5xl">⚠️</span>
+                                <p className="font-bold text-red-500 text-sm">Failed to Load Profile</p>
+                                <p className="text-gray-400 text-xs max-w-xs">{profileError}</p>
+                                <button
+                                    onClick={() => selectedStudentId && fetchStudentProfile(selectedStudentId)}
+                                    className="mt-2 px-5 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition-all"
+                                >
+                                    Try Again
+                                </button>
+                            </div>
                         ) : selectedStudent ? (
-                            <div className="flex flex-col h-full">
+                            <div className="flex flex-col min-h-full sm:min-h-0">
                                 {/* Header Banner */}
-                                <div className="h-14 bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-950 shrink-0 relative">
+                                <div className="h-12 sm:h-14 bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-950 shrink-0 relative">
                                     <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white/20 via-transparent to-transparent" />
-
-                                    {/* Sticky Close Button inside scrollable area */}
                                     <button
                                         onClick={() => setIsProfileModalOpen(false)}
-                                        className="absolute top-4 right-4 w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md flex items-center justify-center text-white transition-all z-[110] border border-white/10"
+                                        className="absolute top-2.5 sm:top-4 right-3 sm:right-4 w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md flex items-center justify-center text-white transition-all z-[110] border border-white/10"
                                     >
-                                        <span className="text-xl">✕</span>
+                                        <span className="text-base sm:text-xl">✕</span>
                                     </button>
                                 </div>
 
-                                {/* Profile Section */}
-                                <div className="px-6 sm:px-10 pb-8 flex flex-col sm:flex-row items-center sm:items-end gap-6 sm:gap-10 relative">
-                                    {/* Profile Picture Box */}
-                                    <div className="w-32 h-32 sm:w-48 sm:h-48 rounded-[2rem] bg-white p-2 shadow-[0_20px_50px_rgba(0,0,0,0.2)] -mt-8 shrink-0 z-10 border border-white/50">
-                                        <div className="w-full h-full rounded-[1.6rem] bg-gray-50 flex items-center justify-center text-4xl sm:text-7xl font-black text-blue-600 overflow-hidden shadow-inner ring-1 ring-black/5">
-                                            {selectedStudent.profilePicture ? (
-                                                <img src={selectedStudent.profilePicture} alt={selectedStudent.name} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <span className="bg-gradient-to-br from-blue-600 to-indigo-700 bg-clip-text text-transparent">
-                                                    {selectedStudent.name?.charAt(0).toUpperCase()}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
+                                {/* Profile Section — Mobile: LEFT info | RIGHT photo */}
+                                <div className="px-4 sm:px-10 pb-3 sm:pb-8 flex flex-row sm:flex-row items-start sm:items-end gap-4 sm:gap-10 relative">
 
-                                    <div className="flex-1 text-center sm:text-left pt-2 sm:pt-0">
-                                        <div className="flex flex-col sm:flex-row items-center sm:items-baseline gap-2 sm:gap-4 mb-3 sm:mb-4">
-                                            <h2 className="text-2xl sm:text-5xl font-black text-gray-900 tracking-tight leading-tight">{selectedStudent.name}</h2>
-                                            <span className={`px-4 py-1 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm ${selectedStudent.studentStatus === 'out' ? 'bg-red-500 text-white shadow-red-200' : 'bg-green-500 text-white shadow-green-200'}`}>
+                                    {/* LEFT: All text info */}
+                                    <div className="flex-1 order-1 sm:order-2 pt-3 sm:pt-0 text-left">
+                                        {/* Name + Status */}
+                                        <div className="flex flex-col sm:flex-row items-start sm:items-baseline gap-1 sm:gap-4 mb-2 sm:mb-4">
+                                            <h2 className="text-base sm:text-5xl font-black text-gray-900 tracking-tight leading-tight uppercase">{selectedStudent.name}</h2>
+                                            <span className={`px-2.5 py-0.5 sm:px-4 sm:py-1 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm ${selectedStudent.studentStatus === 'out' ? 'bg-red-500 text-white shadow-red-200' : 'bg-green-500 text-white shadow-green-200'}`}>
                                                 {selectedStudent.studentStatus === 'out' ? 'Outside' : 'Inside Campus'}
                                             </span>
                                         </div>
-                                        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-10">
-                                            <div className="flex flex-col items-center sm:items-start group">
-                                                <p className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1 group-hover:text-blue-500 transition-colors">Registration ID</p>
-                                                <p className="text-blue-600 font-extrabold text-lg sm:text-2xl tracking-tight">{selectedStudent.registrationId || "N/A"}</p>
+
+                                        {/* Registration ID + Hostel & Room + Recent History in 1 Row (Mobile & Desktop) */}
+                                        <div className="flex flex-wrap items-center gap-2 sm:gap-6 mt-1 sm:mt-2">
+                                            <div className="flex flex-col items-start group">
+                                                <p className="text-[7.5px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Registration ID</p>
+                                                <p className="text-blue-600 font-extrabold text-[10px] sm:text-2xl tracking-tight">{selectedStudent.registrationId || "N/A"}</p>
                                             </div>
-                                            <div className="hidden sm:block w-px h-10 sm:h-12 bg-gray-100/80" />
-                                            <div className="flex flex-col items-center sm:items-start group">
-                                                <p className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1 group-hover:text-blue-500 transition-colors">Hostel & Room</p>
-                                                <p className="text-gray-900 font-extrabold text-lg sm:text-2xl tracking-tight">{formatHostelDisplay(selectedStudent.hostelName)} • {selectedStudent.roomNumber}</p>
+
+                                            <div className="w-[1px] h-6 sm:h-10 bg-slate-200" />
+
+                                            <div className="flex flex-col items-start group">
+                                                <p className="text-[7.5px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Hostel & Room</p>
+                                                <p className="text-gray-900 font-extrabold text-[10px] sm:text-2xl tracking-tight">{formatHostelDisplay(selectedStudent.hostelName)} • {selectedStudent.roomNumber}</p>
+                                            </div>
+
+                                            <div className="w-[1px] h-6 sm:h-10 bg-slate-200" />
+
+                                            {/* Recent History — shifted to right side (left of photo on mobile) */}
+                                            <div className="flex flex-col items-start px-2 py-1 sm:px-3 sm:py-2 bg-red-50/60 rounded-lg sm:rounded-2xl border border-red-100/60 shrink-0">
+                                                <p className="text-[7px] sm:text-[9px] font-black text-red-500 uppercase tracking-widest">Recent History</p>
+                                                {lastOuting ? (
+                                                    <>
+                                                        <p className="text-gray-900 font-extrabold text-[8.5px] sm:text-xs tracking-tight leading-snug">
+                                                            Date: <span className="text-red-600">{lastOuting.checkInISTDate || lastOuting.checkOutISTDate || "N/A"}</span>
+                                                        </p>
+                                                        <p className="text-gray-900 font-extrabold text-[8.5px] sm:text-xs tracking-tight leading-snug">
+                                                            Time: <span className="text-red-600">{lastOuting.checkInISTTime || lastOuting.checkOutISTTime || "N/A"}</span>
+                                                        </p>
+                                                    </>
+                                                ) : (
+                                                    <p className="text-[8px] sm:text-xs text-gray-400 font-semibold italic">No gate pass history yet</p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                    </div>
+
+                                    {/* RIGHT: Profile Picture */}
+                                    <div className="order-2 sm:order-1 shrink-0 mt-3 sm:-mt-8 z-10">
+                                        <div className="w-24 h-24 sm:w-48 sm:h-48 rounded-2xl sm:rounded-[2rem] ring-[3px] ring-blue-500 shadow-[0_10px_30px_rgba(0,0,0,0.15)] sm:shadow-[0_20px_50px_rgba(0,0,0,0.2)]">
+                                            <div className="w-full h-full rounded-2xl sm:rounded-[2rem] bg-gray-50 flex items-center justify-center text-3xl sm:text-7xl font-black text-blue-600 overflow-hidden">
+                                                {selectedStudent.profilePicture ? (
+                                                    <img src={selectedStudent.profilePicture} alt={selectedStudent.name} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <span className="bg-gradient-to-br from-blue-600 to-indigo-700 bg-clip-text text-transparent">
+                                                        {selectedStudent.name?.charAt(0).toUpperCase()}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="px-4 sm:px-10 pb-8 grid grid-cols-2 lg:grid-cols-3 gap-x-4 sm:gap-x-12 gap-y-4 sm:gap-y-8 bg-gray-50/50 pt-6 sm:pt-8 border-t border-gray-100 flex-1">
+                                {/* Info Cards Grid — 2 cols on mobile */}
+                                <div className="flex-1 px-4 sm:px-10 pb-6 sm:pb-8 grid grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-x-12 sm:gap-y-8 bg-gray-50/50 pt-4 sm:pt-8 border-t border-gray-100">
                                     {[
                                         { label: "College Name", value: selectedStudent.collegeName || "N/A", icon: "🎓" },
                                         { label: "ERP ID", value: selectedStudent.erpId || selectedStudent.erpInformation || "N/A", icon: "🆔", valueClass: "text-blue-600" },
                                         { label: "Branch", value: selectedStudent.branch || "N/A", icon: "📚" },
                                         { label: "Year & Sem", value: `${selectedStudent.year || "N/A"} • ${selectedStudent.semester || "N/A"}`, icon: "📅" },
                                         { label: "Mobile", value: selectedStudent.phoneNumber || "N/A", icon: "📞" },
-                                        { label: "Email", value: selectedStudent.email || "N/A", icon: "📧" },
+                                        { label: "Email", value: selectedStudent.email || "N/A", icon: <span className="text-[#FBBC05]">📧</span> },
                                         { label: "Father Name", value: selectedStudent.fatherName || "N/A", icon: "👨‍👦" },
                                         { label: "Father Mobile", value: selectedStudent.fatherNumber || "N/A", icon: "📱" },
                                         { label: "Mother Name", value: selectedStudent.motherName || "N/A", icon: "👩‍👦" },
                                         { label: "Mother Mobile", value: selectedStudent.motherNumber || "N/A", icon: "📱" },
                                         { label: "Permanent Address", value: `${selectedStudent.permanentAddress || "N/A"}${selectedStudent.homeState ? `, ${selectedStudent.homeState}` : ""}`, icon: "🏠", fullWidth: true },
                                     ].map((item: any, idx) => (
-                                        <div key={idx} className={`flex gap-3 sm:gap-4 items-start bg-white/60 p-2.5 sm:p-0 rounded-xl sm:bg-transparent border border-white sm:border-0 shadow-sm sm:shadow-none ${item.fullWidth ? 'col-span-2 lg:col-span-3' : ''}`}>
-                                            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-white shadow-sm flex items-center justify-center text-base sm:text-lg shrink-0 border border-gray-50">{item.icon}</div>
+                                        <div key={idx} className={`flex gap-2 sm:gap-4 items-start bg-white p-2.5 sm:p-0 sm:bg-transparent rounded-xl sm:rounded-none border border-gray-100 sm:border-0 shadow-sm sm:shadow-none ${item.fullWidth ? 'col-span-2 lg:col-span-3' : ''}`}>
+                                            <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gray-50 sm:bg-white shadow-sm flex items-center justify-center text-sm sm:text-lg shrink-0 border border-gray-100">{item.icon}</div>
                                             <div className="min-w-0 flex-1">
-                                                <p className="text-[7px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1">{item.label}</p>
-                                                <p className={`text-[10px] sm:text-sm font-bold m-0 break-words ${item.fullWidth ? '' : 'line-clamp-2'} ${item.valueClass || 'text-gray-900'}`}>{item.value}</p>
+                                                <p className="text-[8px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest mb-0.5">{item.label}</p>
+                                                <p className={`text-[10px] sm:text-sm font-black m-0 break-words ${item.fullWidth ? '' : 'line-clamp-2'} ${item.valueClass || 'text-gray-900'}`}>
+                                                    {item.value !== "N/A" && (item.label.toLowerCase().includes("mobile") || item.label.toLowerCase().includes("phone")) ? (
+                                                        <a href={`tel:${item.value}`} className="hover:text-blue-600 transition-colors">
+                                                            {item.value}
+                                                        </a>
+                                                    ) : item.value !== "N/A" && item.label.toLowerCase().includes("email") ? (
+                                                        <a href={`mailto:${item.value}`} className="hover:text-blue-600 transition-colors">
+                                                            {item.value}
+                                                        </a>
+                                                    ) : (
+                                                        item.value
+                                                    )}
+                                                </p>
                                             </div>
                                         </div>
                                     ))}
@@ -714,36 +807,46 @@ export default function OutingHistoryPage() {
 
             {/* Export Preview Modal */}
             {isExportModalOpen && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in fade-in transition-all">
-                    <div className="bg-[#121421] rounded-3xl w-full max-w-6xl h-[85vh] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-white/10 flex flex-col relative animate-in zoom-in-95">
-                        <div className="px-8 py-5 border-b border-white/10 bg-[#161a29]">
-                            <div className="flex items-center justify-between mb-6">
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4 bg-black/90 backdrop-blur-xl animate-in fade-in transition-all">
+                    <div className="bg-[#121421] rounded-2xl sm:rounded-3xl w-full max-w-6xl max-h-[92vh] sm:max-h-[85vh] h-auto sm:h-[85vh] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-white/10 flex flex-col relative animate-in zoom-in-95">
+                        
+                        {/* Close Button (top right) */}
+                        <button
+                            onClick={() => setIsExportModalOpen(false)}
+                            className="absolute top-2.5 sm:top-5 right-2.5 sm:right-6 w-7 h-7 sm:w-9 sm:h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs sm:text-base transition-all z-30 border border-white/10"
+                            title="Close"
+                        >
+                            ✕
+                        </button>
+
+                        <div className="p-3 sm:p-6 border-b border-white/10 bg-[#161a29] shrink-0">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 mb-2.5 sm:mb-5 pr-8 sm:pr-12">
                                 <div>
-                                    <h2 className="text-xl font-black text-white m-0">📥 Export Data Preview</h2>
-                                    <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">Reviewing {exportData.length} records before download</p>
+                                    <h2 className="text-sm sm:text-xl font-black text-white m-0 flex items-center gap-1.5">📥 Export Data Preview</h2>
+                                    <p className="text-[8px] sm:text-[10px] text-white/40 uppercase tracking-widest mt-0.5">Reviewing {exportData.length} records before download</p>
                                 </div>
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2 sm:gap-4">
                                     <button
                                         onClick={() => setIsExportModalOpen(false)}
-                                        className="px-6 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold transition-all"
+                                        className="px-3 sm:px-6 py-1.5 sm:py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] sm:text-xs font-bold transition-all text-white/80"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         onClick={performDownload}
-                                        className="px-8 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-black uppercase tracking-widest transition-all shadow-xl shadow-blue-500/20 active:scale-95"
+                                        className="px-4 sm:px-8 py-1.5 sm:py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all shadow-xl shadow-blue-500/20 active:scale-95 text-white"
                                     >
                                         🔥 Confirm & Download
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="flex flex-col gap-3 p-4 bg-black/40 rounded-2xl border border-white/10">
+                            <div className="flex flex-col gap-2 p-2.5 sm:p-4 bg-black/40 rounded-xl sm:rounded-2xl border border-white/10">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em]">1. Select Columns & Drag to Reorder</span>
-                                    <span className="text-[9px] text-blue-400/60 font-medium italic">Tip: Drag items left/right to change position in Excel</span>
+                                    <span className="text-[8px] sm:text-[10px] font-black text-white/50 uppercase tracking-widest">1. Select Columns & Drag to Reorder</span>
+                                    <span className="hidden sm:inline text-[9px] text-blue-400/60 font-medium italic">Tip: Drag items left/right to change position in Excel</span>
                                 </div>
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 max-h-28 sm:max-h-none overflow-y-auto no-scrollbar">
                                     {columnOrder.map((colId) => {
                                         const col = availableColumnsData.find(c => c.id === colId)!;
                                         const isSelected = selectedColumns.has(col.id);
@@ -754,23 +857,23 @@ export default function OutingHistoryPage() {
                                                 onDragStart={() => handleDragStart(col.id)}
                                                 onDragOver={handleDragOver}
                                                 onDrop={() => handleDrop(col.id)}
-                                                className={`group flex items-center gap-2 px-3 py-2 rounded-xl border transition-all cursor-move select-none animate-in fade-in duration-300 ${isSelected
+                                                className={`group flex items-center gap-1.5 px-2 py-1 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl border transition-all cursor-move select-none animate-in fade-in duration-300 ${isSelected
                                                     ? "bg-blue-600/20 border-blue-500/40 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.1)]"
                                                     : "bg-white/5 border-white/10 text-white/20 opacity-60 hover:opacity-100"
                                                     } ${draggedColumnId === col.id ? "opacity-30 scale-95 border-dashed border-blue-500" : ""}`}
                                             >
                                                 <div className="flex flex-col gap-0.5 opacity-40 group-hover:opacity-100 transition-opacity">
-                                                    <div className="w-2.5 h-0.5 bg-current rounded-full" />
-                                                    <div className="w-2.5 h-0.5 bg-current rounded-full" />
-                                                    <div className="w-2.5 h-0.5 bg-current rounded-full" />
+                                                    <div className="w-2 h-0.5 sm:w-2.5 sm:h-0.5 bg-current rounded-full" />
+                                                    <div className="w-2 h-0.5 sm:w-2.5 sm:h-0.5 bg-current rounded-full" />
+                                                    <div className="w-2 h-0.5 sm:w-2.5 sm:h-0.5 bg-current rounded-full" />
                                                 </div>
                                                 <input
                                                     type="checkbox"
                                                     checked={isSelected}
                                                     onChange={(e) => { e.stopPropagation(); toggleColumn(col.id); }}
-                                                    className="w-3.5 h-3.5 rounded-md border-white/20 bg-transparent text-blue-600 focus:ring-0 cursor-pointer"
+                                                    className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded border-white/20 bg-transparent text-blue-600 focus:ring-0 cursor-pointer"
                                                 />
-                                                <span className="text-[10px] font-bold uppercase tracking-tight">{col.label}</span>
+                                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-tight">{col.label}</span>
                                             </div>
                                         );
                                     })}
@@ -778,14 +881,14 @@ export default function OutingHistoryPage() {
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-auto custom-scrollbar p-0">
+                        <div className="flex-1 overflow-auto no-scrollbar p-0">
                             <table className="w-full text-left border-collapse min-w-max">
                                 <thead className="sticky top-0 bg-[#121421] z-10">
                                     <tr>
                                         {columnOrder.map((colId) => {
                                             const col = availableColumnsData.find(c => c.id === colId)!;
                                             return selectedColumns.has(col.id) && (
-                                                <th key={col.id} className="px-6 py-5 text-[10px] font-black text-white/30 uppercase tracking-[0.2em] border-b border-white/5 bg-[#121421]">{col.label}</th>
+                                                <th key={col.id} className="px-3 sm:px-6 py-2.5 sm:py-5 text-[8px] sm:text-[10px] font-black text-white/30 uppercase tracking-[0.2em] border-b border-white/5 bg-[#121421]">{col.label}</th>
                                             );
                                         })}
                                     </tr>
@@ -797,19 +900,19 @@ export default function OutingHistoryPage() {
                                                 if (!selectedColumns.has(colId)) return null;
 
                                                 switch (colId) {
-                                                    case "name": return <td key="name" className="px-6 py-4 text-xs font-bold text-white border-b border-white/5">{r.studentName}</td>;
-                                                    case "phone": return <td key="phone" className="px-6 py-4 text-xs font-medium text-blue-400 border-b border-white/5 font-mono">{r.phoneNumber || r.phone || "---"}</td>;
-                                                    case "regId": return <td key="regId" className="px-6 py-4 text-[10px] font-bold text-white/40 border-b border-white/5 uppercase">{r.registrationId}</td>;
-                                                    case "erpId": return <td key="erpId" className="px-6 py-4 text-[10px] font-bold text-indigo-400/80 border-b border-white/5 uppercase">{r.erpId || "---"}</td>;
-                                                    case "hostel": return <td key="hostel" className="px-6 py-4 text-[10px] font-bold text-white/70 border-b border-white/5">{formatHostelDisplay(r.hostelName)}</td>;
-                                                    case "room": return <td key="room" className="px-6 py-4 text-xs font-bold text-white/90 border-b border-white/5">{r.roomNumber}</td>;
+                                                    case "name": return <td key="name" className="px-3 sm:px-6 py-2 sm:py-4 text-[10px] sm:text-xs font-bold text-white border-b border-white/5">{r.studentName}</td>;
+                                                    case "phone": return <td key="phone" className="px-3 sm:px-6 py-2 sm:py-4 text-[10px] sm:text-xs font-medium text-blue-400 border-b border-white/5 font-mono">{r.phoneNumber || r.phone || "---"}</td>;
+                                                    case "regId": return <td key="regId" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-bold text-white/40 border-b border-white/5 uppercase">{r.registrationId}</td>;
+                                                    case "erpId": return <td key="erpId" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-bold text-indigo-400/80 border-b border-white/5 uppercase">{r.erpId || "---"}</td>;
+                                                    case "hostel": return <td key="hostel" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-bold text-white/70 border-b border-white/5">{formatHostelDisplay(r.hostelName)}</td>;
+                                                    case "room": return <td key="room" className="px-3 sm:px-6 py-2 sm:py-4 text-[10px] sm:text-xs font-bold text-white/90 border-b border-white/5">{r.roomNumber}</td>;
                                                     case "outTime": return (
-                                                        <td key="outTime" className="px-6 py-4 text-[11px] font-medium text-white/40 border-b border-white/5">
+                                                        <td key="outTime" className="px-3 sm:px-6 py-2 sm:py-4 text-[9px] sm:text-[11px] font-medium text-white/40 border-b border-white/5">
                                                             <span className="text-white/80">{r.checkOutISTTime}</span> <br /> {r.checkOutISTDate}
                                                         </td>
                                                     );
                                                     case "inTime": return (
-                                                        <td key="inTime" className="px-6 py-4 text-[11px] font-medium text-white/40 border-b border-white/5">
+                                                        <td key="inTime" className="px-3 sm:px-6 py-2 sm:py-4 text-[9px] sm:text-[11px] font-medium text-white/40 border-b border-white/5">
                                                              {r.status === 'in' || r.status === 'auto-resolved' ? (
                                                                 <>
                                                                     <span className="text-green-400">{r.checkInISTTime}</span> <br /> {r.checkInISTDate}
@@ -818,21 +921,21 @@ export default function OutingHistoryPage() {
                                                         </td>
                                                     );
                                                     case "duration": return (
-                                                        <td key="duration" className="px-6 py-4 text-[10px] font-black border-b border-white/5">
+                                                        <td key="duration" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-black border-b border-white/5">
                                                             <span className={r.status === 'out' ? 'text-red-400' : 'text-blue-400'}>{formatDuration(r.durationMinutes)}</span>
                                                         </td>
                                                     );
                                                     case "status": return (
-                                                        <td key="status" className="px-6 py-4 border-b border-white/5">
-                                                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${r.status === 'out' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-green-500/10 text-green-500 border border-green-500/20'}`}>
+                                                        <td key="status" className="px-3 sm:px-6 py-2 sm:py-4 border-b border-white/5">
+                                                            <span className={`px-1.5 py-0.5 rounded text-[7px] sm:text-[8px] font-black uppercase tracking-tighter ${r.status === 'out' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-green-500/10 text-green-500 border border-green-500/20'}`}>
                                                                 {r.status === 'out' ? 'OUT' : 'IN'}
                                                             </span>
                                                         </td>
                                                     );
-                                                    case "fatherName": return <td key="fatherName" className="px-6 py-4 text-[10px] font-bold text-white/60 border-b border-white/5">{r.fatherName || "---"}</td>;
-                                                    case "fatherNumber": return <td key="fatherNumber" className="px-6 py-4 text-[10px] font-medium text-blue-400/70 border-b border-white/5 font-mono">{r.fatherNumber || "---"}</td>;
-                                                    case "motherName": return <td key="motherName" className="px-6 py-4 text-[10px] font-bold text-white/60 border-b border-white/5">{r.motherName || "---"}</td>;
-                                                    case "motherNumber": return <td key="motherNumber" className="px-6 py-4 text-[10px] font-medium text-blue-400/70 border-b border-white/5 font-mono">{r.motherNumber || "---"}</td>;
+                                                    case "fatherName": return <td key="fatherName" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-bold text-white/60 border-b border-white/5">{r.fatherName || "---"}</td>;
+                                                    case "fatherNumber": return <td key="fatherNumber" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-medium text-blue-400/70 border-b border-white/5 font-mono">{r.fatherNumber || "---"}</td>;
+                                                    case "motherName": return <td key="motherName" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-bold text-white/60 border-b border-white/5">{r.motherName || "---"}</td>;
+                                                    case "motherNumber": return <td key="motherNumber" className="px-3 sm:px-6 py-2 sm:py-4 text-[8px] sm:text-[10px] font-medium text-blue-400/70 border-b border-white/5 font-mono">{r.motherNumber || "---"}</td>;
                                                     default: return null;
                                                 }
                                             })}

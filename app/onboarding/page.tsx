@@ -191,44 +191,50 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     const initAuth = async () => {
-      // 1. Check Supabase First
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        const currentUser = session.user;
-        setUser({ uid: currentUser.id, email: currentUser.email, source: 'supabase' });
+      // ⚡ RELIABLE AUTH GUARD:
+      // If the user just came from the login flow (userType=student in localStorage),
+      // they are authenticated. NEVER auto-redirect to login during onboarding.
+      // Firebase onAuthStateChanged can fire null briefly — we rely on localStorage
+      // as the source of truth for "user just logged in".
+      const justLoggedIn = typeof window !== 'undefined' && localStorage.getItem("userType") === "student";
 
-        try {
-          // Identify by email for silent handoff compatibility
-          const response = await fetch(`/api/students?email=${encodeURIComponent(currentUser.email || "")}&supabaseId=${currentUser.id}`);
-          const data = await response.json();
-          if (data.student) {
-            setIsExistingStudent(true);
-            setFormData({
-              ...(data.student.dynamicFields || {}),
-              ...data.student,
-              dob: data.student.dob ? new Date(data.student.dob).toISOString().split("T")[0] : "",
-              joiningDate: data.student.joiningDate ? new Date(data.student.joiningDate).toISOString().split("T")[0] : "",
-            });
-            if (data.student.profilePicture) setCapturedImage(data.student.profilePicture);
-            if (data.student.isProfileLocked) setIsProfileLocked(true);
-          }
-        } catch (error) {
-          console.error("Error fetching Supabase student data:", error);
-        }
-        return;
-      }
+      let userResolved = false;
+      let loginRedirectTimer: ReturnType<typeof setTimeout> | null = null;
 
-      // 2. Fallback to Firebase for legacy sessions
       const unsubscribe = onAuthStateChanged(firebaseAuth, async (currentUser) => {
         if (currentUser) {
+          // ⚡ User confirmed — cancel any pending redirect timer
+          userResolved = true;
+          if (loginRedirectTimer) {
+            clearTimeout(loginRedirectTimer);
+            loginRedirectTimer = null;
+          }
+
           setUser({ uid: currentUser.uid, email: currentUser.email, source: 'firebase' });
           try {
             const response = await fetch(`/api/students?email=${encodeURIComponent(currentUser.email || "")}`);
             const data = await response.json();
             if (data.student) {
+              // ⚡ If profile locked by admin → skip onboarding, go straight to dashboard
+              if (data.student.isProfileLocked) {
+                console.log('[Onboarding] Profile locked by admin — redirecting to dashboard');
+                localStorage.setItem("userType", "student");
+                localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
+                router.push("/");
+                return;
+              }
+
+              // ⚡ If already fully registered (has firebaseUID) → go to dashboard
+              if (data.student.firebaseUID) {
+                console.log('[Onboarding] Already registered — redirecting to dashboard');
+                localStorage.setItem("userType", "student");
+                localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
+                router.push("/");
+                return;
+              }
+
+              // Admin pre-created student without lock → pre-fill form, let them complete it
               setIsExistingStudent(true);
-              // ... set form data ...
               setFormData({
                 ...(data.student.dynamicFields || {}),
                 ...data.student,
@@ -236,17 +242,33 @@ export default function OnboardingPage() {
                 joiningDate: data.student.joiningDate ? new Date(data.student.joiningDate).toISOString().split("T")[0] : "",
               });
               if (data.student.profilePicture) setCapturedImage(data.student.profilePicture);
-              if (data.student.isProfileLocked) setIsProfileLocked(true);
             }
+            // If no student found → fresh new student, form stays blank (correct behaviour)
           } catch (error) {
             console.error("Error fetching Firebase student data:", error);
           }
         } else {
-          router.push("/login");
+          // ⚡ Firebase fired null — this can happen briefly even after a successful login.
+          // ONLY redirect to login if:
+          //   1. The user did NOT just log in (no userType=student in localStorage)
+          //   2. AND Firebase still has no user after the timeout
+          if (!userResolved && !justLoggedIn) {
+            // Short fallback for truly unauthenticated access (e.g. direct URL visit)
+            loginRedirectTimer = setTimeout(() => {
+              if (!firebaseAuth.currentUser && !userResolved) {
+                console.log('[Onboarding] Not authenticated — redirecting to login');
+                router.push("/login");
+              }
+            }, 3000);
+          }
+          // If justLoggedIn is true, we WAIT for Firebase to resolve — no redirect
         }
       });
 
-      return () => unsubscribe();
+      return () => {
+        unsubscribe();
+        if (loginRedirectTimer) clearTimeout(loginRedirectTimer);
+      };
     };
 
     initAuth();

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { firebaseUID, hostelName, fieldId, fieldIds } = body;
+    const { firebaseUID, studentId, hostelName, fieldId, fieldIds } = body;
 
     if (!hostelName) {
       return NextResponse.json({ error: "hostelName is required" }, { status: 400 });
@@ -15,23 +15,32 @@ export async function POST(request: NextRequest) {
 
     const normalizedHostelName = hostelName.trim();
 
-    if (!firebaseUID || !normalizedHostelName || (!fieldId && !fieldIds)) {
+    if ((!firebaseUID && !studentId) || !normalizedHostelName || (!fieldId && !fieldIds)) {
       return NextResponse.json(
         {
-          error: "firebaseUID, hostelName, and fieldId(s) are required",
+          error: "studentId or firebaseUID, hostelName, and fieldId(s) are required",
         },
         { status: 400 }
       );
     }
 
-    // Get student via adapter
-    const student = await db.students.findOne({ firebaseUID });
+    // Get student via adapter by studentId or firebaseUID
+    let student = null;
+    if (studentId) {
+      student = await db.students.getById(studentId);
+    }
+    if (!student && firebaseUID) {
+      student = await db.students.findOne({ firebaseUID });
+    }
+
     if (!student) {
       return NextResponse.json(
         { error: "Student not found" },
         { status: 404 }
       );
     }
+
+    const effectiveFirebaseUID = firebaseUID || student.firebaseUID || student._id.toString();
 
     // Get field enforcement rules via adapter
     const rules = await db.fieldEnforcement.find({
@@ -60,10 +69,10 @@ export async function POST(request: NextRequest) {
 
       // Create or update field progress via adapter
       return db.studentFieldProgress.upsert({
-        studentId: student._id,
+        studentId: student._id.toString(),
         fieldId: id,
         hostelName: normalizedHostelName,
-        firebaseUID,
+        firebaseUID: effectiveFirebaseUID,
         fieldLabel: field.fieldLabel,
         isCompleted: true,
         completedAt: new Date(),

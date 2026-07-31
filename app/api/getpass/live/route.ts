@@ -159,6 +159,13 @@ export async function GET(request: NextRequest) {
             };
         });
 
+        // ⚡ EXCLUDE CURRENTLY OUT STUDENTS FROM RETURNS TODAY:
+        // A student who checked out again belongs strictly in the Outside column, not Returns Today.
+        const filteredRecentActivity = recentActivity.filter((p: any) => {
+            const sId = (typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId)?.toString();
+            return !sId || !uniqueOutRecords.has(sId);
+        });
+
         return NextResponse.json({
             success: true,
             summary: {
@@ -169,7 +176,7 @@ export async function GET(request: NextRequest) {
                 gatePassCount,
             },
             currentlyOut: currentlyOutWithDuration,
-            recentActivity,
+            recentActivity: filteredRecentActivity,
         });
     } catch (error: any) {
         console.error("❌ Error fetching live gate pass data:", error);

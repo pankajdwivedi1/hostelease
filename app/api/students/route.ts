@@ -287,6 +287,50 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { studentId, _id, id } = body;
+    const targetId = studentId || _id || id;
+    if (!targetId) {
+      return NextResponse.json({ error: "Missing student ID" }, { status: 400 });
+    }
+
+    const updateFields: any = {};
+    if (body.name) updateFields.name = body.name.trim();
+    if (body.email) updateFields.email = body.email.toLowerCase().trim();
+    if (body.phoneNumber) updateFields.phoneNumber = body.phoneNumber.trim();
+    if (body.hostelName) updateFields.hostelName = body.hostelName.trim();
+    if (body.roomNumber) updateFields.roomNumber = body.roomNumber.trim();
+    if (body.fatherName !== undefined) updateFields.fatherName = body.fatherName;
+    if (body.fatherNumber !== undefined) updateFields.fatherNumber = body.fatherNumber;
+    if (body.motherName !== undefined) updateFields.motherName = body.motherName;
+    if (body.motherNumber !== undefined) updateFields.motherNumber = body.motherNumber;
+    if (body.collegeName !== undefined) updateFields.collegeName = body.collegeName;
+    if (body.branch !== undefined) updateFields.branch = body.branch;
+    if (body.year !== undefined) updateFields.year = body.year;
+    if (body.semester !== undefined) updateFields.semester = body.semester;
+    if (body.section !== undefined) updateFields.section = body.section;
+    if (body.homeState !== undefined) updateFields.homeState = body.homeState;
+    if (body.permanentAddress !== undefined) updateFields.permanentAddress = body.permanentAddress;
+    if (body.homePinCode !== undefined) updateFields.permanentAddress = body.homePinCode;
+    if (body.localGuardianAddress !== undefined) updateFields.localGuardianAddress = body.localGuardianAddress;
+    if (body.localGuardianPhoneNumber !== undefined) updateFields.localGuardianPhoneNumber = body.localGuardianPhoneNumber;
+    if (body.registrationId !== undefined) updateFields.registrationId = body.registrationId;
+    if (body.erpInformation !== undefined) updateFields.erpInformation = body.erpInformation;
+    if (body.gender !== undefined) updateFields.gender = body.gender;
+    if (body.category !== undefined) updateFields.category = body.category;
+    if (body.dob !== undefined) updateFields.dob = body.dob;
+    if (body.floorNumber !== undefined) updateFields.floorNumber = body.floorNumber;
+
+    const student = await db.students.update(targetId, { $set: updateFields });
+    return NextResponse.json({ success: true, student }, { status: 200 });
+  } catch (error: any) {
+    console.error("Error updating student:", error);
+    return NextResponse.json({ error: error.message || "Failed to update student" }, { status: 500 });
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -306,6 +350,15 @@ export async function GET(request: NextRequest) {
     const parentPhone = searchParams.get("parentPhone");
     const selectedStudentId = searchParams.get("selectedStudentId");
     const minimal = searchParams.get("minimal") === "true";
+    const versionCheck = searchParams.get("versionCheck") === "true";
+    const cachedUpdatedAt = searchParams.get("updatedAt");
+
+    const isNotModified = (student: any) => {
+      if (!versionCheck || !cachedUpdatedAt || !student?.updatedAt) return false;
+      const cachedTime = new Date(cachedUpdatedAt).getTime();
+      const serverTime = new Date(student.updatedAt).getTime();
+      return Math.abs(serverTime - cachedTime) < 1000;
+    };
 
     if (parentPhone) {
       let cleaned = parentPhone.replace(/\D/g, "");
@@ -375,10 +428,22 @@ export async function GET(request: NextRequest) {
       }, { status: 200 });
     }
 
-    if (firebaseUID) {
-      const student = await db.students.findOne({ firebaseUID }, { minimal });
+    if (firebaseUID || email) {
+      let student = await (db.students as any).findOneFast({ firebaseUID: firebaseUID || undefined, email: email || undefined }, { minimal });
+
+      if (student && firebaseUID && !student.firebaseUID) {
+        db.students.save(student.id || student._id || firebaseUID, {
+          ...student,
+          firebaseUID: firebaseUID
+        }).catch(err => console.error("Non-blocking firebaseUID link error:", err));
+        student.firebaseUID = firebaseUID;
+      }
+
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      }
+      if (isNotModified(student)) {
+        return NextResponse.json({ notModified: true, success: true, studentStatus: student.studentStatus || "in" }, { status: 200 });
       }
       const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
       return NextResponse.json({ 
@@ -417,6 +482,9 @@ export async function GET(request: NextRequest) {
 
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      }
+      if (isNotModified(student)) {
+        return NextResponse.json({ notModified: true, success: true, studentStatus: student.studentStatus || "in" }, { status: 200 });
       }
       const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
       return NextResponse.json({ 

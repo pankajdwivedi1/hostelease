@@ -34,36 +34,18 @@ model Tenant {
 
 // 2. students
 model Student {
-  id             String           @id @map("_id")
-  tenantId       String           @db.Uuid @map("tenant_id")
-  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  firebaseUid    String           @unique @map("firebase_uid")
-  name           String
-  email          String           @unique
-  phoneNumber    String           @map("phone_number")
-  hostelName     String           @map("hostel_name")
-  roomNumber     String           @map("room_number")
-  profilePicture String?          @map("profile_picture")
-  studentStatus  String           @default("in") @map("student_status")
-  supabaseId     String?          @map("supabase_id")
-  createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @default(now()) @updatedAt @map("updated_at")
-
-  profile        StudentProfile?
-  security       StudentSecurity?
-
-  attendances    Attendance[]
-  gatePasses     GatePass[]
-  permissions    Permission[]
-  transactions   Transaction[]
-  fieldProgress  StudentFieldProgress[]
-
-  @@map("students")
-}
-
-model StudentProfile {
-  studentId                String    @id @map("student_id")
-  student                  Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  id                       String    @id @map("_id")
+  tenantId                 String    @db.Uuid @map("tenant_id")
+  tenant                   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  firebaseUid              String    @unique @map("firebase_uid")
+  name                     String
+  email                    String    @unique
+  phoneNumber              String    @map("phone_number")
+  hostelName               String    @map("hostel_name")
+  roomNumber               String    @map("room_number")
+  profilePicture           String?   @map("profile_picture")
+  studentStatus            String    @default("in") @map("student_status")
+  supabaseId               String?   @map("supabase_id")
   dob                      DateTime?
   category                 String?
   fatherName               String?   @map("father_name")
@@ -85,25 +67,27 @@ model StudentProfile {
   localGuardianPhoneNumber String?   @map("local_guardian_phone_number")
   registrationId           String?   @unique @map("registration_id")
   createdByErpId           String?   @map("created_by_erp_id")
+  deviceId                 String?   @map("device_id")
+  deviceResetCount         Int       @default(0) @map("device_reset_count")
+  deviceHistory            Json      @default("[]") @map("device_history")
+  isProfileLocked          Boolean   @default(false) @map("is_profile_locked")
+  faceDescriptor           Float[]   @map("face_descriptor")
+  thumbImpressionId        String?   @map("thumb_impression_id")
+  attendanceMode           String    @default("default") @map("attendance_mode")
+  webAuthnCredentials      Json?     @map("web_authn_credentials")
+  lastCheckInLocation      Json?     @map("last_check_in_location")
+  authProvider             String?   @map("auth_provider")
+  dynamicFields            Json?     @map("dynamic_fields")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @default(now()) @updatedAt @map("updated_at")
 
-  @@map("student_profiles")
-}
+  attendances              Attendance[]
+  gatePasses               GatePass[]
+  permissions              Permission[]
+  transactions             Transaction[]
+  fieldProgress            StudentFieldProgress[]
 
-model StudentSecurity {
-  studentId           String   @id @map("student_id")
-  student             Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  deviceId            String?  @map("device_id")
-  deviceResetCount    Int      @default(0) @map("device_reset_count")
-  deviceHistory       Json     @default("[]") @map("device_history")
-  isProfileLocked     Boolean  @default(false) @map("is_profile_locked")
-  faceDescriptor      Float[]  @map("face_descriptor")
-  thumbImpressionId   String?  @map("thumb_impression_id")
-  attendanceMode      String   @default("default") @map("attendance_mode")
-  webAuthnCredentials Json?    @map("web_authn_credentials")
-  lastCheckInLocation Json?    @map("last_check_in_location")
-  authProvider        String?  @map("auth_provider")
-
-  @@map("student_security")
+  @@map("students")
 }
 
 // 3. attendance
@@ -165,6 +149,17 @@ model AdminSettings {
   developerPassword        String?  @map("developer_password")
   leaveApprovalMethod      String   @default("app") @map("leave_approval_method")
   notificationSettings     Json?    @default("{}") @map("notification_settings")
+  enforceUniqueErpId       Boolean  @default(false) @map("enforce_unique_erp_id")
+  enforceUniquePhone       Boolean  @default(false) @map("enforce_unique_phone")
+  enforceUniqueEmail       Boolean  @default(false) @map("enforce_unique_email")
+  enforceUniqueFace        Boolean  @default(false) @map("enforce_unique_face")
+  allowWardenAddStudent    Boolean  @default(false) @map("allow_warden_add_student")
+  allowDeanAddStudent      Boolean  @default(false) @map("allow_dean_add_student")
+  allowWardenEditProfile   Boolean  @default(false) @map("allow_warden_edit_profile")
+  allowDeanEditProfile     Boolean  @default(false) @map("allow_dean_edit_profile")
+  allowWardenRemoveStudent Boolean  @default(false) @map("allow_warden_remove_student")
+  allowDeanRemoveStudent   Boolean  @default(false) @map("allow_dean_remove_student")
+  allowBulkStudentUpdates  Boolean  @default(false) @map("allow_bulk_student_updates")
   createdAt                DateTime @default(now()) @map("created_at")
   updatedAt                DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -225,8 +220,11 @@ model Hostel {
   totalRooms     Int      @default(100) @map("total_rooms")
   wardenUsername String?  @map("warden_username")
   wardenPassword String?  @map("warden_password")
-  attendanceMode String   @default("strict") @map("attendance_mode")
-  tenantId       String?  @db.Uuid @map("tenant_id")
+  attendanceMode           String   @default("strict") @map("attendance_mode")
+  allowWardenAddStudent    Boolean  @default(false) @map("allow_warden_add_student")
+  allowWardenEditProfile   Boolean  @default(false) @map("allow_warden_edit_profile")
+  allowWardenRemoveStudent Boolean  @default(false) @map("allow_warden_remove_student")
+  tenantId                 String?  @db.Uuid @map("tenant_id")
   tenant         Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")

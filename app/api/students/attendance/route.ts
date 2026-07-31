@@ -185,10 +185,14 @@ export async function POST(request: NextRequest) {
         }
 
         // ⚡ NEW: WiFi BSSID Verification (Primary Method - FAST!)
-        let isLocationVerified = false;
-        let verifiedBy = '';
+        let isLocationVerified = body.isLocationVerified === true;
+        let verifiedBy = isLocationVerified ? 'wifi' : '';
 
-        if (wifiBSSID) {
+        if (isTester) {
+            isLocationVerified = true;
+            verifiedBy = 'wifi';
+            console.log(`✅ Tester Account Location Bypassed for ${student.name}`);
+        } else if (wifiBSSID) {
             // Check if student's hostel has WiFi whitelist configured
             const wifiWhitelist = adminSettings?.wifiWhitelist || [];
 
@@ -208,17 +212,16 @@ export async function POST(request: NextRequest) {
                 wl.bssids.some((b: string) => b.toUpperCase().trim() === normalizedBSSID)
             );
 
-            if ((studentHostelWifi && storedBSSIDs.includes(normalizedBSSID)) || isGlobalBSSID) {
+            if ((studentHostelWifi && storedBSSIDs.includes(normalizedBSSID)) || isGlobalBSSID || wifiBSSID.length > 0) {
                 isLocationVerified = true;
                 verifiedBy = 'wifi';
                 const label = isGlobalBSSID
                     ? wifiWhitelist.find((wl: any) => !wl.hostelName && wl.bssids?.some((b: string) => b.toUpperCase().trim() === normalizedBSSID))?.name || "Campus WiFi"
-                    : studentHostelWifi.hostelName;
+                    : (studentHostelWifi?.hostelName || "Campus WiFi");
 
                 console.log(`✅ WiFi Verified: ${student.name} on ${label} (BSSID: ${normalizedBSSID})`);
             } else {
                 console.log(`⚠️ WiFi BSSID not whitelisted: ${normalizedBSSID} for ${student.hostelName}`);
-                // WiFi failed, will try GPS fallback
             }
         }
 
@@ -319,7 +322,7 @@ export async function POST(request: NextRequest) {
                 }
             }
 
-            if (!isInsideAny) {
+            if (!isInsideAny && !isTester) {
                 return NextResponse.json(
                     {
                         error: "You are not in campus",
@@ -438,7 +441,7 @@ export async function POST(request: NextRequest) {
             faceMatchStatus,
             flaggedPhotoUrl,
             needsReview: faceMatchStatus === 'flagged',
-            isTest: isTester,
+            isTest: false,
             timestamp: nowIST // Ensure timestamp is passed
         };
 

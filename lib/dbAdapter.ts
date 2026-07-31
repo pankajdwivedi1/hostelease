@@ -8,9 +8,10 @@ import { prisma } from './prisma';
 export const supabase = getSupabaseAdmin();
 
 // ⚡ PRISMA MODEL FILTERS (Sanitizes data to prevent relationship/read-only write errors)
-const filterStudentForPrisma = (data: any) => {
+const filterStudentForPrisma = (raw: any) => {
+    const data = raw?.$set ? { ...raw, ...raw.$set } : (raw || {});
     const studentFields = [
-        'id', 'tenantId', 'firebaseUid', 'name', 'email', 'phoneNumber',
+        'id', 'tenantId', 'firebaseUid', 'firebaseUID', 'name', 'email', 'phoneNumber',
         'hostelName', 'roomNumber', 'dob', 'category', 'profilePicture',
         'studentStatus', 'fatherName', 'fatherNumber', 'motherName', 'motherNumber',
         'permanentAddress', 'homeState', 'erpInformation', 'erpId', 'joiningDate',
@@ -44,6 +45,11 @@ const filterAttendanceForPrisma = (data: any) => {
     ];
     const filtered: any = {};
     for (const key of attendanceFields) {
+        if (key === 'firebaseUid') {
+            const uid = data.firebaseUid || data.firebaseUID || data.firebase_uid || data.studentId || "manual_override";
+            filtered.firebaseUid = String(uid);
+            continue;
+        }
         if (data[key] !== undefined) {
             if (key === 'timestamp' && data[key]) {
                 const d = new Date(data[key]);
@@ -52,6 +58,9 @@ const filterAttendanceForPrisma = (data: any) => {
                 filtered[key] = data[key];
             }
         }
+    }
+    if (!filtered.firebaseUid) {
+        filtered.firebaseUid = data.studentId || "manual_override";
     }
     return filtered;
 };
@@ -90,6 +99,26 @@ const filterGatePassForPrisma = (data: any) => {
     ];
     const filtered: any = {};
     for (const key of gatePassFields) {
+        if (key === 'firebaseUid') {
+            filtered.firebaseUid = String(data.firebaseUid || data.firebaseUID || data.firebase_uid || "");
+            continue;
+        }
+        if (key === 'checkOutIstTime') {
+            filtered.checkOutIstTime = data.checkOutIstTime || data.checkOutISTTime;
+            continue;
+        }
+        if (key === 'checkOutIstDate') {
+            filtered.checkOutIstDate = data.checkOutIstDate || data.checkOutISTDate;
+            continue;
+        }
+        if (key === 'checkInIstTime') {
+            filtered.checkInIstTime = data.checkInIstTime || data.checkInISTTime;
+            continue;
+        }
+        if (key === 'checkInIstDate') {
+            filtered.checkInIstDate = data.checkInIstDate || data.checkInISTDate;
+            continue;
+        }
         if (data[key] !== undefined) {
             if ((key === 'checkOutTime' || key === 'checkInTime') && data[key]) {
                 const d = new Date(data[key]);
@@ -121,7 +150,8 @@ const filterGatePassTokenForPrisma = (data: any) => {
 const filterHostelForPrisma = (data: any) => {
     const fields = [
         'id', 'name', 'totalRooms', 'wardenUsername', 'wardenPassword',
-        'attendanceMode', 'tenantId'
+        'attendanceMode', 'tenantId',
+        'allowWardenAddStudent', 'allowWardenEditProfile', 'allowWardenRemoveStudent'
     ];
     const filtered: any = {};
     for (const key of fields) {
@@ -628,15 +658,16 @@ const mapGatePassToCamelCase = (g: any) => {
         status: g.status,
         checkOutTime: g.check_out_time || g.checkOutTime,
         checkInTime: g.check_in_time || g.checkInTime,
-        checkOutISTTime: g.check_out_ist_time || g.checkOutISTTime,
-        checkInISTTime: g.check_in_ist_time || g.checkInISTTime,
-        checkOutISTDate: g.check_out_ist_date || g.check_out_date || g.checkOutISTDate || g.checkOutDate,
-        checkInISTDate: g.check_in_ist_date || g.check_in_date || g.checkInISTDate || g.checkInDate,
+        checkOutISTTime: g.check_out_ist_time || g.checkOutISTTime || g.checkOutIstTime,
+        checkInISTTime: g.check_in_ist_time || g.checkInISTTime || g.checkInIstTime,
+        checkOutISTDate: g.check_out_ist_date || g.check_out_date || g.checkOutISTDate || g.checkOutDate || g.checkOutIstDate,
+        checkInISTDate: g.check_in_ist_date || g.check_in_date || g.checkInISTDate || g.checkInDate || g.checkInIstDate,
         durationMinutes: g.duration_minutes || g.durationMinutes,
         phoneNumber: g.phone_number || g.phoneNumber || (Array.isArray(g.students) ? g.students[0]?.phone_number : g.students?.phone_number) || g.students?.phoneNumber || g.studentId?.phoneNumber || g.studentId?.phone_number || "",
         reason: g.reason,
         parentMobile: g.parent_mobile || g.parentMobile,
         destination: g.destination,
+        gateName: g.gate_name || g.gateName,
         manualUpdate: g.manual_update || g.manualUpdate,
         updatedBy: g.updated_by || g.updatedBy,
         createdAt: g.created_at || g.createdAt,
@@ -747,20 +778,24 @@ const mapGatePassTokenToCamelCase = (t: any) => {
  */
 const mapPermissionToCamelCase = (p: any) => {
     if (!p) return null;
+    const fromVal = p.fromDateTime ?? p.from_date_time ?? (p.outDate ? `${p.outDate} ${p.outTime || ''}`.trim() : p.createdAt);
+    const toVal = p.toDateTime ?? p.to_date_time ?? (p.inDate ? `${p.inDate} ${p.inTime || ''}`.trim() : null);
+
     const mapped: any = {
-        _id: p._id,
-        studentId: p.student_id,
-        fromDateTime: p.from_date_time,
-        toDateTime: p.to_date_time,
+        _id: p._id || p.id,
+        id: p.id || p._id,
+        studentId: p.studentId || p.student_id,
+        fromDateTime: fromVal,
+        toDateTime: toVal,
         reason: p.reason,
         status: p.status,
-        wardenStatus: p.warden_status,
-        deanStatus: p.dean_status,
-        parentStatus: p.parent_status,
-        requestType: p.request_type,
-        parentConsentUrl: p.parent_consent_url,
-        createdAt: p.created_at,
-        updatedAt: p.updated_at
+        wardenStatus: p.wardenStatus || p.warden_status,
+        deanStatus: p.deanStatus || p.dean_status,
+        parentStatus: p.parentStatus || p.parent_status,
+        requestType: p.requestType || p.request_type,
+        parentConsentUrl: p.parentConsentUrl || p.parent_consent_url,
+        createdAt: p.createdAt || p.created_at,
+        updatedAt: p.updatedAt || p.updated_at
     };
 
     if (p.students) {
@@ -815,15 +850,15 @@ const mapPermissionToSnakeCase = (p: any) => {
 const mapFieldEnforcementToCamelCase = (f: any) => {
     if (!f) return null;
     return {
-        _id: f._id,
-        hostelName: f.hostel_name,
-        enforcedFields: f.enforced_fields,
-        isActive: f.is_active,
-        notificationPriority: f.notification_priority,
-        successMessage: f.success_message,
-        autoCloseNotification: f.auto_close_notification,
-        createdAt: f.created_at,
-        updatedAt: f.updated_at
+        _id: f._id || f.id,
+        hostelName: f.hostel_name || f.hostelName || "",
+        enforcedFields: f.enforced_fields !== undefined ? f.enforced_fields : (f.enforcedFields || []),
+        isActive: f.is_active !== undefined ? f.is_active : (f.isActive ?? true),
+        notificationPriority: f.notification_priority !== undefined ? f.notification_priority : (f.notificationPriority || "medium"),
+        successMessage: f.success_message !== undefined ? f.success_message : (f.successMessage || ""),
+        autoCloseNotification: f.auto_close_notification !== undefined ? f.auto_close_notification : (f.autoCloseNotification ?? true),
+        createdAt: f.created_at || f.createdAt,
+        updatedAt: f.updated_at || f.updatedAt
     };
 };
 
@@ -858,19 +893,23 @@ const mapFieldEnforcementToSnakeCase = (f: any) => {
  */
 const mapNotificationToCamelCase = (n: any) => {
     if (!n) return null;
+    const notificationId = n._id || n.id || (n.get && (n.get('_id') || n.get('id')));
     return {
-        _id: n._id,
-        senderId: n.sender_id,
-        targetType: n.target_type,
-        targetHostel: n.target_hostel,
-        targetStudentId: n.target_student_id,
+        _id: notificationId,
+        id: notificationId,
+        senderId: n.sender_id || n.senderId,
+        senderRole: n.sender_role || n.senderRole,
+        senderHostel: n.sender_hostel || n.senderHostel,
+        targetType: n.target_type || n.targetType,
+        targetHostel: n.target_hostel || n.targetHostel,
+        targetStudentId: n.target_student_id || n.targetStudentId,
         message: n.message,
         priority: n.priority,
         image: n.image,
-        expiresAt: n.expires_at,
-        acknowledgedBy: n.acknowledged_by,
-        createdAt: n.created_at,
-        updatedAt: n.updated_at
+        expiresAt: n.expires_at || n.expiresAt,
+        acknowledgedBy: n.acknowledged_by || n.acknowledgedBy,
+        createdAt: n.created_at || n.createdAt,
+        updatedAt: n.updated_at || n.updatedAt
     };
 };
 
@@ -882,6 +921,8 @@ const mapNotificationToSnakeCase = (n: any) => {
     const mapped: any = {};
     const fieldMap: any = {
         senderId: 'sender_id',
+        senderRole: 'sender_role',
+        senderHostel: 'sender_hostel',
         targetType: 'target_type',
         targetHostel: 'target_hostel',
         targetStudentId: 'target_student_id',
@@ -1046,8 +1087,8 @@ const getTenantIdOrThrow = async () => {
 };
 
 const getDbSource = async () => {
-    // Check environment variable, defaulting to SUPABASE
-    return process.env.NEXT_PUBLIC_DB_SOURCE || 'SUPABASE';
+    // Check environment variable, defaulting to PRISMA for direct Railway PostgreSQL access
+    return process.env.NEXT_PUBLIC_DB_SOURCE || 'PRISMA';
 };
 
 export const db = {
@@ -1126,8 +1167,12 @@ export const db = {
                 if (error) throw error;
                 return { success: true };
             } else if (source === 'PRISMA') {
+                const whereClause: any = {};
+                if (query.userId) whereClause.userId = query.userId;
+                if (query.userType) whereClause.userType = query.userType;
+                if (query.id) whereClause.id = query.id;
                 await prisma.pushSubscription.deleteMany({
-                    where: query
+                    where: whereClause
                 });
                 return { success: true };
             } else {
@@ -1169,10 +1214,54 @@ export const db = {
                 }
                 return mapSettingsToCamelCase(data);
             } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const data = await prisma.adminSettings.findFirst({
-                    where: { tenantId }
-                });
+                let tenantId = null;
+                try {
+                    tenantId = await getTenantIdOrThrow();
+                } catch (err) {
+                    // Fallback when no tenant header/cookie exists
+                }
+                let data = tenantId ? await prisma.adminSettings.findFirst({ where: { tenantId } }) : null;
+                if (!data) {
+                    data = await prisma.adminSettings.findFirst();
+                }
+
+                // ⚡ LOCATION & WIFI WHITELIST MERGING: Merge all wifiWhitelist and location entries across database records
+                try {
+                    const allAdminSettings = await prisma.adminSettings.findMany();
+                    const wifiMap = new Map<string, any>();
+                    for (const s of allAdminSettings) {
+                        const list = s.wifiWhitelist;
+                        if (Array.isArray(list)) {
+                            for (const item of list) {
+                                if (item) {
+                                    const key = (item.ip || item.hostelName || item.name || JSON.stringify(item)).toString().trim().toLowerCase();
+                                    if (!wifiMap.has(key)) {
+                                        wifiMap.set(key, item);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    let locationsList = data?.hostelLocations;
+                    if (!locationsList || (Array.isArray(locationsList) && (locationsList as any[]).length === 0)) {
+                        const fallback = allAdminSettings.find(s => Array.isArray(s.hostelLocations) && s.hostelLocations.length > 0);
+                        if (fallback?.hostelLocations) {
+                            locationsList = fallback.hostelLocations;
+                        }
+                    }
+
+                    if (data) {
+                        data = {
+                            ...data,
+                            wifiWhitelist: wifiMap.size > 0 ? Array.from(wifiMap.values()) : (data.wifiWhitelist || []),
+                            hostelLocations: locationsList || []
+                        } as any;
+                    }
+                } catch (e) {
+                    console.error("Settings merge error:", e);
+                }
+
                 return data ? mapSettingsToCamelCase(data) : null;
             } else {
                 await connectDB();
@@ -1329,18 +1418,34 @@ export const db = {
 
                 return mapStudentToCamelCase(data);
             } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                let student = await prisma.student.findFirst({
-                    where: {
-                        tenantId,
-                        OR: [
-                            { id: id },
-                            { firebaseUid: id },
-                            { supabaseId: id }
-                        ]
-                    },
-                    include: { profile: true, security: true }
-                });
+                const searchOR: any[] = [
+                    { id: id },
+                    { firebaseUid: id },
+                    { supabaseId: id },
+                    { registrationId: id },
+                    { erpId: id },
+                    { phoneNumber: id }
+                ];
+                let student = null;
+                try {
+                    const tenantId = await getTenantIdOrThrow();
+                    student = await prisma.student.findFirst({
+                        where: {
+                            tenantId,
+                            OR: searchOR
+                        }
+                    });
+                } catch (e) {
+                    // Ignore tenant error
+                }
+
+                if (!student) {
+                    student = await prisma.student.findFirst({
+                        where: {
+                            OR: searchOR
+                        }
+                    });
+                }
                 return student ? mapStudentToCamelCase(student) : null;
             } else {
                 await connectDB();
@@ -1402,9 +1507,7 @@ export const db = {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
-                const selection = options.minimal
-                    ? '_id,firebase_uid,name,email,phone_number,hostel_name,room_number,student_status,supabase_id,profile_picture'
-                    : '*, student_profiles(*), student_security(*)';
+                const selection = '*, student_profiles(*), student_security(*)';
                 let query = supabase.from('students').select(selection);
                 query = query.eq('tenant_id', tenantId);
 
@@ -1491,8 +1594,7 @@ export const db = {
                 if (filter.erpInformation) whereClause.erpId = filter.erpInformation;
 
                 let student = await prisma.student.findFirst({
-                    where: whereClause,
-                    ...(options.minimal ? {} : { include: { profile: true, security: true } })
+                    where: whereClause
                 });
 
                 if (!student) {
@@ -1503,8 +1605,7 @@ export const db = {
                     
                     if (Object.keys(globalWhere).length > 0) {
                         student = await prisma.student.findFirst({
-                            where: globalWhere,
-                            ...(options.minimal ? {} : { include: { profile: true, security: true } })
+                            where: globalWhere
                         });
                     }
                 }
@@ -1534,11 +1635,58 @@ export const db = {
                     delete (queryFilter as any).supabaseId;
                 }
                 let query = StudentModel.findOne(queryFilter);
-                if (options.minimal) {
-                    query = query.select('_id firebaseUID name email studentStatus phoneNumber hostelName roomNumber profilePicture supabaseId');
-                }
                 const student = await query.lean();
                 return mapStudentToCamelCase(student);
+            }
+        },
+
+        // ⚡ INSTANT FAST-PATH: Single DB roundtrip student verification for login (sub-100ms)
+        findOneFast: async (filter: { firebaseUID?: string; email?: string; phoneNumber?: string }, options: { minimal?: boolean } = {}) => {
+            const source = await getDbSource();
+            if (source === 'PRISMA') {
+                const conditions: any[] = [];
+                if (filter.firebaseUID) {
+                    conditions.push({ firebaseUid: filter.firebaseUID });
+                    conditions.push({ supabaseId: filter.firebaseUID });
+                }
+                if (filter.email) {
+                    conditions.push({ email: filter.email.toLowerCase().trim() });
+                }
+                if (filter.phoneNumber) {
+                    conditions.push({ phoneNumber: filter.phoneNumber.trim() });
+                }
+                if (conditions.length === 0) return null;
+
+                const student = await prisma.student.findFirst({
+                    where: { OR: conditions }
+                });
+                return student ? mapStudentToCamelCase(student) : null;
+            } else if (source === 'SUPABASE') {
+                const orParts: string[] = [];
+                if (filter.firebaseUID) {
+                    orParts.push(`firebase_uid.eq.${filter.firebaseUID}`);
+                    orParts.push(`supabase_id.eq.${filter.firebaseUID}`);
+                }
+                if (filter.email) {
+                    orParts.push(`email.eq.${filter.email.toLowerCase().trim()}`);
+                }
+                if (filter.phoneNumber) {
+                    orParts.push(`phone_number.eq.${filter.phoneNumber.trim()}`);
+                }
+                if (orParts.length === 0) return null;
+
+                const selection = '*, student_profiles(*), student_security(*)';
+                const { data, error } = await supabase
+                    .from('students')
+                    .select(selection)
+                    .or(orParts.join(','))
+                    .limit(1)
+                    .maybeSingle();
+
+                if (error || !data) return null;
+                return mapStudentToCamelCase(data);
+            } else {
+                return await db.students.findOne(filter, options);
             }
         },
 
@@ -1806,8 +1954,13 @@ export const db = {
                     const hName = typeof filters.hostelName === 'object' ? filters.hostelName.$regex : filters.hostelName;
                     whereClause.hostelName = { contains: hName, mode: 'insensitive' };
                 }
-                if (filters.studentStatus) whereClause.studentStatus = filters.studentStatus;
-                if (filters.collegeName && filters.collegeName !== 'all') whereClause.collegeName = filters.collegeName;
+                if (filters.studentStatus && filters.studentStatus !== 'all') whereClause.studentStatus = filters.studentStatus;
+                if (filters.collegeName && filters.collegeName !== 'all') whereClause.collegeName = { equals: filters.collegeName, mode: 'insensitive' };
+                if (filters.branch && filters.branch !== 'all') whereClause.branch = { equals: filters.branch, mode: 'insensitive' };
+                if (filters.semester && filters.semester !== 'all') whereClause.semester = { equals: filters.semester, mode: 'insensitive' };
+                if (filters.section && filters.section !== 'all') whereClause.section = { equals: filters.section, mode: 'insensitive' };
+                if (filters.floor && filters.floor !== 'all') whereClause.floorNumber = { contains: filters.floor, mode: 'insensitive' };
+                if (filters.roomNumber && filters.roomNumber !== 'all') whereClause.roomNumber = { equals: filters.roomNumber, mode: 'insensitive' };
                 if (filters.registrationId) whereClause.registrationId = { contains: filters.registrationId, mode: 'insensitive' };
                 if (filters._id) {
                     if (typeof filters._id === 'object' && filters._id.$in) {
@@ -1837,20 +1990,6 @@ export const db = {
 
                 const data = await prisma.student.findMany({
                     where: whereClause,
-                    include: {
-                        profile: true,
-                        security: {
-                            select: {
-                                deviceId: true,
-                                deviceResetCount: true,
-                                deviceHistory: true,
-                                isProfileLocked: true,
-                                attendanceMode: true,
-                                webAuthnCredentials: true,
-                                authProvider: true
-                            }
-                        }
-                    },
                     orderBy: { name: 'asc' },
                     take: options.limit || 1000
                 });
@@ -2385,11 +2524,7 @@ export const db = {
                             roomNumber: true,
                             hostelName: true,
                             email: true,
-                            profile: {
-                                select: {
-                                    registrationId: true
-                                }
-                            }
+                            registrationId: true
                         }
                     });
                     const grouped = (allStudents || []).reduce((acc: any, s: any) => {
@@ -2400,7 +2535,7 @@ export const db = {
                         acc[key].students.push({
                             id: s.id,
                             name: s.name,
-                            regId: s.profile?.registrationId,
+                            regId: s.registrationId,
                             room: s.roomNumber,
                             hostel: s.hostelName,
                             email: s.email
@@ -2414,11 +2549,9 @@ export const db = {
                     const allStudents = await prisma.student.findMany({
                         where: {
                             tenantId,
-                            profile: {
-                                registrationId: {
-                                    not: null,
-                                    notIn: [""]
-                                }
+                            registrationId: {
+                                not: null,
+                                notIn: [""]
                             }
                         },
                         select: {
@@ -2428,15 +2561,11 @@ export const db = {
                             roomNumber: true,
                             hostelName: true,
                             email: true,
-                            profile: {
-                                select: {
-                                    registrationId: true
-                                }
-                            }
+                            registrationId: true
                         }
                     });
                     const grouped = (allStudents || []).reduce((acc: any, s: any) => {
-                        const key = s.profile?.registrationId;
+                        const key = s.registrationId;
                         if (!key) return acc;
                         if (!acc[key]) acc[key] = { _id: key, count: 0, students: [] };
                         acc[key].count++;
@@ -2457,11 +2586,9 @@ export const db = {
                     const allStudents = await prisma.student.findMany({
                         where: {
                             tenantId,
-                            profile: {
-                                erpId: {
-                                    not: null,
-                                    notIn: [""]
-                                }
+                            erpId: {
+                                not: null,
+                                notIn: [""]
                             }
                         },
                         select: {
@@ -2471,16 +2598,12 @@ export const db = {
                             roomNumber: true,
                             hostelName: true,
                             email: true,
-                            profile: {
-                                select: {
-                                    registrationId: true,
-                                    erpId: true
-                                }
-                            }
+                            registrationId: true,
+                            erpId: true
                         }
                     });
                     const grouped = (allStudents || []).reduce((acc: any, s: any) => {
-                        const key = s.profile?.erpId;
+                        const key = s.erpId;
                         if (!key) return acc;
                         if (!acc[key]) acc[key] = { _id: key, count: 0, students: [] };
                         acc[key].count++;
@@ -2491,7 +2614,7 @@ export const db = {
                             room: s.roomNumber,
                             hostel: s.hostelName,
                             email: s.email,
-                            regId: s.profile?.registrationId
+                            regId: s.registrationId
                         });
                         return acc;
                     }, {});
@@ -2508,11 +2631,7 @@ export const db = {
                             hostelName: true,
                             roomNumber: true,
                             email: true,
-                            profile: {
-                                select: {
-                                    registrationId: true
-                                }
-                            }
+                            registrationId: true
                         }
                     });
                     return (students || []).filter((s: any) => {
@@ -2894,10 +3013,6 @@ export const db = {
                     query = query.ilike('hostel_name', `%${filters.hostelName}%`);
                 }
 
-                // Exclude test records if needed (route.ts does: isTest: { $ne: true })
-                // We should replicate that behavior
-                query = query.neq('is_test', true);
-
                 // Sort
                 query = query.order('date', { ascending: false }).order('timestamp', { ascending: false });
 
@@ -2913,8 +3028,7 @@ export const db = {
             } else if (source === 'PRISMA') {
                 const tenantId = await getTenantIdOrThrow();
                 const whereClause: any = {
-                    tenantId,
-                    isTest: { not: true }
+                    tenantId
                 };
 
                 if (filters.date) {
@@ -2949,7 +3063,7 @@ export const db = {
                 const AttendanceModel = (await import('@/models/Attendance')).default;
                 const StudentModel = (await import('@/models/Student')).default;
 
-                let query: any = { isTest: { $ne: true } };
+                let query: any = {};
 
                 // Date Filtering
                 if (filters.startDate && filters.endDate) {
@@ -3018,8 +3132,7 @@ export const db = {
                     by: ['hostelName'],
                     where: {
                         tenantId,
-                        date: date,
-                        isTest: { not: true }
+                        date: date
                     },
                     _count: {
                         studentId: true
@@ -3029,8 +3142,7 @@ export const db = {
                 const presentStudents = await prisma.attendance.findMany({
                     where: {
                         tenantId,
-                        date: date,
-                        isTest: { not: true }
+                        date: date
                     },
                     select: {
                         studentId: true
@@ -3046,11 +3158,11 @@ export const db = {
                 const AttendanceModel = (await import('@/models/Attendance')).default;
 
                 const summary = await AttendanceModel.aggregate([
-                    { $match: { date: date, isTest: { $ne: true } } },
+                    { $match: { date: date } },
                     { $group: { _id: "$hostelName", count: { $sum: 1 } } }
                 ]);
 
-                const presentStudents = await AttendanceModel.find({ date: date, isTest: { $ne: true } }).select("studentId").lean();
+                const presentStudents = await AttendanceModel.find({ date: date }).select("studentId").lean();
 
                 return {
                     summary: summary,
@@ -3404,8 +3516,13 @@ export const db = {
 
                 query = query.eq('tenant_id', tenantId);
 
-                if (filters.firebaseUID) query = query.eq('firebase_uid', filters.firebaseUID);
-                if (filters.studentId) query = query.eq('student_id', filters.studentId);
+                if (filters.studentId && filters.firebaseUID) {
+                    query = query.or(`student_id.eq.${filters.studentId},firebase_uid.eq.${filters.firebaseUID}`);
+                } else if (filters.firebaseUID) {
+                    query = query.eq('firebase_uid', filters.firebaseUID);
+                } else if (filters.studentId) {
+                    query = query.eq('student_id', filters.studentId);
+                }
                 if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
                 if (filters.registrationId) query = query.ilike('registration_id', `%${filters.registrationId}%`);
                 if (filters.type) query = query.eq('type', filters.type);
@@ -3474,8 +3591,16 @@ export const db = {
                     tenantId: tenantId
                 };
 
-                if (filters.firebaseUID) whereClause.firebaseUid = filters.firebaseUID;
-                if (filters.studentId) whereClause.studentId = filters.studentId;
+                if (filters.studentId && filters.firebaseUID) {
+                    whereClause.OR = [
+                        { studentId: filters.studentId },
+                        { firebaseUid: filters.firebaseUID }
+                    ];
+                } else if (filters.firebaseUID) {
+                    whereClause.firebaseUid = filters.firebaseUID;
+                } else if (filters.studentId) {
+                    whereClause.studentId = filters.studentId;
+                }
                 if (filters.status && filters.status !== 'all') whereClause.status = filters.status;
                 if (filters.type) whereClause.type = filters.type;
 
@@ -3545,7 +3670,7 @@ export const db = {
                 if (sortFieldMap[sortField]) sortField = sortFieldMap[sortField];
                 const sortOrder = options.sortOrder || 'desc';
 
-                const total = await prisma.gatePass.count({ where: whereClause });
+                const total = options.skipCount ? 0 : await prisma.gatePass.count({ where: whereClause });
                 const records = await prisma.gatePass.findMany({
                     where: whereClause,
                     orderBy: { [sortField]: sortOrder },
@@ -4207,16 +4332,12 @@ export const db = {
                         select: {
                             id: true,
                             name: true,
-                            profile: {
-                                select: {
-                                    registrationId: true
-                                }
-                            }
+                            registrationId: true
                         }
                       })
                     : [];
 
-                const studentMap = new Map(students.map((s: any) => [s.id, { name: s.name, registration_id: s.profile?.registrationId }]));
+                const studentMap = new Map(students.map((s: any) => [s.id, { name: s.name, registration_id: s.registrationId }]));
 
                 return records.map((n: any) => {
                     const studentInfo = n.targetStudentId ? studentMap.get(n.targetStudentId) : null;
@@ -4274,15 +4395,11 @@ export const db = {
                         where: { id: record.targetStudentId },
                         select: {
                             name: true,
-                            profile: {
-                                select: {
-                                    registrationId: true
-                                }
-                            }
+                            registrationId: true
                         }
                     });
                     if (student) {
-                        studentInfo = { name: student.name, registration_id: student.profile?.registrationId };
+                        studentInfo = { name: student.name, registration_id: student.registrationId };
                     }
                 }
                 const formatted = {
@@ -4408,13 +4525,12 @@ export const db = {
             if (source === 'SUPABASE') {
                 let query = supabase.from('notifications').delete();
 
-                if (filter._id) {
-                    query = query.eq('_id', filter._id);
+                if (filter._id || filter.id) {
+                    const targetId = filter._id || filter.id;
+                    query = query.or(`_id.eq.${targetId},id.eq.${targetId}`);
                 } else if (filter.createdAt && filter.createdAt.$lt) {
                     query = query.lt('created_at', new Date(filter.createdAt.$lt).toISOString());
                 } else {
-                    // Safety check: Supabase delete requires a filter. 
-                    // Use a dummy filter if we really want to delete all, but here we likely want to block accidental wipes.
                     return { deletedCount: 0 };
                 }
 
@@ -4437,7 +4553,21 @@ export const db = {
             } else {
                 await connectDB();
                 const NotificationModel = (await import('@/models/Notification')).default;
-                const result = await NotificationModel.deleteMany(filter);
+                let mongoFilter = { ...filter };
+                if (filter._id || filter.id) {
+                    const targetId = filter._id || filter.id;
+                    try {
+                        const { default: mongoose } = await import('mongoose');
+                        if (mongoose.Types.ObjectId.isValid(targetId)) {
+                            mongoFilter = { $or: [{ _id: new mongoose.Types.ObjectId(targetId) }, { _id: targetId }, { id: targetId }] } as any;
+                        } else {
+                            mongoFilter = { $or: [{ _id: targetId }, { id: targetId }] } as any;
+                        }
+                    } catch (e) {
+                        mongoFilter = { _id: targetId } as any;
+                    }
+                }
+                const result = await NotificationModel.deleteMany(mongoFilter);
                 return { deletedCount: result.deletedCount };
             }
         }

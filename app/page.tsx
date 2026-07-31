@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { supabase } from "@/lib/supabase";
+// Supabase removed — all auth now via Firebase + Railway PostgreSQL
 import dynamic from "next/dynamic";
 
 const StudentDashboard = dynamic(() => import("./components/StudentDashboard"), {
@@ -94,68 +94,57 @@ export default function Dashboard() {
         const cachedStudent = localStorage.getItem("cachedStudentData");
         if (cachedStudent) {
           try {
-            setStudentData(JSON.parse(cachedStudent));
+            const parsedStudent = JSON.parse(cachedStudent);
+            setStudentData(parsedStudent);
             setUserType("student");
             setLoading(false);
-            // We intentionally DO NOT return here! We let the rest of the function run in the background
-            // to silently verify the session with the server. If it fails, it will redirect them out.
+            
+            // ⚡ BACKGROUND VERIFICATION (one-shot - unsubscribes after first fire)
+            // Silently check DB: if student found → update cache; if 404 → redirect to onboarding
+            import("firebase/auth").then(({ onAuthStateChanged }) => {
+              import("@/lib/firebase").then(({ auth }) => {
+                let didRun = false;
+                const unsub = onAuthStateChanged(auth, async (user) => {
+                  if (didRun) return; // ⚡ One-shot: prevent multiple fires
+                  didRun = true;
+                  unsub(); // Unsubscribe immediately after first event
+                  
+                  if (user) {
+                    try {
+                      const response = await fetch(`/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email || "")}&minimal=true`);
+                      if (response.status === 404) {
+                        // Student doesn't exist in DB → clear cache and go to onboarding
+                        localStorage.removeItem("cachedStudentData");
+                        router.push("/onboarding");
+                      } else if (response.ok) {
+                        const data = await response.json();
+                        if (data.student) {
+                          const currentCache = JSON.parse(localStorage.getItem("cachedStudentData") || "{}");
+                          const updatedStudent = { ...currentCache, ...data.student };
+                          localStorage.setItem("cachedStudentData", JSON.stringify(updatedStudent));
+                          setStudentData(updatedStudent);
+                        }
+                      }
+                    } catch (e) {
+                      console.error("Background verification error", e);
+                    }
+                  }
+                });
+              });
+            });
+            
+            return; // ⚡ Instant load: return immediately so user is not redirected back to landing page
           } catch (e) {
             console.error("Cache parsing error", e);
           }
         }
       }
 
-      // 1. ⚡ REGARDLESS of domain, Check Supabase Session First (with a 2.5s fast timeout to prevent hangs)
-      let sbSession = null;
-      try {
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2500));
-        const res = await Promise.race([sessionPromise, timeoutPromise]) as any;
-        sbSession = res?.data?.session || null;
-      } catch (e) {
-        console.warn("⚠️ [Auth] Supabase session check timed out or failed:", e);
-      }
-      
-      if (sbSession && sbSession.user?.email) {
-        try {
-          const response = await fetch(`/api/students?email=${encodeURIComponent(sbSession.user.email)}&supabaseId=${sbSession.user.id}&minimal=true`);
-          if (response.status === 404) {
-             // Not found locally or globally - might be a new user or admin
-             router.push("/onboarding");
-             setLoading(false);
-             return;
-          } else if (response.ok) {
-            const data = await response.json();
-            if (data.student) {
-              // ⚡ REDIRECT if tenant mismatch (found globally but on wrong slug domain)
-              if (data.tenantSlug && activeTenant !== data.tenantSlug) {
-                console.log(`[Switching Tenant] Detected ${data.tenantSlug} for user ${sbSession.user.email}`);
-                document.cookie = `tenant-slug=${data.tenantSlug}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-                window.location.href = `/?tenant=${data.tenantSlug}`;
-                return;
-              }
-              if (data.tenantSubscription) {
-                data.student.tenantSubscription = data.tenantSubscription;
-              }
-              // ⚡ Cache student data for instant load next time (merge with existing cache to preserve security/lock status)
-              const cached = localStorage.getItem("cachedStudentData");
-              const existing = cached ? JSON.parse(cached) : {};
-              const merged = { ...existing, ...data.student };
-              localStorage.setItem("cachedStudentData", JSON.stringify(merged));
-              setStudentData(merged);
-              setUserType("student");
-              localStorage.setItem("userType", "student");
-              setLoading(false);
-              return;
-            }
-          }
-        } catch (e) {
-          console.error("Supabase user fetch failed", e);
-        }
-      }
+      // 1. ⚡ Check Firebase Auth State for Students (fast, no external call until user is confirmed)
+      const sbSession = null; // Legacy: kept for fallback compatibility only
 
-      // 2. ⚡ If No Session, AND on Main Domain -> Show Landing Page
-      if (isMainBase || isRoot) {
+      // 2. ⚡ If No Session AND no logged in role, AND on Main Domain -> Show Landing Page
+      if ((isMainBase || isRoot) && !storedUserType) {
         setIsMainDomain(true);
         setLoading(false);
         return;
@@ -165,12 +154,10 @@ export default function Dashboard() {
 
       if (storedUserType === "student") {
         // Handle Firebase Fallback for existing users
-        const { onAuthStateChanged } = await import("firebase/auth");
-        const { auth } = await import("@/lib/firebase");
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
           if (user) {
             try {
-              const response = await fetch(`/api/students?email=${encodeURIComponent(user.email || "")}&minimal=true`);
+              const response = await fetch(`/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email || "")}&minimal=true`);
               if (response.status === 404) {
                 router.push("/onboarding");
                 setLoading(false);

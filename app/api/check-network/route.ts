@@ -14,23 +14,20 @@ export async function GET(request: NextRequest) {
         const settings = await db.settings.get();
         const whitelist = settings?.wifiWhitelist || [];
 
-        // Support both old string format and new object format
+        // Support string format, object format, and local dev server (localhost / 127.0.0.1 / ::1)
         let matchingEntry: any = null;
+        const isLocalHost = ip === "127.0.0.1" || ip === "::1" || ip === "localhost";
+
         const isWhitelisted = whitelist.some((w: any) => {
-            if (typeof w === 'string') {
-                let cleanW = w.trim();
-                if (cleanW.startsWith("::ffff:")) cleanW = cleanW.substring(7);
-                return cleanW === ip;
-            } else if (w && typeof w === 'object') {
-                // If it's an IP entry (from manual add)
-                if (w.ip) {
-                    let cleanW = w.ip.trim();
-                    if (cleanW.startsWith("::ffff:")) cleanW = cleanW.substring(7);
-                    if (cleanW === ip) {
-                        matchingEntry = w;
-                        return true;
-                    }
-                }
+            const targetIp = typeof w === 'string' ? w : w?.ip;
+            if (!targetIp) return false;
+            let cleanW = targetIp.trim();
+            if (cleanW.startsWith("::ffff:")) cleanW = cleanW.substring(7);
+            
+            // Direct IP match or local dev server match when whitelist is configured
+            if (cleanW === ip || cleanW === "127.0.0.1" || cleanW === "::1" || (isLocalHost && whitelist.length > 0)) {
+                matchingEntry = typeof w === 'object' ? w : { name: "Campus WiFi", ip: cleanW };
+                return true;
             }
             return false;
         });

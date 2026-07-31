@@ -6,7 +6,12 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
     try {
-        const settings = await db.settings.get();
+        let settings: any = null;
+        try {
+            settings = await db.settings.get();
+        } catch (err: any) {
+            console.error("Warning loading settings from DB, using defaults:", err?.message || err);
+        }
         const cookieStore = await cookies();
         const userType = cookieStore.get("userType")?.value;
         const isAdmin = userType === "admin" || userType === "superadmin";

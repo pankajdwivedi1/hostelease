@@ -6,7 +6,12 @@ export const dynamic = "force-dynamic";
 // GET - Fetch all locations
 export async function GET(request: NextRequest) {
     try {
-        const settings = await db.settings.get();
+        let settings = null;
+        try {
+            settings = await db.settings.get();
+        } catch (err) {
+            console.warn("Locations API: Could not resolve tenant settings, returning empty locations array.");
+        }
 
         const locations = settings?.hostelLocations || [];
 
@@ -17,12 +22,25 @@ export async function GET(request: NextRequest) {
         });
     } catch (error: any) {
         console.error("Error fetching locations:", error);
-        return NextResponse.json(
-            { success: false, error: error.message || "Failed to fetch locations" },
-            { status: 500 }
-        );
+        return NextResponse.json({
+            success: true,
+            locations: [],
+            count: 0
+        });
     }
 }
+
+// Helper to sync updated location list across all database adminSettings records
+const syncAllSettings = async (hostelLocations: any[]) => {
+    try {
+        const { prisma } = await import("@/lib/prisma");
+        await prisma.adminSettings.updateMany({
+            data: { hostelLocations }
+        });
+    } catch (e) {
+        console.error("Failed to sync locations across all settings rows:", e);
+    }
+};
 
 // POST - Add a new location
 export async function POST(request: NextRequest) {
@@ -51,6 +69,7 @@ export async function POST(request: NextRequest) {
         hostelLocations.push({ name, lat, lng, radius });
 
         await db.settings.update({ hostelLocations });
+        await syncAllSettings(hostelLocations);
 
         return NextResponse.json({
             success: true,
@@ -101,6 +120,7 @@ export async function PUT(request: NextRequest) {
         const hostelLocations = settings.hostelLocations.slice();
         hostelLocations[index] = { name, lat, lng, radius };
         await db.settings.update({ hostelLocations });
+        await syncAllSettings(hostelLocations);
 
         return NextResponse.json({
             success: true,
@@ -152,6 +172,7 @@ export async function DELETE(request: NextRequest) {
         const hostelLocations = settings.hostelLocations.slice();
         const deletedLocation = hostelLocations.splice(index, 1)[0];
         await db.settings.update({ hostelLocations });
+        await syncAllSettings(hostelLocations);
 
         return NextResponse.json({
             success: true,
