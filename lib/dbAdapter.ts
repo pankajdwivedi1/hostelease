@@ -538,11 +538,11 @@ const mapSettingsToCamelCase = (s: any) => {
         wardenPassword: s.warden_password || s.wardenPassword,
         wardenAccounts: s.warden_accounts || s.wardenAccounts,
         registrationFieldsConfig: s.registration_fields_config || s.registrationFieldsConfig,
-        formBuilderConfig: (Array.isArray(s.form_builder_config) && s.form_builder_config.length > 0)
+        formBuilderConfig: Array.isArray(s.form_builder_config)
             ? s.form_builder_config
-            : (Array.isArray(s.formBuilderConfig) && s.formBuilderConfig.length > 0)
+            : (Array.isArray(s.formBuilderConfig)
                 ? s.formBuilderConfig
-                : collegeTemplate,
+                : collegeTemplate),
         universityBankDetails: s.university_bank_details || s.universityBankDetails,
         hostelFeeAmount: s.hostel_fee_amount || s.hostelFeeAmount,
         paymentInstructions: s.payment_instructions || s.paymentInstructions,

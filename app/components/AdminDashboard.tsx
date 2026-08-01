@@ -3115,7 +3115,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const confirmUpdateFormBuilder = async () => {
-    if (!pendingFormBuilderChanges) return;
+    const fieldsToSave = pendingFormBuilderChanges || formBuilderFields;
+    if (!fieldsToSave) return;
 
     try {
       setIsSavingSystemSettings(true);
@@ -3123,7 +3124,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          formBuilderConfig: pendingFormBuilderChanges,
+          formBuilderConfig: fieldsToSave,
           registrationFieldsConfig: {
             ...registrationFields,
             requireUndertaking: requireUndertaking,
@@ -3133,14 +3134,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       });
       const data = await res.json();
       if (data.success) {
-        setFormBuilderFields(pendingFormBuilderChanges);
-        setSavedFormBuilderConfig(pendingFormBuilderChanges); // ⚡ NEW: Update reference on save
+        setFormBuilderFields(fieldsToSave);
+        setSavedFormBuilderConfig(fieldsToSave);
         setShowChangePreviewModal(false);
         setPendingFormBuilderChanges(null);
-        alert("Configuration updated successfully!");
+        showToast("Form Settings Saved Successfully!", "success");
+      } else {
+        showToast(data.error || "Failed to update form settings", "error");
       }
-    } catch (error) {
-      alert("Failed to update form builder");
+    } catch (error: any) {
+      showToast("Failed to update form settings: " + (error?.message || "Server Error"), "error");
     } finally {
       setIsSavingSystemSettings(false);
     }
@@ -14582,10 +14585,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       ⚠ Reset to Defaults
                     </button>
                     <button
-                      onClick={handlePreviewFormBuilderHub}
-                      className="w-full sm:w-auto px-10 py-3.5 sm:py-4 bg-gray-900 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl hover:bg-black transition-all shadow-xl active:scale-95"
+                      onClick={confirmUpdateFormBuilder}
+                      disabled={isSavingSystemSettings}
+                      className="w-full sm:w-auto px-10 py-3.5 sm:py-4 bg-gray-900 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl hover:bg-black transition-all shadow-xl active:scale-95 flex items-center justify-center gap-2"
                     >
-                      SAVE FORM SETTINGS
+                      {isSavingSystemSettings ? (
+                        <>
+                          <span className="animate-spin">⏳</span> SAVING...
+                        </>
+                      ) : (
+                        "SAVE FORM SETTINGS"
+                      )}
                     </button>
                   </div>
                 )}
