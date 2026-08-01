@@ -9,10 +9,10 @@ import { collegeTemplate } from '@/lib/formTemplates';
 export const supabase = getSupabaseAdmin();
 
 // ⚡ PRISMA MODEL FILTERS (Sanitizes data to prevent relationship/read-only write errors)
-const filterStudentForPrisma = (raw: any) => {
+const filterStudentForPrisma = (raw: any, isUpdate = false) => {
     const data = raw?.$set ? { ...raw, ...raw.$set } : (raw || {});
     const studentFields = [
-        'id', 'tenantId', 'firebaseUid', 'firebaseUID', 'name', 'email', 'phoneNumber',
+        'id', 'tenantId', 'firebaseUid', 'name', 'email', 'phoneNumber',
         'hostelName', 'roomNumber', 'dob', 'category', 'profilePicture',
         'studentStatus', 'fatherName', 'fatherNumber', 'motherName', 'motherNumber',
         'permanentAddress', 'homeState', 'erpInformation', 'erpId', 'joiningDate',
@@ -33,6 +33,20 @@ const filterStudentForPrisma = (raw: any) => {
                 filtered[key] = data[key];
             }
         }
+    }
+
+    // Standardize firebaseUid alias for Prisma schema
+    if (data.firebaseUID && !filtered.firebaseUid) {
+        filtered.firebaseUid = data.firebaseUID;
+    }
+
+    // ⚡ FIX: Prisma update fails if immutable/relational fields (tenantId, id, firebaseUid, supabaseId) are present in update data payload
+    if (isUpdate) {
+        delete filtered.tenantId;
+        delete filtered.id;
+        delete filtered.firebaseUid;
+        delete filtered.firebaseUID;
+        delete filtered.supabaseId;
     }
     return filtered;
 };
@@ -72,7 +86,7 @@ const filterSettingsForPrisma = (data: any) => {
         'adminPassword', 'wardenPassword', 'getpassPassword', 'hostelFeeAmount',
         'paymentInstructions', 'isPaymentEnabled', 'overlapRadius',
         'prioritizeAssignedHostel', 'hostelLocations', 'wardenAccounts',
-        'registrationFieldsConfig', 'formBuilderConfig', 'formBuilderVersions', 'universityBankDetails',
+        'registrationFieldsConfig', 'formBuilderConfig', 'universityBankDetails',
         'wifiWhitelist', 'hostelPrefixMap', 'enableManualAttendance', 'tenantId',
         'developerPassword', 'leaveApprovalMethod', 'notificationSettings',
         // 🛡️ Safeguard & delegation settings
@@ -1813,8 +1827,6 @@ export const db = {
                 return await db.students.getById(studentId, true);
             } else if (source === 'PRISMA') {
                 const tenantId = await getTenantIdOrThrow();
-                const prismaData = { ...filterStudentForPrisma(studentData), tenantId };
-                
                 const existing = await prisma.student.findFirst({
                     where: {
                         tenantId,
@@ -1826,15 +1838,17 @@ export const db = {
                     }
                 });
                 if (existing) {
+                    const updateDataPrisma = filterStudentForPrisma(studentData, true);
                     const result = await prisma.student.update({
                         where: { id: existing.id },
-                        data: prismaData
+                        data: updateDataPrisma
                     });
                     return result;
                 } else {
                     const newId = crypto.randomUUID();
+                    const createDataPrisma = { ...filterStudentForPrisma(studentData, false), tenantId, id: newId, firebaseUid: firebaseUID };
                     const result = await prisma.student.create({
-                        data: { ...prismaData, id: newId, firebaseUid: firebaseUID }
+                        data: createDataPrisma
                     });
                     return result;
                 }
@@ -2318,7 +2332,7 @@ export const db = {
                 }
 
                 // General Update
-                const cleanUpdate = filterStudentForPrisma(updateData);
+                const cleanUpdate = filterStudentForPrisma(updateData, true);
                 
                 try {
                     const data = await prisma.student.update({

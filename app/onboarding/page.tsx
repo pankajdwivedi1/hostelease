@@ -215,27 +215,124 @@ export default function OnboardingPage() {
             const response = await fetch(`/api/students?email=${encodeURIComponent(currentUser.email || "")}`);
             const data = await response.json();
             if (data.student) {
-              const isRegistered = data.student.isProfileLocked || 
-                                   !!data.student.firebaseUID || 
-                                   (!!data.student.name && !!data.student.hostelName && !!data.student.roomNumber);
+              const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+              const isEditMode = searchParams ? searchParams.get("mode") === "edit" : false;
 
-              if (isRegistered) {
-                console.log('[Onboarding] Student profile already registered — redirecting to dashboard');
+              // ⚡ FIX: Only redirect to dashboard if profile is explicitly LOCKED AND not in edit mode
+              const isLocked = data.student.isProfileLocked === true;
+
+              if (isLocked && !isEditMode) {
+                console.log('[Onboarding] Student profile is locked — redirecting to dashboard');
                 localStorage.setItem("userType", "student");
                 localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
                 router.push("/");
                 return;
               }
 
-              // Admin pre-created student without lock → pre-fill form, let them complete it
+              // ⚡ FIX: Pre-fill existing student details with comprehensive alias normalization
               setIsExistingStudent(true);
-              setFormData({
-                ...(data.student.dynamicFields || {}),
-                ...data.student,
-                dob: data.student.dob ? new Date(data.student.dob).toISOString().split("T")[0] : "",
-                joiningDate: data.student.joiningDate ? new Date(data.student.joiningDate).toISOString().split("T")[0] : "",
-              });
-              if (data.student.profilePicture) setCapturedImage(data.student.profilePicture);
+              const s = data.student;
+              const dyn = s.dynamicFields || {};
+              const prof = s.profile || {};
+
+              const getVal = (...keys: string[]) => {
+                for (const k of keys) {
+                  if (s[k] !== undefined && s[k] !== null && String(s[k]).trim() !== "") return String(s[k]);
+                  if (dyn[k] !== undefined && dyn[k] !== null && String(dyn[k]).trim() !== "") return String(dyn[k]);
+                  if (prof[k] !== undefined && prof[k] !== null && String(prof[k]).trim() !== "") return String(prof[k]);
+                }
+                return "";
+              };
+
+              const formatDateVal = (rawDate: any) => {
+                if (!rawDate) return "";
+                try {
+                  const d = new Date(rawDate);
+                  if (!isNaN(d.getTime())) {
+                    return d.toISOString().split("T")[0];
+                  }
+                } catch (e) {}
+                return String(rawDate).split("T")[0] || "";
+              };
+
+              const nameVal = getVal("name", "fullName", "studentName");
+              const phoneVal = getVal("phoneNumber", "phone", "mobile", "contact");
+              const emailVal = getVal("email", "emailAddress") || currentUser.email || "";
+              const genderVal = getVal("gender", "sex");
+              const dobVal = formatDateVal(getVal("dob", "dateOfBirth", "birthDate"));
+              const categoryVal = getVal("category", "socialCategory");
+              const erpVal = getVal("erpId", "erpInformation", "erp_id", "erp");
+              const collegeVal = getVal("collegeName", "college", "institute");
+              const branchVal = getVal("branch", "department");
+              const yearVal = getVal("currentYear", "year", "academicYear");
+              const semVal = getVal("semester", "sem");
+              const secVal = getVal("section", "sec");
+              const fatherNameVal = getVal("fatherName", "father_name", "fathersName");
+              const fatherPhoneVal = getVal("fatherNumber", "fatherPhone", "father_phone", "fathersPhoneNo");
+              const motherNameVal = getVal("motherName", "mother_name", "mothersName");
+              const motherPhoneVal = getVal("motherNumber", "motherPhone", "mother_phone", "mothersPhoneNo");
+              const guardianAddressVal = getVal("localGuardianAddress", "guardianAddress", "local_guardian_address");
+              const guardianPhoneVal = getVal("localGuardianPhoneNumber", "guardianPhone", "local_guardian_phone", "localGuardianPhone");
+              const homeStateVal = getVal("homeState", "state");
+              const permanentAddressVal = getVal("permanentAddress", "address");
+              const hostelVal = getVal("hostelName", "hostel");
+              const floorVal = getVal("floorNumber", "floor");
+              const roomVal = getVal("roomNumber", "room");
+              const joiningDateVal = formatDateVal(getVal("joiningDate", "doj", "joinedDate"));
+
+              const initialForm: Record<string, string> = {
+                ...dyn,
+                ...s,
+                name: nameVal,
+                fullName: nameVal,
+                studentName: nameVal,
+                phone: phoneVal,
+                phoneNumber: phoneVal,
+                mobile: phoneVal,
+                email: emailVal,
+                gender: genderVal,
+                dob: dobVal,
+                dateOfBirth: dobVal,
+                category: categoryVal,
+                socialCategory: categoryVal,
+                erpId: erpVal,
+                erpInformation: erpVal,
+                erp_id: erpVal,
+                collegeName: collegeVal,
+                college: collegeVal,
+                branch: branchVal,
+                currentYear: yearVal,
+                year: yearVal,
+                semester: semVal,
+                sem: semVal,
+                section: secVal,
+                fatherName: fatherNameVal,
+                fathersName: fatherNameVal,
+                fatherNumber: fatherPhoneVal,
+                fatherPhone: fatherPhoneVal,
+                fathersPhoneNo: fatherPhoneVal,
+                motherName: motherNameVal,
+                mothersName: motherNameVal,
+                motherNumber: motherPhoneVal,
+                motherPhone: motherPhoneVal,
+                mothersPhoneNo: motherPhoneVal,
+                localGuardianAddress: guardianAddressVal,
+                guardianAddress: guardianAddressVal,
+                localGuardianPhoneNumber: guardianPhoneVal,
+                guardianPhone: guardianPhoneVal,
+                localGuardianPhone: guardianPhoneVal,
+                homeState: homeStateVal,
+                permanentAddress: permanentAddressVal,
+                address: permanentAddressVal,
+                hostelName: hostelVal,
+                hostel: hostelVal,
+                floorNumber: floorVal,
+                roomNumber: roomVal,
+                joiningDate: joiningDateVal,
+              };
+
+              setFormData(initialForm);
+              if (s.profilePicture) setCapturedImage(s.profilePicture);
             }
             // If no student found → fresh new student, form stays blank (correct behaviour)
           } catch (error) {
@@ -461,7 +558,15 @@ export default function OnboardingPage() {
               'collegeName', 'year', 'semester', 'section', 'floorNumber',
               'localGuardianAddress', 'localGuardianPhoneNumber', 'dob',
               'category', 'deviceId', 'faceDescriptor', 'id', '_id',
-              'createdAt', 'updatedAt', 'studentStatus', 'registrationId'
+              'createdAt', 'updatedAt', 'studentStatus', 'registrationId',
+              'tenantId', 'supabaseId', 'authProvider', 'isProfileLocked',
+              'deviceHistory', 'deviceResetCount', 'permissions', 'webAuthnCredentials',
+              'thumbImpressionId', 'attendanceMode', 'createdByErpId',
+              'fullName', 'studentName', 'phone', 'mobile', 'contact', 'dateOfBirth',
+              'socialCategory', 'erpId', 'erp_id', 'college', 'currentYear', 'sem',
+              'sec', 'fathersName', 'fatherPhone', 'fathersPhoneNo', 'mothersName',
+              'motherPhone', 'mothersPhoneNo', 'guardianAddress', 'guardianPhone',
+              'localGuardianPhone', 'address', 'permanentAddress', 'hostel'
             ];
             if (!coreKeys.includes(key)) {
               acc[key] = (formData as any)[key];

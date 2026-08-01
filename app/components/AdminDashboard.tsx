@@ -6730,86 +6730,172 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
               <div className="bg-[#EFEFEF]/80 p-1.5 md:p-3 rounded-2xl border border-gray-200/50 shadow-sm mb-6 w-full space-y-1.5 md:space-y-2">
                 
-                {/* Main Navigation Tabs (3 columns on mobile, 5 columns on desktop) */}
-                <div className="grid grid-cols-3 md:grid-cols-5 gap-1 md:gap-2 w-full text-center">
-                  <button
-                    onClick={() => startTransition(() => setCurrentTab('permissions'))}
-                    className={`px-1 md:px-5 py-2 md:py-2.5 text-[10px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'permissions' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                  >
-                    Leave Permissions
-                  </button>
-                  <button
-                    onClick={() => startTransition(() => setCurrentTab('attendance'))}
-                    className={`px-1 md:px-5 py-2 md:py-2.5 text-[10px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'attendance' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                  >
-                    Attendance
-                  </button>
-                  <button
-                    onClick={() => startTransition(() => setCurrentTab('rooms'))}
-                    className={`px-1 md:px-5 py-2 md:py-2.5 text-[10px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'rooms' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                  >
-                    Visual Rooms
-                  </button>
-                  {canAddStudent && (
+                {/* 📱 MOBILE VIEW NAVIGATION TABS */}
+                <div className="md:hidden space-y-1.5">
+                  {/* Row 1 Mobile */}
+                  <div className="grid grid-cols-3 gap-1 text-center">
                     <button
-                      onClick={() => startTransition(() => setCurrentTab('add_student'))}
-                      className={`px-1 md:px-5 py-2 md:py-2.5 text-[10px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'add_student' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                      onClick={() => startTransition(() => setCurrentTab('permissions'))}
+                      className={`px-1 py-2 text-[11px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'permissions' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
                     >
-                      Add Student
+                      Leave Permissions
                     </button>
-                  )}
-                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
                     <button
-                      onClick={() => startTransition(() => setCurrentTab('alerts'))}
-                      className={`px-1 md:px-5 py-2 md:py-2.5 text-[10px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'alerts' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                      onClick={() => startTransition(() => setCurrentTab('attendance'))}
+                      className={`px-1 py-2 text-[11px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'attendance' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
                     >
-                      Security Alerts
+                      Attendance
                     </button>
-                  )}
+                    <button
+                      onClick={() => startTransition(() => setCurrentTab('rooms'))}
+                      className={`px-1 py-2 text-[11px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'rooms' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                      Visual Rooms
+                    </button>
+                    {canAddStudent && (
+                      <button
+                        onClick={() => startTransition(() => setCurrentTab('add_student'))}
+                        className={`px-1 py-2 text-[11px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'add_student' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                      >
+                        Add Student
+                      </button>
+                    )}
+                    {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
+                      <button
+                        onClick={() => startTransition(() => setCurrentTab('alerts'))}
+                        className={`px-1 py-2 text-[11px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'alerts' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                      >
+                        Security Alerts
+                      </button>
+                    )}
+                    <button
+                      onClick={() => startTransition(() => setCurrentTab('wifi_sync'))}
+                      className={`px-1 py-2 text-[11px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'wifi_sync' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                      WiFi Network
+                    </button>
+                  </div>
+
+                  {/* Row 2 Mobile: Broadcast, GATEPASS, Payments, Settings right after Payments */}
+                  <div className="grid grid-cols-4 gap-1 text-center">
+                    <button
+                      onClick={() => startTransition(() => setCurrentTab('messaging'))}
+                      className={`px-0.5 py-2 text-[10.5px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'messaging' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                      Broadcast
+                    </button>
+                    {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
+                      <button
+                        onClick={() => setShowGatepassOverlay(true)}
+                        className="px-0.5 py-2 text-[10.5px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-1 touch-manipulation active:scale-95 group"
+                      >
+                        <div className="relative flex h-1.5 w-1.5 flex-shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]"></span>
+                        </div>
+                        GATEPASS
+                      </button>
+                    )}
+                    {!isWarden && (title === "Super Admin Dashboard" || (title === "Dean Dashboard" && bankFormData.isPaymentEnabled)) && (
+                      <button
+                        onClick={() => startTransition(() => setCurrentTab('payments'))}
+                        className={`px-0.5 py-2 text-[10.5px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'payments' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                      >
+                        Payments
+                      </button>
+                    )}
+                    {!isWarden && (title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
+                      <button
+                        onClick={() => startTransition(() => setCurrentTab('settings'))}
+                        className={`px-0.5 py-2 text-[10.5px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                      >
+                        Settings
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Secondary Navigation Tabs (4 columns on mobile, 5 columns on desktop) */}
-                <div className="grid grid-cols-4 md:grid-cols-5 gap-1 md:gap-2 w-full text-center">
-                  <button
-                    onClick={() => startTransition(() => setCurrentTab('messaging'))}
-                    className={`px-0.5 md:px-5 py-2 md:py-2.5 text-[9.5px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'messaging' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                  >
-                    Broadcast
-                  </button>
-                  {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
+                {/* 💻 DESKTOP VIEW NAVIGATION TABS (5 columns - ORIGINAL UNCHANGED LAYOUT) */}
+                <div className="hidden md:block space-y-2">
+                  <div className="grid grid-cols-5 gap-2 w-full text-center">
                     <button
-                      onClick={() => setShowGatepassOverlay(true)}
-                      className="px-0.5 md:px-5 py-2 md:py-2.5 text-[9.5px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-1 touch-manipulation active:scale-95 group"
+                      onClick={() => startTransition(() => setCurrentTab('permissions'))}
+                      className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'permissions' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
                     >
-                      <div className="relative flex h-1.5 w-1.5 md:h-2 md:w-2 flex-shrink-0">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 md:h-2 md:w-2 bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]"></span>
-                      </div>
-                      GATEPASS
+                      Leave Permissions
                     </button>
-                  )}
-                  {!isWarden && (title === "Super Admin Dashboard" || (title === "Dean Dashboard" && bankFormData.isPaymentEnabled)) && (
                     <button
-                      onClick={() => startTransition(() => setCurrentTab('payments'))}
-                      className={`px-0.5 md:px-5 py-2 md:py-2.5 text-[9.5px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'payments' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                      onClick={() => startTransition(() => setCurrentTab('attendance'))}
+                      className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'attendance' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
                     >
-                      Payments
+                      Attendance
                     </button>
-                  )}
-                  <button
-                    onClick={() => startTransition(() => setCurrentTab('wifi_sync'))}
-                    className={`px-0.5 md:px-5 py-2 md:py-2.5 text-[9.5px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'wifi_sync' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                  >
-                    WiFi Network
-                  </button>
-                  {!isWarden && (title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
                     <button
-                      onClick={() => startTransition(() => setCurrentTab('settings'))}
-                      className={`px-0.5 md:px-5 py-2 md:py-2.5 text-[9.5px] sm:text-xs md:text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                      onClick={() => startTransition(() => setCurrentTab('rooms'))}
+                      className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'rooms' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
                     >
-                      Settings
+                      Visual Rooms
                     </button>
-                  )}
+                    {canAddStudent && (
+                      <button
+                        onClick={() => startTransition(() => setCurrentTab('add_student'))}
+                        className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'add_student' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                      >
+                        Add Student
+                      </button>
+                    )}
+                    {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
+                      <button
+                        onClick={() => startTransition(() => setCurrentTab('alerts'))}
+                        className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'alerts' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                      >
+                        Security Alerts
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-5 gap-2 w-full text-center">
+                    <button
+                      onClick={() => startTransition(() => setCurrentTab('messaging'))}
+                      className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'messaging' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                      Broadcast
+                    </button>
+                    {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
+                      <button
+                        onClick={() => setShowGatepassOverlay(true)}
+                        className="px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-1 touch-manipulation active:scale-95 group"
+                      >
+                        <div className="relative flex h-2 w-2 flex-shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]"></span>
+                        </div>
+                        GATEPASS
+                      </button>
+                    )}
+                    {!isWarden && (title === "Super Admin Dashboard" || (title === "Dean Dashboard" && bankFormData.isPaymentEnabled)) && (
+                      <button
+                        onClick={() => startTransition(() => setCurrentTab('payments'))}
+                        className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'payments' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                      >
+                        Payments
+                      </button>
+                    )}
+                    <button
+                      onClick={() => startTransition(() => setCurrentTab('wifi_sync'))}
+                      className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'wifi_sync' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                      WiFi Network
+                    </button>
+                    {!isWarden && (title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
+                      <button
+                        onClick={() => startTransition(() => setCurrentTab('settings'))}
+                        className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+                      >
+                        Settings
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -9122,25 +9208,33 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                   {/* Summary Metric widgets */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex flex-col justify-between shadow-sm">
-                      <span className="text-lg">🚨</span>
-                      <span className="text-2xl font-black text-slate-800 leading-none mt-2">{disciplinaryAlerts.length}</span>
-                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mt-1">Total Alerts</span>
+                    <div className="px-3 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">🚨</span>
+                        <span className="text-xl font-black text-slate-800 leading-none">{disciplinaryAlerts.length}</span>
+                      </div>
+                      <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-400 mt-1 block">Total Alerts</span>
                     </div>
-                    <div className="p-4 bg-red-50/50 border border-red-100 rounded-2xl flex flex-col justify-between shadow-sm">
-                      <span className="text-lg">👤</span>
-                      <span className="text-2xl font-black text-red-600 leading-none mt-2">{disciplinaryAlerts.filter(a => a.type === 'face').length}</span>
-                      <span className="text-[9px] font-black uppercase tracking-wider text-red-400 mt-1">Face Failures</span>
+                    <div className="px-3 py-2.5 bg-red-50/50 border border-red-100 rounded-2xl shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">👤</span>
+                        <span className="text-xl font-black text-red-600 leading-none">{disciplinaryAlerts.filter(a => a.type === 'face').length}</span>
+                      </div>
+                      <span className="text-[8.5px] font-black uppercase tracking-wider text-red-400 mt-1 block">Face Failures</span>
                     </div>
-                    <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl flex flex-col justify-between shadow-sm">
-                      <span className="text-lg">📡</span>
-                      <span className="text-2xl font-black text-indigo-600 leading-none mt-2">{disciplinaryAlerts.filter(a => a.type === 'gps').length}</span>
-                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mt-1">GPS Inaccuracies</span>
+                    <div className="px-3 py-2.5 bg-indigo-50/50 border border-indigo-100 rounded-2xl shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">📡</span>
+                        <span className="text-xl font-black text-indigo-600 leading-none">{disciplinaryAlerts.filter(a => a.type === 'gps').length}</span>
+                      </div>
+                      <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-400 mt-1 block">GPS Inaccuracies</span>
                     </div>
-                    <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-2xl flex flex-col justify-between shadow-sm">
-                      <span className="text-lg">⏳</span>
-                      <span className="text-2xl font-black text-amber-600 leading-none mt-2">{disciplinaryAlerts.filter(a => a.type === 'curfew').length}</span>
-                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mt-1">Curfew Violations</span>
+                    <div className="px-3 py-2.5 bg-amber-50/50 border border-amber-100 rounded-2xl shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">⏳</span>
+                        <span className="text-xl font-black text-amber-600 leading-none">{disciplinaryAlerts.filter(a => a.type === 'curfew').length}</span>
+                      </div>
+                      <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-400 mt-1 block">Curfew Violations</span>
                     </div>
                   </div>
 
@@ -9722,7 +9816,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                           }`}
                       >
-                        <span className="text-center leading-tight">{formatHostelDisplay(h.name)}</span>
+                        <span className="text-center leading-tight text-[10px] sm:text-xs whitespace-nowrap">{formatHostelDisplay(h.name)}</span>
                         <div className="flex items-center gap-1.5">
                           <span className="text-[9px] opacity-75">T: {count}</span>
                           <span className="text-[9px] text-green-600 font-black bg-green-50/50 px-1 rounded">P: {presentCount}</span>
@@ -9755,12 +9849,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <button
                           key={h._id || h.name}
                           onClick={() => setHostelFilter(h.name)}
-                          className={`col-span-2 sm:flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${hostelFilter === h.name
+                          className={`col-span-2 sm:flex-1 px-1 sm:px-2 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${hostelFilter === h.name
                             ? "bg-blue-600 text-background"
                             : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                             }`}
                         >
-                          <span className="text-center leading-tight">{formatHostelDisplay(h.name)}</span>
+                          <span className="text-center leading-tight text-[10px] sm:text-xs whitespace-nowrap">{formatHostelDisplay(h.name)}</span>
                           <div className="flex items-center gap-1.5">
                             <span className="text-[9px] opacity-75">T: {count}</span>
                             <span className="text-[9px] text-green-600 font-black bg-green-50/50 px-1 rounded">P: {presentCount}</span>
@@ -9775,7 +9869,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     onClick={() => setStatusFilter("all")}
                     className={`w-full sm:flex-1 px-1 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
-                    <span className="text-center leading-[1.1]">Current Student Count</span>
+                    <span className="text-center leading-[1.1]">Current Count</span>
                     <span className="text-[10px]">{studentsLoading ? "..." : statusCounts.all}</span>
                   </button>
                   <button
@@ -12848,22 +12942,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
 
                   {/* Footer Actions */}
-                  <div className="px-4 py-3 sm:px-6 sm:py-5 border-t border-slate-100 flex items-center justify-between gap-3 bg-slate-50/50 rounded-b-2xl sm:rounded-b-[28px] mt-auto">
-                    <p className="text-[9px] sm:text-xs text-slate-500 font-bold max-w-[50%] leading-tight sm:leading-normal">
+                  <div className="px-2.5 py-2 sm:px-6 sm:py-5 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 bg-slate-50/50 rounded-b-2xl sm:rounded-b-[28px] mt-auto">
+                    <p className="text-[8.5px] sm:text-xs text-slate-500 font-bold max-w-full sm:max-w-[35%] leading-tight sm:leading-normal hidden xs:block">
                       💡 Click any cell to edit directly. Hit Save Changes when done.
                     </p>
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <div className="flex flex-nowrap items-center justify-end gap-1 sm:gap-2.5 w-full sm:w-auto overflow-x-auto no-scrollbar">
                       <button
                         type="button"
                         onClick={exportBulkStudentsToExcel}
-                        className="px-3 py-1.5 sm:px-4 sm:py-2 border border-emerald-200 hover:border-emerald-300 bg-emerald-50 hover:bg-emerald-100/50 text-emerald-700 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                        className="px-1.5 py-1.5 sm:px-4 sm:py-2 border border-emerald-200 hover:border-emerald-300 bg-emerald-50 hover:bg-emerald-100/50 text-emerald-700 rounded-lg text-[8px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-0.5 sm:gap-1 active:scale-95 cursor-pointer whitespace-nowrap"
                         title="Download current grid data as Excel"
                       >
                         📤 Export Excel
                       </button>
 
                       <label
-                        className="px-3 py-1.5 sm:px-4 sm:py-2 border border-blue-200 hover:border-blue-300 bg-blue-50 hover:bg-blue-100/50 text-blue-700 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                        className="px-1.5 py-1.5 sm:px-4 sm:py-2 border border-blue-200 hover:border-blue-300 bg-blue-50 hover:bg-blue-100/50 text-blue-700 rounded-lg text-[8px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center gap-0.5 sm:gap-1 active:scale-95 cursor-pointer whitespace-nowrap"
                         title="Import student data from Excel to overwrite current grid rows"
                       >
                         📥 Import Excel
@@ -12878,19 +12972,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <button
                         type="button"
                         onClick={() => setShowBulkUpdateModal(false)}
-                        className="px-3 py-1.5 sm:px-4 sm:py-2 border border-slate-200 hover:bg-white text-slate-600 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                        className="px-1.5 py-1.5 sm:px-4 sm:py-2 border border-slate-200 hover:bg-white text-slate-600 rounded-lg text-[8px] sm:text-xs font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap"
                       >
                         Cancel
                       </button>
+
                       <button
                         type="submit"
                         disabled={isBulkUpdating}
-                        className="px-4 py-1.5 sm:px-6 sm:py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-violet-100 flex items-center gap-1 sm:gap-1.5 whitespace-nowrap active:scale-95 cursor-pointer font-bold"
+                        className="px-2 py-1.5 sm:px-6 sm:py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-[8px] sm:text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-violet-100 flex items-center gap-0.5 sm:gap-1.5 whitespace-nowrap active:scale-95 cursor-pointer font-bold"
                       >
                         {isBulkUpdating ? (
-                          <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin"></span> Saving...</>
+                          <><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin"></span> Saving...</>
                         ) : (
-                          <>💾 Save Changes ({bulkStudentsEditList.length})</>
+                          <>💾 Save ({bulkStudentsEditList.length})</>
                         )}
                       </button>
                     </div>
@@ -14585,17 +14680,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       ⚠ Reset to Defaults
                     </button>
                     <button
-                      onClick={confirmUpdateFormBuilder}
-                      disabled={isSavingSystemSettings}
-                      className="w-full sm:w-auto px-10 py-3.5 sm:py-4 bg-gray-900 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl hover:bg-black transition-all shadow-xl active:scale-95 flex items-center justify-center gap-2"
+                      onClick={handlePreviewFormBuilderHub}
+                      className="w-full sm:w-auto px-10 py-3.5 sm:py-4 bg-gray-900 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl hover:bg-black transition-all shadow-xl active:scale-95"
                     >
-                      {isSavingSystemSettings ? (
-                        <>
-                          <span className="animate-spin">⏳</span> SAVING...
-                        </>
-                      ) : (
-                        "SAVE FORM SETTINGS"
-                      )}
+                      SAVE FORM SETTINGS
                     </button>
                   </div>
                 )}

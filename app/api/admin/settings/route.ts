@@ -93,19 +93,6 @@ export async function POST(request: NextRequest) {
         
         if (formBuilderConfig) {
             updateData.formBuilderConfig = formBuilderConfig;
-            try {
-                const existingSettings = await db.settings.get();
-                const currentVersions = existingSettings?.formBuilderVersions || [];
-                const newVersion = {
-                    id: Math.random().toString(36).substring(2, 9),
-                    timestamp: new Date().toISOString(),
-                    fieldsCount: formBuilderConfig.length,
-                    config: formBuilderConfig
-                };
-                updateData.formBuilderVersions = [newVersion, ...currentVersions].slice(0, 15);
-            } catch (err) {
-                console.error("Version snapshot failure:", err);
-            }
         }
 
         if (universityBankDetails) {

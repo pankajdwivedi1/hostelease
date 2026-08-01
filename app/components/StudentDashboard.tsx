@@ -134,6 +134,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [activeHistoryTab, setActiveHistoryTab] = useState<'calendar' | 'permissions'>('calendar');
     const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
     const [selectedCalendarDay, setSelectedCalendarDay] = useState<Date | null>(new Date());
+    const [mobileProfileTab, setMobileProfileTab] = useState<'academic' | 'family' | 'personal'>('academic');
 
     // Swipe gestures for calendar month navigation
     const touchStartRef = useRef<number | null>(null);
@@ -3336,128 +3337,228 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                             {/* Detailed Student Information Section */}
                             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                                <div className="bg-gray-50/50 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                                    <h2 className="text-[12px] font-bold text-gray-800 uppercase tracking-wider">Student Profile Details</h2>
-                                    <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">Official Record</span>
+                                <div className="bg-gray-50/50 px-3.5 sm:px-6 py-3 sm:py-4 border-b border-gray-100 flex items-center justify-between">
+                                    <h2 className="text-[11px] sm:text-[12px] font-bold text-gray-800 uppercase tracking-wider">Student Profile Details</h2>
+                                    <span className="text-[9.5px] sm:text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">Official Record</span>
                                 </div>
 
-                                <div className="p-6">
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-6">
-                                        {(() => {
-                                            const defaultFields = [
-                                                { id: "name", label: "FULL NAME", visible: true, type: "text" },
-                                                { id: "gender", label: "GENDER", visible: true, type: "text" },
-                                                { id: "phoneNumber", label: "PHONE NUMBER", visible: true, type: "tel" },
-                                                { id: "dob", label: "DATE OF BIRTH", visible: true, type: "date" },
-                                                { id: "category", label: "SOCIAL CATEGORY", visible: true, type: "text" },
-                                                { id: "registrationId", label: "ERP ID", visible: true, type: "text" },
-                                                { id: "collegeName", label: "COLLEGE NAME", visible: true, type: "text" },
-                                                { id: "branch", label: "BRANCH", visible: true, type: "text" },
-                                                { id: "year", label: "CURRENT YEAR", visible: true, type: "text" },
-                                                { id: "semester", label: "SEMESTER", visible: true, type: "text" },
-                                                { id: "section", label: "SECTION", visible: true, type: "text" },
-                                                { id: "fatherName", label: "FATHER'S NAME", visible: true, type: "text" },
-                                                { id: "fatherNumber", label: "FATHER'S PHONE NO", visible: true, type: "tel" },
-                                                { id: "motherName", label: "MOTHER'S NAME", visible: true, type: "text" },
-                                                { id: "motherNumber", label: "MOTHER'S PHONE NO", visible: true, type: "tel" },
-                                                { id: "localGuardianAddress", label: "LOCAL GUARDIAN ADDRESS", visible: true, type: "text" },
-                                                { id: "localGuardianPhoneNumber", label: "LOCAL GUARDIAN PHONE", visible: true, type: "tel" },
-                                                { id: "homeState", label: "HOME STATE", visible: true, type: "text" },
-                                                { id: "permanentAddress", label: "PERMANENT ADDRESS", visible: true, type: "text" },
-                                                { id: "hostelName", label: "HOSTEL NAME", visible: true, type: "text" },
-                                                { id: "floorNumber", label: "FLOOR NUMBER", visible: true, type: "text" },
-                                                { id: "roomNumber", label: "ROOM NUMBER", visible: true, type: "text" },
-                                                { id: "joiningDate", label: "HOSTEL JOINING DATE", visible: true, type: "date" }
-                                            ];
-                                            const fieldsToRender = (formBuilderConfig && formBuilderConfig.length > 0)
-                                                ? formBuilderConfig.filter(f => f.visible && f.type !== 'image')
-                                                : defaultFields;
-
-                                            const isProfileLoading = !studentProfile;
-
-                                            return fieldsToRender.map((field) => {
-                                                let rawVal: any = "N/A";
-                                                if (studentProfile) {
-                                                    const p = studentProfile as any;
-                                                    if (p[field.id] !== undefined && p[field.id] !== null && p[field.id] !== "") {
-                                                        rawVal = p[field.id];
-                                                    } else if (p.dynamicFields && p.dynamicFields[field.id] !== undefined && p.dynamicFields[field.id] !== null && p.dynamicFields[field.id] !== "") {
-                                                        rawVal = p.dynamicFields[field.id];
-                                                    } else {
-                                                        const lowerId = field.id.toLowerCase();
-                                                        if (lowerId.includes("name") && !lowerId.includes("father") && !lowerId.includes("mother") && !lowerId.includes("college")) {
-                                                            rawVal = p.name || p.fullName || "N/A";
-                                                        } else if (lowerId === "gender") {
-                                                            rawVal = p.gender || "N/A";
-                                                        } else if (lowerId.includes("phone") && !lowerId.includes("father") && !lowerId.includes("mother") && !lowerId.includes("guardian")) {
-                                                            rawVal = p.phoneNumber || p.phone || p.studentPhone || p.mobile || "N/A";
-                                                        } else if (lowerId.includes("dob") || lowerId.includes("birth")) {
-                                                            rawVal = p.dob || p.dateOfBirth || "N/A";
-                                                        } else if (lowerId.includes("category")) {
-                                                            rawVal = p.category || p.socialCategory || "N/A";
-                                                        } else if (lowerId.includes("reg") || lowerId.includes("erp")) {
-                                                            rawVal = p.registrationId || p.erpId || p.erpInformation || "N/A";
-                                                        } else if (lowerId.includes("college")) {
-                                                            rawVal = p.collegeName || "N/A";
-                                                        } else if (lowerId === "branch") {
-                                                            rawVal = p.branch || "N/A";
-                                                        } else if (lowerId.includes("year")) {
-                                                            rawVal = p.year || p.currentYear || "N/A";
-                                                        } else if (lowerId.includes("sem")) {
-                                                            rawVal = p.semester || p.sem || "N/A";
-                                                        } else if (lowerId === "section") {
-                                                            rawVal = p.section || "N/A";
-                                                        } else if (lowerId.includes("fathername") || lowerId.includes("father'sname")) {
-                                                            rawVal = p.fatherName || "N/A";
-                                                        } else if (lowerId.includes("fathernumber") || lowerId.includes("fatherphone") || lowerId.includes("parentphone") || lowerId.includes("father'sphone")) {
-                                                            rawVal = p.fatherNumber || p.parentPhone || p.fatherPhone || p.fatherMobile || "N/A";
-                                                        } else if (lowerId.includes("mothername") || lowerId.includes("mother'sname")) {
-                                                            rawVal = p.motherName || "N/A";
-                                                        } else if (lowerId.includes("mothernumber") || lowerId.includes("motherphone") || lowerId.includes("mother'sphone")) {
-                                                            rawVal = p.motherNumber || p.motherPhone || p.motherMobile || "N/A";
-                                                        } else if (lowerId.includes("localguardianaddress")) {
-                                                            rawVal = p.localGuardianAddress || "N/A";
-                                                        } else if (lowerId.includes("localguardianphone") || lowerId.includes("guardianphone")) {
-                                                            rawVal = p.localGuardianPhoneNumber || p.localGuardianPhone || "N/A";
-                                                        } else if (lowerId.includes("homestate") || lowerId.includes("state")) {
-                                                            rawVal = p.homeState || "N/A";
-                                                        } else if (lowerId.includes("permanentaddress") || lowerId === "address") {
-                                                            rawVal = p.permanentAddress || p.address || "N/A";
-                                                        } else if (lowerId.includes("hostelname")) {
-                                                            rawVal = p.hostelName || "N/A";
-                                                        } else if (lowerId.includes("floor")) {
-                                                            rawVal = p.floorNumber || "N/A";
-                                                        } else if (lowerId.includes("room")) {
-                                                            rawVal = p.roomNumber || "N/A";
-                                                        } else if (lowerId.includes("joining") || lowerId.includes("hosteljoiningdate")) {
-                                                            rawVal = p.joiningDate || "N/A";
-                                                        }
-                                                    }
-                                                }
-
-                                                const value = (rawVal === undefined || rawVal === null || rawVal === "") ? "N/A" : (typeof rawVal === 'object' ? JSON.stringify(rawVal) : String(rawVal));
-                                                const displayValue = (field.type === 'date' || field.id === 'joiningDate' || field.id === 'dob') ? formatDate(value) : value;
-
-                                                return (
-                                                    <div key={field.id} className={['localGuardianAddress', 'permanentAddress', 'homeAddress'].includes(field.id) ? "md:col-span-2" : ""}>
-                                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{field.label}</p>
-                                                        {isProfileLoading ? (
-                                                            <div className="h-4 w-20 bg-gray-100 animate-pulse rounded mt-1"></div>
-                                                        ) : (field.type === 'tel' || field.id.toLowerCase().includes('number') || field.id.toLowerCase().includes('phone')) && value !== "N/A" ? (
-                                                            <a href={`tel:${value}`} title="Click to call" className="text-[12px] font-bold text-blue-600 hover:underline">
-                                                                {value}
-                                                            </a>
-                                                        ) : (
-                                                            <p className={`text-[12px] font-bold ${field.id === 'roomNumber' || field.id === 'floorNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
-                                                                {field.id === 'roomNumber' && value !== 'N/A' && !value.startsWith('#') ? '#' : ''}{displayValue}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                );
-                                            });
-                                        })()}
+                                <div className="p-3 sm:p-6">
+                                    {/* 📱 MOBILE CATEGORY TABS (Visible on mobile screens only) */}
+                                    <div className="flex sm:hidden items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 mb-3 gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setMobileProfileTab('academic')}
+                                            className={`flex-1 py-1.5 px-2 rounded-lg text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'academic' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
+                                        >
+                                            🎓 Academic
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setMobileProfileTab('family')}
+                                            className={`flex-1 py-1.5 px-2 rounded-lg text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'family' ? 'bg-white text-amber-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
+                                        >
+                                            👨‍👩‍👦 Family
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setMobileProfileTab('personal')}
+                                            className={`flex-1 py-1.5 px-2 rounded-lg text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'personal' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
+                                        >
+                                            📍 Personal
+                                        </button>
                                     </div>
 
+                                    {(() => {
+                                        const defaultFields = [
+                                            { id: "name", label: "FULL NAME", visible: true, type: "text" },
+                                            { id: "gender", label: "GENDER", visible: true, type: "text" },
+                                            { id: "phoneNumber", label: "PHONE NUMBER", visible: true, type: "tel" },
+                                            { id: "dob", label: "DATE OF BIRTH", visible: true, type: "date" },
+                                            { id: "category", label: "SOCIAL CATEGORY", visible: true, type: "text" },
+                                            { id: "registrationId", label: "ERP ID", visible: true, type: "text" },
+                                            { id: "collegeName", label: "COLLEGE NAME", visible: true, type: "text" },
+                                            { id: "branch", label: "BRANCH", visible: true, type: "text" },
+                                            { id: "year", label: "CURRENT YEAR", visible: true, type: "text" },
+                                            { id: "semester", label: "SEMESTER", visible: true, type: "text" },
+                                            { id: "section", label: "SECTION", visible: true, type: "text" },
+                                            { id: "fatherName", label: "FATHER'S NAME", visible: true, type: "text" },
+                                            { id: "fatherNumber", label: "FATHER'S PHONE NO", visible: true, type: "tel" },
+                                            { id: "motherName", label: "MOTHER'S NAME", visible: true, type: "text" },
+                                            { id: "motherNumber", label: "MOTHER'S PHONE NO", visible: true, type: "tel" },
+                                            { id: "localGuardianAddress", label: "LOCAL GUARDIAN ADDRESS", visible: true, type: "text" },
+                                            { id: "localGuardianPhoneNumber", label: "LOCAL GUARDIAN PHONE", visible: true, type: "tel" },
+                                            { id: "homeState", label: "HOME STATE", visible: true, type: "text" },
+                                            { id: "permanentAddress", label: "PERMANENT ADDRESS", visible: true, type: "text" },
+                                            { id: "hostelName", label: "HOSTEL NAME", visible: true, type: "text" },
+                                            { id: "floorNumber", label: "FLOOR NUMBER", visible: true, type: "text" },
+                                            { id: "roomNumber", label: "ROOM NUMBER", visible: true, type: "text" },
+                                            { id: "joiningDate", label: "HOSTEL JOINING DATE", visible: true, type: "date" }
+                                        ];
+                                        const fieldsToRender = (formBuilderConfig && formBuilderConfig.length > 0)
+                                            ? formBuilderConfig.filter(f => f.visible && f.type !== 'image')
+                                            : defaultFields;
+
+                                        const isProfileLoading = !studentProfile;
+
+                                        const getFieldValue = (field: any) => {
+                                            let rawVal: any = "N/A";
+                                            if (studentProfile) {
+                                                const p = studentProfile as any;
+                                                if (p[field.id] !== undefined && p[field.id] !== null && p[field.id] !== "") {
+                                                    rawVal = p[field.id];
+                                                } else if (p.dynamicFields && p.dynamicFields[field.id] !== undefined && p.dynamicFields[field.id] !== null && p.dynamicFields[field.id] !== "") {
+                                                    rawVal = p.dynamicFields[field.id];
+                                                } else {
+                                                    const lowerId = field.id.toLowerCase();
+                                                    if (lowerId.includes("name") && !lowerId.includes("father") && !lowerId.includes("mother") && !lowerId.includes("college")) {
+                                                        rawVal = p.name || p.fullName || "N/A";
+                                                    } else if (lowerId === "gender") {
+                                                        rawVal = p.gender || "N/A";
+                                                    } else if (lowerId.includes("phone") && !lowerId.includes("father") && !lowerId.includes("mother") && !lowerId.includes("guardian")) {
+                                                        rawVal = p.phoneNumber || p.phone || p.studentPhone || p.mobile || "N/A";
+                                                    } else if (lowerId.includes("dob") || lowerId.includes("birth")) {
+                                                        rawVal = p.dob || p.dateOfBirth || "N/A";
+                                                    } else if (lowerId.includes("category")) {
+                                                        rawVal = p.category || p.socialCategory || "N/A";
+                                                    } else if (lowerId.includes("reg") || lowerId.includes("erp")) {
+                                                        rawVal = p.registrationId || p.erpId || p.erpInformation || "N/A";
+                                                    } else if (lowerId.includes("college")) {
+                                                        rawVal = p.collegeName || "N/A";
+                                                    } else if (lowerId === "branch") {
+                                                        rawVal = p.branch || "N/A";
+                                                    } else if (lowerId.includes("year")) {
+                                                        rawVal = p.year || p.currentYear || "N/A";
+                                                    } else if (lowerId.includes("sem")) {
+                                                        rawVal = p.semester || p.sem || "N/A";
+                                                    } else if (lowerId === "section") {
+                                                        rawVal = p.section || "N/A";
+                                                    } else if (lowerId.includes("fathername") || lowerId.includes("father'sname")) {
+                                                        rawVal = p.fatherName || "N/A";
+                                                    } else if (lowerId.includes("fathernumber") || lowerId.includes("fatherphone") || lowerId.includes("parentphone") || lowerId.includes("father'sphone")) {
+                                                        rawVal = p.fatherNumber || p.parentPhone || p.fatherPhone || p.fatherMobile || "N/A";
+                                                    } else if (lowerId.includes("mothername") || lowerId.includes("mother'sname")) {
+                                                        rawVal = p.motherName || "N/A";
+                                                    } else if (lowerId.includes("mothernumber") || lowerId.includes("motherphone") || lowerId.includes("mother'sphone")) {
+                                                        rawVal = p.motherNumber || p.motherPhone || p.motherMobile || "N/A";
+                                                    } else if (lowerId.includes("localguardianaddress")) {
+                                                        rawVal = p.localGuardianAddress || "N/A";
+                                                    } else if (lowerId.includes("localguardianphone") || lowerId.includes("guardianphone")) {
+                                                        rawVal = p.localGuardianPhoneNumber || p.localGuardianPhone || "N/A";
+                                                    } else if (lowerId.includes("homestate") || lowerId.includes("state")) {
+                                                        rawVal = p.homeState || "N/A";
+                                                    } else if (lowerId.includes("permanentaddress") || lowerId === "address") {
+                                                        rawVal = p.permanentAddress || p.address || "N/A";
+                                                    } else if (lowerId.includes("hostelname")) {
+                                                        rawVal = p.hostelName || "N/A";
+                                                    } else if (lowerId.includes("floor")) {
+                                                        rawVal = p.floorNumber || "N/A";
+                                                    } else if (lowerId.includes("room")) {
+                                                        rawVal = p.roomNumber || "N/A";
+                                                    } else if (lowerId.includes("joining") || lowerId.includes("hosteljoiningdate")) {
+                                                        rawVal = p.joiningDate || "N/A";
+                                                    }
+                                                }
+                                            }
+
+                                            const value = (rawVal === undefined || rawVal === null || rawVal === "") ? "N/A" : (typeof rawVal === 'object' ? JSON.stringify(rawVal) : String(rawVal));
+                                            const displayValue = (field.type === 'date' || field.id === 'joiningDate' || field.id === 'dob') ? formatDate(value) : value;
+                                            return { value, displayValue };
+                                        };
+
+                                        return (
+                                            <>
+                                                {/* 📱 MOBILE VIEW: Filtered Grid */}
+                                                <div className="grid grid-cols-2 gap-2 sm:hidden text-xs">
+                                                    {fieldsToRender.filter(f => {
+                                                        const id = f.id.toLowerCase();
+                                                        const lbl = (f.label || '').toLowerCase();
+                                                        if (mobileProfileTab === 'academic') {
+                                                            // Exclude hostel fields from academic tab
+                                                            if (lbl.includes('hostel') || id.includes('hostel')) return false;
+                                                            return (lbl.includes('name') && !lbl.includes('father') && !lbl.includes('mother') && !lbl.includes('guardian')) ||
+                                                                (id.includes('name') && !id.includes('father') && !id.includes('mother') && !id.includes('hostel')) ||
+                                                                lbl.includes('erp') || id.includes('erp') || id.includes('reg') ||
+                                                                lbl.includes('college') || id.includes('college') ||
+                                                                lbl.includes('branch') || id.includes('branch') ||
+                                                                lbl.includes('year') || id.includes('year') ||
+                                                                lbl.includes('sem') || id.includes('sem') ||
+                                                                lbl.includes('section') || id.includes('sec') ||
+                                                                (lbl.includes('joining') && !lbl.includes('hostel')) || (id.includes('joining') && !id.includes('hostel'));
+                                                        } else if (mobileProfileTab === 'family') {
+                                                            return lbl.includes('father') || id.includes('father') ||
+                                                                lbl.includes('mother') || id.includes('mother') ||
+                                                                lbl.includes('guardian') || id.includes('guardian');
+                                                        } else {
+                                                            // Personal tab — explicitly include permanentAddress & address fields (not guardian)
+                                                            const isPhone = (lbl.includes('phone') || id.includes('phone')) && !lbl.includes('father') && !lbl.includes('mother') && !lbl.includes('guardian');
+                                                            const isAddress = (lbl.includes('address') || id.includes('address') || lbl.includes('permanent') || id.includes('permanent')) && !lbl.includes('guardian') && !id.includes('guardian');
+                                                            return isPhone || isAddress ||
+                                                                lbl.includes('gender') || id.includes('gender') ||
+                                                                lbl.includes('birth') || lbl.includes('dob') || id.includes('dob') ||
+                                                                lbl.includes('category') || id.includes('category') ||
+                                                                lbl.includes('state') || id.includes('state') ||
+                                                                lbl.includes('hostel') || id.includes('hostel') ||
+                                                                lbl.includes('floor') || id.includes('floor') ||
+                                                                lbl.includes('room') || id.includes('room');
+                                                        }
+                                                    }).sort((a, b) => {
+                                                        const lblA = (a.label || '').toLowerCase();
+                                                        const lblB = (b.label || '').toLowerCase();
+                                                        const aIsAddress = lblA.includes('address') || lblA.includes('permanent') || a.id.toLowerCase().includes('address') || a.id.toLowerCase().includes('permanent');
+                                                        const bIsAddress = lblB.includes('address') || lblB.includes('permanent') || b.id.toLowerCase().includes('address') || b.id.toLowerCase().includes('permanent');
+                                                        if (aIsAddress && !bIsAddress) return 1;
+                                                        if (!aIsAddress && bIsAddress) return -1;
+                                                        return 0;
+                                                    }).map((field) => {
+                                                        const { value, displayValue } = getFieldValue(field);
+                                                        const lbl = (field.label || '').toLowerCase();
+                                                        const isLongField = lbl.includes('address') || lbl.includes('permanent') || field.id.toLowerCase().includes('address') || String(displayValue).length > 20;
+
+                                                        return (
+                                                            <div key={field.id} className={`flex flex-col bg-slate-50/80 border border-slate-100 p-2 rounded-lg ${isLongField ? "col-span-2 bg-amber-50/30 border-amber-100" : ""}`}>
+                                                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{field.label}</p>
+                                                                {isProfileLoading ? (
+                                                                    <div className="h-4 w-16 bg-gray-100 animate-pulse rounded mt-1"></div>
+                                                                ) : (field.type === 'tel' || field.id.toLowerCase().includes('number') || field.id.toLowerCase().includes('phone')) && value !== "N/A" ? (
+                                                                    <a href={`tel:${value}`} title="Click to call" className="text-[11px] font-black text-blue-600 hover:underline flex items-center gap-1">
+                                                                        <span>📞</span> {displayValue}
+                                                                    </a>
+                                                                ) : (
+                                                                    <p className={`text-[11px] font-extrabold break-words ${field.id === 'roomNumber' || field.id === 'floorNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
+                                                                        {field.id === 'roomNumber' && value !== 'N/A' && !value.startsWith('#') ? '#' : ''}{displayValue}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+
+                                                {/* 💻 DESKTOP/TABLET VIEW: Full Grid */}
+                                                <div className="hidden sm:grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-6">
+                                                    {fieldsToRender.map((field) => {
+                                                        const { value, displayValue } = getFieldValue(field);
+
+                                                        return (
+                                                            <div key={field.id} className={['localGuardianAddress', 'permanentAddress', 'homeAddress'].includes(field.id) ? "md:col-span-2" : ""}>
+                                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{field.label}</p>
+                                                                {isProfileLoading ? (
+                                                                    <div className="h-4 w-20 bg-gray-100 animate-pulse rounded mt-1"></div>
+                                                                ) : (field.type === 'tel' || field.id.toLowerCase().includes('number') || field.id.toLowerCase().includes('phone')) && value !== "N/A" ? (
+                                                                    <a href={`tel:${value}`} title="Click to call" className="text-[12px] font-bold text-blue-600 hover:underline">
+                                                                        {value}
+                                                                    </a>
+                                                                ) : (
+                                                                    <p className={`text-[12px] font-bold ${field.id === 'roomNumber' || field.id === 'floorNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
+                                                                        {field.id === 'roomNumber' && value !== 'N/A' && !value.startsWith('#') ? '#' : ''}{displayValue}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             </div>
 
@@ -4638,7 +4739,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 </div>
                             </div>
 
-                            <div className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-4 md:p-6">
+                            <div className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-1 sm:p-4 md:p-6">
 
                                 {/* ⚡ MANDATORY UPDATE WARNING */}
                                 {missingRequiredFields.length > 0 && (
@@ -4667,58 +4768,201 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 )}
 
                                 <div className="space-y-4">
-                                    <div className="flex flex-col items-center gap-3 md:gap-4">
-                                        <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0">
-                                            {studentProfile.profilePicture ? (
-                                                <img
-                                                    src={studentProfile.profilePicture}
-                                                    alt={studentProfile.name}
-                                                    className="w-full h-full rounded-full object-cover"
-                                                />
-                                            ) : (
-                                                getInitials(studentProfile.name)
-                                            )}
-                                        </div>
-                                        <div className="text-center space-y-2">
-                                            <div className="flex flex-col items-center gap-1">
-                                                <p className="text-base font-semibold text-foreground">{studentProfile.name}</p>
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${studentProfile.studentStatus === 'out' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}`}>
-                                                    {studentProfile.studentStatus || 'in'}
+                                    {/* 💳 Smart Student ID Badge Header (Light Abstract Card Style) */}
+                                    <div className="bg-gradient-to-r from-orange-50/80 via-amber-50/40 to-blue-50/60 border border-orange-200/80 rounded-2xl p-2.5 sm:p-4 text-slate-900 shadow-sm relative">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex-1 space-y-1 min-w-0">
+                                                <span className="inline-block text-[8px] sm:text-[9px] font-black uppercase tracking-widest bg-orange-100/80 text-orange-800 px-2.5 py-0.5 rounded-full border border-orange-200">
+                                                    Digital Hostel ID Pass
                                                 </span>
-                                            </div>
-                                            <p className="text-sm text-secondary">{studentProfile.email}</p>
-
-                                            {studentProfile.registrationId && (
-                                                <div className="mt-4 flex flex-col items-center gap-2 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                                                    <p className="text-xs font-black text-blue-600 tracking-widest uppercase">Registration ID</p>
-                                                    <p className="text-lg font-black text-gray-900 leading-none">{studentProfile.registrationId}</p>
-                                                    <div className="scale-[0.85] py-2">
-                                                        <Barcode
-                                                            value={studentProfile.registrationId}
-                                                            width={1.5}
-                                                            height={50}
-                                                            fontSize={12}
-                                                            background="#ffffff"
-                                                            lineColor="#000000"
-                                                            displayValue={false}
-                                                        />
+                                                <h3 className="text-[10px] sm:text-xs font-black uppercase tracking-tight leading-tight text-slate-500 truncate">ORIENTAL GROUP OF INSTITUTES</h3>
+                                                <div className="pt-0.5">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <h2 className="text-sm sm:text-base font-black text-slate-900 leading-tight truncate">{studentProfile.name}</h2>
+                                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${studentProfile.studentStatus === 'out' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>
+                                                            ● {studentProfile.studentStatus || 'IN'}
+                                                        </span>
                                                     </div>
+                                                    <p className="text-[9.5px] text-slate-500 font-semibold truncate mt-0.5">{studentProfile.email}</p>
                                                 </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
-                                        {formBuilderConfig.filter(f => f.visible && f.type !== 'image').map((field) => {
-                                            const value = (studentProfile as any)[field.id] || studentProfile.dynamicFields?.[field.id] || "N/A";
-                                            const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? formatDate(value) : value;
+                                            </div>
 
-                                            return (
-                                                <div key={field.id} className="flex flex-col">
-                                                    <p className="text-secondary mb-1">{field.label}</p>
-                                                    <p className="text-foreground font-medium">{displayValue}</p>
+                                            {/* 🖼️ Square Border Photo on Top Right Corner */}
+                                            <div className="w-16 h-20 sm:w-20 sm:h-24 rounded-xl border-2 border-white bg-slate-900 text-white flex items-center justify-center font-black text-base flex-shrink-0 overflow-hidden shadow-md ring-2 ring-orange-200/60">
+                                                {studentProfile.profilePicture ? (
+                                                    <img
+                                                        src={studentProfile.profilePicture}
+                                                        alt={studentProfile.name}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                ) : (
+                                                    getInitials(studentProfile.name)
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* 🏢 Single Line for Hostel, Room, College & Branch (No Background Box) */}
+                                        <div className="mt-2.5 pt-0.5 flex items-center justify-between gap-1 sm:gap-2 overflow-x-auto no-scrollbar text-slate-700">
+                                            <div className="flex items-center gap-1 min-w-0">
+                                                <span className="text-[8px]">🏢</span>
+                                                <span className="text-[9px] sm:text-[10px] font-extrabold whitespace-nowrap text-slate-800">{studentProfile.hostelName || "BOYS HOSTEL"}</span>
+                                            </div>
+                                            <span className="text-slate-300 text-[9px]">|</span>
+                                            <div className="flex items-center gap-1 min-w-0">
+                                                <span className="text-[8px]">🚪</span>
+                                                <span className="text-[9px] sm:text-[10px] font-extrabold whitespace-nowrap text-slate-800">{studentProfile.roomNumber ? `ROOM #${studentProfile.roomNumber}` : "ROOM N/A"}</span>
+                                            </div>
+                                            <span className="text-slate-300 text-[9px]">|</span>
+                                            <div className="flex items-center gap-1 min-w-0">
+                                                <span className="text-[8px]">🎓</span>
+                                                <span className="text-[9px] sm:text-[10px] font-extrabold whitespace-nowrap text-slate-800">{studentProfile.collegeName || "OIST"}</span>
+                                            </div>
+                                            <span className="text-slate-300 text-[9px]">|</span>
+                                            <div className="flex items-center gap-1 min-w-0">
+                                                <span className="text-[8px]">📚</span>
+                                                <span className="text-[9px] sm:text-[10px] font-extrabold whitespace-nowrap text-slate-800">{studentProfile.branch || "CS"} ({studentProfile.semester || "4TH SEM"})</span>
+                                            </div>
+                                        </div>
+
+                                        {/* 🎟️ Compact Integrated Barcode Strip */}
+                                        {studentProfile.registrationId && (
+                                            <div className="mt-2.5 bg-white border border-slate-200/80 text-slate-900 rounded-xl p-2 flex items-center justify-between gap-2 shadow-sm">
+                                                <div className="flex flex-col justify-center pl-1 min-w-0">
+                                                    <span className="text-[7.5px] font-black text-orange-600 uppercase tracking-widest">Registration ID</span>
+                                                    <span className="text-[11px] sm:text-xs font-black text-slate-900 tracking-wider truncate">{studentProfile.registrationId}</span>
                                                 </div>
-                                            );
-                                        })}
+                                                <div className="scale-[0.8] sm:scale-90 flex-shrink-0 flex items-center justify-end overflow-hidden max-h-[34px]">
+                                                    <Barcode
+                                                        value={studentProfile.registrationId}
+                                                        width={1.2}
+                                                        height={30}
+                                                        fontSize={10}
+                                                        background="transparent"
+                                                        lineColor="#1e293b"
+                                                        displayValue={false}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* 📋 Detailed Student Profile Attributes Grid */}
+                                    <div className="bg-white border border-slate-200 rounded-2xl p-2.5 sm:p-4 shadow-sm space-y-2.5">
+                                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                            <h4 className="text-[10px] sm:text-xs font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
+                                                📋 Official Student Record
+                                            </h4>
+                                            <span className="text-[9px] font-extrabold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                                                Verified
+                                            </span>
+                                        </div>
+
+                                        {/* 📱 MOBILE CATEGORY TABS (Visible on mobile screens only) */}
+                                        <div className="flex sm:hidden items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 mb-2.5 gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setMobileProfileTab('academic')}
+                                                className={`flex-1 py-1.5 px-2 rounded-lg text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'academic' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
+                                            >
+                                                🎓 Academic
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setMobileProfileTab('family')}
+                                                className={`flex-1 py-1.5 px-2 rounded-lg text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'family' ? 'bg-white text-amber-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
+                                            >
+                                                👨‍👩‍👦 Family
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setMobileProfileTab('personal')}
+                                                className={`flex-1 py-1.5 px-2 rounded-lg text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${mobileProfileTab === 'personal' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'}`}
+                                            >
+                                                📍 Personal
+                                            </button>
+                                        </div>
+
+                                        {/* 📱 MOBILE VIEW: Filtered by Selected Category Tab */}
+                                        <div className="grid grid-cols-2 gap-2 sm:hidden text-xs">
+                                            {formBuilderConfig.filter(f => {
+                                                if (!f.visible || f.type === 'image') return false;
+                                                const id = f.id.toLowerCase();
+                                                const lbl = (f.label || '').toLowerCase();
+                                                if (mobileProfileTab === 'academic') {
+                                                    if (lbl.includes('hostel') || id.includes('hostel')) return false;
+                                                    return (lbl.includes('name') && !lbl.includes('father') && !lbl.includes('mother') && !lbl.includes('guardian')) ||
+                                                        (id.includes('name') && !id.includes('father') && !id.includes('mother') && !id.includes('hostel')) ||
+                                                        lbl.includes('erp') || id.includes('erp') ||
+                                                        lbl.includes('college') || id.includes('college') ||
+                                                        lbl.includes('branch') || id.includes('branch') ||
+                                                        lbl.includes('year') || id.includes('year') ||
+                                                        lbl.includes('sem') || id.includes('sem') ||
+                                                        lbl.includes('section') || id.includes('sec');
+                                                } else if (mobileProfileTab === 'family') {
+                                                    return lbl.includes('father') || id.includes('father') ||
+                                                        lbl.includes('mother') || id.includes('mother') ||
+                                                        lbl.includes('guardian') || id.includes('guardian');
+                                                } else {
+                                                    // Personal
+                                                    const isPhone = (lbl.includes('phone') || id.includes('phone')) && !lbl.includes('father') && !lbl.includes('mother') && !lbl.includes('guardian');
+                                                    const isAddress = (lbl.includes('address') || id.includes('address') || lbl.includes('permanent') || id.includes('permanent')) && !lbl.includes('guardian') && !id.includes('guardian');
+                                                    return isPhone || isAddress ||
+                                                        lbl.includes('gender') || id.includes('gender') ||
+                                                        lbl.includes('birth') || lbl.includes('dob') || id.includes('dob') ||
+                                                        lbl.includes('category') || id.includes('category') ||
+                                                        lbl.includes('state') || id.includes('state') ||
+                                                        lbl.includes('hostel') || id.includes('hostel');
+                                                }
+                                            }).sort((a, b) => {
+                                                const lblA = (a.label || '').toLowerCase();
+                                                const lblB = (b.label || '').toLowerCase();
+                                                const aIsAddress = lblA.includes('address') || lblA.includes('permanent') || a.id.toLowerCase().includes('address') || a.id.toLowerCase().includes('permanent');
+                                                const bIsAddress = lblB.includes('address') || lblB.includes('permanent') || b.id.toLowerCase().includes('address') || b.id.toLowerCase().includes('permanent');
+                                                if (aIsAddress && !bIsAddress) return 1;
+                                                if (!aIsAddress && bIsAddress) return -1;
+                                                return 0;
+                                            }).map((field) => {
+                                                const value = (studentProfile as any)[field.id] || studentProfile.dynamicFields?.[field.id] || "N/A";
+                                                const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? formatDate(value) : value;
+                                                const isLongField = field.id.toLowerCase().includes('address') || String(displayValue).length > 25;
+                                                const isPhoneField = field.id.toLowerCase().includes('phone') || field.id.toLowerCase().includes('number');
+
+                                                return (
+                                                    <div 
+                                                        key={field.id} 
+                                                        className={`flex flex-col bg-slate-50/80 border border-slate-100 p-2 rounded-lg ${isLongField ? 'col-span-2 bg-amber-50/30 border-amber-100' : ''}`}
+                                                    >
+                                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{field.label}</p>
+                                                        {isPhoneField && value && value !== "N/A" ? (
+                                                            <a href={`tel:${value}`} className="text-blue-600 font-black break-words text-[11px] leading-relaxed flex items-center gap-1">
+                                                                <span>📞</span> {displayValue}
+                                                            </a>
+                                                        ) : (
+                                                            <p className="text-slate-800 font-extrabold break-words text-[11px] leading-relaxed">{displayValue}</p>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* 💻 DESKTOP/TABLET VIEW: Full 2-Column Grid */}
+                                        <div className="hidden sm:grid grid-cols-2 gap-2.5 text-xs">
+                                            {formBuilderConfig.filter(f => f.visible && f.type !== 'image').map((field) => {
+                                                const value = (studentProfile as any)[field.id] || studentProfile.dynamicFields?.[field.id] || "N/A";
+                                                const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? formatDate(value) : value;
+                                                const isLongField = field.id.toLowerCase().includes('address') || String(displayValue).length > 25;
+
+                                                return (
+                                                    <div 
+                                                        key={field.id} 
+                                                        className={`flex flex-col bg-slate-50/80 border border-slate-100 p-2.5 rounded-lg ${isLongField ? 'col-span-2 bg-amber-50/30 border-amber-100' : ''}`}
+                                                    >
+                                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{field.label}</p>
+                                                        <p className="text-slate-800 font-extrabold break-words text-xs leading-relaxed">{displayValue}</p>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -4762,7 +5006,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         </button>
 
                                         <button
-                                            onClick={() => router.push("/onboarding")}
+                                            onClick={() => router.push("/onboarding?mode=edit")}
                                             className="w-full px-4 py-3 rounded-lg bg-foreground text-background text-sm font-medium hover:bg-[#383838] transition-colors"
                                         >
                                             Edit Profile
