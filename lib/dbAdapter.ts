@@ -291,13 +291,18 @@ const mapStudentToCamelCase = (s: any) => {
         updatedAt: s.updated_at || s.updatedAt,
         tenantId: s.tenant_id || s.tenantId,
         gender: (() => {
-            if (s.gender) return s.gender;
-            if (profile?.gender) return profile.gender;
+            const rawG = s.gender || profile?.gender;
+            if (rawG && typeof rawG === 'string' && rawG.trim()) return rawG.trim();
             const df = s.dynamic_fields || s.dynamicFields || security?.dynamic_fields || security?.dynamicFields || {};
-            if (df.gender) return df.gender;
+            if (df.gender && typeof df.gender === 'string' && df.gender.trim()) return df.gender.trim();
             const genderKey = Object.keys(df).find(k => k.startsWith('name_copy_1782065596117') || k.toLowerCase().includes('gender') || k.toLowerCase().includes('sex') || k.startsWith('name_copy_'));
-            if (genderKey) return df[genderKey];
-            return "";
+            if (genderKey && df[genderKey] && String(df[genderKey]).trim()) return String(df[genderKey]).trim();
+            
+            // Smart fallback based on hostel name
+            const h = (s.hostel_name || s.hostelName || "").toLowerCase();
+            if (h.includes("boy") || h.includes("ghb")) return "MALE";
+            if (h.includes("girl")) return "FEMALE";
+            return "MALE";
         })(),
 
         // Profile Table fields or fallback
@@ -1248,8 +1253,12 @@ export const db = {
                     }
                 }
 
+                const customFormConfig = targetRows.find(s => Array.isArray(s.form_builder_config) && s.form_builder_config.length > 0)?.form_builder_config
+                    || targetRows.find(s => Array.isArray(s.formBuilderConfig) && s.formBuilderConfig.length > 0)?.formBuilderConfig;
+
                 const mergedSettings = {
                     ...bestRow,
+                    form_builder_config: (customFormConfig && customFormConfig.length > 0) ? customFormConfig : (bestRow.form_builder_config || bestRow.formBuilderConfig || []),
                     wifi_whitelist: wifiMap.size > 0 ? Array.from(wifiMap.values()) : (bestRow.wifi_whitelist || bestRow.wifiWhitelist || []),
                     hostel_locations: (bestRow.hostel_locations || bestRow.hostelLocations || []).length > 0
                         ? (bestRow.hostel_locations || bestRow.hostelLocations)
