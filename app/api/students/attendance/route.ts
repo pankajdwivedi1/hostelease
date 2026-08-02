@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
                 wl.bssids.some((b: string) => b.toUpperCase().trim() === normalizedBSSID)
             );
 
-            if ((studentHostelWifi && storedBSSIDs.includes(normalizedBSSID)) || isGlobalBSSID || wifiBSSID.length > 0) {
+            if ((studentHostelWifi && storedBSSIDs.includes(normalizedBSSID)) || isGlobalBSSID) {
                 isLocationVerified = true;
                 verifiedBy = 'wifi';
                 const label = isGlobalBSSID
@@ -433,7 +433,7 @@ export async function POST(request: NextRequest) {
             location: {
                 lat: lat || 0,
                 lng: lng || 0,
-                accuracy: verifiedBy === 'gps' ? (bodyAccuracy || 0) : 0
+                accuracy: bodyAccuracy || 0
             },
             deviceId: deviceId,
             status: "present" as const,

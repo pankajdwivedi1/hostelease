@@ -2527,7 +2527,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         lng: longitude,
                         accuracy: position.coords.accuracy,
                         deviceId: deviceId,
-                        wifiBSSID: isOnCampusWifi ? "CAMPUS_WIFI_CONNECTED" : "CAMPUS_NETWORK",
+                        wifiBSSID: isOnCampusWifi ? "CAMPUS_WIFI_CONNECTED" : "",
                         isLocationVerified: isAtHostel || isOnCampusWifi,
                         // Face matching results (0% Storage - only numbers stored)
                         faceMatchPercentage: faceResult.percentage,

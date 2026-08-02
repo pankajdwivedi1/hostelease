@@ -717,6 +717,7 @@ interface StudentDetails {
   fatherNumber?: string;
   motherName?: string;
   motherNumber?: string;
+  permanentAddress?: string;
   homePinCode?: string;
   erpInformation?: string;
   joiningDate?: string;
@@ -1955,8 +1956,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         }
       }
       setAuthorizedHostels(authHostels);
-      setHostelFilter("all"); // Default to all authorized for wardens
-      setAttendanceHostelFilter("all");
+      const initialHostel = (getHostelCategory(hostelName) || hostelName).trim();
+      setHostelFilter(initialHostel);
+      setAttendanceHostelFilter(initialHostel);
 
       // Set dynamic dashboard title for wardens
       if (authHostels.length > 1) {
@@ -3935,7 +3937,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               // If cache is fresh and not forced, return immediately
               if (!forceRefresh && timestamp) {
                 const age = Date.now() - parseInt(timestamp);
-                const needsUpgrade = parsed[0].floorNumber === undefined;
+                const needsUpgrade = parsed[0].floorNumber === undefined || parsed[0].permanentAddress === undefined || parsed[0].fatherName === undefined;
                 const CACHE_FRESH_DURATION = 5 * 60 * 1000; // 5 minutes
                 if (!needsUpgrade && age < CACHE_FRESH_DURATION) {
                   setStudentsLoading(false);
@@ -3973,7 +3975,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           fatherNumber: s.fatherNumber,
           motherName: s.motherName,
           motherNumber: s.motherNumber,
-          homePinCode: s.homePinCode,
+          permanentAddress: s.permanentAddress || s.homePinCode,
+          homePinCode: s.permanentAddress || s.homePinCode,
           erpInformation: s.erpInformation,
           joiningDate: s.joiningDate,
           branch: s.branch,
@@ -4919,7 +4922,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     setSelectedExportColumns([
       'sno', 'studentName', 'mobile', 'regId', 'erpId', 'hostel', 'room', 'college', 'branch', 'year', 'semester', 'fatherName', 'fatherMobile', 'motherName', 'motherMobile'
     ]);
-    const data = filteredStudents.map((s, idx) => {
+    let targetList = filteredStudents;
+    if (isWarden && authorizedHostels.length > 0) {
+      targetList = filteredStudents.filter(s => {
+        const rawName = s.hostelName || (s as any).hostel_name || "";
+        const hName = (getHostelCategory(rawName) || rawName).trim().toLowerCase();
+        return authorizedHostels.some(ah => (getHostelCategory(ah) || ah).trim().toLowerCase() === hName);
+      });
+    }
+    const data = targetList.map((s, idx) => {
       const erpIdValue = s.erpInformation || (s as any).erpId || (s as any).enrollmentNo || (s as any).erp_id || "N/A";
       const fatherNameVal = s.fatherName || (s as any).father_name || (s as any).fatherName || "N/A";
       const fatherMobileVal = s.fatherNumber || (s as any).father_number || (s as any).fatherMobile || (s as any).fatherPhone || "N/A";
@@ -4984,7 +4995,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         });
 
         let targetStudents = students;
-        if (attendanceHostelFilter !== 'all') {
+        if (isWarden && authorizedHostels.length > 0) {
+          targetStudents = students.filter(s => {
+            const rawName = s.hostelName || (s as any).hostel_name || "";
+            const hName = (getHostelCategory(rawName) || rawName).trim().toLowerCase();
+            return authorizedHostels.some(ah => (getHostelCategory(ah) || ah).trim().toLowerCase() === hName);
+          });
+        } else if (attendanceHostelFilter !== 'all') {
           targetStudents = students.filter(s => {
             const rawName = s.hostelName || (s as any).hostel_name || "";
             const hName = (getHostelCategory(rawName) || rawName).trim().toLowerCase();
@@ -5048,7 +5065,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
     if (option === 'present') {
       let logsToExport = filteredAttendanceLogs;
-      if (attendanceHostelFilter !== 'all') {
+      if (isWarden && authorizedHostels.length > 0) {
+        logsToExport = attendanceLogs.filter(log => {
+          const studentHostel = (getHostelCategory(log.hostelName || "") || log.hostelName || "").toLowerCase();
+          return authorizedHostels.some(ah => (getHostelCategory(ah) || ah).toLowerCase() === studentHostel);
+        });
+      } else if (attendanceHostelFilter !== 'all') {
         logsToExport = attendanceLogs.filter(log => {
           const studentHostel = getHostelCategory(log.hostelName || "") || log.hostelName || "";
           return studentHostel.toLowerCase() === attendanceHostelFilter.toLowerCase();
@@ -5060,9 +5082,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         logsToExport.map(log => typeof log.studentId === 'string' ? log.studentId : (log.studentId?._id || log.studentId?.id))
       );
       targetStudents = students.filter(s => presentStudentIds.has(s.id));
+      if (isWarden && authorizedHostels.length > 0) {
+        targetStudents = targetStudents.filter(s => {
+          const rawName = s.hostelName || (s as any).hostel_name || "";
+          const hName = (getHostelCategory(rawName) || rawName).trim().toLowerCase();
+          return authorizedHostels.some(ah => (getHostelCategory(ah) || ah).trim().toLowerCase() === hName);
+        });
+      }
     } else if (option === 'absent') {
       let filteredAbsentees = absentees;
-      if (attendanceHostelFilter !== 'all') {
+      if (isWarden && authorizedHostels.length > 0) {
+        filteredAbsentees = absentees.filter(s => {
+          const rawName = s.hostelName || (s as any).hostel_name || "";
+          const hName = (getHostelCategory(rawName) || rawName).trim().toLowerCase();
+          return authorizedHostels.some(ah => (getHostelCategory(ah) || ah).trim().toLowerCase() === hName);
+        });
+      } else if (attendanceHostelFilter !== 'all') {
         filteredAbsentees = absentees.filter(s => {
           const rawName = s.hostelName || (s as any).hostel_name || "";
           const hName = (getHostelCategory(rawName) || rawName).trim().toLowerCase();
@@ -5072,7 +5107,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       targetStudents = filteredAbsentees;
     } else if (option === 'all') {
       let filteredStudents = students;
-      if (attendanceHostelFilter !== 'all') {
+      if (isWarden && authorizedHostels.length > 0) {
+        filteredStudents = students.filter(s => {
+          const rawName = s.hostelName || (s as any).hostel_name || "";
+          const hName = (getHostelCategory(rawName) || rawName).trim().toLowerCase();
+          return authorizedHostels.some(ah => (getHostelCategory(ah) || ah).trim().toLowerCase() === hName);
+        });
+      } else if (attendanceHostelFilter !== 'all') {
         filteredStudents = students.filter(s => {
           const rawName = s.hostelName || (s as any).hostel_name || "";
           const hName = (getHostelCategory(rawName) || rawName).trim().toLowerCase();
@@ -5135,13 +5176,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const activeHeaders = Object.keys(sampleRow);
       const lastColIdx = Math.max(activeHeaders.length - 1, 0);
 
-      const hostelTitle = attendanceHostelFilter && attendanceHostelFilter !== "all"
-        ? formatHostelDisplay(attendanceHostelFilter).toUpperCase()
-        : "ALL HOSTELS";
+      const hostelTitle = isWarden && wardenHostelName
+        ? formatHostelDisplay(wardenHostelName).toUpperCase()
+        : (attendanceHostelFilter && attendanceHostelFilter !== "all"
+            ? formatHostelDisplay(attendanceHostelFilter).toUpperCase()
+            : "ALL HOSTELS");
+
+      const userTypeLabel = isWarden && wardenHostelName
+        ? `${wardenHostelName.toUpperCase()} WARDEN DASHBOARD`
+        : (isWarden ? "WARDEN DASHBOARD" : (title ? title.toUpperCase() : "SUPER ADMIN DASHBOARD"));
 
       const titleRow = [`HOSTELEAZE - MULTI-DAY ATTENDANCE REGISTER MATRIX (${selectedDate} TO ${selectedEndDate})`].concat(Array(lastColIdx).fill(""));
       const infoRow1 = [`HOSTEL SCOPE: ${hostelTitle}   •   TOTAL STUDENTS: ${exportPreviewData.length}   •   PERIOD: ${selectedDate} TO ${selectedEndDate}`].concat(Array(lastColIdx).fill(""));
-      const infoRow2 = [`GENERATED DATE: ${new Date().toLocaleDateString('en-IN')}   •   SYSTEM: SUPER ADMIN DASHBOARD`].concat(Array(lastColIdx).fill(""));
+      const infoRow2 = [`GENERATED DATE: ${new Date().toLocaleDateString('en-IN')}   •   SYSTEM: ${userTypeLabel}`].concat(Array(lastColIdx).fill(""));
       const emptyRow = Array(activeHeaders.length).fill("");
 
       const dataRows = exportPreviewData.map((row: any) => {
@@ -5247,7 +5294,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         }
       }
 
-      const fileName = `attendance_matrix_${attendanceHostelFilter}_${selectedDate}_to_${selectedEndDate}.xlsx`;
+      const fileHostelTag = isWarden && wardenHostelName
+        ? wardenHostelName.replace(/\s+/g, '_')
+        : attendanceHostelFilter;
+      const fileName = `attendance_matrix_${fileHostelTag}_${selectedDate}_to_${selectedEndDate}.xlsx`;
       XLSXStyle.utils.book_append_sheet(wbMatrix, wsMatrix, "Attendance Register");
       XLSXStyle.writeFile(wbMatrix, fileName);
       setShowExportPreview(false);
@@ -5262,9 +5312,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       // Create Informative Header Banner Rows (Fully Merged Across Table Width)
       const activeSelectedHostel = isAttendance ? attendanceHostelFilter : hostelFilter;
-      const hostelTitle = activeSelectedHostel && activeSelectedHostel !== "all" 
-        ? formatHostelDisplay(activeSelectedHostel).toUpperCase() 
-        : "ALL HOSTELS";
+      const hostelTitle = isWarden && wardenHostelName
+        ? formatHostelDisplay(wardenHostelName).toUpperCase()
+        : (activeSelectedHostel && activeSelectedHostel !== "all" 
+            ? formatHostelDisplay(activeSelectedHostel).toUpperCase() 
+            : "ALL HOSTELS");
+
+      const userTypeLabel = isWarden && wardenHostelName
+        ? `${wardenHostelName.toUpperCase()} WARDEN DASHBOARD`
+        : (isWarden ? "WARDEN DASHBOARD" : (title ? title.toUpperCase() : "SUPER ADMIN DASHBOARD"));
+
       const lastColIdx = Math.max(activeHeaders.length - 1, 0);
 
       const titleBannerText = isAttendance
@@ -5273,7 +5330,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       const titleRow = [titleBannerText].concat(Array(lastColIdx).fill(""));
       const infoRow1 = [`HOSTEL SCOPE: ${hostelTitle}   •   TOTAL RECORDS: ${exportPreviewData.length} STUDENTS`].concat(Array(lastColIdx).fill(""));
-      const infoRow2 = [`REPORT DATE: ${isAttendance ? selectedDate : new Date().toLocaleDateString('en-IN')}   •   SYSTEM: SUPER ADMIN DASHBOARD`].concat(Array(lastColIdx).fill(""));
+      const infoRow2 = [`REPORT DATE: ${isAttendance ? selectedDate : new Date().toLocaleDateString('en-IN')}   •   SYSTEM: ${userTypeLabel}`].concat(Array(lastColIdx).fill(""));
       const emptyRow = Array(activeHeaders.length).fill("");
 
       const dataRows = exportPreviewData.map((row: any) => {
@@ -5369,8 +5426,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
 
       const sheetName = isAttendance ? "Attendance Report" : "Students Directory";
+      const exportHostelTag = isWarden && wardenHostelName
+        ? wardenHostelName.replace(/\s+/g, '_')
+        : attendanceHostelFilter;
       const fileName = isAttendance 
-        ? `daily_attendance_${exportOption}_${attendanceHostelFilter}_${selectedDate}.xlsx` 
+        ? `daily_attendance_${exportOption}_${exportHostelTag}_${selectedDate}.xlsx` 
         : `students_directory_${new Date().toISOString().slice(0, 10)}.xlsx`;
 
       XLSXStyle.utils.book_append_sheet(wb2, ws2, sheetName);
@@ -6728,175 +6788,110 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
               )}
 
-              <div className="bg-[#EFEFEF]/80 p-1.5 md:p-3 rounded-2xl border border-gray-200/50 shadow-sm mb-6 w-full space-y-1.5 md:space-y-2">
-                
-                {/* 📱 MOBILE VIEW NAVIGATION TABS */}
-                <div className="md:hidden space-y-1.5">
-                  {/* Row 1 Mobile */}
-                  <div className="grid grid-cols-3 gap-1 text-center">
-                    <button
-                      onClick={() => startTransition(() => setCurrentTab('permissions'))}
-                      className={`px-1 py-2 text-[11px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'permissions' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      Leave Permissions
-                    </button>
-                    <button
-                      onClick={() => startTransition(() => setCurrentTab('attendance'))}
-                      className={`px-1 py-2 text-[11px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'attendance' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      Attendance
-                    </button>
-                    <button
-                      onClick={() => startTransition(() => setCurrentTab('rooms'))}
-                      className={`px-1 py-2 text-[11px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'rooms' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      Visual Rooms
-                    </button>
-                    {canAddStudent && (
-                      <button
-                        onClick={() => startTransition(() => setCurrentTab('add_student'))}
-                        className={`px-1 py-2 text-[11px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'add_student' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                      >
-                        Add Student
-                      </button>
-                    )}
-                    {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
-                      <button
-                        onClick={() => startTransition(() => setCurrentTab('alerts'))}
-                        className={`px-1 py-2 text-[11px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'alerts' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                      >
-                        Security Alerts
-                      </button>
-                    )}
-                    <button
-                      onClick={() => startTransition(() => setCurrentTab('wifi_sync'))}
-                      className={`px-1 py-2 text-[11px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'wifi_sync' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      WiFi Network
-                    </button>
-                  </div>
+              <div className="bg-[#EFEFEF]/80 p-1.5 md:p-3 rounded-2xl border border-gray-200/50 shadow-sm mb-6 w-full">
+                {(() => {
+                  const navTabsList = [
+                    { id: 'permissions', label: 'Leave Permissions' },
+                    { id: 'attendance', label: 'Attendance' },
+                    { id: 'rooms', label: 'Visual Rooms' },
+                    ...(canAddStudent ? [{ id: 'add_student', label: 'Add Student' }] : []),
+                    { id: 'messaging', label: 'Broadcast' },
+                    { id: 'wifi_sync', label: 'WiFi Network' },
+                    ...((title === "Super Admin Dashboard" || title === "Dean Dashboard") ? [{ id: 'alerts', label: 'Security Alerts' }] : []),
+                    ...((title === "Super Admin Dashboard" || title === "Dean Dashboard") ? [{ id: 'gatepass', label: 'GATEPASS' }] : []),
+                    ...(!isWarden && (title === "Super Admin Dashboard" || (title === "Dean Dashboard" && bankFormData.isPaymentEnabled)) ? [{ id: 'payments', label: 'Payments' }] : []),
+                    ...(!isWarden && (title === "Super Admin Dashboard" || title === "Dean Dashboard") ? [{ id: 'settings', label: 'Settings' }] : [])
+                  ];
 
-                  {/* Row 2 Mobile: Broadcast, GATEPASS, Payments, Settings right after Payments */}
-                  <div className="grid grid-cols-4 gap-1 text-center">
-                    <button
-                      onClick={() => startTransition(() => setCurrentTab('messaging'))}
-                      className={`px-0.5 py-2 text-[10.5px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'messaging' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      Broadcast
-                    </button>
-                    {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
+                  // Desktop 2-row split
+                  const halfLen = Math.ceil(navTabsList.length / 2);
+                  const firstRowTabs = navTabsList.slice(0, halfLen);
+                  const secondRowTabs = navTabsList.slice(halfLen);
+
+                  // Mobile Explicit 3-row layout as marked:
+                  // Row 1 (Red): Leave Permissions, Attendance, Visual Rooms (3 buttons)
+                  // Row 2 (Blue): Add Student, Broadcast, WiFi Network (3 buttons)
+                  // Row 3 (Black): Security Alerts, GATEPASS, Payments, Settings (4 buttons)
+                  const mRow1 = [
+                    { id: 'permissions', label: 'Leave Permissions' },
+                    { id: 'attendance', label: 'Attendance' },
+                    { id: 'rooms', label: 'Visual Rooms' }
+                  ];
+                  const mRow2 = [
+                    ...(canAddStudent ? [{ id: 'add_student', label: 'Add Student' }] : []),
+                    { id: 'messaging', label: 'Broadcast' },
+                    { id: 'wifi_sync', label: 'WiFi Network' }
+                  ];
+                  const mRow3 = [
+                    ...((title === "Super Admin Dashboard" || title === "Dean Dashboard") ? [{ id: 'alerts', label: 'Security Alerts' }] : []),
+                    ...((title === "Super Admin Dashboard" || title === "Dean Dashboard") ? [{ id: 'gatepass', label: 'GATEPASS' }] : []),
+                    ...(!isWarden && (title === "Super Admin Dashboard" || (title === "Dean Dashboard" && bankFormData.isPaymentEnabled)) ? [{ id: 'payments', label: 'Payments' }] : []),
+                    ...(!isWarden && (title === "Super Admin Dashboard" || title === "Dean Dashboard") ? [{ id: 'settings', label: 'Settings' }] : [])
+                  ];
+
+                  const renderTabButton = (tab: { id: string; label: string }, isMobile: boolean) => {
+                    const isGatepass = tab.id === 'gatepass';
+                    const isActive = currentTab === tab.id;
+                    return (
                       <button
-                        onClick={() => setShowGatepassOverlay(true)}
-                        className="px-0.5 py-2 text-[10.5px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-1 touch-manipulation active:scale-95 group"
+                        key={tab.id}
+                        onClick={() => {
+                          if (isGatepass) {
+                            setShowGatepassOverlay(true);
+                          } else {
+                            startTransition(() => setCurrentTab(tab.id));
+                          }
+                        }}
+                        className={`w-full ${
+                          isMobile ? 'px-0.5 sm:px-1 py-1 text-[10px] sm:text-[11px] min-h-[28px]' : 'px-3 py-2.5 text-xs lg:text-sm'
+                        } font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 flex items-center justify-center gap-1 ${
+                          isGatepass
+                            ? 'text-blue-600 hover:bg-blue-50 group'
+                            : isActive
+                              ? 'bg-white text-blue-600 shadow-sm border border-gray-100'
+                              : 'text-gray-400 hover:text-gray-700'
+                        }`}
                       >
-                        <div className="relative flex h-1.5 w-1.5 flex-shrink-0">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]"></span>
+                        {isGatepass && (
+                          <div className="relative flex h-1.5 w-1.5 md:h-2 md:w-2 flex-shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 md:h-2 md:w-2 bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]"></span>
+                          </div>
+                        )}
+                        <span className="truncate">{tab.label}</span>
+                      </button>
+                    );
+                  };
+
+                  return (
+                    <div className="space-y-1 md:space-y-2">
+                      {/* 📱 MOBILE VIEW NAVIGATION TABS (EXACT 3-ROW MARKED LAYOUT) */}
+                      <div className="md:hidden space-y-0.5">
+                        <div className="grid gap-1 text-center" style={{ gridTemplateColumns: `repeat(${mRow1.length}, minmax(0, 1fr))` }}>
+                          {mRow1.map(t => renderTabButton(t, true))}
                         </div>
-                        GATEPASS
-                      </button>
-                    )}
-                    {!isWarden && (title === "Super Admin Dashboard" || (title === "Dean Dashboard" && bankFormData.isPaymentEnabled)) && (
-                      <button
-                        onClick={() => startTransition(() => setCurrentTab('payments'))}
-                        className={`px-0.5 py-2 text-[10.5px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'payments' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                      >
-                        Payments
-                      </button>
-                    )}
-                    {!isWarden && (title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
-                      <button
-                        onClick={() => startTransition(() => setCurrentTab('settings'))}
-                        className={`px-0.5 py-2 text-[10.5px] font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                      >
-                        Settings
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* 💻 DESKTOP VIEW NAVIGATION TABS (5 columns - ORIGINAL UNCHANGED LAYOUT) */}
-                <div className="hidden md:block space-y-2">
-                  <div className="grid grid-cols-5 gap-2 w-full text-center">
-                    <button
-                      onClick={() => startTransition(() => setCurrentTab('permissions'))}
-                      className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'permissions' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      Leave Permissions
-                    </button>
-                    <button
-                      onClick={() => startTransition(() => setCurrentTab('attendance'))}
-                      className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'attendance' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      Attendance
-                    </button>
-                    <button
-                      onClick={() => startTransition(() => setCurrentTab('rooms'))}
-                      className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'rooms' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      Visual Rooms
-                    </button>
-                    {canAddStudent && (
-                      <button
-                        onClick={() => startTransition(() => setCurrentTab('add_student'))}
-                        className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'add_student' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                      >
-                        Add Student
-                      </button>
-                    )}
-                    {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
-                      <button
-                        onClick={() => startTransition(() => setCurrentTab('alerts'))}
-                        className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'alerts' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                      >
-                        Security Alerts
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-5 gap-2 w-full text-center">
-                    <button
-                      onClick={() => startTransition(() => setCurrentTab('messaging'))}
-                      className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'messaging' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      Broadcast
-                    </button>
-                    {(title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
-                      <button
-                        onClick={() => setShowGatepassOverlay(true)}
-                        className="px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-1 touch-manipulation active:scale-95 group"
-                      >
-                        <div className="relative flex h-2 w-2 flex-shrink-0">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]"></span>
+                        <div className="grid gap-1 text-center" style={{ gridTemplateColumns: `repeat(${mRow2.length}, minmax(0, 1fr))` }}>
+                          {mRow2.map(t => renderTabButton(t, true))}
                         </div>
-                        GATEPASS
-                      </button>
-                    )}
-                    {!isWarden && (title === "Super Admin Dashboard" || (title === "Dean Dashboard" && bankFormData.isPaymentEnabled)) && (
-                      <button
-                        onClick={() => startTransition(() => setCurrentTab('payments'))}
-                        className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'payments' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                      >
-                        Payments
-                      </button>
-                    )}
-                    <button
-                      onClick={() => startTransition(() => setCurrentTab('wifi_sync'))}
-                      className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'wifi_sync' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      WiFi Network
-                    </button>
-                    {!isWarden && (title === "Super Admin Dashboard" || title === "Dean Dashboard") && (
-                      <button
-                        onClick={() => startTransition(() => setCurrentTab('settings'))}
-                        className={`px-5 py-2.5 text-sm font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 ${currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-                      >
-                        Settings
-                      </button>
-                    )}
-                  </div>
-                </div>
+                        {mRow3.length > 0 && (
+                          <div className="grid gap-1 text-center" style={{ gridTemplateColumns: `repeat(${mRow3.length}, minmax(0, 1fr))` }}>
+                            {mRow3.map(t => renderTabButton(t, true))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 💻 DESKTOP VIEW NAVIGATION TABS (2 BALANCED ROWS JUSTIFIED LEFT-RIGHT & CENTERED) */}
+                      <div className="hidden md:block space-y-2">
+                        <div className="grid gap-2 w-full text-center" style={{ gridTemplateColumns: `repeat(${firstRowTabs.length}, minmax(0, 1fr))` }}>
+                          {firstRowTabs.map(t => renderTabButton(t, false))}
+                        </div>
+                        <div className="grid gap-2 w-full text-center" style={{ gridTemplateColumns: `repeat(${secondRowTabs.length}, minmax(0, 1fr))` }}>
+                          {secondRowTabs.map(t => renderTabButton(t, false))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className={currentTab === 'permissions' ? 'block space-y-6' : 'hidden'}>
@@ -7279,21 +7274,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               value={attendanceHostelFilter}
                               onChange={(e) => {
                                 const val = e.target.value;
-                                // Normalize selection before setting state
                                 const normalized = val === 'all' ? 'all' : (getHostelCategory(val) || val);
                                 setAttendanceHostelFilter(normalized);
                               }}
                               disabled={isWarden && authorizedHostels.length <= 1}
                               className={`bg-blue-50 border-0 text-blue-900 px-3 py-2 rounded-xl font-bold text-xs focus:ring-0 focus:outline-none h-9 ${isWarden && authorizedHostels.length <= 1 ? 'opacity-70 cursor-not-allowed' : ''}`}
                             >
-                              <option value="all">All Hostels</option>
-                              {Object.keys(hostelStats).map((hostelName) => {
-                                // Normalize the display name and value
-                                const normalizedName = getHostelCategory(hostelName) || hostelName;
-                                return (
-                                  <option key={hostelName} value={normalizedName}>{normalizedName}</option>
-                                );
-                              })}
+                              {!isWarden && <option value="all">All Hostels</option>}
+                              {Object.keys(hostelStats)
+                                .filter(hName => {
+                                  if (!isWarden) return true;
+                                  if (authorizedHostels.length === 0) return true;
+                                  const cat = (getHostelCategory(hName) || hName).toLowerCase();
+                                  return authorizedHostels.some(ah => (getHostelCategory(ah) || ah).toLowerCase() === cat);
+                                })
+                                .map((hostelName) => {
+                                  const normalizedName = getHostelCategory(hostelName) || hostelName;
+                                  return (
+                                    <option key={hostelName} value={normalizedName}>{normalizedName}</option>
+                                  );
+                                })}
                             </select>
                             <button
                               onClick={exportAttendanceToExcel}
@@ -7564,18 +7564,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             <table className="w-full text-left table-fixed border-collapse">
                               <thead className="bg-[#fcfcfc] text-secondary font-bold uppercase text-[8px] md:text-[9px] border-b border-gray-100">
                                 <tr>
-                                  <th className="px-2 md:px-4 py-3 w-[50%] md:w-[35%]">Student</th>
-                                  <th className="px-2 md:px-4 py-3 w-[25%] md:w-[25%] hidden md:table-cell">Hostel/Room</th>
-                                  <th className="px-2 md:px-4 py-3 w-[25%] md:w-[12%] text-center">Time</th>
+                                  <th className="px-2 md:px-4 py-3 w-[40%] md:w-[25%]">Student</th>
+                                  <th className="px-2 md:px-4 py-3 w-[20%] md:w-[15%] hidden md:table-cell">ERP ID</th>
+                                  <th className="px-2 md:px-4 py-3 w-[20%] md:w-[20%] hidden md:table-cell">Hostel/Room</th>
+                                  <th className="px-2 md:px-4 py-3 w-[20%] md:w-[12%] text-center">Time</th>
                                   <th className="px-2 md:px-4 py-3 w-[15%] md:w-[13%] text-center hidden md:table-cell">Face</th>
-                                  <th className="px-2 md:px-4 py-3 w-[25%] md:w-[15%] text-right whitespace-nowrap">Dist / Acc</th>
+                                  <th className="px-2 md:px-4 py-3 w-[20%] md:w-[15%] text-right whitespace-nowrap">Dist / Acc</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-50">
                                 {attendanceLogsLoading ? (
-                                  <tr key="loading-entry-logs"><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">Refreshing database...</td></tr>
+                                  <tr key="loading-entry-logs"><td colSpan={6} className="px-4 py-12 text-center text-secondary italic text-xs">Refreshing database...</td></tr>
                                 ) : filteredAttendanceLogs.length === 0 ? (
-                                  <tr key="empty-entry-logs"><td colSpan={4} className="px-4 py-12 text-center text-secondary italic text-xs">No entries found for {selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? `${(() => { const [h, m] = (attendanceTimeSettings.startTime || '21:00').split(':'); const hr = parseInt(h, 10); return `${hr % 12 || 12}:${m || '00'} ${hr >= 12 ? 'PM' : 'AM'}`; })()} onwards` : selectedDate}.</td></tr>
+                                  <tr key="empty-entry-logs"><td colSpan={6} className="px-4 py-12 text-center text-secondary italic text-xs">No entries found for {selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? `${(() => { const [h, m] = (attendanceTimeSettings.startTime || '21:00').split(':'); const hr = parseInt(h, 10); return `${hr % 12 || 12}:${m || '00'} ${hr >= 12 ? 'PM' : 'AM'}`; })()} onwards` : selectedDate}.</td></tr>
                                 ) : (
                                   (showAllEntryLogs ? filteredAttendanceLogs : filteredAttendanceLogs.slice(0, 10)).map((log, idx) => (
                                     <tr key={log._id || log.id || `log-${idx}-${typeof log.studentId === 'object' ? (log.studentId?._id || log.studentId?.id) : log.studentId}`} className="hover:bg-filler/50 transition-colors">
@@ -7584,7 +7585,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           <span className="font-bold text-gray-900 text-[9px] md:text-[13px] uppercase truncate tracking-tight">{log.name || log.studentId?.name || "Unknown"}</span>
                                           <div className="md:hidden flex flex-col mt-0.5">
                                             <span className="text-[8px] font-bold uppercase truncate text-gray-400">
-                                              {log.hostelName || log.studentId?.hostelName || "N/A"} - {log.roomNumber || log.studentId?.roomNumber || "N/A"}
+                                              {(() => { const student = students.find(s => s.id === (typeof log.studentId === 'string' ? log.studentId : (log.studentId?._id || log.studentId?.id))); const erp = student?.erpInformation || student?.erpId || (typeof log.studentId === 'object' ? (log.studentId?.erpInformation || log.studentId?.erpId) : null) || log.erpId || log.erpInformation; return erp ? `${erp} • ` : ''; })()}{log.hostelName || log.studentId?.hostelName || "N/A"} - {log.roomNumber || log.studentId?.roomNumber || "N/A"}
                                             </span>
                                             {((typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null) || log.markedBy || log.deviceId) && (
                                               <span
@@ -7602,6 +7603,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             )}
                                           </div>
                                         </div>
+                                      </td>
+                                      <td className="px-2 md:px-4 py-3 text-secondary text-[9px] md:text-xs truncate font-mono font-bold hidden md:table-cell">
+                                        {(() => {
+                                            const student = students.find(s => s.id === (typeof log.studentId === 'string' ? log.studentId : (log.studentId?._id || log.studentId?.id)));
+                                            return student?.erpInformation || student?.erpId || (typeof log.studentId === 'object' ? (log.studentId?.erpInformation || log.studentId?.erpId) : null) || log.erpId || log.erpInformation || "N/A";
+                                        })()}
                                       </td>
                                       <td className="px-2 md:px-4 py-3 text-secondary text-[9px] md:text-xs truncate hidden md:table-cell">
                                         {log.hostelName || log.studentId?.hostelName || "N/A"} - {log.roomNumber || log.studentId?.roomNumber || "N/A"}
@@ -7930,15 +7937,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             Face: {log.faceMatchPercentage}%
                                           </span>
                                         )}
-                                        {log.location?.accuracy ? (
-                                          <span className={`text-[10px] font-black ${log.location?.accuracy < 50 ? "text-green-600" : "text-amber-500"}`}>
-                                            GPS: {Math.round(log.location.accuracy)}m
-                                          </span>
-                                        ) : (log.markedBy || log.deviceId === 'marked-by-warden' || log.deviceId === 'marked-by-dean' || log.deviceId === 'admin-override') ? (
-                                           <span className="text-[9px] text-green-500 font-bold">Acc: N/A</span>
-                                         ) : (
-                                           <span className="text-[9px] text-emerald-600 font-bold">Campus WiFi</span>
-                                         )}
+                                        {(() => {
+                                           const isAuthorityMarked = Boolean(log.markedBy || log.deviceId === 'marked-by-warden' || log.deviceId === 'marked-by-dean' || log.deviceId === 'marked-by-admin' || log.deviceId === 'admin-override');
+                                           const hasAccuracy = Boolean(log.location?.accuracy && log.location.accuracy > 0);
+
+                                           if (hasAccuracy) {
+                                             return (
+                                               <span className={`text-[10px] font-black ${log.location.accuracy < 50 ? "text-green-600" : "text-amber-500"}`}>
+                                                 GPS, Acc: {Math.round(log.location.accuracy)}m
+                                               </span>
+                                             );
+                                           }
+                                           if (isAuthorityMarked) {
+                                             return (
+                                               <span className="text-[9px] text-green-500 font-bold">Acc: N/A</span>
+                                             );
+                                           }
+                                           return (
+                                             <span className="text-[9px] text-emerald-600 font-bold">Campus WiFi</span>
+                                           );
+                                         })()}
                                         {(log.markedBy || log.deviceId === 'marked-by-warden' || log.deviceId === 'marked-by-dean' || log.deviceId === 'admin-override') && (
                                           <span className="text-[9px] text-purple-600 font-black uppercase">Manual Entry</span>
                                         )}
@@ -9784,15 +9802,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
                 </div>
 
-                <div className="grid grid-cols-6 sm:flex sm:flex-nowrap gap-2 md:gap-3">
+                <div className="flex flex-row flex-wrap sm:flex-nowrap gap-1.5 sm:gap-3 items-stretch">
                   <button
                     onClick={() => setHostelFilter("all")}
-                    className={`col-span-3 sm:flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${hostelFilter === "all"
+                    className={`flex-1 sm:flex-1 min-w-[110px] px-2 py-1 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[36px] ${hostelFilter === "all"
                       ? "bg-blue-600 text-background"
                       : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                       }`}
                   >
-                    <span className="text-center leading-[1.1]">Total Registered Students</span>
+                    <span className="text-center leading-[1.1]">Registered Students</span>
                     <span className="text-[10px] opacity-90">{studentsLoading ? "..." : totalHostelStudents.length}</span>
                   </button>
 
@@ -9811,7 +9829,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <button
                         key={h._id || h.name}
                         onClick={() => setHostelFilter(h.name)}
-                        className={`col-span-3 sm:flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${hostelFilter === h.name
+                        className={`flex-1 sm:flex-1 min-w-[110px] px-2 py-1 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[36px] ${hostelFilter === h.name
                           ? "bg-blue-600 text-background"
                           : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                           }`}
@@ -9849,7 +9867,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <button
                           key={h._id || h.name}
                           onClick={() => setHostelFilter(h.name)}
-                          className={`col-span-2 sm:flex-1 px-1 sm:px-2 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${hostelFilter === h.name
+                          className={`flex-1 sm:flex-1 min-w-[110px] px-1 sm:px-2 py-1 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[36px] ${hostelFilter === h.name
                             ? "bg-blue-600 text-background"
                             : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                             }`}
@@ -9862,63 +9880,63 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </button>
                       );
                     })}
+
+                  <button
+                    onClick={exportToExcel}
+                    disabled={studentsLoading}
+                    className="flex-1 sm:flex-none px-2 sm:px-3 py-1 rounded-lg bg-green-600 hover:bg-green-700 active:scale-95 text-white text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 min-h-[36px] shadow-sm cursor-pointer whitespace-nowrap"
+                    title="Export Excel with Column Selector"
+                  >
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>Export Excel</span>
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-3 sm:flex sm:flex-nowrap gap-2 md:gap-3 items-center">
+                <div className="grid grid-cols-3 sm:flex sm:flex-nowrap gap-2 md:gap-3 items-stretch">
                   <button
                     onClick={() => setStatusFilter("all")}
-                    className={`w-full sm:flex-1 px-1 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 h-[44px] px-1 py-1 rounded-lg text-[10px] sm:text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
-                    <span className="text-center leading-[1.1]">Current Count</span>
+                    <span className="text-center leading-tight">Current Count</span>
                     <span className="text-[10px]">{studentsLoading ? "..." : statusCounts.all}</span>
                   </button>
                   <button
                     onClick={() => setStatusFilter("in")}
-                    className={`w-full sm:flex-1 px-1 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[50px] ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 h-[44px] px-1 py-1 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
                     <span>In</span>
                     <span className="text-[10px]">{studentsLoading ? "..." : statusCounts.in}</span>
                   </button>
                   <button
                     onClick={() => setStatusFilter("out")}
-                    className={`w-full sm:flex-1 px-1 py-1.5 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-between min-h-[50px] ${statusFilter === "out" ? "bg-blue-600 text-background shadow-md shadow-blue-200" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 h-[44px] px-1 py-1 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-between ${statusFilter === "out" ? "bg-blue-600 text-background shadow-md shadow-blue-200" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
-                    <div className="flex flex-col items-center gap-0.5">
+                    <div className="flex flex-col items-center gap-0.5 pt-0.5">
                       <span className="leading-none">Out ({studentsLoading ? "..." : statusCounts.out})</span>
                     </div>
 
                     {!studentsLoading && (
-                      <div className="w-full flex items-center justify-center border-t border-[rgba(0,0,0,0.1)] mt-1 pt-1 text-[8px] uppercase tracking-tighter font-black">
-                        <div className="flex-1 flex flex-col items-center border-r border-[rgba(0,0,0,0.05)]">
-                          <span className={statusFilter === "out" ? "text-white" : "text-[#7f8c8d]"}>H-Leave: {statusCounts.leave}</span>
+                      <div className="w-full flex items-center justify-center border-t border-[rgba(0,0,0,0.12)] pt-0.5 pb-0.5 text-[8px] uppercase tracking-wider font-black">
+                        <div className="flex-1 flex flex-col items-center border-r border-[rgba(0,0,0,0.08)]">
+                          <span className={statusFilter === "out" ? "text-white opacity-95" : "text-slate-800"}>H-Leave: {statusCounts.leave}</span>
                         </div>
                         <div className="flex-1 flex flex-col items-center">
-                          <span className={statusFilter === "out" ? "text-white" : "text-[#7f8c8d]"}>G-Pass: {statusCounts.pass}</span>
+                          <span className={statusFilter === "out" ? "text-white opacity-95" : "text-slate-800"}>G-Pass: {statusCounts.pass}</span>
                         </div>
                       </div>
                     )}
                   </button>
-                  {showRemoveButton && (
-                    <button
-                      onClick={exportToExcel}
-                      disabled={studentsLoading}
-                      className={`w-full sm:flex-1 px-3 md:px-4 py-1.5 md:py-2 rounded-lg bg-green-600 text-white font-medium transition-colors hover:bg-green-700 text-sm whitespace-nowrap flex items-center justify-center gap-1.5 ${studentsLoading ? "opacity-50 cursor-not-allowed" : ""}`}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      {studentsLoading ? "Loading..." : "Export Excel"}
-                    </button>
-                  )}
                 </div>
 
                 {/* ⚡ NEW: Warden Bulk Attendance Actions */}
                 {enableManualAttendance && !studentsLoading && filteredStudents.length > 0 && (statusFilter === 'all' || statusFilter === 'in') && (
-                  <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 p-3 bg-blue-50/50 rounded-2xl border border-blue-100">
-                    <div className="flex items-center gap-2">
+                  <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-3 p-2.5 sm:p-3 bg-blue-50/50 rounded-xl sm:rounded-2xl border border-blue-100">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
                       <input
                         type="checkbox"
-                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                         checked={selectedStudentIds.length > 0 && filteredStudents.filter(s => s.studentStatus !== 'out').every(s => selectedStudentIds.includes(s.id))}
                         onChange={(e) => {
                           if (e.target.checked) {
@@ -9931,10 +9949,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           }
                         }}
                       />
-                      <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest">Select All</span>
+                      <span className="text-[9px] sm:text-[10px] font-bold text-blue-800 uppercase tracking-wider sm:tracking-widest">Select All</span>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-center sm:justify-end gap-1.5 sm:gap-2 w-full sm:w-auto">
                       {(() => {
                         const toMark = selectedStudentIds.filter(id => !presentStudentIds.includes(id) && students.find(s => s.id === id)?.studentStatus !== 'out');
                         const toUnmark = selectedStudentIds.filter(id => presentStudentIds.includes(id));
@@ -9949,7 +9967,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   .map(s => s.id);
                                 if (eligible.length > 0) handleMarkBulkAttendance(eligible);
                               }}
-                              className="px-4 py-1.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-sm shadow-indigo-200 disabled:opacity-50"
+                              className="px-2.5 py-1 sm:px-4 sm:py-1.5 bg-indigo-600 text-white rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-bold uppercase tracking-wider sm:tracking-widest hover:bg-indigo-700 transition-all shadow-sm shadow-indigo-200 disabled:opacity-50"
                             >
                               {isBulkMarking ? "Processing..." : "Mark All Unmarked"}
                             </button>
@@ -9958,7 +9976,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <button
                                 disabled={isBulkMarking}
                                 onClick={() => handleMarkBulkAttendance(toMark)}
-                                className="px-4 py-1.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-all shadow-sm shadow-green-200 disabled:opacity-50"
+                                className="px-2.5 py-1 sm:px-4 sm:py-1.5 bg-green-600 text-white rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-bold uppercase tracking-wider sm:tracking-widest hover:bg-green-700 transition-all shadow-sm shadow-green-200 disabled:opacity-50"
                               >
                                 Mark Selected ({toMark.length})
                               </button>
@@ -9968,7 +9986,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <button
                                 disabled={isBulkMarking}
                                 onClick={() => handleUnmarkBulkAttendance(toUnmark)}
-                                className="px-4 py-1.5 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-sm shadow-red-200 disabled:opacity-50"
+                                className="px-2.5 py-1 sm:px-4 sm:py-1.5 bg-red-600 text-white rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-bold uppercase tracking-wider sm:tracking-widest hover:bg-red-700 transition-all shadow-sm shadow-red-200 disabled:opacity-50"
                               >
                                 Unmark Selected ({toUnmark.length})
                               </button>
@@ -10012,7 +10030,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   setBulkStudentsEditList(selectedData);
                                   setShowBulkUpdateModal(true);
                                 }}
-                                className="px-4 py-1.5 bg-violet-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-violet-700 transition-all shadow-sm shadow-violet-200"
+                                className="px-2.5 py-1 sm:px-4 sm:py-1.5 bg-violet-600 text-white rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-bold uppercase tracking-wider sm:tracking-widest hover:bg-violet-700 transition-all shadow-sm shadow-violet-200"
                               >
                                 ✏️ Bulk Update ({selectedStudentIds.length})
                               </button>
@@ -10026,11 +10044,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                 {/* ⚡ NEW: Bulk Campus Status Toggle for "OUT" Students */}
                 {!studentsLoading && (statusFilter === 'out' || selectedStudentIds.some(id => students.find(s => s.id === id)?.studentStatus === 'out')) && (
-                  <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 p-3 bg-indigo-50/50 rounded-2xl border border-indigo-100 italic font-medium">
-                    <div className="flex items-center gap-2">
+                  <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-3 p-2.5 sm:p-3 bg-indigo-50/50 rounded-xl sm:rounded-2xl border border-indigo-100 italic font-medium">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
                       <input
                         type="checkbox"
-                        className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         checked={selectedStudentIds.length > 0 && filteredStudents.filter(s => s.studentStatus === 'out').every(s => selectedStudentIds.includes(s.id))}
                         onChange={(e) => {
                           if (e.target.checked) {
@@ -10043,10 +10061,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           }
                         }}
                       />
-                      <span className="text-[10px] font-black text-indigo-800 uppercase tracking-widest">Select All (Out Students)</span>
+                      <span className="text-[9px] sm:text-[10px] font-bold text-indigo-800 uppercase tracking-wider sm:tracking-widest">Select All (Out Students)</span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-center sm:justify-end gap-1.5 sm:gap-2 w-full sm:w-auto">
                       <button
                         disabled={isBulkMarking}
                         onClick={() => {
@@ -10055,7 +10073,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             .map(s => s.id);
                           if (eligible.length > 0) handleBulkManualToggle(eligible);
                         }}
-                        className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-sm shadow-blue-200 disabled:opacity-50"
+                        className="px-2.5 py-1 sm:px-4 sm:py-1.5 bg-blue-600 text-white rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-bold uppercase tracking-wider sm:tracking-widest hover:bg-blue-700 transition-all shadow-sm shadow-blue-200 disabled:opacity-50"
                       >
                         {isBulkMarking ? "Processing..." : "Mark All as IN (Campus)"}
                       </button>
@@ -10064,7 +10082,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <button
                           disabled={isBulkMarking}
                           onClick={() => handleBulkManualToggle(selectedStudentIds)}
-                          className="px-4 py-1.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-all shadow-sm shadow-green-200 disabled:opacity-50"
+                          className="px-2.5 py-1 sm:px-4 sm:py-1.5 bg-green-600 text-white rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-bold uppercase tracking-wider sm:tracking-widest hover:bg-green-700 transition-all shadow-sm shadow-green-200 disabled:opacity-50"
                         >
                           Mark Selected as IN ({selectedStudentIds.length})
                         </button>
@@ -10108,7 +10126,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             setBulkStudentsEditList(selectedData);
                             setShowBulkUpdateModal(true);
                           }}
-                          className="px-4 py-1.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-sm shadow-indigo-200"
+                          className="px-2.5 py-1 sm:px-4 sm:py-1.5 bg-indigo-600 text-white rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-bold uppercase tracking-wider sm:tracking-widest hover:bg-indigo-700 transition-all shadow-sm shadow-indigo-200"
                         >
                           ✏️ Bulk Update Selected ({selectedStudentIds.length})
                         </button>
@@ -10134,29 +10152,31 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             return typeof p.studentId === "object" ? p.studentId._id === student.id : p.studentId === student.id;
                           });
                           return (
-                            <div key={student.id} className="flex items-center gap-2 group/card">
-                              {/* ⚡ NEW: Selection Checkbox for Bulk Actions (Attendance & Campus Status) */}
-                              {enableManualAttendance && (
-                                <input
-                                  type="checkbox"
-                                  className={`w-4 h-4 rounded border-gray-300 ${student.studentStatus === 'out' ? 'text-indigo-600 focus:ring-indigo-500' : 'text-blue-600 focus:ring-blue-500'} cursor-pointer transition-all shrink-0`}
-                                  checked={selectedStudentIds.includes(student.id)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedStudentIds((prev) => [...prev, student.id]);
-                                    } else {
-                                      setSelectedStudentIds((prev) => prev.filter((id) => id !== student.id));
-                                    }
-                                  }}
-                                />
-                              )}
-
+                            <div key={student.id} className="group/card">
                               <div
                                 onClick={() => handleProfileClick(student.id)}
-                                className="flex-1 text-left rounded-xl border border-gray-200 bg-white p-3 hover:shadow-md hover:border-blue-200 transition-all group cursor-pointer"
+                                className="w-full text-left rounded-xl border border-gray-200 bg-white p-2.5 sm:p-3 hover:shadow-md hover:border-blue-200 transition-all group cursor-pointer"
                               >
-                                <div className="flex items-start gap-3">
+                                {/* Top Section: Checkbox + Avatar + Name/Email + Mobile MARK button */}
+                                <div className="flex items-start gap-2.5 sm:gap-3">
+                                  {/* ⚡ Selection Checkbox for Bulk Actions (Inside Card for Symmetric Padding) */}
+                                  {enableManualAttendance && (
+                                    <div className="pt-2.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                      <input
+                                        type="checkbox"
+                                        className={`w-4 h-4 rounded border-gray-300 ${student.studentStatus === 'out' ? 'text-indigo-600 focus:ring-indigo-500' : 'text-blue-600 focus:ring-blue-500'} cursor-pointer transition-all shrink-0`}
+                                        checked={selectedStudentIds.includes(student.id)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedStudentIds((prev) => [...prev, student.id]);
+                                          } else {
+                                            setSelectedStudentIds((prev) => prev.filter((id) => id !== student.id));
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  )}
+
                                   <div className="w-10 h-10 rounded-full bg-gray-100 text-gray-600 border border-gray-200 flex items-center justify-center font-bold text-xs flex-shrink-0 overflow-hidden">
                                     {student.profilePicture ? (
                                       <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
@@ -10166,75 +10186,121 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
 
                                   <div className="flex-1 min-w-0">
-                                    <div className="flex justify-between items-start">
-                                      <div className="pr-2">
-                                        <h3 className="text-[11px] font-bold text-gray-900 leading-tight group-hover:text-blue-600 transition-colors">{student.name}</h3>
-                                        <p className="text-[10px] text-gray-500 mt-0.5 truncate">{student.email}</p>
-                                      </div>
-                                      <span className={`flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${(student.studentStatus === 'out' && !presentStudentIds.includes(student.id)) ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
-                                        {(student.studentStatus === 'out' && !presentStudentIds.includes(student.id)) ? 'out' : 'in'}
-                                      </span>
-                                    </div>
-
-                                    <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-50">
-                                      <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium text-gray-500">
-                                        <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">
-                                          {getHostelCategory(student.hostelName) || student.hostelName}
-                                        </span>
-                                        <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">
-                                          Room {student.roomNumber}
-                                        </span>
-                                        {student.floorNumber && (
-                                          <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap">
-                                            {normalizeFloorName(student.floorNumber)}
-                                          </span>
-                                        )}
-                                        <a
-                                          href={`tel:${student.phoneNumber}`}
-                                          onClick={(e) => e.stopPropagation()}
-                                          title="Click to call"
-                                          className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 hover:bg-blue-100 transition-colors whitespace-nowrap flex items-center gap-1"
-                                        >
-                                          <span>📞</span>
-                                          {student.phoneNumber}
-                                        </a>
-                                      </div>
-
-                                      {/* ⚡ NEW: Individual Mark Button (Attendance) */}
-                                      {enableManualAttendance && !presentStudentIds.includes(student.id) && student.studentStatus !== 'out' && (
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleMarkBulkAttendance([student.id]);
-                                          }}
-                                          className="px-3 py-1 bg-green-50 text-green-600 rounded-lg text-[9px] font-black uppercase tracking-widest border border-green-100 hover:bg-green-600 hover:text-white transition-all shadow-sm"
-                                        >
-                                          Mark
-                                        </button>
-                                      )}
-
-                                      {/* ⚡ NEW: Individual Mark Campus IN Button (Manual Toggle) */}
-                                      {student.studentStatus === 'out' && (
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleBulkManualToggle([student.id]);
-                                          }}
-                                          className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
-                                        >
-                                          Mark IN
-                                        </button>
-                                      )}
-
-                                      {presentStudentIds.includes(student.id) && (
-                                        <div className="flex items-center">
-                                          <span className="flex items-center gap-1 text-[9px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100">
-                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                            Present
+                                    <div className="flex justify-between items-start gap-2">
+                                      <div className="pr-1 min-w-0">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <h3 className="text-[11px] font-bold text-gray-900 leading-tight group-hover:text-blue-600 transition-colors">{student.name}</h3>
+                                          {/* Mobile Status Badge: Right beside student name */}
+                                          <span className={`sm:hidden flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${(student.studentStatus === 'out' && !presentStudentIds.includes(student.id)) ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
+                                            {(student.studentStatus === 'out' && !presentStudentIds.includes(student.id)) ? 'out' : 'in'}
                                           </span>
                                         </div>
-                                      )}
+                                        <p className="text-[10px] text-gray-500 mt-0.5 truncate">{student.email}</p>
+                                      </div>
+
+                                      {/* Desktop Status Badge (top-right on desktop) */}
+                                      <span className={`hidden sm:inline-block flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${(student.studentStatus === 'out' && !presentStudentIds.includes(student.id)) ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
+                                        {(student.studentStatus === 'out' && !presentStudentIds.includes(student.id)) ? 'out' : 'in'}
+                                      </span>
+
+                                      {/* Mobile Action Buttons (shifted to top-right in place of IN on mobile, matching IN style & alignment) */}
+                                      <div className="sm:hidden flex-shrink-0 flex items-center">
+                                        {enableManualAttendance && !presentStudentIds.includes(student.id) && student.studentStatus !== 'out' && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleMarkBulkAttendance([student.id]);
+                                            }}
+                                            className="px-2 py-0.5 bg-green-50 text-green-600 rounded text-[9px] font-black uppercase tracking-wider border border-green-100 hover:bg-green-600 hover:text-white transition-all shadow-sm"
+                                          >
+                                            Mark
+                                          </button>
+                                        )}
+
+                                        {student.studentStatus === 'out' && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleBulkManualToggle([student.id]);
+                                            }}
+                                            className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[9px] font-black uppercase tracking-wider border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                                          >
+                                            Mark IN
+                                          </button>
+                                        )}
+
+                                        {presentStudentIds.includes(student.id) && (
+                                          <div className="flex items-center">
+                                            <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-100">
+                                              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                              Present
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
+                                  </div>
+                                </div>
+
+                                {/* Bottom Info Section: All 4 tabs in a single line on mobile & full width */}
+                                <div className="flex justify-between items-center mt-2.5 pt-2.5 sm:mt-3 sm:pt-3 border-t border-gray-50">
+                                  <div className="flex justify-between sm:justify-start items-center gap-1 sm:gap-2 text-[9px] sm:text-[10px] font-medium text-gray-500 overflow-x-auto no-scrollbar w-full sm:w-auto">
+                                    <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap shrink-0">
+                                      {getHostelCategory(student.hostelName) || student.hostelName}
+                                    </span>
+                                    <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap shrink-0">
+                                      Room {student.roomNumber}
+                                    </span>
+                                    {student.floorNumber && (
+                                      <span className="bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 whitespace-nowrap shrink-0">
+                                        {normalizeFloorName(student.floorNumber)}
+                                      </span>
+                                    )}
+                                    <a
+                                      href={`tel:${student.phoneNumber}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      title="Click to call"
+                                      className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 hover:bg-blue-100 transition-colors whitespace-nowrap flex items-center gap-1 shrink-0"
+                                    >
+                                      <span>📞</span>
+                                      {student.phoneNumber}
+                                    </a>
+                                  </div>
+
+                                  {/* Desktop Action Buttons (shown on desktop only) */}
+                                  <div className="hidden sm:flex items-center">
+                                    {enableManualAttendance && !presentStudentIds.includes(student.id) && student.studentStatus !== 'out' && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMarkBulkAttendance([student.id]);
+                                        }}
+                                        className="px-3 py-1 bg-green-50 text-green-600 rounded-lg text-[9px] font-black uppercase tracking-widest border border-green-100 hover:bg-green-600 hover:text-white transition-all shadow-sm"
+                                      >
+                                        Mark
+                                      </button>
+                                    )}
+
+                                    {student.studentStatus === 'out' && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleBulkManualToggle([student.id]);
+                                        }}
+                                        className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                                      >
+                                        Mark IN
+                                      </button>
+                                    )}
+
+                                    {presentStudentIds.includes(student.id) && (
+                                      <div className="flex items-center">
+                                        <span className="flex items-center gap-1 text-[9px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100">
+                                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                          Present
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -10319,16 +10385,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                     {/* Name, Status & Email */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                        <h3 className="text-base sm:text-lg font-black text-gray-900 leading-snug truncate">{selectedStudent.name}</h3>
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${selectedStudent.studentStatus === 'out' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-green-50 text-green-600 border-green-200'}`}>
+                      <div className="flex items-center gap-1.5 mb-1 min-w-0">
+                        <h3 className="text-xs sm:text-sm font-bold text-gray-900 leading-snug truncate min-w-0 shrink">{selectedStudent.name}</h3>
+                        <span className={`shrink-0 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border ${selectedStudent.studentStatus === 'out' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-green-50 text-green-600 border-green-200'}`}>
                           {selectedStudent.studentStatus || 'in'}
                         </span>
                         {Array.isArray(presentStudentIds) && presentStudentIds.includes(selectedStudent.id) && (
-                          <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[9px] font-black rounded-full border border-green-200 uppercase tracking-wide flex items-center gap-0.5">
+                          <span className="shrink-0 px-1.5 py-0.5 bg-green-100 text-green-700 text-[9px] font-black rounded-full border border-green-200 uppercase tracking-wide flex items-center gap-0.5">
                             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                             Present
                           </span>
+                        )}
+                        {selectedStudent.studentStatus === 'out' && (
+                          <button
+                            onClick={() => handleManualToggle(selectedStudent.id, "out")}
+                            disabled={isTogglingStatus}
+                            className="shrink-0 px-2 py-0.5 rounded-md bg-amber-500 text-white text-[9px] font-black uppercase tracking-wider hover:bg-amber-600 transition-all active:scale-95 flex items-center gap-1 shadow-2xs"
+                          >
+                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+                            Mark IN
+                          </button>
                         )}
                       </div>
 
@@ -10359,17 +10435,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             </>
                           )}
                         </button>
-
-                        {selectedStudent.studentStatus === 'out' && (
-                          <button
-                            onClick={() => handleManualToggle(selectedStudent.id, "out")}
-                            disabled={isTogglingStatus}
-                            className="px-2.5 py-1 rounded-lg bg-amber-500 text-white text-[10px] font-black uppercase tracking-wider hover:bg-amber-600 transition-all active:scale-95 flex items-center gap-1 shadow-2xs"
-                          >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
-                            Mark IN
-                          </button>
-                        )}
                       </div>
                       {selectedStudent.isProfileLocked && (
                         <p className="text-[9px] text-amber-600 font-bold uppercase tracking-tight mt-1">Student cannot edit profile anymore</p>
@@ -10539,35 +10604,35 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 {(selectedStudent.collegeName || selectedStudent.branch || selectedStudent.year) && (
                   <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs">
                     <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">Academic Details</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                       {selectedStudent.collegeName && (
-                        <div>
-                          <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">College</p>
-                          <p className="text-[11px] sm:text-xs text-slate-900 font-bold break-words">{selectedStudent.collegeName}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold shrink-0">College</span>
+                          <span className="text-[11px] sm:text-xs text-slate-900 font-bold truncate">{selectedStudent.collegeName}</span>
                         </div>
                       )}
                       {selectedStudent.branch && (
-                        <div>
-                          <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">Branch</p>
-                          <p className="text-[11px] sm:text-xs text-slate-900 font-bold break-words">{selectedStudent.branch}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold shrink-0">Branch</span>
+                          <span className="text-[11px] sm:text-xs text-slate-900 font-bold truncate">{selectedStudent.branch}</span>
                         </div>
                       )}
                       {selectedStudent.year && (
-                        <div>
-                          <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">Year</p>
-                          <p className="text-[11px] sm:text-xs text-slate-900 font-bold">{selectedStudent.year}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold shrink-0">Year</span>
+                          <span className="text-[11px] sm:text-xs text-slate-900 font-bold truncate">{selectedStudent.year}</span>
                         </div>
                       )}
                       {selectedStudent.semester && (
-                        <div>
-                          <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">Sem</p>
-                          <p className="text-[11px] sm:text-xs text-slate-900 font-bold">{selectedStudent.semester}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold shrink-0">Sem</span>
+                          <span className="text-[11px] sm:text-xs text-slate-900 font-bold truncate">{selectedStudent.semester}</span>
                         </div>
                       )}
                       {selectedStudent.section && (
-                        <div>
-                          <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">Section</p>
-                          <p className="text-[11px] sm:text-xs text-slate-900 font-bold">{selectedStudent.section}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold shrink-0">Section</span>
+                          <span className="text-[11px] sm:text-xs text-slate-900 font-bold truncate">{selectedStudent.section}</span>
                         </div>
                       )}
                     </div>
@@ -10606,7 +10671,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 )}
 
                 {/* Home State & Permanent Address */}
-                {(selectedStudent.homePinCode || selectedStudent.homeState) && (
+                {(selectedStudent.permanentAddress || selectedStudent.homePinCode || selectedStudent.homeState) && (
                   <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs space-y-2">
                     {selectedStudent.homeState && (
                       <div>
@@ -10614,10 +10679,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <p className="text-[11px] sm:text-xs text-slate-900 font-bold break-words">{selectedStudent.homeState}</p>
                       </div>
                     )}
-                    {selectedStudent.homePinCode && (
+                    {(selectedStudent.permanentAddress || selectedStudent.homePinCode) && (
                       <div>
-                        <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Permanent Address (Pincode)</p>
-                        <p className="text-[10px] sm:text-xs text-slate-800 font-bold leading-normal break-words whitespace-pre-wrap">{selectedStudent.homePinCode}</p>
+                        <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Permanent Address</p>
+                        <p className="text-[10px] sm:text-xs text-slate-800 font-bold leading-normal break-words whitespace-pre-wrap">{selectedStudent.permanentAddress || selectedStudent.homePinCode}</p>
                       </div>
                     )}
                   </div>
@@ -10651,14 +10716,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     'name', 'email', 'phoneNumber', 'gender', 'dob', 'category', 'erpInformation',
                     'registrationId', 'collegeName', 'branch', 'year', 'semester', 'section', 'hostelName',
                     'roomNumber', 'floorNumber', 'joiningDate', 'fatherName', 'fatherNumber',
-                    'motherName', 'motherNumber', 'homePinCode', 'homeState',
+                    'motherName', 'motherNumber', 'homePinCode', 'homeState', 'permanentAddress', 'address', 'homeAddress', 'permanent_address', 'fullAddress',
                     'localGuardianAddress', 'localGuardianPhoneNumber', 'profilePicture'
                   ]);
                   const customFields = (Array.isArray(savedFormBuilderConfig) ? savedFormBuilderConfig : []).filter(f => {
                     if (!f.visible) return false;
                     if (standardFieldIds.has(f.id)) return false;
                     const labelLower = (f.label || "").toLowerCase().trim();
+                    const idLower = (f.id || "").toLowerCase().trim();
                     if (labelLower === 'gender' || labelLower === 'sex') return false;
+                    if (labelLower.includes('permanent address') || labelLower.includes('home address') || idLower.includes('permanentaddress') || idLower.includes('address')) return false;
                     return true;
                   });
 
@@ -11124,9 +11191,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <span className="hidden sm:inline">🏢 HOSTEL:</span>
                     <span className="sm:hidden">🏢</span>
                     <span className="text-white font-black">
-                      {(exportType === 'attendance' || exportType === 'attendance_matrix' ? attendanceHostelFilter : hostelFilter) && (exportType === 'attendance' || exportType === 'attendance_matrix' ? attendanceHostelFilter : hostelFilter) !== 'all'
-                        ? formatHostelDisplay(exportType === 'attendance' || exportType === 'attendance_matrix' ? attendanceHostelFilter : hostelFilter).toUpperCase()
-                        : 'ALL HOSTELS'}
+                      {isWarden && wardenHostelName
+                        ? formatHostelDisplay(wardenHostelName).toUpperCase()
+                        : ((exportType === 'attendance' || exportType === 'attendance_matrix' ? attendanceHostelFilter : hostelFilter) && (exportType === 'attendance' || exportType === 'attendance_matrix' ? attendanceHostelFilter : hostelFilter) !== 'all'
+                            ? formatHostelDisplay(exportType === 'attendance' || exportType === 'attendance_matrix' ? attendanceHostelFilter : hostelFilter).toUpperCase()
+                            : 'ALL HOSTELS')}
                     </span>
                   </div>
                   <div className="flex items-center gap-1 bg-emerald-950/80 border border-emerald-800/60 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg text-emerald-300 font-bold text-[9px] sm:text-[11px]">
@@ -11217,19 +11286,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               {/* Dynamic Live Preview Table with Smooth Horizontal & Vertical Scrolling */}
               <div className="flex-1 overflow-auto p-4 bg-[#070a12] custom-scrollbar">
                 <div className="border border-slate-800/90 rounded-2xl overflow-x-auto custom-scrollbar shadow-2xl bg-[#0b0f19]">
-                  <table className="min-w-max w-full text-left text-xs border-collapse">
+                  <table className="min-w-max w-full text-center text-xs border-collapse">
                     <thead className="bg-[#111728] sticky top-0 z-10 border-b border-slate-800">
                       <tr>
                         {exportType === 'students' || exportType === 'attendance' ? (
                           EXPORT_COLUMNS.filter(col => selectedExportColumns.includes(col.id)).map(col => (
-                            <th key={col.id} className="px-4 py-3 text-[10px] font-black uppercase text-slate-400 tracking-wider whitespace-nowrap border-r border-slate-800/50 last:border-r-0">
+                            <th key={col.id} className="px-4 py-3 text-[10px] font-black uppercase text-slate-400 tracking-wider whitespace-nowrap border-r border-slate-800/50 last:border-r-0 text-center">
                               {col.label}
                             </th>
                           ))
                         ) : (
                           exportPreviewData.length > 0 && Object.keys(exportPreviewData[0]).map((header) => (
-                            <th key={header} className={`px-4 py-3 text-[10px] font-black uppercase tracking-wider whitespace-nowrap border-r border-slate-800/50 last:border-r-0 ${
-                              header.includes('/') ? 'text-center bg-blue-950/40 text-blue-300' : 'text-slate-400'
+                            <th key={header} className={`px-4 py-3 text-[10px] font-black uppercase tracking-wider whitespace-nowrap border-r border-slate-800/50 last:border-r-0 text-center ${
+                              header.includes('/') ? 'bg-blue-950/40 text-blue-300' : 'text-slate-400'
                             }`}>
                               {header}
                             </th>
@@ -11244,7 +11313,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             EXPORT_COLUMNS.filter(col => selectedExportColumns.includes(col.id)).map(col => {
                               const val = row[col.label] ?? "N/A";
                               return (
-                                <td key={col.id} className="px-4 py-2.5 whitespace-nowrap border-r border-slate-800/30 last:border-r-0">
+                                <td key={col.id} className="px-4 py-2.5 whitespace-nowrap border-r border-slate-800/30 last:border-r-0 text-center">
                                   {col.id === 'sno' ? (
                                     <span className="font-mono text-emerald-400 font-bold">{val}</span>
                                   ) : col.id === 'studentName' ? (
@@ -11271,7 +11340,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             })
                           ) : exportType === 'attendance_matrix' ? (
                             Object.entries(row).map(([k, val]: [string, any], j) => (
-                              <td key={j} className="px-3 py-2 text-center whitespace-nowrap border-r border-slate-800/30 last:border-r-0">
+                              <td key={j} className="px-3 py-2 text-center whitespace-nowrap border-r border-slate-800/30 last:border-r-0 text-center">
                                 {val === 'P' ? (
                                   <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-950/90 text-emerald-400 border border-emerald-800/70 shadow-sm">P</span>
                                 ) : val === 'A' ? (
@@ -11291,7 +11360,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             ))
                           ) : (
                             Object.values(row).map((val: any, j) => (
-                              <td key={j} className="px-4 py-2.5 text-slate-300 whitespace-nowrap border-r border-slate-800/30 last:border-r-0">
+                              <td key={j} className="px-4 py-2.5 text-slate-300 whitespace-nowrap border-r border-slate-800/30 last:border-r-0 text-center">
                                 {val}
                               </td>
                             ))
@@ -12009,11 +12078,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     </div>
 
                     <div className="col-span-full">
-                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Permanent Address </label>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 px-1">Permanent Address</label>
                       <input
                         type="text"
-                        value={editStudentForm.homePinCode || ""}
-                        onChange={(e) => setEditStudentForm(prev => ({ ...prev, homePinCode: e.target.value.toUpperCase() }))}
+                        value={editStudentForm.permanentAddress || editStudentForm.homePinCode || ""}
+                        onChange={(e) => setEditStudentForm(prev => ({ 
+                          ...prev, 
+                          permanentAddress: e.target.value.toUpperCase(),
+                          homePinCode: e.target.value.toUpperCase()
+                        }))}
                         className="w-full h-12 px-4 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-800"
                       />
                     </div>
@@ -12061,7 +12134,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         'name', 'email', 'phoneNumber', 'gender', 'dob', 'category', 'erpInformation',
                         'registrationId', 'collegeName', 'branch', 'year', 'semester', 'section', 'hostelName',
                         'roomNumber', 'floorNumber', 'joiningDate', 'fatherName', 'fatherNumber',
-                        'motherName', 'motherNumber', 'homePinCode', 'homeState',
+                        'motherName', 'motherNumber', 'homePinCode', 'homeState', 'permanentAddress', 'address', 'homeAddress', 'permanent_address', 'fullAddress',
                         'localGuardianAddress', 'localGuardianPhoneNumber', 'profilePicture'
                       ]);
                       const customFields = savedFormBuilderConfig.filter(f => {
@@ -12070,7 +12143,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         
                         // Exclude Gender from Custom Fields list since it is already rendered standardly in Personal Info
                         const labelLower = (f.label || "").toLowerCase().trim();
+                        const idLower = (f.id || "").toLowerCase().trim();
                         if (labelLower === 'gender' || labelLower === 'sex') return false;
+                        
+                        // Exclude Permanent Address from Custom Fields since it is already rendered standardly under Address Information
+                        if (labelLower.includes('permanent address') || labelLower.includes('home address') || idLower.includes('permanentaddress') || idLower.includes('address')) return false;
                         
                         return true;
                       });
