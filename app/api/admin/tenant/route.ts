@@ -15,6 +15,14 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
         }
 
+        // Also fetch institution details from admin_settings
+        let settings: any = null;
+        try {
+            settings = await db.settings.get();
+        } catch (e) {}
+
+        const instConfig = settings?.universityDetails || {};
+
         return NextResponse.json({
             success: true,
             tenant: {
@@ -22,7 +30,11 @@ export async function GET(request: NextRequest) {
                 logo: tenant.logo,
                 primaryColor: tenant.primaryColor,
                 secondaryColor: tenant.secondaryColor,
-                slug: tenant.slug
+                slug: tenant.slug,
+                address: instConfig.address || tenant.address || "",
+                email: instConfig.email || tenant.email || "",
+                phone: instConfig.phone || tenant.phone || "",
+                gstin: instConfig.gstin || tenant.gstin || ""
             }
         });
     } catch (error: any) {
@@ -42,7 +54,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { name, logo, primaryColor, secondaryColor } = body;
+        const { name, logo, primaryColor, secondaryColor, address, email, phone, gstin } = body;
 
         const supabase = getSupabaseAdmin();
         const updateData: any = {};
@@ -52,14 +64,26 @@ export async function POST(request: NextRequest) {
         if (primaryColor) updateData.primary_color = primaryColor;
         if (secondaryColor) updateData.secondary_color = secondaryColor;
 
-        const { error } = await supabase
-            .from('tenants')
-            .update(updateData)
-            .eq('id', tenant._id);
-
-        if (error) {
-            throw error;
+        if (tenant._id) {
+            await supabase
+                .from('tenants')
+                .update(updateData)
+                .eq('id', tenant._id);
         }
+
+        // Save detailed institution info into admin_settings
+        const existingSettings = await db.settings.get();
+        const updatedDetails = {
+            ...(existingSettings?.universityDetails || {}),
+            address: address !== undefined ? address : (existingSettings?.universityDetails?.address || ""),
+            email: email !== undefined ? email : (existingSettings?.universityDetails?.email || ""),
+            phone: phone !== undefined ? phone : (existingSettings?.universityDetails?.phone || ""),
+            gstin: gstin !== undefined ? gstin : (existingSettings?.universityDetails?.gstin || "")
+        };
+
+        await db.settings.update({
+            universityDetails: updatedDetails
+        });
 
         return NextResponse.json({ success: true, message: "Tenant configuration updated successfully" });
     } catch (error: any) {

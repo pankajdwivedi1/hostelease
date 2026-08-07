@@ -1123,6 +1123,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [tenantFormData, setTenantFormData] = useState({
     name: "",
     logo: "",
+    address: "",
+    email: "",
+    phone: "",
+    gstin: "",
     primaryColor: "#3b82f6",
     secondaryColor: "#1e40af"
   });
@@ -2046,7 +2050,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       return;
     }
     
-    const formattedDate = new Date(tx.date || Date.now()).toLocaleDateString("en-IN", { dateStyle: "long" });
+    const paymentDateObj = new Date(tx.date || Date.now());
+    const formattedDate = paymentDateObj.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
+    const formattedTime = paymentDateObj.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+    const fullDateTimeStr = `${formattedDate} • ${formattedTime} IST`;
     const invoiceNo = (tx.id || "tx_invoice").replace('tx_', 'INV-').replace('dir_', 'INV-DIR-').toUpperCase();
     
     // 1. Strictly use app settings: Rate = ₹30/student/mo, Discounts = 0%, 20%, 30%, 40% (+3% Direct Transfer)
@@ -2073,199 +2080,252 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const discountAmount = Math.round(grossBase * (discountPercent / 100)); // ₹1,60,560 * 43% = ₹69,041
     const netCalculated = grossBase - discountAmount; // ₹91,519
     const finalPaid = (tx.amount && tx.amount > 0 && tx.amount <= grossBase) ? tx.amount : netCalculated;
+    const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/logo.jpeg` : '/logo.jpeg';
 
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
         <head>
-          <title>Invoice ${invoiceNo}</title>
+          <title>Hosteleaze Tax Invoice ${invoiceNo}</title>
           <style>
+            @page {
+              size: A4 portrait;
+              margin: 6mm 10mm;
+            }
+            * { box-sizing: border-box; }
             body {
-              font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
               margin: 0;
-              padding: 40px;
-              color: #1f2937;
-              line-height: 1.5;
+              padding: 16px;
+              color: #0f172a;
+              line-height: 1.35;
+              background: #f8fafc;
             }
             .invoice-box {
-              max-width: 820px;
+              max-width: 760px;
               margin: auto;
-              background: #fff;
-              border: 1px solid #e5e7eb;
-              border-radius: 16px;
-              padding: 40px;
-              box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+              background: #ffffff;
+              border: 1px solid #e2e8f0;
+              border-radius: 12px;
+              padding: 24px 28px;
+              box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
             }
             .header {
               display: flex;
               justify-content: space-between;
               align-items: center;
-              border-bottom: 2px solid #f3f4f6;
-              padding-bottom: 24px;
-              margin-bottom: 30px;
+              border-bottom: 2px solid #f1f5f9;
+              padding-bottom: 16px;
+              margin-bottom: 18px;
             }
-            .logo {
-              font-size: 30px;
+            .brand-wrapper {
+              display: flex;
+              align-items: center;
+              gap: 12px;
+            }
+            .brand-logo {
+              width: 44px;
+              height: 44px;
+              border-radius: 10px;
+              object-fit: cover;
+              border: 1.5px solid #e0e7ff;
+            }
+            .logo-text {
+              font-size: 26px;
               font-weight: 900;
               color: #4f46e5;
-              text-transform: uppercase;
               letter-spacing: -0.5px;
+              line-height: 1;
             }
-            .logo span {
-              color: #111827;
+            .logo-text span {
+              color: #0f172a;
+            }
+            .brand-sub {
+              font-size: 9px;
+              font-weight: 800;
+              color: #64748b;
+              text-transform: uppercase;
+              letter-spacing: 0.8px;
+              margin-top: 3px;
             }
             .title {
               text-align: right;
             }
             .title h1 {
               margin: 0;
-              font-size: 24px;
+              font-size: 20px;
               font-weight: 900;
-              color: #111827;
+              color: #0f172a;
               letter-spacing: -0.5px;
+            }
+            .title-no {
+              margin: 3px 0 0 0;
+              font-size: 11px;
+              font-weight: 800;
+              color: #64748b;
+              font-family: monospace;
             }
             .details {
               display: grid;
               grid-template-cols: 1fr 1fr;
-              gap: 24px;
-              margin-bottom: 30px;
+              gap: 16px;
+              margin-bottom: 16px;
             }
             .details h3 {
-              margin: 0 0 6px 0;
-              font-size: 11px;
+              margin: 0 0 4px 0;
+              font-size: 10px;
               text-transform: uppercase;
-              letter-spacing: 1px;
-              color: #9ca3af;
+              letter-spacing: 0.8px;
+              color: #94a3b8;
               font-weight: 800;
             }
             .details p {
               margin: 0;
-              font-size: 14px;
+              font-size: 13px;
               font-weight: 700;
-              color: #374151;
+              color: #334155;
+            }
+            .meta-bar {
+              display: grid;
+              grid-template-cols: 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 18px;
+              background: #f8fafc;
+              padding: 12px 16px;
+              border-radius: 10px;
+              border: 1px solid #e2e8f0;
             }
             .table {
               width: 100%;
               border-collapse: collapse;
-              margin-bottom: 30px;
+              margin-bottom: 18px;
             }
             .table th {
-              background: #f9fafb;
-              border-bottom: 2px solid #e5e7eb;
-              color: #4b5563;
-              font-size: 11px;
+              background: #f1f5f9;
+              border-bottom: 2px solid #e2e8f0;
+              color: #475569;
+              font-size: 10px;
               font-weight: 800;
               text-transform: uppercase;
               letter-spacing: 0.5px;
-              padding: 12px 16px;
+              padding: 10px 12px;
               text-align: left;
             }
             .table td {
-              padding: 14px 16px;
-              border-bottom: 1px solid #f3f4f6;
-              font-size: 13px;
+              padding: 10px 12px;
+              border-bottom: 1px solid #f1f5f9;
+              font-size: 12px;
               font-weight: 600;
-              color: #1f2937;
-            }
-            .table tr:last-child td {
-              border-bottom: none;
+              color: #1e293b;
             }
             .total-box {
               display: flex;
               justify-content: flex-end;
-              margin-bottom: 30px;
+              margin-bottom: 18px;
             }
             .total-table {
-              width: 320px;
-              font-size: 14px;
+              width: 300px;
+              font-size: 13px;
             }
             .total-table tr td {
-              padding: 6px 0;
+              padding: 4px 0;
             }
             .total-table tr td:last-child {
               text-align: right;
               font-weight: 700;
             }
             .grand-total {
-              font-size: 18px;
+              font-size: 16px;
               font-weight: 900;
-              color: #111827;
-              border-top: 2px solid #e5e7eb;
-              padding-top: 10px;
+              color: #0f172a;
+              border-top: 2px solid #e2e8f0;
+              padding-top: 8px;
             }
             .savings-badge {
               background: #ecfdf5;
               border: 1px solid #a7f3d0;
               color: #047857;
-              padding: 8px 12px;
-              border-radius: 10px;
-              font-size: 12px;
+              padding: 6px 10px;
+              border-radius: 8px;
+              font-size: 11px;
               font-weight: 800;
               text-align: right;
-              margin-bottom: 12px;
+              margin-bottom: 8px;
+            }
+            .audit-box {
+              background: #f8fafc;
+              border: 1.5px dashed #cbd5e1;
+              padding: 14px 16px;
+              border-radius: 10px;
+              margin-bottom: 16px;
             }
             .footer {
-              border-top: 2px solid #f3f4f6;
-              padding-top: 20px;
+              border-top: 1.5px solid #f1f5f9;
+              padding-top: 12px;
               text-align: center;
-              font-size: 12px;
-              color: #9ca3af;
+              font-size: 11px;
+              color: #94a3b8;
               font-weight: 600;
-              margin-top: 40px;
             }
             @media print {
               body { padding: 0; background: #fff; }
-              .invoice-box { border: none; box-shadow: none; padding: 0; }
-              .no-print { display: none; }
+              .invoice-box { border: none; box-shadow: none; padding: 0; margin: 0; width: 100%; max-width: 100%; }
+              .no-print { display: none !important; }
             }
             .print-btn {
               background: #4f46e5;
               color: #fff;
               border: none;
-              padding: 12px 24px;
-              border-radius: 10px;
+              padding: 10px 20px;
+              border-radius: 8px;
               font-weight: 800;
-              font-size: 14px;
+              font-size: 13px;
               cursor: pointer;
               box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
-              transition: all 0.2s;
-              margin-bottom: 20px;
-            }
-            .print-btn:hover {
-              background: #4338ca;
+              margin-bottom: 16px;
             }
           </style>
         </head>
         <body>
-          <div style="max-width: 820px; margin: auto;" class="no-print">
-            <button onclick="window.print()" class="print-btn">🖨️ Print / Save PDF Invoice</button>
+          <div style="max-width: 760px; margin: auto;" class="no-print">
+            <button onclick="window.print()" class="print-btn">🖨️ Print / Save 1-Page A4 PDF Invoice</button>
           </div>
           <div class="invoice-box">
             <div class="header">
-              <div class="logo">HOSTEL<span>EAZE</span></div>
+              <div class="brand-wrapper">
+                <img src="${logoUrl}" class="brand-logo" alt="Hosteleaze Logo" onerror="this.style.display='none'" />
+                <div>
+                  <div class="logo-text">HOSTEL<span>EAZE</span></div>
+                  <div class="brand-sub">Smart Campus Automation • SAC 998313</div>
+                </div>
+              </div>
               <div class="title">
                 <h1>OFFICIAL TAX INVOICE</h1>
-                <p style="margin: 4px 0 0 0; font-size: 12px; font-weight: 800; color: #6b7280;">NO: ${invoiceNo}</p>
+                <p class="title-no">NO: ${invoiceNo}</p>
               </div>
             </div>
             
             <div class="details">
               <div>
                 <h3>Billed To (Client)</h3>
-                <p style="font-size: 16px; color: #111827; margin-bottom: 4px;">${collegeName || "Partner College"}</p>
-                <p style="font-size: 12px; font-weight: 600; color: #6b7280;">Hostel Management Subscription Node</p>
+                <p style="font-size: 15px; color: #0f172a; margin-bottom: 2px;">${collegeName || tenantFormData.name || "Partner College"}</p>
+                <p style="font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 2px;">Hostel Management Subscription Node</p>
+                ${tenantFormData.address ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin-bottom: 2px;">📍 ${tenantFormData.address}</p>` : ''}
+                ${tenantFormData.email || tenantFormData.phone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px;">✉️ ${tenantFormData.email || ''} ${tenantFormData.phone ? '• 📞 ' + tenantFormData.phone : ''}</p>` : ''}
+                ${tenantFormData.gstin ? `<p style="font-size: 10px; font-weight: 800; color: #4338ca;">GSTIN: ${tenantFormData.gstin}</p>` : ''}
               </div>
               <div style="text-align: right;">
                 <h3>Billed From (Provider)</h3>
-                <p style="font-size: 16px; color: #111827; margin-bottom: 4px;">Hosteleaze Inc.</p>
-                <p style="font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 2px;">Developer Account: DR. PANKAJ DWIVEDI</p>
-                <p style="font-size: 12px; font-weight: 600; color: #6b7280;">Support: support@hosteleaze.com</p>
+                <p style="font-size: 15px; color: #0f172a; margin-bottom: 2px;">Hosteleaze Inc.</p>
+                <p style="font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 1px;">Account: DR. PANKAJ DWIVEDI</p>
+                <p style="font-size: 11px; font-weight: 600; color: #64748b;">Support: support@hosteleaze.com</p>
               </div>
             </div>
 
-            <div class="details" style="margin-bottom: 24px; background: #f9fafb; padding: 16px; border-radius: 12px; border: 1px solid #f3f4f6;">
+            <div class="meta-bar">
               <div>
-                <h3>Invoice Issue Date</h3>
-                <p style="color: #111827;">${formattedDate}</p>
+                <h3>Payment Date & Exact Time</h3>
+                <p style="color: #0f172a;">${fullDateTimeStr}</p>
               </div>
               <div style="text-align: right;">
                 <h3>Payment Method</h3>
@@ -2286,8 +2346,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               <tbody>
                 <tr>
                   <td>
-                    <div style="font-weight: 800; color: #111827;">Hosteleaze Enterprise License</div>
-                    <div style="font-size: 11px; color: #6b7280; font-weight: 600; margin-top: 2px;">Full Warden, Student & Admin Gatepass Portals Access</div>
+                    <div style="font-weight: 800; color: #0f172a;">Hosteleaze Enterprise License</div>
+                    <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 2px;">Full Warden, Student & Admin Gatepass Portals Access</div>
                   </td>
                   <td style="text-align: center; font-weight: 700;">${studentCount}</td>
                   <td style="text-align: center; font-weight: 700;">₹${ratePerStudentMonth}</td>
@@ -2299,7 +2359,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <tr style="background: #fdf2f8;">
                   <td colspan="4" style="color: #be185d; font-weight: 700;">
                     🎁 Subscription Plan Discount & Incentives (${discountPercent}% OFF)
-                    ${isDirectTransfer ? '<span style="font-size: 10px; opacity: 0.8; margin-left: 6px;">(Includes Direct Transfer Incentive)</span>' : ''}
+                    ${isDirectTransfer ? '<span style="font-size: 9px; opacity: 0.8; margin-left: 4px;">(Includes Direct Transfer Incentive)</span>' : ''}
                   </td>
                   <td style="text-align: right; font-weight: 800; color: #be185d;">-₹${discountAmount.toLocaleString("en-IN")}.00</td>
                 </tr>
@@ -2308,7 +2368,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             </table>
 
             <div class="total-box">
-              <div style="width: 320px;">
+              <div style="width: 300px;">
                 ${discountAmount > 0 ? `
                 <div class="savings-badge">
                   🎉 Total College Savings: ₹${discountAmount.toLocaleString("en-IN")}.00
@@ -2338,22 +2398,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               </div>
             </div>
 
-            <div style="background: #f8fafc; border: 1.5px dashed #cbd5e1; padding: 18px; border-radius: 14px; margin-bottom: 30px;">
-              <p style="margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: 800; margin-bottom: 6px;">Payment Verification & Audit Proof</p>
+            <div class="audit-box">
+              <p style="margin: 0; font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; font-weight: 800; margin-bottom: 4px;">Payment Verification & Audit Proof</p>
               <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                  <p style="margin: 0; font-family: monospace; font-size: 13px; font-weight: 800; color: #0f172a;">Reference / UTR ID: ${tx.utr || tx.id || "N/A"}</p>
-                  <p style="margin: 3px 0 0 0; font-size: 11px; font-weight: 600; color: #64748b;">Method: ${paymentMethodText}</p>
+                  <p style="margin: 0; font-family: monospace; font-size: 12px; font-weight: 800; color: #0f172a;">Reference / UTR ID: ${tx.utr || tx.id || "N/A"}</p>
+                  <p style="margin: 2px 0 0 0; font-size: 10px; font-weight: 600; color: #64748b;">Method: ${paymentMethodText} • Timestamp: ${fullDateTimeStr}</p>
                 </div>
-                <div style="background: #dcfce7; border: 1px solid #86efac; color: #15803d; padding: 6px 14px; border-radius: 20px; font-size: 11px; font-weight: 900; letter-spacing: 0.5px;">
+                <div style="background: #dcfce7; border: 1px solid #86efac; color: #15803d; padding: 4px 12px; border-radius: 16px; font-size: 10px; font-weight: 900; letter-spacing: 0.5px;">
                   ✓ PAID & VERIFIED
                 </div>
               </div>
             </div>
 
             <div class="footer">
-              <p style="margin: 0; font-size: 14px; font-weight: 800; color: #374151; margin-bottom: 4px;">Thank you for trusting Hosteleaze!</p>
-              <p style="margin: 0;">This is a computer-generated tax invoice receipt. Digital authorization valid without physical signature.</p>
+              <p style="margin: 0; font-size: 13px; font-weight: 800; color: #334155; margin-bottom: 2px;">Thank you for trusting Hosteleaze!</p>
+              <p style="margin: 0; font-size: 10px;">This is an official computer-generated tax invoice receipt. Digital authorization valid without physical signature.</p>
             </div>
           </div>
         </body>
@@ -2525,6 +2585,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         setTenantFormData({
           name: data.tenant.name || "",
           logo: data.tenant.logo || "",
+          address: data.tenant.address || "",
+          email: data.tenant.email || "",
+          phone: data.tenant.phone || "",
+          gstin: data.tenant.gstin || "",
           primaryColor: data.tenant.primaryColor || "#3b82f6",
           secondaryColor: data.tenant.secondaryColor || "#1e40af"
         });
@@ -13342,14 +13406,60 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                     <div className="space-y-4">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">University Name</label>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">University / Institute Name</label>
                         <input
                           type="text"
                           value={tenantFormData.name}
                           onChange={(e) => setTenantFormData({ ...tenantFormData, name: e.target.value })}
                           className="w-full p-4 rounded-2xl border-2 border-gray-100 text-sm font-bold focus:border-blue-500 outline-none transition-all"
-                          placeholder="e.g. ORIENTAL INSTITUTE OF SCIENCE"
+                          placeholder="e.g. Oriental Group of Institutes (OGI)"
                         />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1 sm:col-span-2">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Institute Campus Address & Location</label>
+                          <input
+                            type="text"
+                            value={tenantFormData.address}
+                            onChange={(e) => setTenantFormData({ ...tenantFormData, address: e.target.value })}
+                            className="w-full p-3.5 rounded-2xl border-2 border-gray-100 text-xs font-bold focus:border-blue-500 outline-none transition-all"
+                            placeholder="e.g. Oriental Campus, Raisen Road, Bhopal, MP - 462021"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Official Contact Email</label>
+                          <input
+                            type="email"
+                            value={tenantFormData.email}
+                            onChange={(e) => setTenantFormData({ ...tenantFormData, email: e.target.value })}
+                            className="w-full p-3.5 rounded-2xl border-2 border-gray-100 text-xs font-bold focus:border-blue-500 outline-none transition-all"
+                            placeholder="e.g. info@oriental.ac.in"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Official Contact Phone / Mobile</label>
+                          <input
+                            type="text"
+                            value={tenantFormData.phone}
+                            onChange={(e) => setTenantFormData({ ...tenantFormData, phone: e.target.value })}
+                            className="w-full p-3.5 rounded-2xl border-2 border-gray-100 text-xs font-bold focus:border-blue-500 outline-none transition-all"
+                            placeholder="e.g. +91 9981414729 / 0755-2529015"
+                          />
+                        </div>
+
+                        <div className="space-y-1 sm:col-span-2">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Institute GSTIN / Tax Reg ID (Optional)</label>
+                          <input
+                            type="text"
+                            value={tenantFormData.gstin}
+                            onChange={(e) => setTenantFormData({ ...tenantFormData, gstin: e.target.value })}
+                            className="w-full p-3.5 rounded-2xl border-2 border-gray-100 text-xs font-bold focus:border-blue-500 outline-none transition-all uppercase"
+                            placeholder="e.g. 23AAAAA0000A1Z5"
+                          />
+                        </div>
                       </div>
 
                       <div className="space-y-1">
