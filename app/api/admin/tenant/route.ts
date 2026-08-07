@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import { getTenantFromRequest } from "@/lib/tenant";
+import { db } from "@/lib/dbAdapter";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
             settings = await db.settings.get();
         } catch (e) {}
 
-        const instConfig = settings?.universityDetails || {};
+        const instConfig = settings?.universityBankDetails || {};
 
         return NextResponse.json({
             success: true,
@@ -71,18 +72,18 @@ export async function POST(request: NextRequest) {
                 .eq('id', tenant._id);
         }
 
-        // Save detailed institution info into admin_settings
+        // Save detailed institution info into existing universityBankDetails column of admin_settings
         const existingSettings = await db.settings.get();
-        const updatedDetails = {
-            ...(existingSettings?.universityDetails || {}),
-            address: address !== undefined ? address : (existingSettings?.universityDetails?.address || ""),
-            email: email !== undefined ? email : (existingSettings?.universityDetails?.email || ""),
-            phone: phone !== undefined ? phone : (existingSettings?.universityDetails?.phone || ""),
-            gstin: gstin !== undefined ? gstin : (existingSettings?.universityDetails?.gstin || "")
+        const updatedBankDetails = {
+            ...(existingSettings?.universityBankDetails || {}),
+            address: address !== undefined ? address : (existingSettings?.universityBankDetails?.address || ""),
+            email: email !== undefined ? email : (existingSettings?.universityBankDetails?.email || ""),
+            phone: phone !== undefined ? phone : (existingSettings?.universityBankDetails?.phone || ""),
+            gstin: gstin !== undefined ? gstin : (existingSettings?.universityBankDetails?.gstin || "")
         };
 
         await db.settings.update({
-            universityDetails: updatedDetails
+            universityBankDetails: updatedBankDetails
         });
 
         return NextResponse.json({ success: true, message: "Tenant configuration updated successfully" });

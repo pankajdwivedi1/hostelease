@@ -2081,6 +2081,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const netCalculated = grossBase - discountAmount; // ₹91,519
     const finalPaid = (tx.amount && tx.amount > 0 && tx.amount <= grossBase) ? tx.amount : netCalculated;
     const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/logo.jpeg` : '/logo.jpeg';
+    const hostOrigin = typeof window !== 'undefined' ? window.location.origin : "https://hosteleaze.com";
+    const verificationUrl = `${hostOrigin}/verify-invoice?id=${encodeURIComponent(invoiceNo)}&college=${encodeURIComponent(collegeName || tenantFormData.name)}&amount=${finalPaid}&utr=${encodeURIComponent(tx.utr || tx.id || 'N/A')}&date=${encodeURIComponent(fullDateTimeStr)}`;
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -2308,8 +2310,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             <div class="details">
               <div>
                 <h3>Billed To (Client)</h3>
-                <p style="font-size: 15px; color: #0f172a; margin-bottom: 2px;">${collegeName || tenantFormData.name || "Partner College"}</p>
-                <p style="font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 2px;">Hostel Management Subscription Node</p>
+                <p style="font-size: 15px; color: #0f172a; margin-bottom: 3px; font-weight: 800;">${collegeName || tenantFormData.name || "Partner College"}</p>
                 ${tenantFormData.address ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin-bottom: 2px;">📍 ${tenantFormData.address}</p>` : ''}
                 ${tenantFormData.email || tenantFormData.phone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px;">✉️ ${tenantFormData.email || ''} ${tenantFormData.phone ? '• 📞 ' + tenantFormData.phone : ''}</p>` : ''}
                 ${tenantFormData.gstin ? `<p style="font-size: 10px; font-weight: 800; color: #4338ca;">GSTIN: ${tenantFormData.gstin}</p>` : ''}
@@ -2367,8 +2368,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               </tbody>
             </table>
 
-            <div class="total-box">
-              <div style="width: 300px;">
+            <div class="total-box" style="display: flex; justify-content: space-between; align-items: stretch; margin-bottom: 18px; gap: 20px;">
+              <div style="display: flex; align-items: center; gap: 16px; background: #f8fafc; border: 1.5px solid #cbd5e1; padding: 12px 16px; border-radius: 14px; max-width: 410px; flex: 1;">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(verificationUrl)}" style="width: 135px; height: 135px; border-radius: 10px; border: 1.5px solid #94a3b8; background: #fff; padding: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);" alt="Verification QR Code" />
+                <div style="flex: 1;">
+                  <div style="font-size: 11px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2;">Scan to Verify Invoice</div>
+                  <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 4px;">Official Digital Audit Proof</div>
+                  <div style="font-size: 9px; font-family: monospace; font-weight: 800; color: #3730a3; margin-top: 10px; background: #e0e7ff; border: 1px solid #c7d2fe; padding: 4px 8px; border-radius: 6px; display: inline-block;">✓ VERIFIED E-INVOICE</div>
+                </div>
+              </div>
+
+              <div style="width: 300px; shrink: 0;">
                 ${discountAmount > 0 ? `
                 <div class="savings-badge">
                   🎉 Total College Savings: ₹${discountAmount.toLocaleString("en-IN")}.00
