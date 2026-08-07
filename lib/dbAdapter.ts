@@ -1686,41 +1686,48 @@ export const db = {
 
                 return mapStudentToCamelCase(data);
             } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                const whereClause: any = { tenantId };
+                let tenantId: string | null = null;
+                try {
+                    tenantId = await getTenantIdOrThrow();
+                } catch (tErr) {}
+
+                const searchOR: any[] = [];
                 if (filter.firebaseUID) {
-                    whereClause.OR = [
+                    searchOR.push(
+                        { id: filter.firebaseUID },
                         { firebaseUid: filter.firebaseUID },
                         { supabaseId: filter.firebaseUID }
-                    ];
+                    );
                 }
                 if (filter.supabaseId) {
-                    whereClause.OR = [
-                        { supabaseId: filter.supabaseId },
-                        { firebaseUid: filter.supabaseId }
-                    ];
+                    searchOR.push(
+                        { id: filter.supabaseId },
+                        { firebaseUid: filter.supabaseId },
+                        { supabaseId: filter.supabaseId }
+                    );
                 }
-                if (filter._id) whereClause.id = filter._id;
-                if (filter.email) whereClause.email = filter.email;
-                if (filter.phoneNumber) whereClause.phoneNumber = filter.phoneNumber;
-                if (filter.registrationId) whereClause.registrationId = filter.registrationId;
-                if (filter.erpInformation) whereClause.erpId = filter.erpInformation;
+                if (filter._id) searchOR.push({ id: filter._id });
+                if (filter.email) searchOR.push({ email: filter.email });
+                if (filter.phoneNumber) searchOR.push({ phoneNumber: filter.phoneNumber });
+                if (filter.registrationId) searchOR.push({ registrationId: filter.registrationId });
+                if (filter.erpInformation) searchOR.push({ erpId: filter.erpInformation });
 
-                let student = await prisma.student.findFirst({
-                    where: whereClause
-                });
+                let student: any = null;
+                if (tenantId && searchOR.length > 0) {
+                    student = await prisma.student.findFirst({
+                        where: {
+                            tenantId,
+                            OR: searchOR
+                        }
+                    });
+                }
 
-                if (!student) {
-                    // Global lookup fallback
-                    const globalWhere: any = {};
-                    if (filter.firebaseUID) globalWhere.firebaseUid = filter.firebaseUID;
-                    if (filter.email) globalWhere.email = filter.email;
-                    
-                    if (Object.keys(globalWhere).length > 0) {
-                        student = await prisma.student.findFirst({
-                            where: globalWhere
-                        });
-                    }
+                if (!student && searchOR.length > 0) {
+                    student = await prisma.student.findFirst({
+                        where: {
+                            OR: searchOR
+                        }
+                    });
                 }
                 return student ? mapStudentToCamelCase(student) : null;
             } else {
