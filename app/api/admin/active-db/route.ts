@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSupabaseAdmin } from '@/lib/supabaseServer';
+import { clearDbSourceCache } from '@/lib/dbAdapter';
 
 const supabase = getSupabaseAdmin();
 
@@ -61,6 +62,8 @@ export async function POST(req: Request) {
         } catch (e: any) {
             console.error("Failed to update active_database_source in Supabase:", e?.message);
         }
+
+        clearDbSourceCache();
 
         return NextResponse.json({ success: true, source });
     } catch (err: any) {

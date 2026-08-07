@@ -1111,9 +1111,50 @@ const getTenantIdOrThrow = async () => {
     return tid;
 };
 
-const getDbSource = async () => {
-    // Check environment variable, defaulting to PRISMA for direct Railway PostgreSQL access
-    return process.env.NEXT_PUBLIC_DB_SOURCE || 'PRISMA';
+export const clearDbSourceCache = () => {
+    cachedDbSource = null;
+    lastDbSourceCheck = 0;
+};
+
+const getDbSource = async (): Promise<string> => {
+    const now = Date.now();
+    if (cachedDbSource && (now - lastDbSourceCheck < SOURCE_CACHE_TTL)) {
+        return cachedDbSource;
+    }
+
+    try {
+        const settings = await prisma.adminSettings.findFirst({
+            select: { activeDatabaseSource: true }
+        });
+        if (settings?.activeDatabaseSource) {
+            let src = settings.activeDatabaseSource.toUpperCase();
+            if (src === 'RAILWAY') src = 'PRISMA';
+            cachedDbSource = src;
+            lastDbSourceCheck = now;
+            return src;
+        }
+    } catch {
+        try {
+            const { data } = await supabase
+                .from('admin_settings')
+                .select('active_database_source')
+                .limit(1)
+                .maybeSingle();
+            if (data?.active_database_source) {
+                let src = String(data.active_database_source).toUpperCase();
+                if (src === 'RAILWAY') src = 'PRISMA';
+                cachedDbSource = src;
+                lastDbSourceCheck = now;
+                return src;
+            }
+        } catch {}
+    }
+
+    let envSource = (process.env.NEXT_PUBLIC_DB_SOURCE || 'PRISMA').toUpperCase();
+    if (envSource === 'RAILWAY') envSource = 'PRISMA';
+    cachedDbSource = envSource;
+    lastDbSourceCheck = now;
+    return envSource;
 };
 
 export const db = {
