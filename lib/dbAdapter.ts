@@ -56,7 +56,8 @@ const filterAttendanceForPrisma = (data: any) => {
         'id', 'tenantId', 'studentId', 'firebaseUid', 'name', 'hostelName',
         'roomNumber', 'date', 'timestamp', 'istTime', 'istDate', 'location',
         'deviceId', 'status', 'faceMatchPercentage', 'faceMatchStatus',
-        'flaggedPhotoUrl', 'needsReview', 'isTest', 'markedBy', 'faceScore', 'gps'
+        'flaggedPhotoUrl', 'needsReview', 'isTest', 'markedBy', 'faceScore', 'gps',
+        'verificationMethod', 'verifiedBy', 'isWifiVerified'
     ];
     const filtered: any = {};
     for (const key of attendanceFields) {
@@ -326,8 +327,8 @@ const mapStudentToCamelCase = (s: any) => {
         fatherNumber: profile?.father_number !== undefined ? profile.father_number : (s.father_number || s.fatherNumber),
         motherName: profile?.mother_name !== undefined ? profile.mother_name : (s.mother_name || s.motherName),
         motherNumber: profile?.mother_number !== undefined ? profile.mother_number : (s.mother_number || s.motherNumber),
-        permanentAddress: profile?.permanent_address !== undefined ? profile.permanent_address : (s.permanent_address || s.permanentAddress),
-        homePinCode: profile?.permanent_address !== undefined ? profile.permanent_address : (s.permanent_address || s.permanentAddress || s.home_pin_code || s.homePinCode),
+        permanentAddress: profile?.permanent_address || s.permanent_address || s.permanentAddress || s.address || s.homePinCode || s.home_pin_code || (s.dynamicFields && (s.dynamicFields.permanentAddress || s.dynamicFields.address || s.dynamicFields.homePinCode)) || "",
+        homePinCode: profile?.permanent_address || s.permanent_address || s.permanentAddress || s.address || s.homePinCode || s.home_pin_code || (s.dynamicFields && (s.dynamicFields.permanentAddress || s.dynamicFields.address || s.dynamicFields.homePinCode)) || "",
         homeState: profile?.home_state !== undefined ? profile.home_state : (s.home_state || s.homeState),
         erpInformation: profile?.erp_id !== undefined ? profile.erp_id : (s.erp_id || s.erpInformation || s.erpInformation),
         branch: profile?.branch !== undefined ? profile.branch : s.branch,
@@ -1184,11 +1185,15 @@ export const db = {
         deleteMany: async (query: any) => {
             const source = await getDbSource();
             if (source === 'SUPABASE') {
+                if (!query.userId && !query.userType && !query.id) {
+                    return { success: true };
+                }
                 let sQuery = supabase.from('push_subscriptions').delete();
                 if (query.userId) sQuery = sQuery.eq('user_id', query.userId);
                 if (query.userType) sQuery = sQuery.eq('user_type', query.userType);
+                if (query.id) sQuery = sQuery.eq('id', query.id);
                 const { error } = await sQuery;
-                if (error) throw error;
+                if (error) console.warn("Supabase push delete error:", error);
                 return { success: true };
             } else if (source === 'PRISMA') {
                 const whereClause: any = {};
@@ -2209,12 +2214,23 @@ export const db = {
                         if (forbidden.includes(lowKey) || forbidden.includes(lowKey.replace(/_/g, ''))) return;
 
                         if (fieldMap[key]) {
-                            mapped[fieldMap[key]] = data[key];
+                            // Only set mapped value if data[key] is defined and not null
+                            if (data[key] !== undefined && data[key] !== null && data[key] !== "") {
+                                mapped[fieldMap[key]] = data[key];
+                            }
                         } else {
                             // Default to original if no mapping (e.g. branch, year, category, dob etc already snake_case or same)
-                            mapped[key] = data[key];
+                            if (data[key] !== undefined) {
+                                mapped[key] = data[key];
+                            }
                         }
                     });
+
+                    // Ensure permanent_address is set from permanentAddress, address, or homePinCode if available
+                    const resolvedAddress = data.permanentAddress || data.address || data.homePinCode;
+                    if (resolvedAddress) {
+                        mapped['permanent_address'] = resolvedAddress;
+                    }
 
                     console.log("🛠️ Supabase Mapped Update Data:", mapped);
                     return mapped;

@@ -24,8 +24,8 @@ export async function GET(request: NextRequest) {
             let cleanW = targetIp.trim();
             if (cleanW.startsWith("::ffff:")) cleanW = cleanW.substring(7);
             
-            // Direct IP match or local dev server match when whitelist is configured
-            if (cleanW === ip || cleanW === "127.0.0.1" || cleanW === "::1" || (isLocalHost && whitelist.length > 0)) {
+            // Strict exact match against whitelisted IP only
+            if (cleanW === ip) {
                 matchingEntry = typeof w === 'object' ? w : { name: "Campus WiFi", ip: cleanW };
                 return true;
             }

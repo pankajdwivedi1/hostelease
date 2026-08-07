@@ -77,9 +77,9 @@ export const validators = {
    * Validate Firebase UID format
    */
   isValidFirebaseUID: (uid: string): boolean => {
-    // Firebase UIDs are typically 28 chars, but can be longer or contain special chars in some cases
+    if (!uid || typeof uid !== 'string') return false;
     const uidRegex = /^[a-zA-Z0-9\-_]{1,128}$/;
-    return uidRegex.test(uid);
+    return uidRegex.test(uid.trim());
   },
 
   /**
@@ -96,7 +96,6 @@ export const validators = {
    */
   isValidDateFormat: (date: string): boolean => {
     if (!date) return false;
-    // Support YYYY-MM-DD or DD-MM-YYYY or DD/MM/YYYY
     const ymdRegex = /^\d{4}-\d{2}-\d{2}$/;
     const dmyRegex = /^\d{2}-\d{2}-\d{4}$/;
     const dmySlashRegex = /^\d{2}\/\d{2}\/\d{4}$/;
@@ -122,7 +121,6 @@ export const validators = {
    * Validate hostel name (prevent injection)
    */
   isValidHostelName: (name: string): boolean => {
-    // Relaxed hostel name validation: alphanumeric, spaces, hyphens, dots, parentheses, underscores
     const hostelRegex = /^[a-zA-Z0-9\s\-._()]{1,100}$/;
     return hostelRegex.test(name);
   },
@@ -165,7 +163,6 @@ export const validators = {
     const ymdRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (ymdRegex.test(date)) return date;
 
-    // Check for DD-MM-YYYY or DD/MM/YYYY
     const dmyRegex = /^(\d{2})[-/](\d{2})[-/](\d{4})$/;
     const match = date.match(dmyRegex);
     if (match) {
@@ -177,18 +174,19 @@ export const validators = {
 
 /**
  * Validate all student registration fields
- * ✅ FIX #10: Only 5 fields are MANDATORY, rest are optional
  */
 export function validateStudentRegistration(body: any): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
-  // ✅ MANDATORY FIELDS (4 only, Email optional)
-  if (!body.firebaseUID || !validators.isValidFirebaseUID(body.firebaseUID)) {
+  // Auto fallback for missing firebaseUID
+  if (!body.firebaseUID) {
+    body.firebaseUID = `uid_${Date.now()}`;
+  } else if (!validators.isValidFirebaseUID(body.firebaseUID)) {
     errors.push('Invalid Firebase UID');
   }
 
-  if ((!body.email || !validators.isValidEmail(body.email)) && !body.phoneNumber) {
-    errors.push('Either email or phone number is required');
+  if (body.email && body.email.trim() !== "" && !validators.isValidEmail(body.email.trim())) {
+    errors.push('Invalid email address format');
   }
 
   if (!body.phoneNumber || !validators.isValidPhoneNumber(body.phoneNumber)) {
@@ -203,13 +201,9 @@ export function validateStudentRegistration(body: any): { valid: boolean; errors
     errors.push('Room number is required');
   }
 
-  // ✅ OPTIONAL FIELDS (only validate if provided)
   if (body.name && !validators.isValidName(body.name)) {
-    errors.push('Name must be 2-50 characters, letters only');
+    errors.push('Name must be valid text (letters, numbers, spaces)');
   }
-
-  // PIN code validation removed as per user request to stop forcing its format
-
 
   if (body.hostelName && !validators.isValidHostelName(body.hostelName)) {
     errors.push('Invalid hostel name');
@@ -219,7 +213,7 @@ export function validateStudentRegistration(body: any): { valid: boolean; errors
     errors.push('Date of birth must be in YYYY-MM-DD format');
   }
 
-  if (body.phoneNumber && body.fatherNumber && body.fatherNumber.trim() !== "" && !validators.isValidPhoneNumber(body.fatherNumber)) {
+  if (body.fatherNumber && body.fatherNumber.trim() !== "" && !validators.isValidPhoneNumber(body.fatherNumber)) {
     errors.push('Father phone must be 10-13 digits');
   }
 

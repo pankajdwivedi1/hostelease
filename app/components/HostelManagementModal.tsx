@@ -437,6 +437,36 @@ export default function HostelManagementModal({
                           🔄 Force Sync All Students to Current Mode
                         </button>
 
+                        {/* 🏷️ REGISTRATION FORMAT SETTING */}
+                        <div className="mt-3 bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 space-y-1.5">
+                          <div className="flex items-center justify-between gap-1 flex-wrap">
+                            <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest flex items-center gap-1">
+                              🏷️ Registration Format
+                            </label>
+                            <span className="text-[8px] font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+                              Preview: {(() => {
+                                const fmt = matchedHostel.registrationFormat || (matchedHostel.name?.toUpperCase().includes("BOYS") ? "BOYS-{SEQ4}" : matchedHostel.name?.toUpperCase().includes("GANGOTRI") ? "GANGOTRI-{SEQ4}" : matchedHostel.name?.toUpperCase().includes("GAYTRI") ? "GAYTRI-{SEQ4}" : matchedHostel.name?.toUpperCase().includes("GHB") ? "GHB-{SEQ4}" : `${matchedHostel.name?.toUpperCase().replace(/[^A-Z]/g, "")}-{SEQ4}`);
+                                let res = fmt;
+                                res = res.replace(/{SEQ4}/gi, "0001").replace(/{SEQ3}/gi, "001").replace(/{SEQ}/gi, "0001").replace(/{YEAR}/gi, new Date().getFullYear().toString()).replace(/{YY}/gi, new Date().getFullYear().toString().slice(-2));
+                                return !fmt.includes("{") ? `${fmt}-0001` : res;
+                              })()}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              defaultValue={matchedHostel.registrationFormat || (matchedHostel.name?.toUpperCase().includes("BOYS") ? "BOYS-{SEQ4}" : matchedHostel.name?.toUpperCase().includes("GANGOTRI") ? "GANGOTRI-{SEQ4}" : matchedHostel.name?.toUpperCase().includes("GAYTRI") ? "GAYTRI-{SEQ4}" : matchedHostel.name?.toUpperCase().includes("GHB") ? "GHB-{SEQ4}" : `${matchedHostel.name?.toUpperCase().replace(/[^A-Z]/g, "")}-{SEQ4}`)}
+                              placeholder="e.g. BOYS-{SEQ4}"
+                              onBlur={(e) => {
+                                const defaultFmt = matchedHostel.name?.toUpperCase().includes("BOYS") ? "BOYS-{SEQ4}" : matchedHostel.name?.toUpperCase().includes("GANGOTRI") ? "GANGOTRI-{SEQ4}" : matchedHostel.name?.toUpperCase().includes("GAYTRI") ? "GAYTRI-{SEQ4}" : matchedHostel.name?.toUpperCase().includes("GHB") ? "GHB-{SEQ4}" : `${matchedHostel.name?.toUpperCase().replace(/[^A-Z]/g, "")}-{SEQ4}`;
+                                const newFormat = e.target.value.trim() || defaultFmt;
+                                handleUpdateHostelConfig({ ...matchedHostel, id: matchedHostel._id, registrationFormat: newFormat });
+                              }}
+                              className="flex-1 text-[11px] font-mono font-black uppercase text-slate-800 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 focus:border-blue-500 focus:outline-none shadow-sm"
+                            />
+                          </div>
+                        </div>
+
                         {/* WiFi IP Badge & Activity Logs Row */}
                         <div className="mt-3 flex items-center justify-between gap-2">
                           {(() => {

@@ -970,8 +970,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         filter: `_id=eq.${studentProfile._id}`
                     },
                     (payload: any) => {
-                        console.log("⚡ [REALTIME] Student status updated:", payload.new.student_status);
-                        setStudentProfile(prev => prev ? ({ ...prev, studentStatus: payload.new.student_status }) : prev);
+                        const newStatus = payload.new.student_status || payload.new.studentStatus;
+                        console.log("⚡ [REALTIME] Student status updated:", newStatus);
+                        if (newStatus) {
+                            localStorage.setItem("studentStatus", newStatus);
+                            setStudentProfile(prev => prev ? ({ ...prev, studentStatus: newStatus }) : prev);
+                        }
                     }
                 )
                 .subscribe();
@@ -979,22 +983,53 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             // Delay initial notification fetch by 3 seconds as requested
             const initialNotifTimer = setTimeout(fetchStudentNotifications, 3000);
 
-            // ⚡ OPTIMIZATION: 3-minute interval for students (saves battery & massive bandwidth)
-            // ⚡ OPTIMIZATION: Background polling removed to save massive bandwidth. 
-            // Student can pull-to-refresh to see new notifications.
+            // ⚡ INSTANT LOCAL SYNC: Check localStorage for any status changes made by QR scan
+            const syncStatusFromLocalStorage = () => {
+                try {
+                    const storedStatus = localStorage.getItem("studentStatus") as "in" | "out" | null;
+                    const cachedStr = localStorage.getItem("cachedStudentData");
+                    let cachedStatus: "in" | "out" | null = null;
+                    if (cachedStr) {
+                        const parsed = JSON.parse(cachedStr);
+                        if (parsed?.studentStatus) cachedStatus = parsed.studentStatus as "in" | "out";
+                    }
+                    const latestStatus = storedStatus || cachedStatus;
+                    if (latestStatus) {
+                        setStudentProfile(prev => {
+                            if (prev && prev.studentStatus !== latestStatus) {
+                                return { ...prev, studentStatus: latestStatus };
+                            }
+                            return prev;
+                        });
+                    }
+                } catch (e) {
+                    console.error("Error syncing status from local storage:", e);
+                }
+            };
 
-            // Add simple logic to refetch when student returns to app after a while
+            // Run initial sync on mount
+            syncStatusFromLocalStorage();
+
+            // Refetch/sync when student returns to app tab or comes back from scanner
             const handleVisibilityChange = () => {
                 if (document.visibilityState === 'visible') {
+                    syncStatusFromLocalStorage();
                     fetchStudentNotifications();
                 }
             };
+
+            window.addEventListener('focus', syncStatusFromLocalStorage);
+            window.addEventListener('pageshow', syncStatusFromLocalStorage);
+            window.addEventListener('storage', syncStatusFromLocalStorage);
             document.addEventListener('visibilitychange', handleVisibilityChange);
 
             return () => {
                 clearTimeout(initialNotifTimer);
                 supabase.removeChannel(statusChannel);
                 document.removeEventListener('visibilitychange', handleVisibilityChange);
+                window.removeEventListener('focus', syncStatusFromLocalStorage);
+                window.removeEventListener('pageshow', syncStatusFromLocalStorage);
+                window.removeEventListener('storage', syncStatusFromLocalStorage);
             };
         }
     }, [studentProfile, loading, isFullProfileLoaded]);
@@ -2527,8 +2562,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         lng: longitude,
                         accuracy: position.coords.accuracy,
                         deviceId: deviceId,
-                        wifiBSSID: isOnCampusWifi ? "CAMPUS_WIFI_CONNECTED" : "",
-                        isLocationVerified: isAtHostel || isOnCampusWifi,
+                        wifiBSSID: isOnCampusWifi !== false ? "CAMPUS_WIFI_CONNECTED" : "",
+                        verificationMethod: isOnCampusWifi !== false ? "wifi" : "gps",
+                        verifiedBy: isOnCampusWifi !== false ? "wifi" : "gps",
+                        isWifiVerified: isOnCampusWifi !== false,
+                        isLocationVerified: true,
                         // Face matching results (0% Storage - only numbers stored)
                         faceMatchPercentage: faceResult.percentage,
                         faceMatchStatus: faceResult.status
@@ -4783,7 +4821,20 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                             ● {studentProfile.studentStatus || 'IN'}
                                                         </span>
                                                     </div>
-                                                    <p className="text-[9.5px] text-slate-500 font-semibold truncate mt-0.5">{studentProfile.email}</p>
+                                                    <p className="text-[9.5px] text-slate-500 font-semibold truncate mt-0.5 font-mono">
+                                                        {(() => {
+                                                            let em = studentProfile.email || (studentProfile as any).emailAddress || (studentProfile as any).studentEmail || (studentProfile as any).dynamicFields?.email || (studentProfile as any).dynamicFields?.emailAddress || "";
+                                                            if (!em && studentProfile.dynamicFields) {
+                                                                for (const [k, v] of Object.entries(studentProfile.dynamicFields)) {
+                                                                    if (typeof v === 'string' && v.includes('@') && v.includes('.')) {
+                                                                        em = v;
+                                                                        break;
+                                                                    }
+                                                                }
+                                                            }
+                                                            return em;
+                                                        })()}
+                                                    </p>
                                                 </div>
                                             </div>
 

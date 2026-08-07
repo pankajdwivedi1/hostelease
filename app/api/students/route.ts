@@ -103,43 +103,33 @@ export async function POST(request: NextRequest) {
     let registrationId = existingStudent?.registrationId;
 
     if (!registrationId) {
+      let targetFormat = "";
       let prefix = "";
-      let isHostelPrefix = false;
 
-      // Try to find custom prefix from hostelPrefixMap in settings
-      try {
-        const hostelPrefixMap = adminSettings?.hostelPrefixMap || [
-          { hostelName: "GHB HOSTEL", prefix: "GUEST" },
-          { hostelName: "BOYS HOSTEL", prefix: "BOYS" },
-          { hostelName: "GANGOTRI HOSTEL", prefix: "GANGOTRI" },
-          { hostelName: "GAYTRI HOSTEL", prefix: "GAYTRI" }
-        ];
-
-        if (hostelName) {
-          const lowerHostel = hostelName.toLowerCase();
-          if (Array.isArray(hostelPrefixMap)) {
-            for (const mapping of hostelPrefixMap) {
-              if (lowerHostel.includes(mapping.hostelName.toLowerCase())) {
-                prefix = mapping.prefix;
-                isHostelPrefix = true;
-                break;
-              }
-            }
-          } else {
-            for (const [name, p] of Object.entries(hostelPrefixMap)) {
-              if (lowerHostel.includes(name.toLowerCase())) {
-                prefix = p as string;
-                isHostelPrefix = true;
-                break;
-              }
-            }
+      if (hostelName) {
+        try {
+          const allHostels = await db.hostels.getAll();
+          const cleanHostelName = hostelName.trim().toLowerCase();
+          const foundHostel = allHostels.find((h: any) => cleanHostelName.includes(h.name.trim().toLowerCase()) || h.name.trim().toLowerCase().includes(cleanHostelName));
+          if (foundHostel && foundHostel.registrationFormat) {
+            targetFormat = foundHostel.registrationFormat;
           }
+        } catch (err) {
+          console.warn("Failed to fetch hostel for registration format:", err);
         }
-      } catch (err) {
-        console.error("Failed to load hostelPrefixMap from settings:", err);
       }
 
-      // Fallback if no matching hostel prefix was found
+      // Default formats per hostel if not configured
+      if (!targetFormat && hostelName) {
+        const hUpper = hostelName.toUpperCase();
+        if (hUpper.includes("BOYS")) targetFormat = "BOYS-{SEQ4}";
+        else if (hUpper.includes("GANGOTRI")) targetFormat = "GANGOTRI-{SEQ4}";
+        else if (hUpper.includes("GAYTRI")) targetFormat = "GAYTRI-{SEQ4}";
+        else if (hUpper.includes("GHB") || hUpper.includes("GUEST")) targetFormat = "GHB-{SEQ4}";
+      }
+
+      // Extract prefix from format (e.g. BOYS from BOYS-{SEQ4})
+      prefix = targetFormat ? targetFormat.split(/[-_{]/)[0].toUpperCase() : "";
       if (!prefix) {
         const colName = collegeName ? collegeName.toUpperCase().replace(/[^A-Z]/g, '') : "UNK";
         const yearStr = joiningDate ? new Date(joiningDate).getFullYear().toString().slice(-2) : new Date().getFullYear().toString().slice(-2);
@@ -158,7 +148,6 @@ export async function POST(request: NextRequest) {
         if (regIds.length > 0) {
           const numbers = regIds
             .map((id: string) => {
-              // Strip prefix and any non-digits (like the hyphen in GUEST-0001)
               const cleanId = id.replace(prefix, '').replace(/[^0-9]/g, '');
               return parseInt(cleanId);
             })
@@ -170,10 +159,24 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (isHostelPrefix) {
-        registrationId = `${prefix}-${String(nextNumber).padStart(4, '0')}`;
+      const seq4 = String(nextNumber).padStart(4, '0');
+      const seq3 = String(nextNumber).padStart(3, '0');
+      const currentYearStr = new Date().getFullYear().toString();
+      const currentYYStr = currentYearStr.slice(-2);
+
+      if (targetFormat) {
+        let resId = targetFormat;
+        resId = resId.replace(/{SEQ4}/gi, seq4);
+        resId = resId.replace(/{SEQ3}/gi, seq3);
+        resId = resId.replace(/{SEQ}/gi, seq4);
+        resId = resId.replace(/{YEAR}/gi, currentYearStr);
+        resId = resId.replace(/{YY}/gi, currentYYStr);
+        if (!targetFormat.includes("{")) {
+          resId = `${targetFormat}-${seq4}`;
+        }
+        registrationId = resId;
       } else {
-        registrationId = `${prefix}${String(nextNumber).padStart(3, '0')}`;
+        registrationId = `${prefix}-${seq4}`;
       }
     }
 
@@ -206,7 +209,10 @@ export async function POST(request: NextRequest) {
       ...(fatherNumber && { fatherNumber: validators.sanitizePhoneNumber(fatherNumber) }),
       ...(motherName && { motherName: validators.sanitizeInput(motherName) }),
       ...(motherNumber && { motherNumber: validators.sanitizePhoneNumber(motherNumber) }),
-      ...((permanentAddress || body.homePinCode) && { permanentAddress: validators.sanitizeInput(permanentAddress || body.homePinCode) }),
+      ...((permanentAddress || body.address || body.homePinCode) && { 
+        permanentAddress: validators.sanitizeInput(permanentAddress || body.address || body.homePinCode),
+        homePinCode: validators.sanitizeInput(permanentAddress || body.address || body.homePinCode)
+      }),
       ...(homeState && { homeState: validators.sanitizeInput(homeState) }),
       ...(erpInformation && { erpInformation: validators.sanitizeInput(erpInformation) }),
       ...(joiningDate && { joiningDate: validators.formatDateForDB(joiningDate) }),
@@ -312,8 +318,11 @@ export async function PUT(request: NextRequest) {
     if (body.semester !== undefined) updateFields.semester = body.semester;
     if (body.section !== undefined) updateFields.section = body.section;
     if (body.homeState !== undefined) updateFields.homeState = body.homeState;
-    if (body.permanentAddress !== undefined) updateFields.permanentAddress = body.permanentAddress;
-    if (body.homePinCode !== undefined) updateFields.permanentAddress = body.homePinCode;
+    const targetPermAddress = body.permanentAddress || body.address || body.homePinCode;
+    if (targetPermAddress !== undefined && targetPermAddress !== null && targetPermAddress !== "") {
+      updateFields.permanentAddress = targetPermAddress;
+      updateFields.homePinCode = targetPermAddress;
+    }
     if (body.localGuardianAddress !== undefined) updateFields.localGuardianAddress = body.localGuardianAddress;
     if (body.localGuardianPhoneNumber !== undefined) updateFields.localGuardianPhoneNumber = body.localGuardianPhoneNumber;
     if (body.registrationId !== undefined) updateFields.registrationId = body.registrationId;

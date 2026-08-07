@@ -293,6 +293,17 @@ export default function StudentScannerPage() {
             setCurrentStatus(newStatus);
             localStorage.setItem("studentStatus", newStatus);
 
+            try {
+                const cachedStr = localStorage.getItem("cachedStudentData");
+                if (cachedStr) {
+                    const parsed = JSON.parse(cachedStr);
+                    parsed.studentStatus = newStatus;
+                    localStorage.setItem("cachedStudentData", JSON.stringify(parsed));
+                }
+            } catch (e) {
+                console.error("Failed to update cachedStudentData:", e);
+            }
+
             setScanResult({
                 success: true,
                 action: targetAction,
@@ -458,6 +469,17 @@ export default function StudentScannerPage() {
 
                 setCurrentStatus(data.newStatus);
                 localStorage.setItem("studentStatus", data.newStatus);
+
+                try {
+                    const cachedStr = localStorage.getItem("cachedStudentData");
+                    if (cachedStr) {
+                        const parsed = JSON.parse(cachedStr);
+                        parsed.studentStatus = data.newStatus;
+                        localStorage.setItem("cachedStudentData", JSON.stringify(parsed));
+                    }
+                } catch (e) {
+                    console.error("Failed to update cachedStudentData:", e);
+                }
 
                 // Refresh history
                 fetchOutingHistory(firebaseUID);

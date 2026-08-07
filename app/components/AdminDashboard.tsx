@@ -10,6 +10,7 @@ import Barcode from "react-barcode";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import { showToast, showConfirm, showPrompt } from "@/lib/toast";
+import { registerPushNotifications } from "@/lib/pushRegister";
 
 const LocationPickerMap = dynamic(() => import("./LocationPickerMap"), {
   ssr: false,
@@ -2015,9 +2016,34 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       return;
     }
     
-    const formattedDate = new Date(tx.date).toLocaleDateString("en-IN", { dateStyle: "long" });
-    const invoiceNo = tx.id.replace('tx_', 'INV-').toUpperCase();
+    const formattedDate = new Date(tx.date || Date.now()).toLocaleDateString("en-IN", { dateStyle: "long" });
+    const invoiceNo = (tx.id || "tx_invoice").replace('tx_', 'INV-').replace('dir_', 'INV-DIR-').toUpperCase();
     
+    // 1. Strictly use app settings: Rate = ₹30/student/mo, Discounts = 0%, 20%, 30%, 40% (+3% Direct Transfer)
+    const studentCount = tx.studentCount || 446;
+    const months = tx.months || (tx.billingPeriod?.includes("1 Month") ? 1 : tx.billingPeriod?.includes("3") ? 3 : tx.billingPeriod?.includes("6") ? 6 : 12);
+    const ratePerStudentMonth = tx.ratePerStudentMonth || 30; // Your exact configured app setting: ₹30
+
+    const paymentMethodText = tx.paymentSource || (tx.remarks?.includes("Razorpay") || tx.id?.includes("rzp") ? "Razorpay (Instant Online Renewal)" : "Direct Bank / UPI Transfer (UTR Verified)");
+    const isDirectTransfer = paymentMethodText.toLowerCase().includes("direct") || paymentMethodText.toLowerCase().includes("bank");
+
+    // Determine discount rule % from app settings based on tenure (0%, 20%, 30%, 40%)
+    let discountPercent = tx.discountPercent !== undefined ? Number(tx.discountPercent) : 
+      months === 1 ? 0 :
+      months === 3 ? 20 :
+      months === 6 ? 30 : 40; // 40% for 12 months (Your exact Annual Plan setting)
+
+    // If direct transfer, add your configured 3% direct transfer incentive
+    if (isDirectTransfer && tx.discountPercent === undefined) {
+      discountPercent += 3;
+    }
+
+    // 2. Calculate Gross Subtotal at your set rate (₹30), discount amount, and exact net Total Paid
+    const grossBase = studentCount * ratePerStudentMonth * months; // 446 * 30 * 12 = ₹1,60,560
+    const discountAmount = Math.round(grossBase * (discountPercent / 100)); // ₹1,60,560 * 43% = ₹69,041
+    const netCalculated = grossBase - discountAmount; // ₹91,519
+    const finalPaid = (tx.amount && tx.amount > 0 && tx.amount <= grossBase) ? tx.amount : netCalculated;
+
     printWindow.document.write(`
       <html>
         <head>
@@ -2027,28 +2053,35 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
               margin: 0;
               padding: 40px;
-              color: #333;
+              color: #1f2937;
               line-height: 1.5;
             }
             .invoice-box {
-              max-width: 800px;
+              max-width: 820px;
               margin: auto;
               background: #fff;
+              border: 1px solid #e5e7eb;
+              border-radius: 16px;
+              padding: 40px;
+              box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
             }
             .header {
               display: flex;
               justify-content: space-between;
               align-items: center;
               border-bottom: 2px solid #f3f4f6;
-              padding-bottom: 20px;
+              padding-bottom: 24px;
               margin-bottom: 30px;
             }
             .logo {
-              font-size: 28px;
+              font-size: 30px;
               font-weight: 900;
               color: #4f46e5;
               text-transform: uppercase;
               letter-spacing: -0.5px;
+            }
+            .logo span {
+              color: #111827;
             }
             .title {
               text-align: right;
@@ -2057,17 +2090,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               margin: 0;
               font-size: 24px;
               font-weight: 900;
-              color: #1f2937;
+              color: #111827;
               letter-spacing: -0.5px;
             }
             .details {
               display: grid;
               grid-template-cols: 1fr 1fr;
-              gap: 20px;
-              margin-bottom: 40px;
+              gap: 24px;
+              margin-bottom: 30px;
             }
             .details h3 {
-              margin: 0 0 8px 0;
+              margin: 0 0 6px 0;
               font-size: 11px;
               text-transform: uppercase;
               letter-spacing: 1px;
@@ -2078,12 +2111,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               margin: 0;
               font-size: 14px;
               font-weight: 700;
-              color: #4b5563;
+              color: #374151;
             }
             .table {
               width: 100%;
               border-collapse: collapse;
-              margin-bottom: 40px;
+              margin-bottom: 30px;
             }
             .table th {
               background: #f9fafb;
@@ -2097,9 +2130,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               text-align: left;
             }
             .table td {
-              padding: 16px;
+              padding: 14px 16px;
               border-bottom: 1px solid #f3f4f6;
-              font-size: 14px;
+              font-size: 13px;
               font-weight: 600;
               color: #1f2937;
             }
@@ -2109,14 +2142,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             .total-box {
               display: flex;
               justify-content: flex-end;
-              margin-bottom: 50px;
+              margin-bottom: 30px;
             }
             .total-table {
-              width: 250px;
+              width: 320px;
               font-size: 14px;
             }
             .total-table tr td {
-              padding: 8px 0;
+              padding: 6px 0;
             }
             .total-table tr td:last-child {
               text-align: right;
@@ -2127,7 +2160,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               font-weight: 900;
               color: #111827;
               border-top: 2px solid #e5e7eb;
-              padding-top: 12px;
+              padding-top: 10px;
+            }
+            .savings-badge {
+              background: #ecfdf5;
+              border: 1px solid #a7f3d0;
+              color: #047857;
+              padding: 8px 12px;
+              border-radius: 10px;
+              font-size: 12px;
+              font-weight: 800;
+              text-align: right;
+              margin-bottom: 12px;
             }
             .footer {
               border-top: 2px solid #f3f4f6;
@@ -2136,10 +2180,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               font-size: 12px;
               color: #9ca3af;
               font-weight: 600;
-              margin-top: 50px;
+              margin-top: 40px;
             }
             @media print {
-              body { padding: 0; }
+              body { padding: 0; background: #fff; }
+              .invoice-box { border: none; box-shadow: none; padding: 0; }
               .no-print { display: none; }
             }
             .print-btn {
@@ -2147,11 +2192,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               color: #fff;
               border: none;
               padding: 12px 24px;
-              border-radius: 8px;
-              font-weight: 700;
+              border-radius: 10px;
+              font-weight: 800;
               font-size: 14px;
               cursor: pointer;
-              box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1), 0 2px 4px -1px rgba(79, 70, 229, 0.06);
+              box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
               transition: all 0.2s;
               margin-bottom: 20px;
             }
@@ -2161,89 +2206,124 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           </style>
         </head>
         <body>
-          <div style="max-width: 800px; margin: auto;" class="no-print">
-            <button onclick="window.print()" class="print-btn">Print / Save as PDF</button>
+          <div style="max-width: 820px; margin: auto;" class="no-print">
+            <button onclick="window.print()" class="print-btn">🖨️ Print / Save PDF Invoice</button>
           </div>
           <div class="invoice-box">
             <div class="header">
-              <div class="logo">Hosteleaze</div>
+              <div class="logo">HOSTEL<span>EAZE</span></div>
               <div class="title">
-                <h1>TAX INVOICE</h1>
-                <p style="margin: 4px 0 0 0; font-size: 12px; font-weight: 700; color: #6b7280;">No: ${invoiceNo}</p>
+                <h1>OFFICIAL TAX INVOICE</h1>
+                <p style="margin: 4px 0 0 0; font-size: 12px; font-weight: 800; color: #6b7280;">NO: ${invoiceNo}</p>
               </div>
             </div>
             
             <div class="details">
               <div>
-                <h3>Billed To</h3>
+                <h3>Billed To (Client)</h3>
                 <p style="font-size: 16px; color: #111827; margin-bottom: 4px;">${collegeName || "Partner College"}</p>
-                <p style="font-size: 12px; font-weight: 500; color: #9ca3af;">Subscription Client</p>
+                <p style="font-size: 12px; font-weight: 600; color: #6b7280;">Hostel Management Subscription Node</p>
               </div>
               <div style="text-align: right;">
-                <h3>Billed From</h3>
+                <h3>Billed From (Provider)</h3>
                 <p style="font-size: 16px; color: #111827; margin-bottom: 4px;">Hosteleaze Inc.</p>
-                <p style="font-size: 12px; font-weight: 500; color: #9ca3af; margin-bottom: 2px;">Developer Account: DR. PANKAJ DWIVEDI</p>
-                <p style="font-size: 12px; font-weight: 500; color: #9ca3af;">Email: support@hosteleaze.com</p>
+                <p style="font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 2px;">Developer Account: DR. PANKAJ DWIVEDI</p>
+                <p style="font-size: 12px; font-weight: 600; color: #6b7280;">Support: support@hosteleaze.com</p>
               </div>
             </div>
 
-            <div class="details" style="margin-bottom: 30px;">
+            <div class="details" style="margin-bottom: 24px; background: #f9fafb; padding: 16px; border-radius: 12px; border: 1px solid #f3f4f6;">
               <div>
-                <h3>Invoice Date</h3>
-                <p>${formattedDate}</p>
+                <h3>Invoice Issue Date</h3>
+                <p style="color: #111827;">${formattedDate}</p>
               </div>
               <div style="text-align: right;">
                 <h3>Payment Method</h3>
-                <p>Razorpay (Instant Online Renewal)</p>
+                <p style="color: #4f46e5;">${paymentMethodText}</p>
               </div>
             </div>
 
             <table class="table">
               <thead>
                 <tr>
-                  <th>Item Description</th>
-                  <th style="text-align: right;">Billing Period</th>
+                  <th>Item & Plan Description</th>
+                  <th style="text-align: center;">Students</th>
+                  <th style="text-align: center;">Rate / Mo</th>
+                  <th style="text-align: center;">Duration</th>
                   <th style="text-align: right;">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
                   <td>
-                    <div style="font-weight: 700; color: #111827;">Hosteleaze Campus Management Software License</div>
-                    <div style="font-size: 12px; color: #6b7280; font-weight: 500; margin-top: 4px;">Full Administrative & Warden Gatepass Portals Access</div>
+                    <div style="font-weight: 800; color: #111827;">Hosteleaze Enterprise License</div>
+                    <div style="font-size: 11px; color: #6b7280; font-weight: 600; margin-top: 2px;">Full Warden, Student & Admin Gatepass Portals Access</div>
                   </td>
-                  <td style="text-align: right;">${tx.billingPeriod || "1 Year"}</td>
-                  <td style="text-align: right;">₹${tx.amount?.toLocaleString("en-IN") || 0}.00</td>
+                  <td style="text-align: center; font-weight: 700;">${studentCount}</td>
+                  <td style="text-align: center; font-weight: 700;">₹${ratePerStudentMonth}</td>
+                  <td style="text-align: center; font-weight: 700;">${tx.billingPeriod || (months + " Months")}</td>
+                  <td style="text-align: right; font-weight: 800;">₹${grossBase.toLocaleString("en-IN")}.00</td>
                 </tr>
+
+                ${discountAmount > 0 ? `
+                <tr style="background: #fdf2f8;">
+                  <td colspan="4" style="color: #be185d; font-weight: 700;">
+                    🎁 Subscription Plan Discount & Incentives (${discountPercent}% OFF)
+                    ${isDirectTransfer ? '<span style="font-size: 10px; opacity: 0.8; margin-left: 6px;">(Includes Direct Transfer Incentive)</span>' : ''}
+                  </td>
+                  <td style="text-align: right; font-weight: 800; color: #be185d;">-₹${discountAmount.toLocaleString("en-IN")}.00</td>
+                </tr>
+                ` : ''}
               </tbody>
             </table>
 
             <div class="total-box">
-              <table class="total-table">
-                <tr>
-                  <td>Subtotal</td>
-                  <td>₹${tx.amount?.toLocaleString("en-IN") || 0}.00</td>
-                </tr>
-                <tr>
-                  <td>Tax (0%)</td>
-                  <td>₹0.00</td>
-                </tr>
-                <tr class="grand-total">
-                  <td>Total Paid</td>
-                  <td style="color: #4f46e5;">₹${tx.amount?.toLocaleString("en-IN") || 0}.00</td>
-                </tr>
-              </table>
+              <div style="width: 320px;">
+                ${discountAmount > 0 ? `
+                <div class="savings-badge">
+                  🎉 Total College Savings: ₹${discountAmount.toLocaleString("en-IN")}.00
+                </div>
+                ` : ''}
+
+                <table class="total-table">
+                  <tr>
+                    <td>Gross Subtotal</td>
+                    <td>₹${grossBase.toLocaleString("en-IN")}.00</td>
+                  </tr>
+                  ${discountAmount > 0 ? `
+                  <tr>
+                    <td style="color: #be185d;">Total Discounts (${discountPercent}%)</td>
+                    <td style="color: #be185d;">-₹${discountAmount.toLocaleString("en-IN")}.00</td>
+                  </tr>
+                  ` : ''}
+                  <tr>
+                    <td>GST / Service Tax (0%)</td>
+                    <td>₹0.00</td>
+                  </tr>
+                  <tr class="grand-total">
+                    <td>Total Paid</td>
+                    <td style="color: #4f46e5;">₹${finalPaid.toLocaleString("en-IN")}.00</td>
+                  </tr>
+                </table>
+              </div>
             </div>
 
-            <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 12px; margin-bottom: 40px;">
-              <p style="margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 800; margin-bottom: 6px;">Payment Verification Proof</p>
-              <p style="margin: 0; font-family: monospace; font-size: 13px; font-weight: 700; color: #1f2937;">Transaction / Payment ID: ${tx.utr || "N/A"}</p>
-              <p style="margin: 4px 0 0 0; font-size: 12px; font-weight: 500; color: #10b981;">✓ Paid Successfully & Verified</p>
+            <div style="background: #f8fafc; border: 1.5px dashed #cbd5e1; padding: 18px; border-radius: 14px; margin-bottom: 30px;">
+              <p style="margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: 800; margin-bottom: 6px;">Payment Verification & Audit Proof</p>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <p style="margin: 0; font-family: monospace; font-size: 13px; font-weight: 800; color: #0f172a;">Reference / UTR ID: ${tx.utr || tx.id || "N/A"}</p>
+                  <p style="margin: 3px 0 0 0; font-size: 11px; font-weight: 600; color: #64748b;">Method: ${paymentMethodText}</p>
+                </div>
+                <div style="background: #dcfce7; border: 1px solid #86efac; color: #15803d; padding: 6px 14px; border-radius: 20px; font-size: 11px; font-weight: 900; letter-spacing: 0.5px;">
+                  ✓ PAID & VERIFIED
+                </div>
+              </div>
             </div>
 
             <div class="footer">
-              <p style="margin: 0; font-size: 14px; font-weight: 800; color: #4b5563; margin-bottom: 6px;">Thank you for using Hosteleaze!</p>
-              <p style="margin: 0;">This is a computer-generated tax invoice receipt. No signature is required.</p>
+              <p style="margin: 0; font-size: 14px; font-weight: 800; color: #374151; margin-bottom: 4px;">Thank you for trusting Hosteleaze!</p>
+              <p style="margin: 0;">This is a computer-generated tax invoice receipt. Digital authorization valid without physical signature.</p>
             </div>
           </div>
         </body>
@@ -2269,7 +2349,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         }
 
         if (mappedType && userId) {
-          const { registerPushNotifications } = await import("@/lib/pushRegister");
           await registerPushNotifications(userId, mappedType);
         }
       } catch (e) {
@@ -7650,7 +7729,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           {(() => {
                                             const rawName = log.hostelName || log.studentId?.hostelName || "";
                                             const hostel = hostelLocations.find(l => l.name.toLowerCase() === (getHostelCategory(rawName) || rawName).toLowerCase());
-                                            if (hostel && log.location?.lat) {
+                                            const isWifiVerified = Boolean(
+                                              log.verificationMethod === 'wifi' || 
+                                              log.verificationMethod === 'ip' || 
+                                              log.verificationMethod === 'bssid' || 
+                                              log.verifiedBy === 'wifi' || 
+                                              log.verifiedBy === 'ip' || 
+                                              log.verifiedBy === 'bssid' || 
+                                              log.isWifiVerified || 
+                                              log.attendanceMode === 'wifi' ||
+                                              log.verification_method === 'wifi' || 
+                                              log.verification_method === 'ip' || 
+                                              log.verification_method === 'bssid' || 
+                                              log.verified_by === 'wifi' || 
+                                              log.verified_by === 'ip' || 
+                                              log.verified_by === 'bssid' || 
+                                              log.is_wifi_verified ||
+                                              (log.wifiBSSID && String(log.wifiBSSID).toUpperCase().includes('WIFI')) ||
+                                              (log.wifi_bssid && String(log.wifi_bssid).toUpperCase().includes('WIFI'))
+                                            );
+                                            if (!isWifiVerified && hostel && log.location?.lat) {
                                               const dist = calculateDistance(log.location.lat, log.location.lng, hostel.lat, hostel.lng);
                                               return (
                                                 <span className={`text-[9px] md:text-[10px] font-black ${dist < hostel.radius ? "text-blue-600" : "text-amber-600"}`}>
@@ -7662,23 +7760,44 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           })()}
                                           {(() => {
                                             const isAuthorityMarked = Boolean(log.markedBy || log.deviceId === 'marked-by-warden' || log.deviceId === 'marked-by-dean' || log.deviceId === 'marked-by-admin' || log.deviceId === 'admin-override');
-                                            if (log.location?.accuracy) {
-                                              return (
-                                                <span className={`text-[8px] md:text-[9px] font-bold ${log.location.accuracy < 50 ? "text-green-500" : "text-orange-400"}`}>
-                                                  GPS, Acc: {Math.round(log.location.accuracy)}m
-                                                </span>
-                                              );
-                                            }
+                                            const isWifiVerified = Boolean(
+                                              log.verificationMethod === 'wifi' || 
+                                              log.verificationMethod === 'ip' || 
+                                              log.verificationMethod === 'bssid' || 
+                                              log.verifiedBy === 'wifi' || 
+                                              log.verifiedBy === 'ip' || 
+                                              log.verifiedBy === 'bssid' || 
+                                              log.isWifiVerified || 
+                                              log.attendanceMode === 'wifi' ||
+                                              log.verification_method === 'wifi' || 
+                                              log.verification_method === 'ip' || 
+                                              log.verification_method === 'bssid' || 
+                                              log.verified_by === 'wifi' || 
+                                              log.verified_by === 'ip' || 
+                                              log.verified_by === 'bssid' || 
+                                              log.is_wifi_verified ||
+                                              (log.wifiBSSID && String(log.wifiBSSID).toUpperCase().includes('WIFI')) ||
+                                              (log.wifi_bssid && String(log.wifi_bssid).toUpperCase().includes('WIFI'))
+                                            );
+
                                             if (isAuthorityMarked) {
                                               return (
-                                                <span className="text-[8px] md:text-[9px] font-bold text-green-500">
+                                                <span className="text-[8px] md:text-[9px] font-bold text-emerald-600 font-extrabold">
                                                   Acc: N/A
                                                 </span>
                                               );
                                             }
+                                            if (isWifiVerified) {
+                                              return (
+                                                <span className="text-[8px] md:text-[9px] font-bold text-emerald-600 font-extrabold">
+                                                  Campus WiFi
+                                                </span>
+                                              );
+                                            }
+                                            const accuracyVal = Math.round(log.location?.accuracy || log.accuracy || 0);
                                             return (
                                               <span className="text-[8px] md:text-[9px] font-bold text-emerald-600 font-extrabold">
-                                                Campus WiFi
+                                                {accuracyVal > 0 ? `GPS, Acc: ${accuracyVal}m` : "GPS"}
                                               </span>
                                             );
                                           })()}
@@ -7938,25 +8057,32 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           </span>
                                         )}
                                         {(() => {
-                                           const isAuthorityMarked = Boolean(log.markedBy || log.deviceId === 'marked-by-warden' || log.deviceId === 'marked-by-dean' || log.deviceId === 'marked-by-admin' || log.deviceId === 'admin-override');
-                                           const hasAccuracy = Boolean(log.location?.accuracy && log.location.accuracy > 0);
+                                          const isAuthorityMarked = Boolean(log.markedBy || log.deviceId === 'marked-by-warden' || log.deviceId === 'marked-by-dean' || log.deviceId === 'marked-by-admin' || log.deviceId === 'admin-override');
+                                          const isWifiVerified = Boolean(
+                                            log.verificationMethod === 'wifi' || 
+                                            log.verificationMethod === 'ip' || 
+                                            log.verificationMethod === 'bssid' || 
+                                            log.verifiedBy === 'wifi' || 
+                                            log.verifiedBy === 'ip' || 
+                                            log.verifiedBy === 'bssid' || 
+                                            log.isWifiVerified || 
+                                            log.attendanceMode === 'wifi'
+                                          );
 
-                                           if (hasAccuracy) {
-                                             return (
-                                               <span className={`text-[10px] font-black ${log.location.accuracy < 50 ? "text-green-600" : "text-amber-500"}`}>
-                                                 GPS, Acc: {Math.round(log.location.accuracy)}m
-                                               </span>
-                                             );
-                                           }
-                                           if (isAuthorityMarked) {
-                                             return (
-                                               <span className="text-[9px] text-green-500 font-bold">Acc: N/A</span>
-                                             );
-                                           }
-                                           return (
-                                             <span className="text-[9px] text-emerald-600 font-bold">Campus WiFi</span>
-                                           );
-                                         })()}
+                                          if (isAuthorityMarked) {
+                                            return (
+                                              <span className="text-[9px] text-purple-600 font-bold">Manual Entry</span>
+                                            );
+                                          }
+                                          if (isWifiVerified) {
+                                            return (
+                                              <span className="text-[9px] text-emerald-600 font-bold">Campus WiFi</span>
+                                            );
+                                          }
+                                          return (
+                                            <span className="text-[9px] text-green-600 font-bold">GPS</span>
+                                          );
+                                        })()}
                                         {(log.markedBy || log.deviceId === 'marked-by-warden' || log.deviceId === 'marked-by-dean' || log.deviceId === 'admin-override') && (
                                           <span className="text-[9px] text-purple-600 font-black uppercase">Manual Entry</span>
                                         )}
@@ -10195,7 +10321,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             {(student.studentStatus === 'out' && !presentStudentIds.includes(student.id)) ? 'out' : 'in'}
                                           </span>
                                         </div>
-                                        <p className="text-[10px] text-gray-500 mt-0.5 truncate">{student.email}</p>
+                                        <p className="text-[10px] text-gray-500 mt-0.5 truncate">
+                                           {(() => {
+                                             let em = student.email || (student as any).emailAddress || (student as any).studentEmail || (student as any).dynamicFields?.email || (student as any).dynamicFields?.emailAddress || "";
+                                             if (!em && student.dynamicFields) {
+                                               for (const [k, v] of Object.entries(student.dynamicFields)) {
+                                                 if (typeof v === 'string' && v.includes('@') && v.includes('.')) {
+                                                   em = v;
+                                                   break;
+                                                 }
+                                               }
+                                             }
+                                             return em;
+                                           })()}
+                                         </p>
                                       </div>
 
                                       {/* Desktop Status Badge (top-right on desktop) */}
@@ -10543,31 +10682,31 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     
                     {/* Column 1: Contact & Profile */}
                     <div className="space-y-1.5 min-w-0 pr-1.5 sm:pr-2">
-                      <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Contact & Profile</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Contact & Profile</p>
                       <div>
-                        <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase">Phone Number</p>
-                        <a href={`tel:${selectedStudent.phoneNumber}`} className="text-[11px] sm:text-xs text-blue-600 font-bold hover:underline block truncate">
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">Phone Number</p>
+                        <a href={`tel:${selectedStudent.phoneNumber}`} className="text-[10px] text-blue-600 font-bold hover:underline block truncate">
                           {selectedStudent.phoneNumber}
                         </a>
                       </div>
                       {selectedStudent.dob && (
                         <div>
-                          <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase">Date of Birth</p>
-                          <p className="text-[11px] sm:text-xs text-slate-900 font-bold">{formatDate(selectedStudent.dob)}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">Date of Birth</p>
+                          <p className="text-[10px] text-slate-900 font-bold">{formatDate(selectedStudent.dob)}</p>
                         </div>
                       )}
                       {(selectedStudent.gender || selectedStudent.category) && (
                         <div className="grid grid-cols-2 gap-1 pt-0.5">
                           {selectedStudent.gender && (
                             <div>
-                              <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase">Gender</p>
-                              <p className="text-[11px] sm:text-xs text-indigo-600 font-bold uppercase">{selectedStudent.gender}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase">Gender</p>
+                              <p className="text-[10px] text-indigo-600 font-bold uppercase">{selectedStudent.gender}</p>
                             </div>
                           )}
                           {selectedStudent.category && (
                             <div>
-                              <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase">Category</p>
-                              <p className="text-[11px] sm:text-xs text-blue-600 font-bold uppercase">{selectedStudent.category}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase">Category</p>
+                              <p className="text-[10px] text-blue-600 font-bold uppercase">{selectedStudent.category}</p>
                             </div>
                           )}
                         </div>
@@ -10576,23 +10715,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                     {/* Column 2: Hostel & Room */}
                     <div className="space-y-1.5 min-w-0 pl-2 sm:pl-3">
-                      <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Hostel & Room</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Hostel & Room</p>
                       <div>
-                        <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase">Hostel & Room</p>
-                        <p className="text-[11px] sm:text-xs text-slate-900 font-bold leading-tight">
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">Hostel & Room</p>
+                        <p className="text-[10px] text-slate-900 font-bold leading-tight">
                           {getHostelCategory(selectedStudent.hostelName) || selectedStudent.hostelName} <span className="text-slate-400">|</span> Room {selectedStudent.roomNumber}
                         </p>
                       </div>
                       {selectedStudent.floorNumber && (
                         <div>
-                          <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase">Floor</p>
-                          <p className="text-[11px] sm:text-xs text-slate-900 font-bold">{normalizeFloorName(selectedStudent.floorNumber)}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">Floor</p>
+                          <p className="text-[10px] text-slate-900 font-bold">{normalizeFloorName(selectedStudent.floorNumber)}</p>
                         </div>
                       )}
                       {selectedStudent.joiningDate && (
                         <div>
-                          <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase">Joined Date</p>
-                          <p className="text-[10px] sm:text-xs text-slate-700 font-bold">{new Date(selectedStudent.joiningDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">Joined Date</p>
+                          <p className="text-[10px] text-slate-700 font-bold">{new Date(selectedStudent.joiningDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}</p>
                         </div>
                       )}
                     </div>
@@ -10603,36 +10742,36 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 {/* Academic Details */}
                 {(selectedStudent.collegeName || selectedStudent.branch || selectedStudent.year) && (
                   <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs">
-                    <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">Academic Details</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">Academic Details</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                       {selectedStudent.collegeName && (
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold shrink-0">College</span>
-                          <span className="text-[11px] sm:text-xs text-slate-900 font-bold truncate">{selectedStudent.collegeName}</span>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold shrink-0">College</span>
+                          <span className="text-[10px] text-slate-900 font-bold truncate">{selectedStudent.collegeName}</span>
                         </div>
                       )}
                       {selectedStudent.branch && (
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold shrink-0">Branch</span>
-                          <span className="text-[11px] sm:text-xs text-slate-900 font-bold truncate">{selectedStudent.branch}</span>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold shrink-0">Branch</span>
+                          <span className="text-[10px] text-slate-900 font-bold truncate">{selectedStudent.branch}</span>
                         </div>
                       )}
                       {selectedStudent.year && (
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold shrink-0">Year</span>
-                          <span className="text-[11px] sm:text-xs text-slate-900 font-bold truncate">{selectedStudent.year}</span>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold shrink-0">Year</span>
+                          <span className="text-[10px] text-slate-900 font-bold truncate">{selectedStudent.year}</span>
                         </div>
                       )}
                       {selectedStudent.semester && (
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold shrink-0">Sem</span>
-                          <span className="text-[11px] sm:text-xs text-slate-900 font-bold truncate">{selectedStudent.semester}</span>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold shrink-0">Sem</span>
+                          <span className="text-[10px] text-slate-900 font-bold truncate">{selectedStudent.semester}</span>
                         </div>
                       )}
                       {selectedStudent.section && (
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold shrink-0">Section</span>
-                          <span className="text-[11px] sm:text-xs text-slate-900 font-bold truncate">{selectedStudent.section}</span>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold shrink-0">Section</span>
+                          <span className="text-[10px] text-slate-900 font-bold truncate">{selectedStudent.section}</span>
                         </div>
                       )}
                     </div>
@@ -10642,14 +10781,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 {/* Guardian Info (Father & Mother Side-by-Side on Mobile) */}
                 {(selectedStudent.fatherName || selectedStudent.motherName) && (
                   <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs">
-                    <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">Guardian Information</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">Guardian Information</p>
                     <div className="grid grid-cols-2 gap-2 sm:gap-3">
                       {selectedStudent.fatherName && (
                         <div className="bg-slate-50/70 p-2 sm:p-2.5 rounded-lg border border-slate-100 min-w-0">
-                          <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">Father</p>
-                          <p className="text-[10px] sm:text-xs text-slate-900 font-bold break-words leading-tight">{selectedStudent.fatherName}</p>
+                          <p className="text-[10px] text-slate-400 uppercase font-bold">Father</p>
+                          <p className="text-[10px] text-slate-900 font-bold break-words leading-tight">{selectedStudent.fatherName}</p>
                           {selectedStudent.fatherNumber && (
-                            <a href={`tel:${selectedStudent.fatherNumber}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-bold inline-block hover:underline mt-0.5 break-all max-w-full">
+                            <a href={`tel:${selectedStudent.fatherNumber}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] font-bold inline-block hover:underline mt-0.5 break-all max-w-full">
                               {selectedStudent.fatherNumber}
                             </a>
                           )}
@@ -10657,10 +10796,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       )}
                       {selectedStudent.motherName && (
                         <div className="bg-slate-50/70 p-2 sm:p-2.5 rounded-lg border border-slate-100 min-w-0">
-                          <p className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">Mother</p>
-                          <p className="text-[10px] sm:text-xs text-slate-900 font-bold break-words leading-tight">{selectedStudent.motherName}</p>
+                          <p className="text-[10px] text-slate-400 uppercase font-bold">Mother</p>
+                          <p className="text-[10px] text-slate-900 font-bold break-words leading-tight">{selectedStudent.motherName}</p>
                           {selectedStudent.motherNumber && (
-                            <a href={`tel:${selectedStudent.motherNumber}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-bold inline-block hover:underline mt-0.5 break-all max-w-full">
+                            <a href={`tel:${selectedStudent.motherNumber}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] font-bold inline-block hover:underline mt-0.5 break-all max-w-full">
                               {selectedStudent.motherNumber}
                             </a>
                           )}
@@ -10671,37 +10810,41 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 )}
 
                 {/* Home State & Permanent Address */}
-                {(selectedStudent.permanentAddress || selectedStudent.homePinCode || selectedStudent.homeState) && (
-                  <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs space-y-2">
-                    {selectedStudent.homeState && (
-                      <div>
-                        <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Home State</p>
-                        <p className="text-[11px] sm:text-xs text-slate-900 font-bold break-words">{selectedStudent.homeState}</p>
-                      </div>
-                    )}
-                    {(selectedStudent.permanentAddress || selectedStudent.homePinCode) && (
-                      <div>
-                        <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Permanent Address</p>
-                        <p className="text-[10px] sm:text-xs text-slate-800 font-bold leading-normal break-words whitespace-pre-wrap">{selectedStudent.permanentAddress || selectedStudent.homePinCode}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
+                {(() => {
+                  const displayPermAddr = selectedStudent.permanentAddress || selectedStudent.permanent_address || selectedStudent.homePinCode || selectedStudent.address || (selectedStudent.dynamicFields && (selectedStudent.dynamicFields.permanentAddress || selectedStudent.dynamicFields.address || selectedStudent.dynamicFields.homePinCode));
+                  if (!displayPermAddr && !selectedStudent.homeState) return null;
+                  return (
+                    <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs space-y-2">
+                      {selectedStudent.homeState && (
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Home State</p>
+                          <p className="text-[10px] text-slate-900 font-bold break-words">{selectedStudent.homeState}</p>
+                        </div>
+                      )}
+                      {displayPermAddr && (
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Permanent Address</p>
+                          <p className="text-[10px] text-slate-800 font-bold leading-normal break-words whitespace-pre-wrap">{displayPermAddr}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Local Guardian Details */}
                 {(selectedStudent.localGuardianAddress || selectedStudent.localGuardianPhoneNumber) && (
                   <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs">
-                    <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 border-b border-slate-100 pb-1">Local Guardian Details</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 border-b border-slate-100 pb-1">Local Guardian Details</p>
                     <div className="space-y-1">
                       {selectedStudent.localGuardianAddress && (
-                        <p className="text-[10px] sm:text-xs text-slate-700 font-medium leading-relaxed break-words whitespace-pre-wrap">
+                        <p className="text-[10px] text-slate-700 font-medium leading-relaxed break-words whitespace-pre-wrap">
                           {selectedStudent.localGuardianAddress}
                         </p>
                       )}
                       {selectedStudent.localGuardianPhoneNumber && (
                         <div className="flex items-center gap-2 pt-0.5">
-                          <span className="text-[8px] sm:text-[9px] text-slate-400 uppercase font-bold">Phone:</span>
-                          <a href={`tel:${selectedStudent.localGuardianPhoneNumber}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-bold inline-block hover:underline break-all">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold">Phone:</span>
+                          <a href={`tel:${selectedStudent.localGuardianPhoneNumber}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] font-bold inline-block hover:underline break-all">
                             {selectedStudent.localGuardianPhoneNumber}
                           </a>
                         </div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -12,6 +13,7 @@ const OGI_SEED_TRANSACTION = {
     utr: "659864589235",
     date: "2026-03-07T16:23:43.395Z",
     billingType: "Verified Payment",
+    paymentSource: "Direct Bank / UPI Transfer (UTR Verified)",
     billingPeriod: "1 Year",
     remarks: "Initial seeded payment proof"
 };
@@ -51,7 +53,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
     try {
-        const newRecord = await request.json(); // { tenantId, tenantName, amount, utr, date, billingType, billingPeriod, remarks }
+        const newRecord = await request.json(); // { tenantId, tenantName, amount, utr, date, billingType, billingPeriod, remarks, paymentSource }
         const supabase = getSupabaseAdmin();
 
         // Validate billingType
@@ -60,7 +62,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: "Invalid billing type" }, { status: 400 });
         }
 
-        // Fetch existing
+        // Fetch existing from Supabase
         const { data, error: fetchError } = await supabase
             .from('platform_settings')
             .select('settings')
@@ -79,12 +81,14 @@ export async function POST(request: NextRequest) {
             utr: newRecord.utr || "",
             date: newRecord.date || new Date().toISOString(),
             billingType: newRecord.billingType,
+            paymentSource: newRecord.paymentSource || (newRecord.utr ? "Direct Bank / UPI Transfer (UTR Verified)" : "Direct Bank Transfer"),
             billingPeriod: newRecord.billingPeriod || "1 Month",
             remarks: newRecord.remarks || ""
         };
 
         const updatedLogs = [updatedRecord, ...currentLogs];
 
+        // 1. Update Supabase
         const { error: upsertError } = await supabase
             .from('platform_settings')
             .upsert({
@@ -95,8 +99,20 @@ export async function POST(request: NextRequest) {
 
         if (upsertError) throw upsertError;
 
+        // 2. Update Prisma (Railway PostgreSQL)
+        try {
+            await prisma.platformSetting.upsert({
+                where: { id: 'super_admin_billing_ledger' },
+                update: { settings: updatedLogs as any, updatedAt: new Date() },
+                create: { id: 'super_admin_billing_ledger', settings: updatedLogs as any, updatedAt: new Date() }
+            });
+        } catch (e: any) {
+            console.error("Prisma billing ledger update warning:", e?.message);
+        }
+
         return NextResponse.json({ success: true, logs: updatedLogs });
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }
+

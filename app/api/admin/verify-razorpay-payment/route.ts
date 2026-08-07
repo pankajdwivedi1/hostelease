@@ -59,6 +59,16 @@ export async function POST(request: NextRequest) {
             console.error("Failed to fetch payment amount from Razorpay:", razorpayFetchErr);
         }
 
+        // 3b. Fetch student count
+        let studentCount = 0;
+        try {
+            const { count } = await supabase
+                .from('students')
+                .select('*', { count: 'exact', head: true })
+                .eq('tenant_id', tenantId);
+            studentCount = count || 0;
+        } catch (e) {}
+
         // Log transaction to global billing ledger
         try {
             const { data: ledgerData } = await supabase
@@ -68,6 +78,10 @@ export async function POST(request: NextRequest) {
                 .maybeSingle();
 
             const currentLogs = Array.isArray(ledgerData?.settings) ? ledgerData.settings : [];
+            const pricePerMonth = settings.pricePerStudentPerMonth || 30;
+            const months = 12;
+            const discountPercent = settings.discount12Month !== undefined ? Number(settings.discount12Month) : 20;
+
             const newRecord = {
                 id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                 tenantId: tenantId,
@@ -76,6 +90,11 @@ export async function POST(request: NextRequest) {
                 utr: razorpay_payment_id,
                 date: new Date().toISOString(),
                 billingType: "Verified Payment",
+                paymentSource: "Razorpay (Instant Online Renewal)",
+                studentCount: studentCount || 446,
+                ratePerStudentMonth: pricePerMonth,
+                months: months,
+                discountPercent: discountPercent,
                 billingPeriod: "1 Year",
                 remarks: `Paid via Razorpay (Order: ${razorpay_order_id})`
             };

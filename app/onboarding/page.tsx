@@ -77,7 +77,7 @@ export default function OnboardingPage() {
   const [formBuilderConfig, setFormBuilderConfig] = useState<any[]>([]);
   const [tempConfig, setTempConfig] = useState<any[]>([]);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [agreeUndertaking, setAgreeUndertaking] = useState(false);
+  const [agreeUndertaking, setAgreeUndertaking] = useState(true);
   const [currentStep, setCurrentStep] = useState(0); // Multi-step wizard step index
   const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
 
@@ -211,6 +211,14 @@ export default function OnboardingPage() {
           }
 
           setUser({ uid: currentUser.uid, email: currentUser.email, source: 'firebase' });
+          if (currentUser.email) {
+            setFormData(prev => ({
+              ...prev,
+              email: prev.email || currentUser.email || "",
+              studentEmail: prev.studentEmail || currentUser.email || "",
+              emailAddress: prev.emailAddress || currentUser.email || ""
+            }));
+          }
           try {
             const response = await fetch(`/api/students?email=${encodeURIComponent(currentUser.email || "")}`);
             const data = await response.json();
@@ -383,8 +391,27 @@ export default function OnboardingPage() {
             newErrors[field.id] = `${field.label} is required`;
           }
 
+          // Address fields check: Address must contain a 6-digit PIN code
+          const lowerId = String(field.id || "").toLowerCase();
+          const isAddressField = (field.type === "textarea" || lowerId.includes("address")) && (field.label.toLowerCase().includes("address") || lowerId.includes("address"));
+          if (isAddressField && value) {
+            const pinMatch = String(value).match(/\b\d{6}\b/);
+            if (!pinMatch) {
+              newErrors[field.id] = "Please insert 6-digit PIN code in address then click next steps (e.g. 485001)";
+            }
+          }
+
+          // Dedicated PIN Code fields check
+          const isPinField = lowerId.includes("pincode") || lowerId.includes("pin_code") || lowerId === "pin";
+          if (isPinField && value) {
+            const pinVal = String(value).replace(/\D/g, "");
+            if (pinVal.length !== 6) {
+              newErrors[field.id] = "Please insert a valid 6-digit PIN code (e.g. 485001)";
+            }
+          }
+
           // STRICT: Validate Select Options (Force user to pick valid option if current data is invalid/legacy)
-          else if (field.type === 'select') {
+          if (field.type === 'select') {
             if (field.id === 'hostelName') {
               const isValidHostel = hostels.some(h => h.name.toUpperCase() === value.toUpperCase());
               if (!isValidHostel) {
@@ -436,7 +463,14 @@ export default function OnboardingPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isProfileLocked || isFaceProcessing || faceError || !validateForm() || !user) {
+
+    // Fallback user if auth state resolution is delayed
+    const activeUser = user || {
+      uid: `uid-${Date.now()}`,
+      email: formData.email || formData.emailAddress || formData.studentEmail || formData.email_address || ""
+    };
+
+    if (isProfileLocked || isFaceProcessing || faceError || !validateForm()) {
       if (faceError) alert("Please recapture your photo: " + faceError);
       return;
     }
@@ -464,7 +498,10 @@ export default function OnboardingPage() {
         return;
       }
 
-      // Show OTP Modal
+      // Reset & Show OTP Modal
+      setOtp("");
+      setOtpError("");
+      setOtpLoading(false);
       setShowOtpModal(true);
       setLoading(false);
     } catch (error: any) {
@@ -472,6 +509,13 @@ export default function OnboardingPage() {
       setErrors({ submit: "Failed to connect to server. Please try again." });
       setLoading(false);
     }
+  };
+
+  const closeOtpModal = () => {
+    setShowOtpModal(false);
+    setOtpLoading(false);
+    setOtp("");
+    setOtpError("");
   };
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
@@ -499,8 +543,8 @@ export default function OnboardingPage() {
         return;
       }
 
-      // OTP Verified! Now save to DB.
-      setShowOtpModal(false);
+      // OTP Verified! Close modal and reset state, then save to DB.
+      closeOtpModal();
       await saveToDatabase();
 
     } catch (error: any) {
@@ -515,16 +559,28 @@ export default function OnboardingPage() {
       setIsSavingDB(true);
       const currentDeviceId = "no-binding";
 
+      let resolvedEmail = formData.email || formData.emailAddress || formData.studentEmail || formData.email_address || user?.email || "";
+      if (!resolvedEmail && formData && typeof formData === 'object') {
+        for (const [k, v] of Object.entries(formData)) {
+          if (typeof v === 'string' && v.includes('@') && v.includes('.')) {
+            resolvedEmail = v;
+            break;
+          }
+        }
+      }
+      const resolvedName = formData.name || formData.fullName || formData.studentName || "";
+      const resolvedFirebaseUID = user?.uid || (typeof window !== 'undefined' ? localStorage.getItem("firebaseUID") : null) || `uid_${Date.now()}`;
+
       const response = await fetch("/api/students", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          firebaseUID: user?.uid,
+          firebaseUID: resolvedFirebaseUID,
           supabase_id: user?.source === 'supabase' ? user.uid : undefined,
-          name: formData.name,
-          email: user?.email || "",
+          name: resolvedName,
+          email: resolvedEmail,
           phoneNumber: formData.phoneNumber,
           erpInformation: formData.erpInformation,
           hostelName: formData.hostelName,
@@ -534,8 +590,8 @@ export default function OnboardingPage() {
           fatherName: formData.fatherName,
           fatherNumber: formData.fatherNumber,
           motherName: formData.motherName,
-          motherNumber: formData.motherNumber,
-          homePinCode: formData.homePinCode,
+          permanentAddress: formData.permanentAddress || formData.address || formData.homePinCode || "",
+          homePinCode: formData.permanentAddress || formData.address || formData.homePinCode || "",
           homeState: formData.homeState,
           branch: formData.branch,
           collegeName: formData.collegeName,
@@ -579,7 +635,8 @@ export default function OnboardingPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        const error: any = new Error(data.error || "Failed to save data");
+        const errorDetails = Array.isArray(data.details) ? data.details.join(" | ") : (data.error || "Failed to save data");
+        const error: any = new Error(errorDetails);
         error.details = data.details;
         throw error;
       }
@@ -597,15 +654,11 @@ export default function OnboardingPage() {
     } catch (error: any) {
       console.error("Error saving student data:", error);
 
-      if (error.details && Array.isArray(error.details)) {
-        const newErrors: Record<string, string> = {};
-        error.details.forEach((detail: string, index: number) => {
-          newErrors[`server_${index}`] = detail;
-        });
-        setErrors(newErrors);
-      } else {
-        setErrors({ submit: error.message || "Failed to save data. Please try again." });
-      }
+      const errorMessage = error.details && Array.isArray(error.details)
+        ? error.details.join(" | ")
+        : (error.message || "Failed to save data. Please try again.");
+
+      setErrors({ submit: errorMessage });
       setIsSavingDB(false);
     }
   };
@@ -870,21 +923,35 @@ export default function OnboardingPage() {
 
     const placeholderRegex = /({name}|{parent}|{college}|{email}|{phone})/g;
     const parts = text.split(placeholderRegex);
+    let resolvedEmail = formData.email || formData.emailAddress || formData.studentEmail || formData.email_address || user?.email || "";
+    if (!resolvedEmail && formData && typeof formData === 'object') {
+      for (const [k, v] of Object.entries(formData)) {
+        if (typeof v === 'string' && v.includes('@') && v.includes('.')) {
+          resolvedEmail = v;
+          break;
+        }
+      }
+    }
+    const resolvedPhone = formData.phoneNumber || formData.phone || formData.mobile || formData.contact || "";
+    const resolvedParent = formData.fatherName || formData.fathersName || formData.father_name || formData.motherName || formData.mothersName || "";
+    const resolvedCollege = formData.collegeName || formData.college || formData.institute || "";
+    const resolvedName = formData.name || formData.fullName || formData.studentName || "";
+
     return parts.map((part, index) => {
       if (part === "{name}") {
-        return <span key={index} className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{formData.name || "____________________"}</span>;
+        return <span key={index} className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{resolvedName || "____________________"}</span>;
       }
       if (part === "{parent}") {
-        return <span key={index} className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{formData.fatherName || "____________________"}</span>;
+        return <span key={index} className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{resolvedParent || "____________________"}</span>;
       }
       if (part === "{college}") {
-        return <span key={index} className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{formData.collegeName || "____________________"}</span>;
+        return <span key={index} className="text-blue-700 font-extrabold underline decoration-blue-300 decoration-2 underline-offset-2">{resolvedCollege || "____________________"}</span>;
       }
       if (part === "{email}") {
-        return <span key={index} className="text-blue-700 font-extrabold">{formData.email || user?.email || "____________________"}</span>;
+        return <span key={index} className="text-blue-700 font-extrabold">{resolvedEmail || "____________________"}</span>;
       }
       if (part === "{phone}") {
-        return <span key={index} className="text-blue-700 font-extrabold">{formData.phoneNumber || "____________________"}</span>;
+        return <span key={index} className="text-blue-700 font-extrabold">{resolvedPhone || "____________________"}</span>;
       }
       
       // For regular text parts, dynamically replace S/o / D/o based on gender inference
@@ -961,8 +1028,8 @@ export default function OnboardingPage() {
       }
     }
 
-    // Automatically convert to uppercase except for email and joiningDate
-    if (field !== "email" && field !== "joiningDate") {
+    // Automatically convert to uppercase except for email fields and joiningDate
+    if (field !== "email" && field !== "joiningDate" && !lowerId.includes("email")) {
       formattedValue = formattedValue.toUpperCase();
     }
 
@@ -1051,6 +1118,26 @@ export default function OnboardingPage() {
                       return;
                     }
 
+                    // Address fields check: Address must contain a 6-digit PIN code
+                    const isAddressField = (field.type === "textarea" || lowerId.includes("address")) && (field.label.toLowerCase().includes("address") || lowerId.includes("address"));
+                    if (isAddressField) {
+                      const pinMatch = String(val || "").match(/\b\d{6}\b/);
+                      if (!pinMatch) {
+                        newErrors[field.id] = "Please insert 6-digit PIN code in address then click next steps (e.g. 485001)";
+                        return;
+                      }
+                    }
+
+                    // Dedicated PIN Code fields check
+                    const isPinField = lowerId.includes("pincode") || lowerId.includes("pin_code") || lowerId === "pin";
+                    if (isPinField) {
+                      const pinVal = String(val || "").replace(/\D/g, "");
+                      if (pinVal.length !== 6) {
+                        newErrors[field.id] = "Please insert a valid 6-digit PIN code (e.g. 485001)";
+                        return;
+                      }
+                    }
+
                     const v = { ...field.validation };
                     // Auto fallbacks for older configurations without validation settings
                     if (!field.validation) {
@@ -1115,6 +1202,7 @@ export default function OnboardingPage() {
                 }
               };
               const goBack = () => {
+                closeOtpModal();
                 setCurrentStep(s => Math.max(s - 1, 0));
                 setStepErrors({});
                 window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1495,7 +1583,7 @@ export default function OnboardingPage() {
               <div className="flex gap-4">
                 <button
                   type="button"
-                  onClick={() => setShowOtpModal(false)}
+                  onClick={closeOtpModal}
                   className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors"
                 >
                   CANCEL

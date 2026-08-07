@@ -78,13 +78,18 @@ export async function registerPushNotifications(
       })
     });
 
+    if (!res.ok) {
+      console.warn(`Push subscription API status: ${res.status}`);
+      return;
+    }
+
     const data = await res.json();
     if (data.success) {
       console.log(`Successfully registered push notifications for ${userType} ID: ${userId}`);
     } else {
-      console.error("Failed to persist push subscription on server:", data.error);
+      console.warn("Push subscription warning:", data.error || "Failed to persist subscription");
     }
   } catch (error) {
-    console.error("Failed to setup push notifications:", error);
+    console.warn("Push notification setup notice:", error);
   }
 }

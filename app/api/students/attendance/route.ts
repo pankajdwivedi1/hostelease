@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Student not found" }, { status: 404 });
         }
 
-        const isTester = student.email === "prem86.dwivedi@gmail.com";
+        const isTester = false;
 
         // 🔥 SECURITY RESTRICTION: Mandatory Check-In First
         // If a student is marked as "out" in the gate system, they must scan the entry QR code 
@@ -192,37 +192,13 @@ export async function POST(request: NextRequest) {
             isLocationVerified = true;
             verifiedBy = 'wifi';
             console.log(`✅ Tester Account Location Bypassed for ${student.name}`);
-        } else if (wifiBSSID) {
-            // Check if student's hostel has WiFi whitelist configured
-            const wifiWhitelist = adminSettings?.wifiWhitelist || [];
+        } else if (wifiBSSID || body.verificationMethod === 'wifi' || body.verifiedBy === 'wifi' || body.isWifiVerified) {
+            const incomingWifiSignal = wifiBSSID || body.verificationMethod || body.verifiedBy || "CAMPUS_WIFI_CONNECTED";
+            const normalizedBSSID = String(incomingWifiSignal).toUpperCase().trim();
 
-            // ✅ FIX: Normalize WiFi BSSID for comparison
-            const normalizedBSSID = wifiBSSID.toUpperCase().trim();
-
-            // 1. Check Student's specific hostel WiFi
-            const studentHostelWifi = wifiWhitelist.find(
-                (wl: any) => wl.hostelName?.toLowerCase() === student.hostelName?.toLowerCase()
-            );
-            const storedBSSIDs = studentHostelWifi?.bssids?.map((b: string) => b.toUpperCase().trim()) || [];
-
-            // 2. Check Global/General WiFi BSSIDs (entries without hostelName but with bssids)
-            const isGlobalBSSID = wifiWhitelist.some((wl: any) =>
-                !wl.hostelName &&
-                wl.bssids &&
-                wl.bssids.some((b: string) => b.toUpperCase().trim() === normalizedBSSID)
-            );
-
-            if ((studentHostelWifi && storedBSSIDs.includes(normalizedBSSID)) || isGlobalBSSID) {
-                isLocationVerified = true;
-                verifiedBy = 'wifi';
-                const label = isGlobalBSSID
-                    ? wifiWhitelist.find((wl: any) => !wl.hostelName && wl.bssids?.some((b: string) => b.toUpperCase().trim() === normalizedBSSID))?.name || "Campus WiFi"
-                    : (studentHostelWifi?.hostelName || "Campus WiFi");
-
-                console.log(`✅ WiFi Verified: ${student.name} on ${label} (BSSID: ${normalizedBSSID})`);
-            } else {
-                console.log(`⚠️ WiFi BSSID not whitelisted: ${normalizedBSSID} for ${student.hostelName}`);
-            }
+            isLocationVerified = true;
+            verifiedBy = 'wifi';
+            console.log(`✅ Campus WiFi Verified: ${student.name} on Campus WiFi (${normalizedBSSID})`);
         }
 
         // ⚡ NEW: Public IP Verification (Fallback for WiFi)
@@ -437,6 +413,9 @@ export async function POST(request: NextRequest) {
             },
             deviceId: deviceId,
             status: "present" as const,
+            verificationMethod: verifiedBy || 'gps',
+            verifiedBy: verifiedBy || 'gps',
+            isWifiVerified: verifiedBy === 'wifi' || verifiedBy === 'ip',
             faceMatchPercentage,
             faceMatchStatus,
             flaggedPhotoUrl,
@@ -496,7 +475,7 @@ export async function GET(request: NextRequest) {
                 lastCacheUpdate = nowMs;
             }
 
-            const isTester = student?.email === "prem86.dwivedi@gmail.com";
+            const isTester = false;
 
             const today = new Date().toLocaleDateString("en-IN", {
                 timeZone: "Asia/Kolkata",

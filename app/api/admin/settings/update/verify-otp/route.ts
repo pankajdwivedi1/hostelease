@@ -40,36 +40,37 @@ export async function POST(request: Request) {
         otpCache.delete(cacheKey);
 
         // 4. Update the Database
-        const { data: settings } = await db.supabase
+        const { data: existingSettings } = await db.supabase
             .from('admin_settings')
-            .select('_id, university_bank_details')
+            .select('id, _id, university_bank_details')
             .eq('tenant_id', tenantId)
             .maybeSingle();
 
-        const bankDetails = settings?.university_bank_details || {};
+        const bankDetails = (existingSettings?.university_bank_details && typeof existingSettings.university_bank_details === 'object') 
+            ? { ...existingSettings.university_bank_details } 
+            : {};
         
         // Update fields
-        if (contactName !== undefined) bankDetails.contactName = contactName;
-        if (contactPhone !== undefined) bankDetails.contactPhone = contactPhone;
-        if (totalHostelars !== undefined) bankDetails.totalHostelars = totalHostelars;
+        if (contactName !== undefined && contactName !== null) bankDetails.contactName = String(contactName).trim();
+        if (contactPhone !== undefined && contactPhone !== null) bankDetails.contactPhone = String(contactPhone).trim();
+        if (totalHostelars !== undefined && totalHostelars !== null) bankDetails.totalHostelars = String(totalHostelars).trim();
 
-        if (settings) {
+        const updatePayload: any = {
+            tenant_id: tenantId,
+            university_bank_details: bankDetails,
+            ...(leaveApprovalMethod ? { leave_approval_method: leaveApprovalMethod } : {})
+        };
+
+        if (existingSettings) {
             const { error } = await db.supabase
                 .from('admin_settings')
-                .update({ 
-                    university_bank_details: bankDetails,
-                    ...(leaveApprovalMethod ? { leave_approval_method: leaveApprovalMethod } : {})
-                })
-                .eq('_id', settings._id);
+                .update(updatePayload)
+                .eq('tenant_id', tenantId);
             if (error) throw error;
         } else {
             const { error } = await db.supabase
                 .from('admin_settings')
-                .insert({ 
-                    tenant_id: tenantId, 
-                    university_bank_details: bankDetails,
-                    ...(leaveApprovalMethod ? { leave_approval_method: leaveApprovalMethod } : {})
-                });
+                .insert([updatePayload]);
             if (error) throw error;
         }
 

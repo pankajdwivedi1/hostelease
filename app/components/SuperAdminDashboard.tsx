@@ -57,9 +57,9 @@ interface Tenant {
     healthScore?: number;
 }
 
-// ⚡ LIVE SWITCH COMPONENT
+// ⚡ LIVE SWITCH COMPONENT (SUPABASE ↔ RAILWAY)
 const LiveDbSwitch = () => {
-    const [source, setSource] = useState<'MONGODB' | 'SUPABASE' | null>(null);
+    const [source, setSource] = useState<'RAILWAY' | 'SUPABASE' | 'MONGODB' | null>(null);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -81,10 +81,10 @@ const LiveDbSwitch = () => {
 
     const toggle = async () => {
         if (!source) return;
-        const newSource = source === 'MONGODB' ? 'SUPABASE' : 'MONGODB';
+        const newSource = source === 'RAILWAY' ? 'SUPABASE' : 'RAILWAY';
         
         // ⚠️ Enforce Typed Affirmation
-        const doubleCheck = await showPrompt(`⚠️ WARNING: YOU ARE ABOUT TO SWITCH DATABASE TO ${newSource} FOR ALL USERS.\n\nTo confirm, type the word "SWITCH" below:`);
+        const doubleCheck = await showPrompt(`⚠️ WARNING: YOU ARE ABOUT TO SWITCH GLOBAL ACTIVE DATABASE TO ${newSource} FOR ALL USERS.\n\nTo confirm, type the word "SWITCH" below:`);
         if (doubleCheck !== "SWITCH") {
             showToast("Database switch aborted.", "warning");
             return;
@@ -113,7 +113,7 @@ const LiveDbSwitch = () => {
                 });
 
                 localStorage.clear();
-                showToast(`Switched to ${data.source}`, "success");
+                showToast(`Switched active database to ${data.source}`, "success");
                 setTimeout(() => window.location.reload(), 1500);
             } else {
                 showToast("Failed: " + data.error, "error");
@@ -131,19 +131,188 @@ const LiveDbSwitch = () => {
         <button
             onClick={toggle}
             disabled={loading}
+            title={`Current Active DB: ${source}. Click to switch to ${source === 'RAILWAY' ? 'SUPABASE' : 'RAILWAY'}`}
             className={`h-10 sm:h-11 px-3 sm:px-4 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all border shadow-sm active:scale-95 flex items-center gap-1.5 justify-center w-full sm:w-auto ${
-                source === 'SUPABASE'
-                    ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
-                    : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                source === 'RAILWAY'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                    : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
             }`}
         >
             {loading ? 'Switching...' : (
                 <>
-                    <span className={`w-2 h-2 rounded-full ${source === 'SUPABASE' ? 'bg-orange-500 animate-pulse' : 'bg-green-500'}`}></span>
-                    {source === 'SUPABASE' ? 'Supabase' : 'MongoDB'}
+                    <span className={`w-2 h-2 rounded-full ${source === 'RAILWAY' ? 'bg-emerald-500 animate-pulse' : 'bg-orange-500 animate-pulse'}`}></span>
+                    {source === 'RAILWAY' ? 'RAILWAY' : 'SUPABASE'}
                 </>
             )}
         </button>
+    );
+};
+
+// ⚡ SYNC DATABASES COMPONENT (SUPABASE ↔ RAILWAY)
+const SyncDbButton = () => {
+    const [showModal, setShowModal] = useState(false);
+    const [syncing, setSyncing] = useState(false);
+    const [direction, setDirection] = useState<'TWO_WAY' | 'RAILWAY_TO_SUPABASE' | 'SUPABASE_TO_RAILWAY'>('TWO_WAY');
+
+    const handleSync = async () => {
+        setSyncing(true);
+        try {
+            const res = await fetch('/api/admin/sync-db', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ direction })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                showToast(data.message || "Databases synced successfully!", "success");
+                
+                // Write Audit Log
+                await fetch('/api/super-admin/audit-logs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: "SYNC_DATABASES",
+                        details: `Executed database sync (${direction}) between Supabase and Railway`,
+                        user: "Super Admin"
+                    })
+                });
+
+                setShowModal(false);
+            } else {
+                showToast("Sync failed: " + (data.error || "Unknown error"), "error");
+            }
+        } catch (e: any) {
+            showToast("Error executing sync: " + e.message, "error");
+        } finally {
+            setSyncing(false);
+        }
+    };
+
+    return (
+        <div className="relative inline-block text-left">
+            <button
+                onClick={() => setShowModal(!showModal)}
+                disabled={syncing}
+                title="Sync data between Railway and Supabase PostgreSQL"
+                className="h-10 sm:h-11 px-3 sm:px-4 bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 flex items-center gap-1.5 justify-center w-full sm:w-auto"
+            >
+                <Zap className="w-3.5 h-3.5 text-purple-600 animate-pulse" />
+                <span>{syncing ? 'Syncing...' : 'Sync DB'}</span>
+            </button>
+
+            {showModal && (
+                <>
+                    {/* Transparent Click-outside overlay (NO dark background screen) */}
+                    <div 
+                        className="fixed inset-0 z-40 bg-transparent" 
+                        onClick={() => !syncing && setShowModal(false)}
+                    />
+
+                    {/* Floating Dropdown Card: centered inset-x-3 on mobile, absolute right-0 on desktop */}
+                    <div className="fixed inset-x-3 top-24 sm:top-auto sm:inset-x-auto sm:absolute sm:right-0 sm:mt-2 z-50 bg-white rounded-2xl w-auto sm:w-96 max-w-md sm:max-w-none p-4 shadow-2xl border border-purple-200 space-y-3 animate-in fade-in zoom-in-95 duration-150">
+                        <div className="flex items-center justify-between border-b pb-2">
+                            <div className="flex items-center gap-2">
+                                <Database className="w-4 h-4 text-purple-600 shrink-0" />
+                                <h3 className="font-black text-gray-900 text-xs uppercase tracking-wide">Live Database Sync Tool</h3>
+                            </div>
+                            <button 
+                                onClick={() => !syncing && setShowModal(false)} 
+                                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg transition-colors"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <p className="text-[11px] text-gray-600 font-medium leading-normal">
+                            Sync live datasets (students, attendance, gate passes, settings) between <strong>Supabase</strong> and <strong>Railway PostgreSQL</strong>.
+                        </p>
+
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Select Sync Direction:</label>
+                            <div className="grid grid-cols-1 gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => setDirection('TWO_WAY')}
+                                    className={`p-2 rounded-xl border text-left text-xs font-bold transition-all flex items-center gap-2 ${
+                                        direction === 'TWO_WAY'
+                                            ? 'border-purple-500 bg-purple-50 text-purple-900 ring-1 ring-purple-300'
+                                            : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                                    }`}
+                                >
+                                    <span className="w-2 h-2 rounded-full bg-purple-600 shrink-0"></span>
+                                    <div>
+                                        <div className="font-extrabold text-[11px]">🔄 Two-Way Full Sync</div>
+                                        <div className="text-[9px] text-gray-500 font-normal">Make both databases 100% equal.</div>
+                                    </div>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setDirection('RAILWAY_TO_SUPABASE')}
+                                    className={`p-2 rounded-xl border text-left text-xs font-bold transition-all flex items-center gap-2 ${
+                                        direction === 'RAILWAY_TO_SUPABASE'
+                                            ? 'border-emerald-500 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-300'
+                                            : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                                    }`}
+                                >
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                                    <div>
+                                        <div className="font-extrabold text-[11px]">🟢 Railway ➔ Supabase</div>
+                                        <div className="text-[9px] text-gray-500 font-normal">Copy Railway records to Supabase.</div>
+                                    </div>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setDirection('SUPABASE_TO_RAILWAY')}
+                                    className={`p-2 rounded-xl border text-left text-xs font-bold transition-all flex items-center gap-2 ${
+                                        direction === 'SUPABASE_TO_RAILWAY'
+                                            ? 'border-orange-500 bg-orange-50 text-orange-900 ring-1 ring-orange-300'
+                                            : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                                    }`}
+                                >
+                                    <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0"></span>
+                                    <div>
+                                        <div className="font-extrabold text-[11px]">🟠 Supabase ➔ Railway</div>
+                                        <div className="text-[9px] text-gray-500 font-normal">Copy Supabase records to Railway.</div>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t">
+                            <button
+                                type="button"
+                                disabled={syncing}
+                                onClick={() => setShowModal(false)}
+                                className="px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-xl transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                disabled={syncing}
+                                onClick={handleSync}
+                                className="px-3.5 py-1.5 text-xs font-black uppercase tracking-wider text-white bg-purple-600 hover:bg-purple-700 active:scale-95 rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                            >
+                                {syncing ? (
+                                    <>
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        <span>Syncing...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Zap className="w-3.5 h-3.5" />
+                                        <span>Start Sync</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
+        </div>
     );
 };
 
@@ -355,7 +524,8 @@ export default function SuperAdminDashboard() {
     };
 
     const checkTenantDns = async (slug: string, isManual = false) => {
-        const domain = slug + ".hosteleaze.com";
+        const currentHost = typeof window !== 'undefined' ? window.location.hostname : "hosteleaze.com";
+        const domain = currentHost.includes("localhost") ? "localhost" : "hosteleaze.com";
         setDnsStatus(prev => ({ ...prev, [slug]: 'checking' }));
         try {
             const res = await fetch("/api/super-admin/tenants/dns", {
@@ -367,12 +537,12 @@ export default function SuperAdminDashboard() {
             if (data.resolved) {
                 setDnsStatus(prev => ({ ...prev, [slug]: 'resolved' }));
                 if (isManual) {
-                    showToast(`DNS resolved successfully for ${domain}`, "success");
+                    showToast(`Domain & Node operational for ${slug} (${getTenantDisplayUrl(slug)})`, "success");
                 }
             } else {
                 setDnsStatus(prev => ({ ...prev, [slug]: 'pending' }));
                 if (isManual) {
-                    showToast(`DNS check failed: ${domain} is unresolved.`, "error");
+                    showToast(`DNS check failed for ${slug}`, "error");
                 }
             }
         } catch (error: any) {
@@ -861,6 +1031,7 @@ export default function SuperAdminDashboard() {
                     </div>
 
                     <LiveDbSwitch />
+                    <SyncDbButton />
 
                     <button
                         onClick={async () => {

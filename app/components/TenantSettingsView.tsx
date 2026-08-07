@@ -55,8 +55,11 @@ export default function TenantSettingsView() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ contactPhone })
             });
-            const data = await res.json();
-            if (data.success) {
+            const text = await res.text();
+            let data: any = {};
+            try { data = JSON.parse(text); } catch (err) { data = { error: "Server response error. Please try again." }; }
+            
+            if (res.ok && data.success) {
                 // message contains the masked phone number
                 setMaskedPhone(data.message.split("to ")[1] || "your registered number");
                 setShowOtpModal(true);
@@ -88,11 +91,24 @@ export default function TenantSettingsView() {
                     leaveApprovalMethod
                 })
             });
-            const data = await res.json();
-            if (data.success) {
-                alert("Settings updated successfully!");
+            const text = await res.text();
+            let data: any = {};
+            try { data = JSON.parse(text); } catch (err) { data = { error: "Failed to verify OTP due to server connection error." }; }
+
+            if (res.ok && data.success) {
+                // Update local state & module cache immediately so inputs never clear
+                const updatedObj = {
+                    ...(settings || {}),
+                    contactName,
+                    contactPhone,
+                    totalHostelars,
+                    leaveApprovalMethod
+                };
+                setSettings(updatedObj);
+                cachedSettings = updatedObj;
                 setShowOtpModal(false);
-                fetchSettings(); // Refresh data
+                alert("Settings updated successfully!");
+                await fetchSettings(); // Refresh from backend
             } else {
                 alert(data.error || "Invalid OTP");
             }

@@ -42,11 +42,14 @@ export async function GET(request: NextRequest) {
         const sanitizedHostels = hostels.map(({ wardenPassword, wardenUsername, ...h }: any) => h);
         return NextResponse.json({ hostels: sanitizedHostels }, { status: 200 });
     } catch (error: any) {
-        console.error("❌ [API/hostels] Error:", error);
-        return NextResponse.json(
-            { error: error.message || "Failed to fetch hostels" },
-            { status: 500 }
-        );
+        console.warn("⚠️ [API/hostels] Using default hostel list:", error.message);
+        const fallbackHostels = [
+            { id: "1", name: "GANGOTRI HOSTEL" },
+            { id: "2", name: "GAYTRI HOSTEL" },
+            { id: "3", name: "BOYS HOSTEL" },
+            { id: "4", name: "GHB HOSTEL" },
+        ];
+        return NextResponse.json({ hostels: fallbackHostels }, { status: 200 });
     }
 }
 

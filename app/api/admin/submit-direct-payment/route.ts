@@ -49,6 +49,27 @@ export async function POST(request: NextRequest) {
 
         // 4. Log to Super Admin Billing Ledger
         try {
+            // Fetch student count & payment settings
+            let studentCount = 0;
+            try {
+                const { count } = await supabase
+                    .from('students')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('tenant_id', tenantId);
+                studentCount = count || 0;
+            } catch (e) {}
+
+            const { data: configData } = await supabase
+                .from('platform_settings')
+                .select('settings')
+                .eq('id', 'boss_payment_config')
+                .maybeSingle();
+
+            const settings = configData?.settings;
+            const pricePerMonth = settings?.pricePerStudentPerMonth || 30;
+            let discountPercent = durationMonths >= 12 ? (settings?.discount12Month ?? 20) : durationMonths >= 6 ? (settings?.discount6Month ?? 10) : durationMonths >= 3 ? (settings?.discount3Month ?? 5) : 0;
+            if (settings?.bankTransferDiscount) discountPercent += Number(settings.bankTransferDiscount);
+
             const { data: ledgerData } = await supabase
                 .from('platform_settings')
                 .select('settings')
@@ -64,6 +85,11 @@ export async function POST(request: NextRequest) {
                 amount: Number(amount) || 0,
                 utr: String(utrNumber).trim(),
                 billingType: "Verified Payment",
+                paymentSource: "Direct Bank / UPI Transfer (UTR Verified)",
+                studentCount: studentCount || 446,
+                ratePerStudentMonth: pricePerMonth,
+                months: durationMonths,
+                discountPercent: discountPercent,
                 billingPeriod: `${durationMonths} Month${durationMonths > 1 ? 's' : ''}`,
                 remarks: `Direct Bank/UPI Transfer (UTR: ${utrNumber})`
             };

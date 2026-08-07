@@ -74,13 +74,13 @@ export default function Dashboard() {
         'hosteleaze.com',
         'www.hosteleaze.com',
         'localhost',
+        '127.0.0.1',
         'hosteleaze.vercel.app',
         'hosteleaze-silk.vercel.app',
         'hostelease-silk.vercel.app'
       ];
       const parts = hostname.split('.');
-      const isRoot = (parts.length === 1 || (parts.length === 2 && (parts[0] === 'www' || parts[1] === 'localhost'))) && !activeTenant;
-      const isMainBase = mainDomains.includes(hostname) && !activeTenant;
+      const isRootDomain = mainDomains.includes(hostname) || parts.length === 1 || (parts.length === 2 && (parts[0] === 'www' || parts[1] === 'localhost'));
 
       // ⚡ FAST PATH FOR ADMINS/STAFF: Skip Supabase network call completely
       const storedUserType = localStorage.getItem("userType");
@@ -145,8 +145,8 @@ export default function Dashboard() {
       // 1. ⚡ Check Firebase Auth State for Students (fast, no external call until user is confirmed)
       const sbSession = null; // Legacy: kept for fallback compatibility only
 
-      // 2. ⚡ If No Session AND no logged in role, AND on Main Domain -> Show Landing Page
-      if ((isMainBase || isRoot) && !storedUserType) {
+      // 2. ⚡ If No Session AND no logged in role, AND on Main Domain (and no explicit ?tenant= URL param) -> Show Landing Page
+      if (isRootDomain && !tenantParam && !storedUserType) {
         setIsMainDomain(true);
         setLoading(false);
         return;

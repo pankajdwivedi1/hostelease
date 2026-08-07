@@ -15,25 +15,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Clear any existing subscriptions for this specific endpoint first to avoid duplicates
-    await db.pushSubscription.deleteMany({
-      subscription: {
-        path: ["endpoint"],
-        equals: subscription.endpoint
-      }
-    }).catch(() => {
-      // In MongoDB, clean up by deleting matching userId subscription OR exact endpoint
-      // We do a simple cleanup to avoid index bloat
-    });
-
-    // Alternatively, delete duplicate for same endpoint
+    // Clear existing subscription for this user to avoid duplicates
     try {
       await db.pushSubscription.deleteMany({
         userId,
-        userType,
-        "subscription.endpoint": subscription.endpoint
+        userType
       });
-    } catch(e) {}
+    } catch (e) {}
 
     // Save subscription to the database
     const newSubscription = await db.pushSubscription.create({
