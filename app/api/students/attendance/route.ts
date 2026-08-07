@@ -457,45 +457,55 @@ export async function GET(request: NextRequest) {
         const searchParams = request.nextUrl.searchParams;
         const studentId = searchParams.get("studentId");
 
-        if (studentId) {
-            const nowMs = Date.now();
+        if (!studentId) {
+            return NextResponse.json({ error: "Student ID required" }, { status: 400 });
+        }
 
-            // Use dbAdapter for student fetch to support Supabase/Mongo switching
+        const nowMs = Date.now();
+        let student: any = null;
+        let adminSettings: any = null;
+
+        try {
             const studentPromise = db.students.getById(studentId);
+            const settingsPromise = (cachedAdminSettings && (nowMs - lastCacheUpdate < CACHE_DURATION))
+                ? Promise.resolve(cachedAdminSettings)
+                : db.settings.get();
 
-            const [student, adminSettings] = await Promise.all([
-                studentPromise,
-                (cachedAdminSettings && (nowMs - lastCacheUpdate < CACHE_DURATION))
-                    ? Promise.resolve(cachedAdminSettings)
-                    : db.settings.get()
-            ]);
+            [student, adminSettings] = await Promise.all([studentPromise, settingsPromise]);
 
-            if (!cachedAdminSettings || (nowMs - lastCacheUpdate >= CACHE_DURATION)) {
+            if (adminSettings && (!cachedAdminSettings || (nowMs - lastCacheUpdate >= CACHE_DURATION))) {
                 cachedAdminSettings = adminSettings;
                 lastCacheUpdate = nowMs;
             }
-
-            const isTester = false;
-
-            const today = new Date().toLocaleDateString("en-IN", {
-                timeZone: "Asia/Kolkata",
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
-            }).split('/').reverse().join('-');
-
-            // Use dbAdapter for attendance check
-            const attendance = await db.attendance.checkToday(studentId, today);
-
-            return NextResponse.json({
-                marked: isTester ? false : !!attendance,
-                startTime: adminSettings?.attendanceStartTime || "21:00",
-                endTime: adminSettings?.attendanceEndTime || "23:00"
-            });
+        } catch (err: any) {
+            console.warn("GET attendance student/settings fetch warning:", err?.message);
         }
 
-        return NextResponse.json({ error: "Student ID required" }, { status: 400 });
+        const today = new Date().toLocaleDateString("en-IN", {
+            timeZone: "Asia/Kolkata",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        }).split('/').reverse().join('-');
+
+        let attendance: any = null;
+        try {
+            attendance = await db.attendance.checkToday(studentId, today);
+        } catch (attErr: any) {
+            console.warn("GET attendance checkToday warning:", attErr?.message);
+        }
+
+        return NextResponse.json({
+            marked: !!attendance,
+            startTime: adminSettings?.attendanceStartTime || "21:00",
+            endTime: adminSettings?.attendanceEndTime || "23:00"
+        });
     } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        console.error("GET attendance endpoint error:", e?.message);
+        return NextResponse.json({
+            marked: false,
+            startTime: "21:00",
+            endTime: "23:00"
+        });
     }
 }
