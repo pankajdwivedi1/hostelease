@@ -764,13 +764,43 @@ const CACHE_KEYS = {
 };
 const CACHE_DURATION = 1800000; // ⚡ CACHE ENABLED: 30-minute TTL to save bandwidth across tab switches
 
-const DEFAULT_UNDERTAKING_TEXT = `I, {name}, S/o / D/o {parent}, student of {college} (Email: {email}, Mobile: {phone}), solemnly affirm and declare that:
-1. I will abide by the hostel/institute rules and will maintain proper discipline.
-2. I will not indulge in any act of indiscipline and will not damage any hostel/institute property.
-3. I will not use any motorized vehicle within the campus during my study.
-4. I will not indulge in ragging directly or indirectly.
-5. I shall abide by any other guidelines notified by the Institute/hostel authorities.
-6. In case of violation of rules by me, I shall abide by the decision taken by the Institute/hostel authorities.`;
+const DEFAULT_UNDERTAKING_TEXT = `I, {name}, S/o / D/o {parent}, student of {college} (Email: {email}, Mobile: {phone}), hereby undertake that I shall abide by the following terms and conditions governing my stay in the hostel:
+1. I shall maintain discipline, decorum, and good conduct at all times within the hostel premises and shall not indulge in any act of indiscipline or misconduct.
+2. I shall not leave the hostel premises without obtaining prior permission from the competent authority, wherever applicable.
+3. I shall not keep or use any prohibited electrical or electronic appliances in the hostel. Any violation of this provision shall render me liable to disciplinary action as recommended by the Discipline Committee.
+4. I shall neither possess, consume, nor distribute any intoxicating substances, alcoholic beverages, tobacco, cigarettes, vaping devices, or any other smoking materials within the hostel premises. Violation of this condition may result in disciplinary action, including expulsion from the hostel.
+5. I shall neither engage in nor encourage ragging or any other form of harassment, bullying, or in disciplinary activity. I further undertake to immediately report any such incident to the hostel administration or the appropriate institutional authority.
+6. I shall strictly comply with all the rules, regulations, instructions, and guidelines issued by the hostel administration and the mess management from time to time.
+7. I shall not permit any unauthorized person or non-hosteller to stay in or occupy my hostel room without prior written permission from the hostel administration.
+8. I acknowledge that I am solely responsible for the safety and security of my personal belongings, cash, valuables, and other possessions. The institution and hostel administration shall not be held liable for any loss, theft, or damage to the same.
+9. I undertake to promptly inform the institution of any change in my residential address, contact details, or the contact details of my parent(s)/guardian(s).
+10. A student securing less than 75% attendance in any two semesters shall not be eligible for hostel admission or renewal of hostel accommodation for the subsequent academic session.
+11. The hostel allotment shall remain valid only up to 30 June of the respective academic session unless otherwise notified by the institution.
+12. In the event of vacating the hostel before the completion of the academic session, I shall be liable to pay the full hostel fee for the entire academic year and mess charges up to the month in which I vacate the hostel. The hostel fee shall be non-refundable under any circumstances.
+13. The hostel administration reserves the absolute right to change, shift, or reassign my hostel room at any time in the interest of administration, discipline, maintenance, or any other institutional requirement.
+14. I understand and agree that the hostel fee is subject to revision from the subsequent academic session as determined by the competent authority of the institution.
+15. I further undertake to comply with any additional rules, regulations, or instructions issued by the institution or hostel administration from time to time. Failure to comply with any of the above conditions may result in disciplinary action, including suspension or cancellation of hostel accommodation, without prejudice to any other action deemed appropriate by the institution.
+16. I will not remain in hostel room during the class hours, without any valid reason. In case there is a reason, the warden will be informed by me. In case I fail to do so, action may be taken against me.
+
+I hereby declare that I have carefully read, understood, and accepted all the above terms and conditions. I agree to abide by them throughout my stay in the hostel.
+
+Name of Student: {name}                Signature of Student: {name}
+Place: {place}                          Date: {date}
+
+I certify that my ward will abide by the above undertaking.
+
+Name of the Parent: {parent}          Signature: {parent}
+Place: {place}                          Date: {date}
+
+───────────────────────────────────────────────────────────────────────────────────
+
+For hostel related enquiry please contact:
+Dr Vijendra Singh (Dean Hostel) Mob no: 9981414729
+email: vijendrasinghthakur@oriental.ac.in
+
+1. Rahul Yadav - Hostel Warden (Boys) Mob no: 9039761287
+2. Anita Khabse - Hostel Warden (Girls) Mob no: 8305493461
+3. Anjali Mishra - Hostel Warden (Girls) Mob no: 9131804631`;
 
 // Floor normalization helper function
 const normalizeFloorName = (floorVal: string | number | undefined, roomNum?: string): string => {
@@ -3227,6 +3257,34 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       showToast("Failed to update form settings: " + (error?.message || "Server Error"), "error");
     } finally {
       setIsSavingSystemSettings(false);
+    }
+  };
+
+  const saveUndertakingSettings = async (newRequire: boolean, newText: string) => {
+    try {
+      const settingsRes = await fetch("/api/admin/settings", { cache: "no-store" });
+      const settingsData = await settingsRes.json();
+      const currentConfig = settingsData?.registrationFieldsConfig || {};
+
+      const updatedConfig = {
+        ...currentConfig,
+        requireUndertaking: newRequire,
+        undertakingText: newText
+      };
+
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          registrationFieldsConfig: updatedConfig
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(newRequire ? "Student Undertaking Enabled & Saved!" : "Student Undertaking Disabled & Saved!", "success");
+      }
+    } catch (err) {
+      console.error("Failed to auto-save undertaking settings:", err);
     }
   };
 
@@ -13381,7 +13439,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               type="checkbox"
                               checked={requireUndertaking}
                               onChange={(e) => {
-                                setRequireUndertaking(e.target.checked);
+                                const checked = e.target.checked;
+                                setRequireUndertaking(checked);
+                                saveUndertakingSettings(checked, undertakingText);
                               }}
                               className="sr-only peer"
                             />
@@ -13398,11 +13458,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <textarea
                             value={undertakingText}
                             onChange={(e) => setUndertakingText(e.target.value)}
+                            onBlur={(e) => saveUndertakingSettings(requireUndertaking, e.target.value)}
                             placeholder="Enter undertaking text points..."
                             className="w-full min-h-[160px] p-4 rounded-xl border-2 border-purple-200/60 bg-white font-mono text-xs text-purple-950 focus:border-purple-600 focus:outline-none shadow-inner"
                           />
-                          <p className="text-[9px] text-purple-600 font-bold uppercase tracking-wider px-1">
-                            💡 Use placeholders: <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{name}`}</code>, <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{parent}`}</code>, <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{college}`}</code>, <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{email}`}</code>, <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{phone}`}</code>
+                          <p className="text-[9px] text-purple-600 font-bold uppercase tracking-wider px-1 flex flex-wrap items-center gap-1">
+                            💡 Use placeholders: <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{name}`}</code>, <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{parent}`}</code>, <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{college}`}</code>, <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{email}`}</code>, <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{phone}`}</code>, <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{place}`}</code>, <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-mono font-black">{`{date}`}</code>
                           </p>
                         </div>
                       )}
