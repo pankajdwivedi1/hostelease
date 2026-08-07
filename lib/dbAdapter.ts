@@ -1696,21 +1696,27 @@ export const db = {
                     searchOR.push(
                         { id: filter.firebaseUID },
                         { firebaseUid: filter.firebaseUID },
-                        { supabaseId: filter.firebaseUID }
+                        { supabaseId: filter.firebaseUID },
+                        { email: filter.firebaseUID },
+                        { phoneNumber: filter.firebaseUID },
+                        { erpId: filter.firebaseUID },
+                        { erpInformation: filter.firebaseUID }
                     );
                 }
                 if (filter.supabaseId) {
                     searchOR.push(
                         { id: filter.supabaseId },
+                        { supabaseId: filter.supabaseId },
                         { firebaseUid: filter.supabaseId },
-                        { supabaseId: filter.supabaseId }
+                        { id: filter.supabaseId },
+                        { email: filter.supabaseId }
                     );
                 }
                 if (filter._id) searchOR.push({ id: filter._id });
                 if (filter.email) searchOR.push({ email: filter.email });
                 if (filter.phoneNumber) searchOR.push({ phoneNumber: filter.phoneNumber });
                 if (filter.registrationId) searchOR.push({ registrationId: filter.registrationId });
-                if (filter.erpInformation) searchOR.push({ erpId: filter.erpInformation });
+                if (filter.erpInformation) searchOR.push({ erpId: filter.erpInformation }, { erpInformation: filter.erpInformation });
 
                 let student: any = null;
                 if (tenantId && searchOR.length > 0) {

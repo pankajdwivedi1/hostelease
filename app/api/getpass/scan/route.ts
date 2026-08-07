@@ -94,8 +94,15 @@ export async function POST(request: NextRequest) {
         }
 
 
-        // Find the student
-        const student = await db.students.findOne({ firebaseUID });
+        // Find the student with robust multi-attribute fallback
+        let student = await db.students.findOne({ firebaseUID });
+        if (!student && typeof firebaseUID === 'string') {
+            student = await db.students.findOne({ email: firebaseUID });
+        }
+        if (!student && typeof firebaseUID === 'string') {
+            student = await db.students.findOne({ _id: firebaseUID });
+        }
+
         if (!student) {
             return NextResponse.json(
                 { error: "Student not found. Please register first." },
