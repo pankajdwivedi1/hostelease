@@ -31,7 +31,7 @@ function getISTStrings(date: Date) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { studentId, studentIds, searchId, action, userType = 'admin' } = body;
+        const { studentId, studentIds, searchId, action, userType = 'admin', requestType = 'HOME-LEAVE', reason = 'Manual Management Override', operator = 'Admin' } = body;
         const targetIds: string[] = studentIds || (studentId ? [studentId] : []);
 
         // 2. Validate Authorization (Only Admin/Warden/Gatekeeper/SuperAdmin can manually toggle)
@@ -81,6 +81,8 @@ export async function POST(request: NextRequest) {
         const { istTime, istDate } = getISTStrings(now);
         let processedCount = 0;
 
+        const { writeAdminAuditLog } = await import("@/lib/auditLog");
+
         for (const id of targetIds) {
             const student = await db.students.getById(id.toString());
             if (!student) continue;
@@ -88,7 +90,7 @@ export async function POST(request: NextRequest) {
             const currentStatus = student.studentStatus || "in";
 
             if (currentStatus === "in") {
-                // MARK OUT
+                // MARK OUT (HOME-LEAVE or GATE-PASS)
                 const { records: existingPasses } = await db.gatePasses.list({
                     studentId: id.toString(),
                     status: "out",
@@ -109,6 +111,9 @@ export async function POST(request: NextRequest) {
                     }
                 }
 
+                const targetType = requestType || 'HOME-LEAVE';
+                const passReason = reason || `Manual ${targetType} Override`;
+
                 await db.gatePasses.create({
                     studentId: id.toString(),
                     firebaseUID: student.firebaseUID,
@@ -120,14 +125,43 @@ export async function POST(request: NextRequest) {
                     checkOutISTTime: istTime,
                     checkOutISTDate: istDate,
                     status: "out",
-                    gateName: "Manual (Bulk)",
+                    requestType: targetType,
+                    reason: passReason,
+                    gateName: "Management Override",
                     qrTokenUsedOut: "MANUAL_BY_" + userType.toUpperCase(),
                 });
 
+                // Also create an approved permission record so dashboard calendars and logs show HOME-LEAVE
+                try {
+                    await db.permissions.create({
+                        studentId: id.toString(),
+                        studentName: student.name,
+                        hostelName: student.hostelName,
+                        roomNumber: student.roomNumber,
+                        requestType: targetType === 'HOME-LEAVE' ? 'leave' : 'outing',
+                        reason: passReason,
+                        fromDateTime: now,
+                        toDateTime: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+                        status: 'approved',
+                        parentStatus: 'approved',
+                        wardenStatus: 'approved',
+                        deanStatus: 'approved',
+                    });
+                } catch (permErr) {
+                    console.warn("Non-blocking permission creation notice:", permErr);
+                }
+
                 await db.students.update(id.toString(), { studentStatus: "out" });
+                await writeAdminAuditLog({
+                    action: "MANUAL_STATUS_OVERRIDE_OUT",
+                    entityType: "student",
+                    entityId: id.toString(),
+                    entityName: student.name,
+                    details: { status: "out", requestType: targetType, reason: passReason },
+                    performedBy: operator || userType
+                });
             } else {
-                // MARK IN
-                // ⚡ ROBUST SEARCH: Find passes by EITHER studentId OR firebaseUID to handle mismatches
+                // MARK IN (Returned)
                 const openPassesBySIDRes = await db.gatePasses.list({
                     studentId: id.toString(),
                     status: "out",
@@ -138,7 +172,6 @@ export async function POST(request: NextRequest) {
                     status: "out",
                 });
 
-                // Combine and deduplicate records by _id
                 const combinedPasses = [...(openPassesBySIDRes.records || []), ...(openPassesByFUIDRes.records || [])];
                 const uniqueOpenPasses = Array.from(new Map(combinedPasses.map(p => [p._id, p])).values());
 
@@ -158,6 +191,14 @@ export async function POST(request: NextRequest) {
                 }
 
                 await db.students.update(id.toString(), { studentStatus: "in" });
+                await writeAdminAuditLog({
+                    action: "MANUAL_STATUS_OVERRIDE_IN",
+                    entityType: "student",
+                    entityId: id.toString(),
+                    entityName: student.name,
+                    details: { status: "in", reason: reason || "Returned to Campus" },
+                    performedBy: operator || userType
+                });
             }
             processedCount++;
         }

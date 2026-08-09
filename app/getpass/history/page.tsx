@@ -552,7 +552,7 @@ export default function OutingHistoryPage() {
                                                     : "bg-blue-500/20 text-blue-400 border-blue-500/30"
                                                     }`}>
                                                     <span className="text-[9px]">{record.type === "leave" ? "🏠" : "🎫"}</span>
-                                                    <span>{record.type === "leave" ? "H-LEAVE" : "G-PASS"}</span>
+                                                    <span>{record.type === "leave" ? "HOME-LEAVE" : "GATE-PASS"}</span>
                                                 </span>
                                             </div>
                                             <p className="text-[10px] text-white/70 mt-1 font-medium truncate uppercase tracking-tighter">
@@ -585,7 +585,7 @@ export default function OutingHistoryPage() {
                                                     </div>
                                                     {record.type === 'leave' && (
                                                         <div className="flex items-center gap-1 mt-1">
-                                                            <span className="text-[7px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20 font-black uppercase tracking-tighter">🏠 H-LEAVE</span>
+                                                            <span className="text-[7px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20 font-black uppercase tracking-tighter">🏠 HOME-LEAVE</span>
                                                         </div>
                                                     )}
                                                 </div>

@@ -1025,7 +1025,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                 {liveData.summary.leaveCount || 0}
                                             </span>
                                             <span className="text-[8px] text-[rgba(255,255,255,0.45)] font-black uppercase tracking-widest mt-0.5">
-                                                H-LEAVE
+                                                HOME-LEAVE
                                             </span>
                                         </div>
                                         <div className="flex-1 flex flex-col items-center justify-center">
@@ -1033,7 +1033,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                 {liveData.summary.gatePassCount || 0}
                                             </span>
                                             <span className="text-[8px] text-[rgba(255,255,255,0.45)] font-black uppercase tracking-widest mt-0.5">
-                                                G-PASS
+                                                GATE-PASS
                                             </span>
                                         </div>
                                     </div>
@@ -1229,7 +1229,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                                 : "bg-blue-500/20 text-blue-400 border-blue-500/30"
                                                                 }`}>
                                                                 <span className="text-[9px]">{record.type === "leave" ? "🏠" : "🎫"}</span>
-                                                                <span>{record.type === "leave" ? "H-LEAVE" : "G-PASS"}</span>
+                                                                <span>{record.type === "leave" ? "HOME-LEAVE" : "GATE-PASS"}</span>
                                                             </span>
                                                         </div>
                                                         <p className="text-[9px] text-[rgba(255,255,255,0.3)] tracking-tight uppercase m-0 mt-0.5 font-bold truncate">

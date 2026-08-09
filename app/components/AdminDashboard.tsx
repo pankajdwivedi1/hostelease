@@ -4555,25 +4555,37 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const handleManualToggle = async (studentId: string, currentStatus: "in" | "out") => {
+  const handleManualToggle = async (studentId: string, currentStatus: "in" | "out", requestType = "HOME-LEAVE", customReason?: string) => {
     if (!studentId) return;
 
     // Auto-detect user type from local storage
     const storedUserType = localStorage.getItem("userType") || "warden";
 
-    const action = currentStatus === 'out' ? "Mark IN" : "Mark OUT";
-    if (!await showConfirm(`⚠️ MANUAL OVERRIDE:\nAre you sure you want to ${action} this student manually?`)) return;
+    const actionLabel = currentStatus === 'out' ? "Mark RETURNED (IN)" : `Mark ${requestType}`;
+
+    let reason = customReason;
+    if (currentStatus === 'in' && !reason) {
+      const input = window.prompt(`Enter reason for marking ${requestType} (e.g. Medical leave, Emergency leave approved verbally):`, "Management Override");
+      if (input === null) return;
+      reason = input || "Management Override";
+    }
 
     try {
       setIsTogglingStatus(true);
       const res = await fetch("/api/getpass/manual-toggle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId, userType: storedUserType }),
+        body: JSON.stringify({
+          studentId,
+          userType: storedUserType,
+          requestType,
+          reason: reason || "Manual Override",
+          operator: userEmail || storedUserType
+        }),
       });
       const data = await res.json();
       if (data.success) {
-        alert(data.message);
+        alert(data.message || `Successfully updated status for student.`);
         // Refresh students and permissions
         fetchStudents(true);
         fetchPermissions();
@@ -4581,10 +4593,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
         // If profile details are open, update them
         if (selectedStudent && selectedStudent.id === studentId) {
-          setSelectedStudent({ ...selectedStudent, studentStatus: data.newStatus });
+          setSelectedStudent({ ...selectedStudent, studentStatus: currentStatus === 'out' ? 'in' : 'out' });
         }
       } else {
-        alert(data.error);
+        alert(data.error || "Failed to update status");
       }
     } catch (err) {
       alert("Error: Failed to update status");
@@ -9334,7 +9346,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                 rStatus === 'in' ? 'bg-green-500' :
                                                 rStatus === 'hleave' ? 'bg-blue-500' : 'bg-yellow-500'
                                               }`}
-                                              title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'H-LEAVE' : 'G-PASS'}`}
+                                              title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'HOME-LEAVE' : 'GATE-PASS'}`}
                                             >
                                               {r.name.slice(0, 1).toUpperCase()}
                                             </div>
@@ -10176,10 +10188,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     {!studentsLoading && (
                       <div className="w-full flex items-center justify-center border-t border-[rgba(0,0,0,0.12)] pt-0.5 pb-0.5 text-[8px] uppercase tracking-wider font-black">
                         <div className="flex-1 flex flex-col items-center border-r border-[rgba(0,0,0,0.08)]">
-                          <span className={statusFilter === "out" ? "text-white opacity-95" : "text-slate-800"}>H-Leave: {statusCounts.leave}</span>
+                          <span className={statusFilter === "out" ? "text-white opacity-95" : "text-slate-800"}>Home-Leave: {statusCounts.leave}</span>
                         </div>
                         <div className="flex-1 flex flex-col items-center">
-                          <span className={statusFilter === "out" ? "text-white opacity-95" : "text-slate-800"}>G-Pass: {statusCounts.pass}</span>
+                          <span className={statusFilter === "out" ? "text-white opacity-95" : "text-slate-800"}>Gate-Pass: {statusCounts.pass}</span>
                         </div>
                       </div>
                     )}
@@ -10665,14 +10677,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             Present
                           </span>
                         )}
-                        {selectedStudent.studentStatus === 'out' && (
+                        {selectedStudent.studentStatus === 'out' ? (
                           <button
                             onClick={() => handleManualToggle(selectedStudent.id, "out")}
                             disabled={isTogglingStatus}
-                            className="shrink-0 px-2 py-0.5 rounded-md bg-amber-500 text-white text-[9px] font-black uppercase tracking-wider hover:bg-amber-600 transition-all active:scale-95 flex items-center gap-1 shadow-2xs"
+                            className="shrink-0 px-2.5 py-0.5 rounded-md bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider hover:bg-emerald-700 transition-all active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer"
                           >
                             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
-                            Mark IN
+                            Mark RETURNED (IN)
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleManualToggle(selectedStudent.id, "in", "HOME-LEAVE")}
+                            disabled={isTogglingStatus}
+                            className="shrink-0 px-2.5 py-0.5 rounded-md bg-blue-600 text-white text-[9px] font-black uppercase tracking-wider hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer"
+                          >
+                            <span>🏠</span> Mark HOME-LEAVE
                           </button>
                         )}
                       </div>
