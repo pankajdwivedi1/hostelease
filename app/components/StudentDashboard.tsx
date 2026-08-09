@@ -290,16 +290,23 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         "July", "August", "September", "October", "November", "December"
     ];
 
-    const fetchGatePassHistory = async () => {
+    const fetchGatePassHistory = async (isFullHistory = false) => {
         const studentId = studentProfile?._id;
         if (!studentId) return;
         setLoadingGatePasses(true);
         try {
-            const res = await fetch(`/api/getpass/history?studentId=${studentId}&limit=1000&populate=false${getTenantParam(false)}`);
+            const limit = isFullHistory ? 1000 : 5;
+            const res = await fetch(`/api/getpass/history?studentId=${studentId}&limit=${limit}&populate=false${getTenantParam(false)}`);
             if (res.ok) {
                 const data = await res.json();
                 if (data.success && data.records) {
-                    setGatePasses(data.records);
+                    setGatePasses(prev => {
+                        if (!isFullHistory && prev.length > limit) {
+                            // Retain existing full history if already loaded
+                            return prev;
+                        }
+                        return data.records;
+                    });
                 } else {
                     showToast("Failed to fetch outing history.", "error");
                 }
@@ -315,8 +322,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     };
 
     useEffect(() => {
-        if (showPermissionsHistory || studentProfile?._id) {
-            fetchGatePassHistory();
+        if (showPermissionsHistory) {
+            fetchGatePassHistory(true);
+        } else if (studentProfile?._id) {
+            fetchGatePassHistory(false);
         }
     }, [showPermissionsHistory, studentProfile?._id]);
 

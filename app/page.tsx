@@ -111,17 +111,23 @@ export default function Dashboard() {
                   
                   if (user) {
                     try {
-                      const response = await fetch(`/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email || "")}&minimal=true`);
+                      const cached = localStorage.getItem("cachedStudentData");
+                      const currentCache = cached ? JSON.parse(cached) : {};
+                      const cachedTime = currentCache.updatedAt || currentCache.updated_at || "";
+                      const response = await fetch(`/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email || "")}&minimal=true&versionCheck=true&updatedAt=${encodeURIComponent(cachedTime)}`);
                       if (response.status === 404) {
-                        // Only redirect if NO valid student cache exists
-                        const cached = localStorage.getItem("cachedStudentData");
                         if (!cached) {
                           router.push("/onboarding");
                         }
                       } else if (response.ok) {
                         const data = await response.json();
-                        if (data.student) {
-                          const currentCache = JSON.parse(localStorage.getItem("cachedStudentData") || "{}");
+                        if (data.notModified) {
+                          if (data.studentStatus && currentCache.studentStatus !== data.studentStatus) {
+                            const updated = { ...currentCache, studentStatus: data.studentStatus };
+                            localStorage.setItem("cachedStudentData", JSON.stringify(updated));
+                            setStudentData(updated);
+                          }
+                        } else if (data.student) {
                           const updatedStudent = { ...currentCache, ...data.student };
                           localStorage.setItem("cachedStudentData", JSON.stringify(updatedStudent));
                           setStudentData(updatedStudent);
