@@ -139,7 +139,7 @@ export default function ParentConsentClient({
         }
     }, [stream, recordingState]);
 
-    // Request camera permission and start preview
+    // Request camera permission and start preview with microphone verification
     const startCamera = async (): Promise<MediaStream | null> => {
         try {
             setErrorMessage("");
@@ -147,10 +147,34 @@ export default function ParentConsentClient({
                 stream.getTracks().forEach(track => track.stop());
             }
 
-            // Portrait on mobile, landscape on desktop — avoids black side bars
-            const mediaStream = await navigator.mediaDevices.getUserMedia(
-                getCameraConstraints(isMobileDevice())
-            );
+            let mediaStream: MediaStream;
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia(
+                    getCameraConstraints(isMobileDevice())
+                );
+            } catch (initialErr) {
+                console.warn("Primary camera constraints failed, attempting basic fallback...", initialErr);
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "user" },
+                    audio: true
+                });
+            }
+
+            // Verify active audio track presence
+            const audioTracks = mediaStream.getAudioTracks();
+            if (audioTracks.length === 0 || !audioTracks[0].enabled) {
+                console.warn("⚠️ Main stream missing active audio track. Acquiring separate audio track...");
+                try {
+                    const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const micTrack = audioStream.getAudioTracks()[0];
+                    if (micTrack) {
+                        mediaStream.addTrack(micTrack);
+                        console.log("✅ Microphone audio track attached successfully.");
+                    }
+                } catch (micErr) {
+                    console.error("Microphone fallback acquisition failed:", micErr);
+                }
+            }
 
             setStream(mediaStream);
             if (videoPreviewRef.current) {
@@ -171,8 +195,8 @@ export default function ParentConsentClient({
             setRecordingState("idle");
             return mediaStream;
         } catch (err: any) {
-            console.error("Camera access failed:", err);
-            setErrorMessage("असुविधा के लिए खेद है। कैमरा और माइक्रोफ़ोन एक्सेस की अनुमति नहीं मिली। कृपया अपने ब्राउज़र सेटिंग्स में कैमरा अनुमति की जांच करें। (Camera or Microphone permission denied. Please allow camera access in browser settings.)");
+            console.error("Camera/mic access failed:", err);
+            setErrorMessage("असुविधा के लिए खेद है। कैमरा और माइक्रोफ़ोन एक्सेस की अनुमति नहीं मिली। कृपया अपने ब्राउज़र सेटिंग्स में कैमरा और माइक्रोफ़ोन अनुमति की जांच करें। (Camera or Microphone permission denied. Please allow camera and mic access in browser settings.)");
             setRecordingState("error");
             return null;
         }
@@ -183,20 +207,46 @@ export default function ParentConsentClient({
         // Camera will be set up when user taps button
     }, []);
 
-    // Start video recording
-    const startRecording = (activeStream?: MediaStream) => {
+    // Start video recording with guaranteed audio
+    const startRecording = async (activeStream?: MediaStream) => {
         const currentStream = activeStream || stream;
         if (!currentStream) return;
+
+        // Ensure stream has audio track before initializing recorder
+        const audioTracks = currentStream.getAudioTracks();
+        if (audioTracks.length === 0 || !audioTracks[0].enabled) {
+            console.warn("⚠️ Attempting emergency mic track attach prior to recording...");
+            try {
+                const micOnlyStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const micTrack = micOnlyStream.getAudioTracks()[0];
+                if (micTrack) {
+                    currentStream.addTrack(micTrack);
+                }
+            } catch (micErr) {
+                console.error("Failed emergency mic track acquisition:", micErr);
+            }
+        }
 
         chunksRef.current = [];
         const { mimeType: selectedMimeType } = pickConsentMimeType();
 
         try {
-            const mediaRecorder = new MediaRecorder(currentStream, {
-                mimeType: selectedMimeType,
-                videoBitsPerSecond: 300000, // 300 kbps (low bitrate, clear enough for consent)
-                audioBitsPerSecond: 64000   // 64 kbps (clear mono audio)
-            });
+            let mediaRecorder: MediaRecorder;
+            try {
+                mediaRecorder = new MediaRecorder(currentStream, {
+                    mimeType: selectedMimeType,
+                    videoBitsPerSecond: 300000, // 300 kbps (low bitrate, clear enough for consent)
+                    audioBitsPerSecond: 64000   // 64 kbps (clear mono audio)
+                });
+            } catch (optErr) {
+                console.warn("MediaRecorder with bitrates failed, retrying with mimeType only...", optErr);
+                try {
+                    mediaRecorder = new MediaRecorder(currentStream, { mimeType: selectedMimeType });
+                } catch (mimeErr) {
+                    console.warn("MediaRecorder with mimeType failed, falling back to default constructor...", mimeErr);
+                    mediaRecorder = new MediaRecorder(currentStream);
+                }
+            }
 
             mediaRecorder.ondataavailable = (e) => {
                 if (e.data && e.data.size > 0) {
@@ -205,7 +255,8 @@ export default function ParentConsentClient({
             };
 
             mediaRecorder.onstop = () => {
-                const blob = new Blob(chunksRef.current, { type: selectedMimeType });
+                const actualType = mediaRecorder.mimeType || selectedMimeType || "video/webm";
+                const blob = new Blob(chunksRef.current, { type: actualType });
                 const url = URL.createObjectURL(blob);
                 setVideoUrl(url);
                 setRecordingState("review");

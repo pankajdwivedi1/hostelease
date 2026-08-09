@@ -2716,23 +2716,23 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             </div>
 
                             {/* Quick Info Grid */}
-                            <div className={`grid grid-cols-2 ${gridColsClass} gap-3 mb-2`} style={{ fontFamily: 'var(--font-lora), Cambria' }}>
-                                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-2 md:p-2.5 rounded-2xl border border-blue-100 shadow-sm flex flex-col justify-center">
-                                    <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1">Current Status</p>
-                                    <div className="flex items-center gap-2">
-                                        <div className={`w-2 h-2 rounded-full animate-pulse ${studentProfile.studentStatus === 'out' ? 'bg-red-500' : 'bg-green-500'}`} />
-                                        <p className="text-[12px] font-bold text-gray-900 capitalize">Currently {studentProfile.studentStatus || 'IN'}</p>
+                            <div className={`grid grid-cols-2 ${gridColsClass} gap-2 sm:gap-3 mb-2`} style={{ fontFamily: 'var(--font-lora), Cambria' }}>
+                                <div className="h-12 bg-gradient-to-br from-blue-50 to-indigo-50 px-3 rounded-xl border border-blue-100 shadow-sm flex flex-col justify-center overflow-hidden min-w-0">
+                                    <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-blue-600 opacity-80 truncate">Current Status</span>
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                        <div className={`w-2 h-2 rounded-full shrink-0 animate-pulse ${studentProfile.studentStatus === 'out' ? 'bg-red-500' : 'bg-green-500'}`} />
+                                        <p className="text-[10px] md:text-xs font-black text-gray-900 uppercase tracking-tight truncate">Currently {studentProfile.studentStatus || 'IN'}</p>
                                     </div>
                                 </div>
-                                <div className="bg-white p-2 md:p-2.5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center">
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hostel & Room</p>
-                                    <p className="text-[12px] font-bold text-gray-900">{studentProfile.hostelName}<span className="text-blue-600 ml-1">#{studentProfile.roomNumber}</span></p>
+                                <div className="h-12 bg-white px-3 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-center overflow-hidden min-w-0">
+                                    <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-gray-400 opacity-70 truncate">Hostel & Room</span>
+                                    <p className="text-[10px] md:text-xs font-black text-gray-900 uppercase tracking-tight truncate">{studentProfile.hostelName}<span className="text-blue-600 ml-1">#{studentProfile.roomNumber}</span></p>
                                 </div>
                                 {!isParentView && (
-                                    <div className={`p-2 md:p-2.5 rounded-2xl border shadow-sm flex items-center justify-between gap-1 transition-all duration-500 ${highlightLocation ? 'bg-red-50 border-red-300 ring-4 ring-red-100 shadow-xl scale-[1.02]' : 'bg-white border-gray-100'}`}>
-                                        <div>
-                                            <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${highlightLocation ? 'text-red-500 animate-pulse' : 'text-gray-400'}`}>Location Lock</p>
-                                            <p className="text-[12px] font-bold text-gray-700">{isAtHostel ? '📍 Verified' : '❌ Not Verified'}</p>
+                                    <div className={`h-12 px-3 rounded-xl border shadow-sm flex items-center justify-between gap-1 transition-all duration-500 overflow-hidden min-w-0 ${highlightLocation ? 'bg-red-50 border-red-300 ring-4 ring-red-100 shadow-xl scale-[1.02]' : 'bg-white border-gray-100'}`}>
+                                        <div className="flex flex-col overflow-hidden min-w-0">
+                                            <span className={`block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${highlightLocation ? 'text-red-500 animate-pulse' : 'text-gray-400 opacity-70'}`}>Location Lock</span>
+                                            <p className="text-[10px] md:text-xs font-black text-gray-700 uppercase tracking-tight truncate">{isAtHostel ? '📍 Verified' : '❌ Not Verified'}</p>
                                         </div>
                                         <button
                                             onClick={() => {
@@ -2740,13 +2740,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 getAccurateLocation();
                                             }}
                                             disabled={isLocationChecking}
-                                            className={`p-2 rounded-lg transition-all ${isAtHostel ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'} ${highlightLocation ? 'animate-bounce' : ''}`}
+                                            className={`p-1.5 rounded-lg transition-all ${isAtHostel ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'} ${highlightLocation ? 'animate-bounce' : ''}`}
                                             title="Refresh Location"
                                         >
                                             {isLocationChecking ? (
-                                                <div className="w-5 h-5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+                                                <div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
                                             ) : (
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                                 </svg>
@@ -2755,10 +2755,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     </div>
                                 )}
 
-                                <div className="bg-white p-2 md:p-2.5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between gap-1">
-                                    <div className="flex-1">
-                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Daily Attendance</p>
-                                        <p className={`text-[12px] font-bold ${isParentView ? attendanceDisplay.textColor : 'text-gray-700'}`}>
+                                <div className="h-12 bg-white px-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between gap-1 overflow-hidden min-w-0">
+                                    <div className="flex flex-col overflow-hidden min-w-0">
+                                        <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-gray-400 opacity-70 truncate">Daily Attendance</span>
+                                        <p className={`text-[10px] md:text-xs font-black uppercase tracking-tight truncate ${isParentView ? attendanceDisplay.textColor : 'text-gray-700'}`}>
                                             {isParentView ? (
                                                 attendanceDisplay.text
                                             ) : (
@@ -2767,8 +2767,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         </p>
                                     </div>
                                     {isParentView ? (
-                                        <div className={`p-2 rounded-lg ${attendanceDisplay.iconBg}`} title={attendanceDisplay.text}>
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <div className={`p-1.5 rounded-lg ${attendanceDisplay.iconBg}`} title={attendanceDisplay.text}>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={attendanceDisplay.iconPath} />
                                             </svg>
                                         </div>
@@ -2776,18 +2776,18 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         <button
                                             onClick={() => handleMarkAttendance(0)}
                                             disabled={isAttendanceMarked}
-                                            className={`p-2 rounded-lg transition-colors ${
+                                            className={`p-1.5 rounded-lg transition-colors ${
                                                 isAttendanceMarked 
                                                 ? 'bg-green-100 text-green-600' 
                                                 : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:bg-indigo-200'
                                             }`}
                                         >
                                             {isAttendanceMarked ? (
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                                 </svg>
                                             ) : (
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                                                 </svg>
                                             )}
@@ -2937,7 +2937,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                             {/* Action Buttons Row */}
                             {!isParentView && (
-                                <div className="grid grid-cols-2 gap-3 mb-4">
+                                <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-2 sm:mb-4">
                                     <button
                                         onClick={() => router.push("/getpass/scan")}
                                         className="w-full h-12 rounded-xl bg-[#EEF2FF] border-2 border-[#C7D2FE] text-[#4F46E5] font-black hover:bg-[#E0E7FF] transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left"
@@ -2988,7 +2988,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-2 gap-3 mb-6">
+                            <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-6">
                                 <button
                                     onClick={() => setShowPermissionsHistory(true)}
                                     className="w-full h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5"
@@ -3773,15 +3773,37 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     </div>
 
                                                     {/* Legend */}
-                                                    <div className="flex justify-around items-center px-4 py-3 bg-gray-50 text-[9px] sm:text-[10px] font-black uppercase tracking-wider border-b border-gray-100">
-                                                        <div className="flex items-center gap-1.5 text-emerald-700">
-                                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30"></span> Inside Campus
+                                                    <div className="bg-gray-50 border-b border-gray-100 px-3 py-2 space-y-1.5">
+                                                        {/* Outing Tile Header */}
+                                                        <div className="flex items-center justify-between text-[9px] sm:text-[10px] font-black tracking-wider gap-1">
+                                                            <span className="px-1 py-0.5 rounded bg-gray-200 text-rose-900 text-[8px] tracking-widest shrink-0 font-bold border border-gray-300">OUTING:</span>
+                                                            <div className="flex items-center gap-1 text-gray-900">
+                                                                <span className="w-3.5 h-3.5 rounded-none border border-gray-900 bg-emerald-500 shrink-0"></span>
+                                                                <span>Inside Campus</span>
+                                                            </div>
+                                                            <span className="text-gray-400 font-normal">|</span>
+                                                            <div className="flex items-center gap-1 text-gray-900">
+                                                                <span className="w-3.5 h-3.5 rounded-none border border-gray-900 bg-amber-500 shrink-0"></span>
+                                                                <span>Partial Outing</span>
+                                                            </div>
+                                                            <span className="text-gray-400 font-normal">|</span>
+                                                            <div className="flex items-center gap-1 text-gray-900">
+                                                                <span className="w-3.5 h-3.5 rounded-none border border-gray-900 bg-rose-600 shrink-0"></span>
+                                                                <span>Completely Out</span>
+                                                            </div>
                                                         </div>
-                                                        <div className="flex items-center gap-1.5 text-amber-700">
-                                                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-sm shadow-amber-500/30"></span> Partial Outing
-                                                        </div>
-                                                        <div className="flex items-center gap-1.5 text-rose-700">
-                                                            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm shadow-rose-500/30"></span> Completely Out
+                                                        {/* Daily Attendance Dot */}
+                                                        <div className="flex items-center justify-between text-[9px] sm:text-[10px] font-black tracking-wider gap-1 border-t border-gray-200/60 pt-1.5">
+                                                            <span className="px-1 py-0.5 rounded bg-gray-200 text-rose-900 text-[8px] tracking-widest shrink-0 font-bold border border-gray-300">NIGHT ATTENDANCE:</span>
+                                                            <div className="flex items-center gap-1 text-gray-900">
+                                                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+                                                                <span>Present</span>
+                                                            </div>
+                                                            <span className="text-gray-400 font-normal">|</span>
+                                                            <div className="flex items-center gap-1 text-gray-900">
+                                                                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0"></span>
+                                                                <span>Absent</span>
+                                                            </div>
                                                         </div>
                                                     </div>
 
@@ -3903,9 +3925,17 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                             )}
                                                                             
                                                                             {/* Attendance Indicator Bar & Dot */}
-                                                                            <div className="absolute bottom-0 w-full h-[50%] bg-white/95 backdrop-blur-sm rounded-none flex items-center justify-center border-t border-black/5 shadow-inner">
-                                                                                {attendanceStatus === 'Present' && <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm" title="Present" />}
-                                                                                {attendanceStatus === 'Absent' && <span className="w-2 h-2 rounded-full bg-rose-500 shadow-sm animate-pulse" title="Absent" />}
+                                                                            <div className="absolute bottom-0 w-full h-[50%] bg-white/95 backdrop-blur-sm rounded-none flex items-center justify-center gap-0.5 border-t border-black/5 shadow-inner px-0.5">
+                                                                                {attendanceStatus === 'Present' && (
+                                                                                    <span className="flex items-center gap-0.5 text-[7.5px] font-black text-emerald-700" title="Attendance: Present">
+                                                                                        <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm" />
+                                                                                    </span>
+                                                                                )}
+                                                                                {attendanceStatus === 'Absent' && (
+                                                                                    <span className="flex items-center gap-0.5 text-[7.5px] font-black text-rose-600" title="Attendance: Absent">
+                                                                                        <span className="w-2 h-2 rounded-full bg-rose-500 shadow-sm animate-pulse" />
+                                                                                    </span>
+                                                                                )}
                                                                             </div>
                                                                             {isToday && (
                                                                                 <span className={`w-1 h-1 rounded-full absolute top-1.5 left-1.5 ${status || isJoiningDate ? 'bg-white' : 'bg-blue-600'}`} />

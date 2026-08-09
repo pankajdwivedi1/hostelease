@@ -11,6 +11,7 @@ export interface IPermission {
   wardenStatus: "pending" | "allowed" | "rejected";
   deanStatus: "pending" | "allowed" | "rejected";
   parentStatus: "pending" | "allowed" | "rejected" | "no_response";
+  parentConsentUrl?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -66,6 +67,10 @@ const PermissionSchema = new Schema<IPermission>(
       enum: ["pending", "allowed", "rejected", "no_response"],
       default: "pending",
       index: true,
+    },
+    parentConsentUrl: {
+      type: String,
+      default: null,
     },
   },
   {

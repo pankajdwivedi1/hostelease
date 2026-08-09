@@ -181,7 +181,7 @@ const filterHostelForPrisma = (data: any) => {
 const filterPermissionForPrisma = (data: any) => {
     const fields = [
         'id', 'studentId', 'fromDateTime', 'toDateTime', 'reason', 'status',
-        'wardenStatus', 'deanStatus', 'requestType', 'parentStatus'
+        'wardenStatus', 'deanStatus', 'requestType', 'parentStatus', 'parentConsentUrl'
     ];
     const filtered: any = {};
     for (const key of fields) {
@@ -5291,13 +5291,12 @@ export const db = {
                     .single();
 
                 // 🔄 ROBUST FALLBACK: Handle missing columns in update
-                if (error && (error.message?.includes('tenant_id') || error.message?.includes('request_type') || error.message?.includes('parent_consent_url') || error.code === 'PGRST204' || error.message?.includes('schema cache'))) {
+                if (error && (error.message?.includes('tenant_id') || error.message?.includes('request_type') || error.code === 'PGRST204' || error.message?.includes('schema cache'))) {
                     console.warn(`⚠️ [DB] Permissions update schema mismatch ("${error.message}"). Retrying without new columns...`);
                     
                     const cleanUpdate = { ...snakeUpdate };
                     delete cleanUpdate.tenant_id;
                     delete cleanUpdate.request_type;
-                    delete cleanUpdate.parent_consent_url;
                     
                     const retry = await supabase.from('permissions').update(cleanUpdate).eq('_id', id).select().single();
                     data = retry.data;

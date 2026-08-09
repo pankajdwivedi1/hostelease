@@ -2081,8 +2081,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const netCalculated = grossBase - discountAmount; // ₹91,519
     const finalPaid = (tx.amount && tx.amount > 0 && tx.amount <= grossBase) ? tx.amount : netCalculated;
     const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/logo.jpeg` : '/logo.jpeg';
-    const hostOrigin = typeof window !== 'undefined' ? window.location.origin : "https://hosteleaze.com";
-    const verificationUrl = `${hostOrigin}/verify-invoice?id=${encodeURIComponent(invoiceNo)}&college=${encodeURIComponent(collegeName || tenantFormData.name)}&amount=${finalPaid}&utr=${encodeURIComponent(tx.utr || tx.id || 'N/A')}&date=${encodeURIComponent(fullDateTimeStr)}`;
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -2370,7 +2368,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
             <div class="total-box" style="display: flex; justify-content: space-between; align-items: stretch; margin-bottom: 18px; gap: 20px;">
               <div style="display: flex; align-items: center; gap: 16px; background: #f8fafc; border: 1.5px solid #cbd5e1; padding: 12px 16px; border-radius: 14px; max-width: 410px; flex: 1;">
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(verificationUrl)}" style="width: 135px; height: 135px; border-radius: 10px; border: 1.5px solid #94a3b8; background: #fff; padding: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);" alt="Verification QR Code" />
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`HOSTELEAZE TAX INVOICE\nInvoice: ${invoiceNo}\nCollege: ${collegeName || tenantFormData.name}\nAmount: Rs. ${finalPaid.toLocaleString("en-IN")}\nUTR: ${tx.utr || tx.id}\nStatus: PAID & VERIFIED`)}" style="width: 135px; height: 135px; border-radius: 10px; border: 1.5px solid #94a3b8; background: #fff; padding: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);" alt="Verification QR Code" />
                 <div style="flex: 1;">
                   <div style="font-size: 11px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2;">Scan to Verify Invoice</div>
                   <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 4px;">Official Digital Audit Proof</div>
@@ -11204,18 +11202,38 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 To {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}
                               </p>
                             </div>
-                            {showStatus ? (
-                              <div className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${permission.status === "allowed"
-                                ? "bg-green-100/80 text-green-700 border border-green-200"
-                                : "bg-red-100/80 text-red-700 border border-red-200"
-                                }`}>
-                                {permission.status === "allowed" ? "Accepted" : "Rejected"}
-                              </div>
-                            ) : (
-                              <div className="px-3 py-1 rounded-full text-[11px] font-black bg-yellow-100 text-yellow-700 border border-yellow-200 uppercase tracking-wider">
-                                Pending
-                              </div>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {permission.parentConsentUrl && (
+                                <button
+                                  onMouseEnter={() => prefetchVideo(permission.parentConsentUrl!)}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    setActiveConsentVideoUrl(
+                                      resolveConsentVideoSrc(
+                                        permission.parentConsentUrl!,
+                                        prefetchedVideoUrls
+                                      )
+                                    );
+                                  }}
+                                  className="text-[10px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 px-2 py-1 rounded-lg uppercase tracking-wider hover:bg-indigo-100 transition-all flex items-center gap-1 cursor-pointer"
+                                  title="Play Parent Consent Video"
+                                >
+                                  🎥 Play Consent Video
+                                </button>
+                              )}
+                              {showStatus ? (
+                                <div className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${permission.status === "allowed"
+                                  ? "bg-green-100/80 text-green-700 border border-green-200"
+                                  : "bg-red-100/80 text-red-700 border border-red-200"
+                                  }`}>
+                                  {permission.status === "allowed" ? "Accepted" : "Rejected"}
+                                </div>
+                              ) : (
+                                <div className="px-3 py-1 rounded-full text-[11px] font-black bg-yellow-100 text-yellow-700 border border-yellow-200 uppercase tracking-wider">
+                                  Pending
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <p className="text-[13px] text-slate-800 leading-relaxed font-medium">
                             {permission.reason}
