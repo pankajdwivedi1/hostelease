@@ -9413,8 +9413,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             const studentIdStr = student.id || student._id;
                             const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString()) || presentStudentIds.includes(studentIdStr?.toString());
                             return (
-                              <div key={student.id} className="p-2.5 sm:p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-200 transition-all">
-                                <div className="flex items-start gap-3 min-w-0 w-full">
+                              <div key={student.id} className="p-2 sm:p-3 bg-slate-50 rounded-2xl border border-slate-100 flex flex-row items-end sm:items-center justify-between gap-3 hover:border-slate-200 transition-all">
+                                <div className="flex items-center gap-3.5 min-w-0">
                                   {/* Avatar or Profile Image */}
                                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-xs sm:text-sm shadow-md overflow-hidden shrink-0 border border-slate-100">
                                     {student.profilePicture ? (
@@ -9423,7 +9423,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       student.name.slice(0, 2).toUpperCase()
                                     )}
                                   </div>
-                                  <div className="min-w-0 flex-1">
+                                  <div className="min-w-0">
                                     <div className="flex items-center gap-2">
                                       <h4 className="font-bold text-slate-800 text-sm leading-snug truncate">{student.name}</h4>
                                        {showFlashingBlueDot ? (hasMarkedAttendance ? (<span className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 shadow-sm" title="Night Attendance Marked" />) : (<span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shrink-0 shadow-sm" title="Night Attendance Not Marked" />)) : (hasMarkedAttendance && (<span className="w-2.5 h-2.5 bg-blue-600 rounded-full shrink-0 shadow-sm" title="Night Attendance Marked" />))}
@@ -9447,36 +9447,35 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider">🔒 Locked</span>
                                       )}
                                     </div>
-
-                                    {/* ⚡ Shifted Action Buttons Directly Below Badges */}
-                                    <div className="flex items-center gap-2 mt-2.5 pt-2 border-t border-slate-200/60">
-                                      <a
-                                        href={`tel:${student.phoneNumber}`}
-                                        className="w-8 h-8 sm:w-9 sm:h-9 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-100 transition-all shadow-2xs flex items-center justify-center text-xs font-bold active:scale-95"
-                                        title="Call Student"
-                                      >
-                                        📞
-                                      </a>
-                                      {student.fatherNumber && (
-                                        <a
-                                          href={`tel:${student.fatherNumber}`}
-                                          className="w-8 h-8 sm:w-9 sm:h-9 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-100 transition-all shadow-2xs flex items-center justify-center text-xs font-bold active:scale-95"
-                                          title={`Call Parent: ${student.fatherName || "Father"}`}
-                                        >
-                                          👨‍👩‍👦
-                                        </a>
-                                      )}
-                                      <a
-                                        href={`https://wa.me/${student.phoneNumber}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="w-8 h-8 sm:w-9 sm:h-9 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl hover:bg-emerald-100 transition-all shadow-2xs flex items-center justify-center text-xs font-bold active:scale-95"
-                                        title="WhatsApp Student"
-                                      >
-                                        💬
-                                      </a>
-                                    </div>
                                   </div>
+                                </div>
+
+                                <div className="flex flex-row sm:flex-col items-center gap-1 sm:gap-1.5 shrink-0 self-end sm:self-center mb-0.5 sm:mb-0">
+                                  <a
+                                    href={`tel:${student.phoneNumber}`}
+                                    className="p-1 sm:p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-[10px] sm:text-xs"
+                                    title="Call Student"
+                                  >
+                                    📞
+                                  </a>
+                                  {student.fatherNumber && (
+                                    <a
+                                      href={`tel:${student.fatherNumber}`}
+                                      className="p-1 sm:p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-[10px] sm:text-xs"
+                                      title={`Call Parent: ${student.fatherName || "Father"}`}
+                                    >
+                                      👨‍👩‍👦
+                                    </a>
+                                  )}
+                                  <a
+                                    href={`https://wa.me/${student.phoneNumber}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1 sm:p-1.5 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-100/50 transition-colors shadow-sm text-[10px] sm:text-xs"
+                                    title="WhatsApp Student"
+                                  >
+                                    💬
+                                  </a>
                                 </div>
                               </div>
                             );
