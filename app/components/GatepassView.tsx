@@ -315,36 +315,44 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         }
 
         // ⚡ INSTANT DISPLAY (0ms):
-        // Immediately render modal with all available record fields (Name, Hostel, Room, Reg ID, Status, etc.)
+        // Search loaded memory lists (currentlyOut, returnsToday) for pre-loaded full profile
+        const inMemoryMatch = [...(liveData?.currentlyOut || []), ...(liveData?.returnsToday || [])].find((item: any) => 
+            (item.studentId || item._id || item.id) === studentId || (item.firebaseUID && fallbackRecord?.firebaseUID && item.firebaseUID === fallbackRecord.firebaseUID)
+        );
+
+        const src = { ...inMemoryMatch, ...fallbackRecord };
+
         const initialStudent: any = {
             _id: studentId,
             id: studentId,
-            name: fallbackRecord?.studentName || fallbackRecord?.name || selectedStudent?.name || "Student",
-            hostelName: fallbackRecord?.hostelName || "",
-            roomNumber: fallbackRecord?.roomNumber || "",
-            registrationId: fallbackRecord?.registrationId || "",
-            phoneNumber: fallbackRecord?.phoneNumber || "",
-            fatherName: fallbackRecord?.fatherName || "",
-            fatherNumber: fallbackRecord?.fatherNumber || "",
-            motherName: fallbackRecord?.motherName || "",
-            motherNumber: fallbackRecord?.motherNumber || "",
-            erpInformation: fallbackRecord?.erpId || fallbackRecord?.erpInformation || "",
-            studentStatus: fallbackRecord?.status === "out" ? "out" : "in",
-            collegeName: fallbackRecord?.collegeName || "",
-            branch: fallbackRecord?.branch || "",
-            year: fallbackRecord?.year || "",
-            semester: fallbackRecord?.semester || "",
-            homePinCode: fallbackRecord?.homePinCode || fallbackRecord?.permanentAddress || "",
-            profilePicture: fallbackRecord?.profilePicture || fallbackRecord?.photo || "",
+            name: src.studentName || src.name || selectedStudent?.name || "Student",
+            hostelName: src.hostelName || src.hostel_name || "",
+            roomNumber: src.roomNumber || src.room_number || "",
+            registrationId: src.registrationId || src.registration_id || "",
+            phoneNumber: src.phoneNumber || src.phone_number || src.phone || src.mobile || "",
+            fatherName: src.fatherName || src.father_name || "",
+            fatherNumber: src.fatherNumber || src.father_number || src.fatherPhone || src.father_phone || "",
+            motherName: src.motherName || src.mother_name || "",
+            motherNumber: src.motherNumber || src.mother_number || src.motherPhone || src.mother_phone || "",
+            erpInformation: src.erpInformation || src.erp_id || src.erpId || "",
+            studentStatus: src.studentStatus || (src.status === "out" ? "out" : "in"),
+            collegeName: src.collegeName || src.college_name || src.college || "",
+            branch: src.branch || "",
+            year: src.year || "",
+            semester: src.semester || "",
+            permanentAddress: src.permanentAddress || src.permanent_address || src.homeAddress || src.address || src.homePinCode || "",
+            homeState: src.homeState || src.home_state || "",
+            email: src.email || "",
+            profilePicture: src.profilePicture || src.photo || src.profile_picture || "",
         };
 
         setSelectedStudent(initialStudent);
-        if (fallbackRecord && (fallbackRecord.checkOutTime || fallbackRecord.checkInTime)) {
-            setLastOuting(fallbackRecord);
+        if (src && (src.checkOutTime || src.checkInTime || src.checkOutISTTime || src.checkInISTTime)) {
+            setLastOuting(src);
         }
         setIsProfileModalOpen(true);
         setProfileError(null);
-        setIsLoadingProfile(false); // ⚡ NEVER BLOCK WITH SPINNER
+        setIsLoadingProfile(false);
 
         // Asynchronous background fetch for full detailed fields
         try {
@@ -1386,16 +1394,13 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
                                             {/* Recent History — shifted to right side (left of photo on mobile) */}
                                             <div className="flex flex-col items-start px-2 py-1 sm:px-3 sm:py-2 bg-red-50/60 rounded-lg sm:rounded-2xl border border-red-100/60 shrink-0">
-                                                <p className="text-[7px] sm:text-[9px] font-black text-red-500 uppercase tracking-widest">Recent History</p>
+                                                <p className="text-[7px] sm:text-[9px] font-black text-red-500 uppercase tracking-widest mb-0.5">Recent History</p>
                                                 {lastOuting ? (
-                                                    <>
-                                                        <p className="text-gray-900 font-extrabold text-[8.5px] sm:text-xs tracking-tight leading-snug">
-                                                            Date: <span className="text-red-600">{lastOuting.checkInISTDate || lastOuting.checkOutISTDate || "N/A"}</span>
-                                                        </p>
-                                                        <p className="text-gray-900 font-extrabold text-[8.5px] sm:text-xs tracking-tight leading-snug">
-                                                            Time: <span className="text-red-600">{lastOuting.checkInISTTime || lastOuting.checkOutISTTime || "N/A"}</span>
-                                                        </p>
-                                                    </>
+                                                    <div className="flex items-center gap-1 text-gray-900 font-extrabold text-[8.5px] sm:text-xs tracking-tight leading-snug flex-wrap">
+                                                        <span>Date: <span className="text-red-600">{lastOuting.checkInISTDate || lastOuting.checkOutISTDate || "N/A"}</span></span>
+                                                        <span className="text-gray-300 font-normal">•</span>
+                                                        <span>Time: <span className="text-red-600">{lastOuting.checkInISTTime || lastOuting.checkOutISTTime || "N/A"}</span></span>
+                                                    </div>
                                                 ) : (
                                                     <p className="text-[8px] sm:text-xs text-gray-400 font-semibold italic">No gate pass history yet</p>
                                                 )}
@@ -1421,25 +1426,25 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                 </div>
 
                                 {/* Info Cards Grid — 2 cols on mobile */}
-                                <div className="flex-1 px-4 sm:px-10 pb-6 sm:pb-8 grid grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-x-12 sm:gap-y-8 bg-gray-50/50 pt-4 sm:pt-8 border-t border-gray-100">
+                                <div className="flex-1 px-4 sm:px-10 pb-6 sm:pb-8 grid grid-cols-2 lg:grid-cols-3 gap-1.5 sm:gap-x-12 sm:gap-y-8 bg-gray-50/50 pt-3 sm:pt-8 border-t border-gray-100">
                                     {[
-                                        { label: "College Name", value: selectedStudent.collegeName || "N/A", icon: "🎓" },
-                                        { label: "ERP ID", value: selectedStudent.erpInformation || "N/A", icon: "🆔", valueClass: "text-blue-600" },
+                                        { label: "College Name", value: selectedStudent.collegeName || selectedStudent.college_name || selectedStudent.college || "N/A", icon: "🎓" },
+                                        { label: "ERP ID", value: selectedStudent.erpInformation || selectedStudent.erp_id || selectedStudent.erpId || "N/A", icon: "🆔", valueClass: "text-blue-600" },
                                         { label: "Branch", value: selectedStudent.branch || "N/A", icon: "📚" },
-                                        { label: "Year & Sem", value: `${selectedStudent.year || "N/A"} • ${selectedStudent.semester || "N/A"}`, icon: "📅" },
-                                        { label: "Mobile", value: selectedStudent.phoneNumber || "N/A", icon: "📞" },
+                                        { label: "Year & Sem", value: `${selectedStudent.year || "1st Year"} • ${selectedStudent.semester || "1st Sem"}`, icon: "📅" },
+                                        { label: "Mobile", value: selectedStudent.phoneNumber || selectedStudent.phone_number || selectedStudent.phone || selectedStudent.mobile || "N/A", icon: "📞" },
                                         { label: "Email", value: selectedStudent.email || "N/A", icon: <span className="text-[#FBBC05]">📧</span> },
-                                        { label: "Father Name", value: selectedStudent.fatherName || "N/A", icon: "👨‍👦" },
-                                        { label: "Father Mobile", value: selectedStudent.fatherNumber || "N/A", icon: "📱" },
-                                        { label: "Mother Name", value: selectedStudent.motherName || "N/A", icon: "👩‍👦" },
-                                        { label: "Mother Mobile", value: selectedStudent.motherNumber || "N/A", icon: "📱" },
-                                        { label: "Permanent Address", value: `${selectedStudent.permanentAddress || "N/A"}${selectedStudent.homeState ? `, ${selectedStudent.homeState}` : ""}`, icon: "🏠", fullWidth: true },
+                                        { label: "Father Name", value: selectedStudent.fatherName || selectedStudent.father_name || "N/A", icon: "👨‍👦" },
+                                        { label: "Father Mobile", value: selectedStudent.fatherNumber || selectedStudent.father_number || selectedStudent.fatherPhone || selectedStudent.father_phone || "N/A", icon: "📱" },
+                                        { label: "Mother Name", value: selectedStudent.motherName || selectedStudent.mother_name || "N/A", icon: "👩‍👦" },
+                                        { label: "Mother Mobile", value: selectedStudent.motherNumber || selectedStudent.mother_number || selectedStudent.motherPhone || selectedStudent.mother_phone || "N/A", icon: "📱" },
+                                        { label: "Permanent Address", value: `${selectedStudent.permanentAddress || selectedStudent.permanent_address || selectedStudent.homeAddress || selectedStudent.address || "N/A"}${selectedStudent.homeState ? `, ${selectedStudent.homeState}` : ""}`, icon: "🏠", fullWidth: true },
                                     ].map((item: any, idx) => (
-                                        <div key={idx} className={`flex gap-2 sm:gap-4 items-start bg-white p-2.5 sm:p-0 sm:bg-transparent rounded-xl sm:rounded-none border border-gray-100 sm:border-0 shadow-sm sm:shadow-none ${item.fullWidth ? 'col-span-2 lg:col-span-3' : ''}`}>
-                                            <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gray-50 sm:bg-white shadow-sm flex items-center justify-center text-sm sm:text-lg shrink-0 border border-gray-100">{item.icon}</div>
+                                        <div key={idx} className={`flex gap-1.5 sm:gap-4 items-center bg-white p-1.5 px-2.5 sm:p-0 sm:bg-transparent rounded-lg sm:rounded-none border border-gray-100 sm:border-0 shadow-2xs sm:shadow-none ${item.fullWidth ? 'col-span-2 lg:col-span-3' : ''}`}>
+                                            <div className="w-6 h-6 sm:w-10 sm:h-10 rounded-md sm:rounded-xl bg-gray-50 sm:bg-white shadow-2xs flex items-center justify-center text-xs sm:text-lg shrink-0 border border-gray-100">{item.icon}</div>
                                             <div className="min-w-0 flex-1">
-                                                <p className="text-[8px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest mb-0.5">{item.label}</p>
-                                                <p className={`text-[10px] sm:text-sm font-black m-0 break-words ${item.fullWidth ? '' : 'line-clamp-2'} ${item.valueClass || 'text-gray-900'}`}>
+                                                <p className="text-[7.5px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest mb-0">{item.label}</p>
+                                                <p className={`text-[9.5px] sm:text-sm font-black m-0 break-words ${item.fullWidth ? '' : 'line-clamp-2'} ${item.valueClass || 'text-gray-900'}`}>
                                                     {item.value !== "N/A" && (item.label.toLowerCase().includes("mobile") || item.label.toLowerCase().includes("phone")) ? (
                                                         <a href={`tel:${item.value}`} className="hover:text-blue-600 transition-colors">
                                                             {item.value}
