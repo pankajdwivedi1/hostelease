@@ -1512,7 +1512,7 @@ export const db = {
                     .maybeSingle();
 
                 if (error || !data) {
-                    console.log(`[DB_ADAPTER] Falling back to firebase_uid/supabase_id lookup for: ${id}`);
+                    console.log(`[DB_ADAPTER] Falling back to firebase_uid/supabase_id/registration_id/erp_id lookup for: ${id}`);
                     const fbLookup = await supabase
                         .from('students')
                         .select('*, student_profiles(*), student_security(*)')
@@ -1520,8 +1520,27 @@ export const db = {
                         .eq('tenant_id', tenantId)
                         .maybeSingle();
 
-                    data = fbLookup.data;
-                    error = fbLookup.error;
+                    if (fbLookup.data) {
+                        data = fbLookup.data;
+                        error = fbLookup.error;
+                    } else {
+                        const { data: profMatch } = await supabase
+                            .from('student_profiles')
+                            .select('student_id')
+                            .or(`registration_id.eq.${id},erp_id.eq.${id}`)
+                            .maybeSingle();
+
+                        if (profMatch?.student_id) {
+                            const { data: stData, error: stErr } = await supabase
+                                .from('students')
+                                .select('*, student_profiles(*), student_security(*)')
+                                .eq('tenant_id', tenantId)
+                                .eq('_id', profMatch.student_id)
+                                .maybeSingle();
+                            data = stData;
+                            error = stErr;
+                        }
+                    }
                 }
 
                 if (error) {
