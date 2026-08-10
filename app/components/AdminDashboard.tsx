@@ -10165,34 +10165,57 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <div className="grid grid-cols-3 sm:flex sm:flex-nowrap gap-2 md:gap-3 items-stretch">
                   <button
                     onClick={() => setStatusFilter("all")}
-                    className={`w-full sm:flex-1 h-[44px] px-1 py-1 rounded-lg text-[10px] sm:text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 min-h-[54px] px-1.5 py-1.5 rounded-xl text-[10px] sm:text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
                     <span className="text-center leading-tight">Current Count</span>
-                    <span className="text-[10px]">{studentsLoading ? "..." : statusCounts.all}</span>
+                    <span className="text-xs font-black">{studentsLoading ? "..." : statusCounts.all}</span>
                   </button>
                   <button
                     onClick={() => setStatusFilter("in")}
-                    className={`w-full sm:flex-1 h-[44px] px-1 py-1 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 min-h-[54px] px-1.5 py-1.5 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
                     <span>In</span>
-                    <span className="text-[10px]">{studentsLoading ? "..." : statusCounts.in}</span>
+                    <span className="text-xs font-black">{studentsLoading ? "..." : statusCounts.in}</span>
                   </button>
                   <button
                     onClick={() => setStatusFilter("out")}
-                    className={`w-full sm:flex-1 h-[44px] px-1 py-1 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-between ${statusFilter === "out" ? "bg-blue-600 text-background shadow-md shadow-blue-200" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 min-h-[54px] px-2 py-1 rounded-xl text-xs font-bold transition-all flex flex-col justify-center ${statusFilter === "out" ? "bg-blue-600 text-white shadow-md shadow-blue-200" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
-                    <div className="flex flex-col items-center gap-0.5 pt-0.5">
-                      <span className="leading-none">Out ({studentsLoading ? "..." : statusCounts.out})</span>
-                    </div>
+                    {!studentsLoading ? (
+                      <div className="w-full flex flex-col justify-center gap-0.5 text-[8px] sm:text-[9px] uppercase tracking-wider font-black">
+                        {/* Row 1: OUTSIDE */}
+                        <div className="flex items-center justify-between border-b border-[rgba(0,0,0,0.12)] pb-0.5">
+                          <span className={statusFilter === "out" ? "text-white" : "text-slate-800"}>
+                            OUTSIDE
+                          </span>
+                          <span className={`text-[10px] sm:text-xs font-black tabular-nums ${statusFilter === "out" ? "text-white" : "text-red-600"}`}>
+                            {statusCounts.out}
+                          </span>
+                        </div>
 
-                    {!studentsLoading && (
-                      <div className="w-full flex items-center justify-center border-t border-[rgba(0,0,0,0.12)] pt-0.5 pb-0.5 text-[8px] uppercase tracking-wider font-black">
-                        <div className="flex-1 flex flex-col items-center border-r border-[rgba(0,0,0,0.08)]">
-                          <span className={statusFilter === "out" ? "text-white opacity-95" : "text-slate-800"}>Home-Leave: {statusCounts.leave}</span>
+                        {/* Row 2: GATE-PASS */}
+                        <div className="flex items-center justify-between border-b border-[rgba(0,0,0,0.08)] pb-0.5">
+                          <span className={statusFilter === "out" ? "text-white opacity-95" : "text-slate-600"}>
+                            GATE-PASS
+                          </span>
+                          <span className="text-[10px] sm:text-xs font-black tabular-nums">
+                            {statusCounts.pass}
+                          </span>
                         </div>
-                        <div className="flex-1 flex flex-col items-center">
-                          <span className={statusFilter === "out" ? "text-white opacity-95" : "text-slate-800"}>Gate-Pass: {statusCounts.pass}</span>
+
+                        {/* Row 3: HOME-LEAVE */}
+                        <div className="flex items-center justify-between">
+                          <span className={statusFilter === "out" ? "text-white opacity-95" : "text-slate-600"}>
+                            HOME-LEAVE
+                          </span>
+                          <span className="text-[10px] sm:text-xs font-black tabular-nums">
+                            {statusCounts.leave}
+                          </span>
                         </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center">
+                        <span className="text-[10px]">Out (...)</span>
                       </div>
                     )}
                   </button>
