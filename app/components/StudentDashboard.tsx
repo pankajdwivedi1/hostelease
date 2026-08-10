@@ -4635,39 +4635,20 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                         <ellipse
                                                             cx="50" cy="50" rx="35" ry="42"
                                                             fill="none"
-                                                            stroke={faceDetected ? "#22c55e" : "#3b82f6"}
-                                                            strokeWidth="0.5"
-                                                            strokeDasharray={faceDetected ? "none" : "2,1"}
-                                                            className="transition-all duration-500"
+                                                            stroke={faceMatchStep === 'success' || faceDetected ? "#22c55e" : "#3b82f6"}
+                                                            strokeWidth={faceMatchStep === 'success' || faceDetected ? "1.5" : "0.8"}
+                                                            strokeDasharray={faceMatchStep === 'success' || faceDetected ? "none" : "2,1"}
+                                                            className="transition-all duration-300 drop-shadow-[0_0_12px_rgba(34,197,94,0.8)]"
                                                         />
                                                         {/* Scanning Line Animation */}
-                                                        {cameraActive && faceMatchStep === 'detecting' && (
-                                                            <line x1="15" x2="85" y1="0" y2="0" stroke="rgba(59, 130, 246, 0.5)" strokeWidth="0.5" className="animate-scan-line">
-                                                                <animate attributeName="y1" values="20;80;20" dur="3s" repeatCount="indefinite" />
-                                                                <animate attributeName="y2" values="20;80;20" dur="3s" repeatCount="indefinite" />
+                                                        {cameraActive && (faceMatchStep === 'detecting' || faceMatchStep === 'matching') && (
+                                                            <line x1="15" x2="85" y1="0" y2="0" stroke={faceDetected ? "rgba(34, 197, 94, 0.8)" : "rgba(59, 130, 246, 0.8)"} strokeWidth="0.8" className="animate-scan-line">
+                                                                <animate attributeName="y1" values="12;88;12" dur="2s" repeatCount="indefinite" />
+                                                                <animate attributeName="y2" values="12;88;12" dur="2s" repeatCount="indefinite" />
                                                             </line>
                                                         )}
                                                     </svg>
                                                 </div>
-
-                                                {/* ⚡ INDUSTRIAL: Face Tracking Box */}
-                                                {faceBox && (
-                                                    <div
-                                                        className="absolute border-2 border-green-500 rounded-lg pointer-events-none transition-all duration-150 shadow-[0_0_15px_rgba(34,197,94,0.5)] z-20"
-                                                        style={{
-                                                            // Mirrored calculation since video is scale-x-[-1]
-                                                            left: `${100 - ((faceBox.x + faceBox.width) / (videoRef.current?.videoWidth || 1)) * 100}%`,
-                                                            top: `${(faceBox.y / (videoRef.current?.videoHeight || 1)) * 100}%`,
-                                                            width: `${(faceBox.width / (videoRef.current?.videoWidth || 1)) * 100}%`,
-                                                            height: `${(faceBox.height / (videoRef.current?.videoHeight || 1)) * 100}%`,
-                                                        }}
-                                                    >
-                                                        <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-green-500 -ml-[2px] -mt-[2px]" />
-                                                        <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-green-500 -mr-[2px] -mt-[2px]" />
-                                                        <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-green-500 -ml-[2px] -mb-[2px]" />
-                                                        <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-green-500 -mr-[2px] -mb-[2px]" />
-                                                    </div>
-                                                )}
 
                                                 {faceMatchStep === 'matching' && (
                                                     <div className="absolute inset-0 bg-blue-600/20 backdrop-blur-[2px] flex items-center justify-center z-30">
