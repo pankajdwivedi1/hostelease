@@ -9416,7 +9416,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <div key={student.id} className="p-2 sm:p-3 bg-slate-50 rounded-2xl border border-slate-100 flex flex-row items-end sm:items-center justify-between gap-3 hover:border-slate-200 transition-all">
                                 <div className="flex items-center gap-3.5 min-w-0">
                                   {/* Avatar or Profile Image */}
-                                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-xs sm:text-sm shadow-md overflow-hidden shrink-0 border border-slate-100">
+                                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-sm sm:text-base shadow-md overflow-hidden shrink-0 border border-slate-200">
                                     {student.profilePicture ? (
                                       <img src={student.profilePicture} alt={student.name} className="w-full h-full object-cover" />
                                     ) : (
