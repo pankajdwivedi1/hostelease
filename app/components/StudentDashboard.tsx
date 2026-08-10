@@ -447,11 +447,35 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     useEffect(() => {
         if (studentProfile) {
             // Preload face-api models when student dashboard is ready
-            faceMatching.loadFaceApiModels().then(success => {
-                if (success) console.log('Face matching models ready');
+            faceMatching.loadFaceApiModels(true).then(success => {
+                if (success) {
+                    console.log('Face matching models ready');
+                    // ⚡ SILENT BACKGROUND PRE-CALCULATOR: If face vector is missing, extract it in background now!
+                    const hasVector = Array.isArray(studentProfile.faceDescriptor) && studentProfile.faceDescriptor.length > 0;
+                    if (!hasVector && studentProfile.profilePicture) {
+                        console.log('⚡ Silently pre-calculating student face vector for instant scanning...');
+                        faceMatching.loadImage(studentProfile.profilePicture).then(img => {
+                            faceMatching.detectFace(img, true).then(res => {
+                                if (res && res.descriptor) {
+                                    const vector = Array.from(res.descriptor);
+                                    console.log('✅ Background face vector pre-calculated successfully!');
+                                    setStudentProfile(prev => prev ? ({ ...prev, faceDescriptor: vector }) : prev);
+                                    fetch('/api/students/face-descriptor', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            firebaseUID: studentProfile.firebaseUID,
+                                            faceDescriptor: vector
+                                        })
+                                    }).catch(e => console.warn('Background vector sync error:', e));
+                                }
+                            }).catch(() => {});
+                        }).catch(() => {});
+                    }
+                }
             });
         }
-    }, [studentProfile]);
+    }, [studentProfile?.profilePicture, studentProfile?.firebaseUID]);
 
     // Automatic Face Detection Loop (Industrial Strength)
     useEffect(() => {
@@ -545,10 +569,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 // ⚡ TURBO: Pass the detection result we already have from the loop!
                                 const result = await performFaceVerification(res);
                                 if (result && result.status === 'auto-approved') {
-                                    setTimeout(() => {
-                                        stopCamera();
-                                        proceedWithAttendance(result);
-                                    }, 200); // Snappy transition (200ms)
+                                    stopCamera();
+                                    proceedWithAttendance(result);
                                 } else {
                                     stopCamera();
                                     const percent = result?.percentage !== undefined ? `${result.percentage}%` : 'Low';
