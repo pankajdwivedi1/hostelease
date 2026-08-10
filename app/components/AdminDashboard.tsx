@@ -9425,7 +9425,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-2">
-                                      <h4 className="font-bold text-slate-800 text-sm leading-snug truncate">{student.name}</h4>
+                                      <h4 className="font-bold text-slate-800 text-xs sm:text-sm leading-snug truncate">{student.name}</h4>
                                        {showFlashingBlueDot ? (hasMarkedAttendance ? (<span className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 shadow-sm" title="Night Attendance Marked" />) : (<span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shrink-0 shadow-sm" title="Night Attendance Not Marked" />)) : (hasMarkedAttendance && (<span className="w-2.5 h-2.5 bg-blue-600 rounded-full shrink-0 shadow-sm" title="Night Attendance Marked" />))}
 
                                     </div>
