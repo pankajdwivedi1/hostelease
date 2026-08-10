@@ -70,15 +70,15 @@ export async function GET(request: NextRequest) {
                 }),
                 db.gatePasses.list(filters, { limit: 1, countOnly: true }),
                 db.students.count(countFilters),
-                supabase.from('gate_passes').select('*', { count: 'exact', head: true }).eq('status', 'out').eq('type', 'leave').eq('tenant_id', tenantId),
-                supabase.from('gate_passes').select('*', { count: 'exact', head: true }).eq('status', 'out').eq('type', 'outing').eq('tenant_id', tenantId)
+                db.gatePasses.list({ ...filters, type: 'leave' }, { countOnly: true }),
+                db.gatePasses.list({ ...filters, type: 'outing' }, { countOnly: true })
             ]);
 
             const { records: miniRecent } = recentRes;
             const uniqueStudentsOut = summaryRes.total || 0;
             const totalStudents = studentsRes || 0;
-            const miniLeaveCount = leaveCountRes.count || 0;
-            const miniGatePassCount = outingCountRes.count || 0;
+            const miniLeaveCount = leaveCountRes.total || 0;
+            const miniGatePassCount = outingCountRes.total || 0;
 
             return NextResponse.json({
                 success: true,

@@ -47,12 +47,10 @@ export async function POST(request: NextRequest) {
         // If there's a warden for the student's hostel, notify them
         if (student.hostelName) {
           // Fetch warden account username for this hostel
-          db.supabase.from("hostels")
-            .select("warden_username")
-            .eq("name", student.hostelName)
-            .maybeSingle()
-            .then(({ data }) => {
-              const wardenId = data?.warden_username;
+          db.hostels.getAll()
+            .then((hostels: any[]) => {
+              const matchedHostel = (hostels || []).find((h: any) => h.name === student.hostelName);
+              const wardenId = matchedHostel?.wardenUsername;
               if (wardenId) {
                 sendPushNotification(wardenId, "warden", "wardenNewLeaveRequest", {
                   title: "New Leave Application",
@@ -60,7 +58,7 @@ export async function POST(request: NextRequest) {
                   url: "/"
                 }).catch(err => console.error("Warden new leave push failed:", err));
               }
-            });
+            }).catch(err => console.error("Hostel lookup for push failed:", err));
         }
 
         // Also notify the Dean (master user: "admin", userType: "dean")
@@ -78,12 +76,8 @@ export async function POST(request: NextRequest) {
     const parentPhone = student.fatherNumber || student.motherNumber || student.phoneNumber;
     
     // Fetch leave approval settings to determine if voice call is required
-    const { data: settings } = await db.supabase
-      .from('admin_settings')
-      .select('leave_approval_method')
-      .eq('tenant_id', student.tenantId)
-      .maybeSingle();
-    const leaveApprovalMethod = settings?.leave_approval_method || 'app';
+    const settings = await db.settings.get();
+    const leaveApprovalMethod = settings?.leaveApprovalMethod || 'app';
 
     // Trigger MSG91 Voice Call only if configured to use IVR Call method
     if (leaveApprovalMethod === 'ivr' && parentPhone) {
