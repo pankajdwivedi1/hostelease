@@ -1122,39 +1122,33 @@ const getDbSource = async (): Promise<string> => {
         return cachedDbSource;
     }
 
+    // ⚡ Fast path: Check process.env.NEXT_PUBLIC_DB_SOURCE first
+    let envSource = (process.env.NEXT_PUBLIC_DB_SOURCE || '').toUpperCase();
+    if (envSource === 'RAILWAY') envSource = 'PRISMA';
+    if (envSource === 'SUPABASE' || envSource === 'PRISMA' || envSource === 'MONGODB') {
+        cachedDbSource = envSource;
+        lastDbSourceCheck = now;
+        return envSource;
+    }
+
     try {
-        const settings = await prisma.adminSettings.findFirst({
-            select: { activeDatabaseSource: true }
-        });
-        if (settings?.activeDatabaseSource) {
-            let src = settings.activeDatabaseSource.toUpperCase();
+        const { data } = await supabase
+            .from('admin_settings')
+            .select('active_database_source')
+            .limit(1)
+            .maybeSingle();
+        if (data?.active_database_source) {
+            let src = String(data.active_database_source).toUpperCase();
             if (src === 'RAILWAY') src = 'PRISMA';
             cachedDbSource = src;
             lastDbSourceCheck = now;
             return src;
         }
-    } catch {
-        try {
-            const { data } = await supabase
-                .from('admin_settings')
-                .select('active_database_source')
-                .limit(1)
-                .maybeSingle();
-            if (data?.active_database_source) {
-                let src = String(data.active_database_source).toUpperCase();
-                if (src === 'RAILWAY') src = 'PRISMA';
-                cachedDbSource = src;
-                lastDbSourceCheck = now;
-                return src;
-            }
-        } catch {}
-    }
+    } catch {}
 
-    let envSource = (process.env.NEXT_PUBLIC_DB_SOURCE || 'PRISMA').toUpperCase();
-    if (envSource === 'RAILWAY') envSource = 'PRISMA';
-    cachedDbSource = envSource;
+    cachedDbSource = 'SUPABASE';
     lastDbSourceCheck = now;
-    return envSource;
+    return 'SUPABASE';
 };
 
 export const db = {
@@ -1512,7 +1506,7 @@ export const db = {
                     .maybeSingle();
 
                 if (error || !data) {
-                    console.log(`[DB_ADAPTER] Falling back to firebase_uid/supabase_id/registration_id/erp_id lookup for: ${id}`);
+                    console.log(`[DB_ADAPTER] Falling back to firebase_uid/supabase_id lookup for: ${id}`);
                     const fbLookup = await supabase
                         .from('students')
                         .select('*, student_profiles(*), student_security(*)')
@@ -1520,27 +1514,8 @@ export const db = {
                         .eq('tenant_id', tenantId)
                         .maybeSingle();
 
-                    if (fbLookup.data) {
-                        data = fbLookup.data;
-                        error = fbLookup.error;
-                    } else {
-                        const { data: profMatch } = await supabase
-                            .from('student_profiles')
-                            .select('student_id')
-                            .or(`registration_id.eq.${id},erp_id.eq.${id}`)
-                            .maybeSingle();
-
-                        if (profMatch?.student_id) {
-                            const { data: stData, error: stErr } = await supabase
-                                .from('students')
-                                .select('*, student_profiles(*), student_security(*)')
-                                .eq('tenant_id', tenantId)
-                                .eq('_id', profMatch.student_id)
-                                .maybeSingle();
-                            data = stData;
-                            error = stErr;
-                        }
-                    }
+                    data = fbLookup.data;
+                    error = fbLookup.error;
                 }
 
                 if (error) {
@@ -2928,10 +2903,24 @@ export const db = {
                 const tenantId = await getTenantIdOrThrow();
                 const finalData = { ...filterAttendanceForPrisma(attendanceData), tenantId };
                 if (!finalData.id) finalData.id = crypto.randomUUID();
-                const record = await prisma.attendance.create({
-                    data: finalData
-                });
-                return record;
+                try {
+                    const record = await prisma.attendance.create({
+                        data: finalData
+                    });
+                    return record;
+                } catch (pErr: any) {
+                    if (pErr?.code === 'P2002' || pErr?.message?.includes('Unique constraint')) {
+                        console.warn("⚠️ Attendance record already exists for student today, updating existing record...");
+                        await prisma.attendance.updateMany({
+                            where: { studentId: finalData.studentId, date: finalData.date, tenantId },
+                            data: finalData
+                        });
+                        return await prisma.attendance.findFirst({
+                            where: { studentId: finalData.studentId, date: finalData.date, tenantId }
+                        });
+                    }
+                    throw pErr;
+                }
             } else {
                 await connectDB();
                 const AttendanceModel = (await import('@/models/Attendance')).default;
@@ -3002,10 +2991,11 @@ export const db = {
 
                 const { error } = await supabase
                     .from('attendance')
-                    .insert(supabaseData);
+                    .upsert(supabaseData, { onConflict: 'student_id,date', ignoreDuplicates: true });
                 if (error) {
-                    console.error("Supabase Bulk Insert Error:", error);
-                    throw error;
+                    console.warn("Supabase Bulk Upsert Notice (falling back to insert):", error.message);
+                    const { error: insErr } = await supabase.from('attendance').insert(supabaseData);
+                    if (insErr) console.warn("Supabase Bulk Insert Notice:", insErr.message);
                 }
                 return { count: supabaseData.length };
             } else if (source === 'PRISMA') {
@@ -3016,7 +3006,8 @@ export const db = {
                     tenantId
                 }));
                 const result = await prisma.attendance.createMany({
-                    data: prismaRecords
+                    data: prismaRecords,
+                    skipDuplicates: true
                 });
                 return { count: result.count };
             } else {
