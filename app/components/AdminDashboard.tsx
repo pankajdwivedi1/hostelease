@@ -4561,11 +4561,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     // Auto-detect user type from local storage
     const storedUserType = localStorage.getItem("userType") || "warden";
 
-    const actionLabel = currentStatus === 'out' ? "Mark RETURNED (IN)" : `Mark ${requestType}`;
-
     let reason = customReason;
     if (currentStatus === 'in' && !reason) {
-      const input = window.prompt(`Enter reason for marking ${requestType} (e.g. Medical leave, Emergency leave approved verbally):`, "Management Override");
+      const input = await showPrompt(`Enter reason for marking ${requestType} (e.g. Medical leave, Emergency leave approved verbally):`, "Management Override");
       if (input === null) return;
       reason = input || "Management Override";
     }
@@ -4585,7 +4583,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       });
       const data = await res.json();
       if (data.success) {
-        alert(data.message || `Successfully updated status for student.`);
+        showToast(data.message || `Successfully marked ${requestType} for student.`, "success");
         // Refresh students and permissions
         fetchStudents(true);
         fetchPermissions();
@@ -4596,10 +4594,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           setSelectedStudent({ ...selectedStudent, studentStatus: currentStatus === 'out' ? 'in' : 'out' });
         }
       } else {
-        alert(data.error || "Failed to update status");
+        showToast(data.error || "Failed to update status", "error");
       }
     } catch (err) {
-      alert("Error: Failed to update status");
+      showToast("Error: Failed to update status", "error");
     } finally {
       setIsTogglingStatus(false);
     }
