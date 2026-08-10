@@ -1279,17 +1279,17 @@ export const db = {
 
                 const rows = Array.isArray(allRows) && allRows.length > 0 ? allRows : [];
                 
-                // If tenant settings are empty, fallback to query all admin_settings
                 let targetRows = rows;
-                if (targetRows.length === 0 || !targetRows.some(s => (s.hostel_locations || s.hostelLocations || []).length > 0)) {
+                if (targetRows.length === 0) {
                     const { data: globalRows } = await supabase.from('admin_settings').select('*');
                     if (globalRows && globalRows.length > 0) {
                         targetRows = globalRows;
                     }
                 }
 
-                // Find the best row with populated hostel locations
-                const bestRow = targetRows.find(s => (s.hostel_locations || s.hostelLocations || []).length > 0) || targetRows[0] || {};
+                // Prioritize the tenant's exact row first
+                const exactTenantRow = targetRows.find(s => tenantId && (s.tenant_id === tenantId || s.tenantId === tenantId));
+                const bestRow = exactTenantRow || targetRows.find(s => (s.hostel_locations || s.hostelLocations || []).length > 0) || targetRows[0] || {};
 
                 // Merge wifi whitelist across all rows
                 const wifiMap = new Map<string, any>();
