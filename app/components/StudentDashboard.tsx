@@ -2076,28 +2076,28 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             setAttendanceFailedReason('');
 
             setCameraActive(true);
-            setFaceMatchStep('loading-models');
 
             // ⚡ IMMEDIATE: Start camera stream
             const streamPromise = navigator.mediaDevices.getUserMedia({
                 video: {
                     facingMode: 'user',
                     aspectRatio: { ideal: 1 },
-                    width: { ideal: 1080 }
+                    width: { ideal: 640 }
                 }
             });
 
-            // ⚡ FAST FEED: Show video as soon as the browser allows (before model AI is ready)
+            // ⚡ FAST FEED: Show video as soon as the browser allows & start detection loop instantly
             const stream = await streamPromise;
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
                 videoRef.current.play();
             }
 
-            // ⚡ PARALLEL: Ensure models are ready for the detection loop
-            await faceMatching.loadFaceApiModels();
-
+            // ⚡ INSTANT: Start detection loop immediately without blocking
             setFaceMatchStep('detecting');
+
+            // Ensure models are loaded in background if not already warmed up
+            faceMatching.loadFaceApiModels().catch(() => {});
         } catch (err) {
             console.error("Camera error:", err);
             alert("Could not access camera. Please ensure permissions are granted.");
@@ -2142,73 +2142,27 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             let referenceDescriptor = studentProfile.faceDescriptor;
 
             if (!referenceDescriptor || referenceDescriptor.length === 0) {
-                console.log("🔒 Biometric lock missing. Initiating Biometric Lock-In from camera scan...");
-                setFaceMatchProgress(40);
-
-                try {
-                    await faceMatching.loadFaceApiModels(true);
-                    let res: any = null;
-
-                    if (studentProfile.profilePicture) {
-                        try {
-                            const profileImg = await faceMatching.loadImage(studentProfile.profilePicture);
-                            res = await faceMatching.detectFace(profileImg, true);
-                        } catch (e) {
-                            console.warn("Could not extract vector from profile picture, falling back to live camera lock-in.");
-                        }
-                    }
-
-                    if (res && res.descriptor) {
-                        referenceDescriptor = Array.from(res.descriptor);
-                    } else if (liveRes && liveRes.descriptor) {
-                        // ⚡ BIOMETRIC LOCK-IN: Use live face scan descriptor and lock it into Railway DB!
-                        console.log("⚡ Live camera Biometric Lock-In triggered!");
-                        referenceDescriptor = Array.from(liveRes.descriptor);
-
-                        // Save new live photo & vector to Railway DB
-                        const canvas = document.createElement('canvas');
-                        canvas.width = videoRef.current.videoWidth || 640;
-                        canvas.height = videoRef.current.videoHeight || 640;
-                        canvas.getContext('2d')?.drawImage(videoRef.current, 0, 0);
-                        const liveCapturedPhoto = canvas.toDataURL('image/jpeg', 0.85);
-
-                        await fetch(`/api/students/${studentProfile._id || studentProfile.id || studentProfile.firebaseUID}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                profilePicture: liveCapturedPhoto,
-                                faceDescriptor: referenceDescriptor
-                            })
-                        });
-                    } else {
-                        throw new Error("Could not detect a valid face. Please position your face clearly in front of the camera.");
-                    }
-
-                    await fetch('/api/students/face-descriptor', {
+                console.log("⚡ Auto Lock-In: Using live camera face scan descriptor...");
+                if (existingRes && existingRes.descriptor) {
+                    referenceDescriptor = Array.from(existingRes.descriptor);
+                    const updatedProfile = { ...studentProfile, faceDescriptor: referenceDescriptor };
+                    setStudentProfile(updatedProfile);
+                    
+                    // Save vector asynchronously in background
+                    fetch('/api/students/face-descriptor', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             firebaseUID: studentProfile.firebaseUID,
                             faceDescriptor: referenceDescriptor
                         })
-                    });
-
-                    const updatedProfile = { ...studentProfile, faceDescriptor: referenceDescriptor };
-                    setStudentProfile(updatedProfile);
-                    showToast("🔒 Biometric Face Lock-In Complete!", "success");
+                    }).catch(() => {});
 
                     setFaceMatchStep('success');
                     return {
                         percentage: 100,
                         status: 'auto-approved',
                     };
-                } catch (genError: any) {
-                    console.error("Error in Biometric Lock-In:", genError);
-                    setFaceMatchStep('error');
-                    showToast(genError.message || "Biometric Lock-In failed. Please try again.", "error");
-                    stopCamera();
-                    setIsMarkingAttendance(false);
-                    return null;
                 }
             }
 
