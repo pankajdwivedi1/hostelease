@@ -1007,35 +1007,35 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                     <div className="text-2xl font-extrabold text-[#00ff88] tabular-nums leading-tight">{liveData.summary.studentsIn}</div>
                                     <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest">In Campus</div>
                                 </div>
-                                <div className="py-1.5 px-3 bg-[rgba(255,107,107,0.05)] rounded-2xl border border-[rgba(255,107,107,0.2)] text-center flex flex-col justify-between lg:flex-1 relative overflow-hidden">
-                                    {/* Top Label: Outside Total */}
-                                    <div className="mb-1">
-                                        <div className="text-3xl font-extrabold text-[#ff6b6b] tabular-nums leading-none mb-0.5">
-                                            {liveData.summary.studentsOut}
-                                        </div>
-                                        <div className="text-[11px] text-[rgba(255,255,255,0.6)] uppercase tracking-[0.2em] font-black">
+                                <div className="py-2 px-3 bg-[rgba(255,107,107,0.06)] rounded-2xl border border-[rgba(255,107,107,0.25)] flex flex-col justify-center gap-1.5 lg:flex-1 relative overflow-hidden">
+                                    {/* Row 1: OUTSIDE */}
+                                    <div className="flex items-center justify-between border-b border-[rgba(255,107,107,0.2)] pb-1">
+                                        <span className="text-[11px] font-black uppercase tracking-wider text-[#ff6b6b]">
                                             OUTSIDE
-                                        </div>
+                                        </span>
+                                        <span className="text-base font-extrabold text-[#ff6b6b] tabular-nums">
+                                            {liveData.summary.studentsOut}
+                                        </span>
                                     </div>
 
-                                    {/* Bottom Split Section */}
-                                    <div className="flex border-t border-[rgba(255,107,107,0.2)] h-9 pt-1.5 mt-1">
-                                        <div className="flex-1 border-r border-[rgba(255,107,107,0.15)] flex flex-col items-center justify-center">
-                                            <span className="text-[14px] font-black text-white leading-none">
-                                                {liveData.summary.leaveCount || 0}
-                                            </span>
-                                            <span className="text-[8px] text-[rgba(255,255,255,0.45)] font-black uppercase tracking-widest mt-0.5">
-                                                HOME-LEAVE
-                                            </span>
-                                        </div>
-                                        <div className="flex-1 flex flex-col items-center justify-center">
-                                            <span className="text-[14px] font-black text-white leading-none">
-                                                {liveData.summary.gatePassCount || 0}
-                                            </span>
-                                            <span className="text-[8px] text-[rgba(255,255,255,0.45)] font-black uppercase tracking-widest mt-0.5">
-                                                GATE-PASS
-                                            </span>
-                                        </div>
+                                    {/* Row 2: GATE-PASS */}
+                                    <div className="flex items-center justify-between border-b border-[rgba(255,107,107,0.15)] pb-1">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-200">
+                                            GATE-PASS
+                                        </span>
+                                        <span className="text-sm font-extrabold text-white tabular-nums">
+                                            {liveData.summary.gatePassCount || 0}
+                                        </span>
+                                    </div>
+
+                                    {/* Row 3: HOME-LEAVE */}
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-200">
+                                            HOME-LEAVE
+                                        </span>
+                                        <span className="text-sm font-extrabold text-white tabular-nums">
+                                            {liveData.summary.leaveCount || 0}
+                                        </span>
                                     </div>
                                 </div>
                                 <div
