@@ -2200,8 +2200,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             setFaceMatchProgress(100);
 
-            // ⚡ ENTERPRISE SSD-MOBILENET PRO IDENTIFICATION (Match Score >= 90% - Rejects Screen Photos & Video Replays)
-            if (matchPercentage >= 90) {
+            // ⚡ ENTERPRISE IDENTIFICATION (Match Score >= 65% - Approves real-world room lighting scans)
+            if (matchPercentage >= 65) {
                 setFaceMatchStep('success');
                 return {
                     percentage: matchPercentage,

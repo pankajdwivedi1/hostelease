@@ -1132,11 +1132,14 @@ const getDbSource = async (): Promise<string> => {
     }
 
     try {
-        const { data } = await supabase
-            .from('admin_settings')
-            .select('active_database_source')
-            .limit(1)
-            .maybeSingle();
+        let tenantId = null;
+        try {
+            tenantId = await getTenantIdOrThrow();
+        } catch (err) {}
+
+        const query = supabase.from('admin_settings').select('active_database_source');
+        const { data } = tenantId ? await query.eq('tenant_id', tenantId).limit(1).maybeSingle() : await query.limit(1).maybeSingle();
+
         if (data?.active_database_source) {
             let src = String(data.active_database_source).toUpperCase();
             if (src === 'RAILWAY') src = 'PRISMA';
