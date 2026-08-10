@@ -316,6 +316,118 @@ const SyncDbButton = () => {
     );
 };
 
+// ⚡ BULK FACE EMBEDDINGS GENERATOR COMPONENT (PRE-CALCULATE ALL VECTOR DESCRIPTORS)
+const GenerateEmbeddingsButton = () => {
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [progressStatus, setProgressStatus] = useState("");
+    const [processedCount, setProcessedCount] = useState(0);
+    const [totalMissing, setTotalMissing] = useState(0);
+
+    const handleGenerateEmbeddings = async () => {
+        try {
+            setIsGenerating(true);
+            setProgressStatus("Checking student face vectors...");
+
+            // 1. Fetch missing students list
+            const checkRes = await fetch("/api/admin/generate-face-descriptors");
+            const checkData = await checkRes.json();
+
+            if (!checkData.success) {
+                throw new Error(checkData.error || "Failed to query missing vectors");
+            }
+
+            const missing = checkData.missingStudents || [];
+            if (missing.length === 0) {
+                showToast("🎉 All student face vectors are 100% pre-calculated!", "success");
+                setIsGenerating(false);
+                return;
+            }
+
+            setTotalMissing(missing.length);
+            setProgressStatus(`Found ${missing.length} missing vectors. Loading AI face model...`);
+
+            // 2. Load face-api models dynamically
+            const faceMatching = await import("@/lib/faceMatching");
+            await faceMatching.loadFaceApiModels(true);
+
+            // 3. Process missing students in batches
+            let batchUpdates: any[] = [];
+            let currentProcessed = 0;
+            let totalSaved = 0;
+
+            for (const student of missing) {
+                currentProcessed++;
+                setProcessedCount(currentProcessed);
+                setProgressStatus(`Processing ${currentProcessed}/${missing.length}: ${student.name}`);
+
+                if (student.profilePicture) {
+                    try {
+                        const img = await faceMatching.loadImage(student.profilePicture);
+                        const res = await faceMatching.detectFace(img, true);
+                        if (res && res.descriptor) {
+                            batchUpdates.push({
+                                studentId: student.id,
+                                firebaseUID: student.firebaseUID,
+                                faceDescriptor: Array.from(res.descriptor)
+                            });
+                        }
+                    } catch (err) {
+                        console.warn(`Could not extract face descriptor for ${student.name}`);
+                    }
+                }
+
+                // Push updates in batches of 15
+                if (batchUpdates.length >= 15 || currentProcessed === missing.length) {
+                    if (batchUpdates.length > 0) {
+                        setProgressStatus(`Saving ${batchUpdates.length} face vectors to Railway & Supabase...`);
+                        const saveRes = await fetch("/api/admin/generate-face-descriptors", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ updates: batchUpdates })
+                        });
+                        const saveData = await saveRes.json();
+                        if (saveData.success) {
+                            totalSaved += saveData.updatedCount || batchUpdates.length;
+                        }
+                        batchUpdates = [];
+                    }
+                }
+            }
+
+            showToast(`🎉 Pre-calculated and saved ${totalSaved} face vectors! Instant <30ms verification ready.`, "success");
+        } catch (error: any) {
+            console.error("Error generating face embeddings:", error);
+            showToast("Embedding generation error: " + (error.message || "Failed"), "error");
+        } finally {
+            setIsGenerating(false);
+            setProgressStatus("");
+            setProcessedCount(0);
+            setTotalMissing(0);
+        }
+    };
+
+    return (
+        <button
+            onClick={handleGenerateEmbeddings}
+            disabled={isGenerating}
+            title="Pre-calculate 128-D face embeddings for all students to enable instant <30ms verification"
+            className="h-10 sm:h-11 px-3 sm:px-4 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 flex items-center gap-1.5 justify-center w-full sm:w-auto"
+        >
+            {isGenerating ? (
+                <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    <span>{processedCount > 0 ? `${processedCount}/${totalMissing}` : "Loading AI..."}</span>
+                </>
+            ) : (
+                <>
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>⚡ AI Face Vectors</span>
+                </>
+            )}
+        </button>
+    );
+};
+
 export default function SuperAdminDashboard() {
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [viewMode, setViewMode] = useState<"active" | "recycle" | "audit" | "billing" | "expired">("active");
@@ -1032,6 +1144,7 @@ export default function SuperAdminDashboard() {
 
                     <LiveDbSwitch />
                     <SyncDbButton />
+                    <GenerateEmbeddingsButton />
 
                     <button
                         onClick={async () => {
