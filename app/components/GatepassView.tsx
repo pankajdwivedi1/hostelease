@@ -1007,23 +1007,23 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                     <div className="text-2xl font-extrabold text-[#00ff88] tabular-nums leading-tight">{liveData.summary.studentsIn}</div>
                                     <div className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-widest">In Campus</div>
                                 </div>
-                                <div className="py-2 px-3 bg-[rgba(255,107,107,0.06)] rounded-2xl border border-[rgba(255,107,107,0.25)] flex flex-col justify-center gap-1.5 lg:flex-1 relative overflow-hidden">
+                                <div className="py-1 px-3 bg-[rgba(255,107,107,0.06)] rounded-2xl border border-[rgba(255,107,107,0.25)] flex flex-col justify-around lg:flex-1 relative overflow-hidden">
                                     {/* Row 1: OUTSIDE */}
-                                    <div className="flex items-center justify-between border-b border-[rgba(255,107,107,0.2)] pb-1">
+                                    <div className="flex items-center justify-between border-b border-[rgba(255,107,107,0.2)] pb-0.5">
                                         <span className="text-[11px] font-black uppercase tracking-wider text-[#ff6b6b]">
                                             OUTSIDE
                                         </span>
-                                        <span className="text-base font-extrabold text-[#ff6b6b] tabular-nums">
+                                        <span className="text-xl sm:text-2xl font-black text-[#ff6b6b] tabular-nums leading-tight">
                                             {liveData.summary.studentsOut}
                                         </span>
                                     </div>
 
                                     {/* Row 2: GATE-PASS */}
-                                    <div className="flex items-center justify-between border-b border-[rgba(255,107,107,0.15)] pb-1">
+                                    <div className="flex items-center justify-between border-b border-[rgba(255,107,107,0.15)] pb-0.5">
                                         <span className="text-[10px] font-black uppercase tracking-wider text-slate-200">
                                             GATE-PASS
                                         </span>
-                                        <span className="text-sm font-extrabold text-white tabular-nums">
+                                        <span className="text-xl sm:text-2xl font-black text-white tabular-nums leading-tight">
                                             {liveData.summary.gatePassCount || 0}
                                         </span>
                                     </div>
@@ -1033,7 +1033,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                         <span className="text-[10px] font-black uppercase tracking-wider text-slate-200">
                                             HOME-LEAVE
                                         </span>
-                                        <span className="text-sm font-extrabold text-white tabular-nums">
+                                        <span className="text-xl sm:text-2xl font-black text-white tabular-nums leading-tight">
                                             {liveData.summary.leaveCount || 0}
                                         </span>
                                     </div>
