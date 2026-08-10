@@ -4561,9 +4561,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     // Auto-detect user type from local storage
     const storedUserType = localStorage.getItem("userType") || "warden";
 
+    const actionLabel = currentStatus === 'out' ? "Mark RETURNED (IN)" : `Mark ${requestType}`;
+
     let reason = customReason;
     if (currentStatus === 'in' && !reason) {
-      const input = await showPrompt(`Enter reason for marking ${requestType} (e.g. Medical leave, Emergency leave approved verbally):`, "Management Override");
+      const input = window.prompt(`Enter reason for marking ${requestType} (e.g. Medical leave, Emergency leave approved verbally):`, "Management Override");
       if (input === null) return;
       reason = input || "Management Override";
     }
@@ -4583,7 +4585,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       });
       const data = await res.json();
       if (data.success) {
-        showToast(data.message || `Successfully marked ${requestType} for student.`, "success");
+        alert(data.message || `Successfully updated status for student.`);
         // Refresh students and permissions
         fetchStudents(true);
         fetchPermissions();
@@ -4594,10 +4596,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           setSelectedStudent({ ...selectedStudent, studentStatus: currentStatus === 'out' ? 'in' : 'out' });
         }
       } else {
-        showToast(data.error || "Failed to update status", "error");
+        alert(data.error || "Failed to update status");
       }
     } catch (err) {
-      showToast("Error: Failed to update status", "error");
+      alert("Error: Failed to update status");
     } finally {
       setIsTogglingStatus(false);
     }
@@ -10698,22 +10700,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             Present
                           </span>
                         )}
-                        {selectedStudent.studentStatus === 'out' ? (
+                        {selectedStudent.studentStatus === 'out' && (
                           <button
-                            onClick={() => handleManualToggle(selectedStudent._id || selectedStudent.id, "out")}
+                            onClick={() => handleManualToggle(selectedStudent.id, "out")}
                             disabled={isTogglingStatus}
-                            className="shrink-0 px-2.5 py-0.5 rounded-md bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider hover:bg-emerald-700 transition-all active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer"
+                            className="shrink-0 px-2 py-0.5 rounded-md bg-amber-500 text-white text-[9px] font-black uppercase tracking-wider hover:bg-amber-600 transition-all active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer"
                           >
                             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
-                            Mark RETURNED (IN)
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleManualToggle(selectedStudent._id || selectedStudent.id, "in", "HOME-LEAVE")}
-                            disabled={isTogglingStatus}
-                            className="shrink-0 px-2.5 py-0.5 rounded-md bg-blue-600 text-white text-[9px] font-black uppercase tracking-wider hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer"
-                          >
-                            <span>🏠</span> Mark HOME-LEAVE
+                            Mark IN
                           </button>
                         )}
                       </div>
