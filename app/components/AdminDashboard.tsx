@@ -10700,7 +10700,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         )}
                         {selectedStudent.studentStatus === 'out' ? (
                           <button
-                            onClick={() => handleManualToggle(selectedStudent.id, "out")}
+                            onClick={() => handleManualToggle(selectedStudent._id || selectedStudent.id, "out")}
                             disabled={isTogglingStatus}
                             className="shrink-0 px-2.5 py-0.5 rounded-md bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider hover:bg-emerald-700 transition-all active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer"
                           >
@@ -10709,7 +10709,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           </button>
                         ) : (
                           <button
-                            onClick={() => handleManualToggle(selectedStudent.id, "in", "HOME-LEAVE")}
+                            onClick={() => handleManualToggle(selectedStudent._id || selectedStudent.id, "in", "HOME-LEAVE")}
                             disabled={isTogglingStatus}
                             className="shrink-0 px-2.5 py-0.5 rounded-md bg-blue-600 text-white text-[9px] font-black uppercase tracking-wider hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer"
                           >

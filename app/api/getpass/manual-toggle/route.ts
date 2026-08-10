@@ -84,15 +84,25 @@ export async function POST(request: NextRequest) {
         const { writeAdminAuditLog } = await import("@/lib/auditLog");
 
         for (const id of targetIds) {
-            const student = await db.students.getById(id.toString());
-            if (!student) continue;
+            let student = await db.students.getById(id.toString());
+            if (!student) {
+                student = await db.students.findOne({ registrationId: id.toString() });
+                if (!student) student = await db.students.findOne({ erpInformation: id.toString() });
+                if (!student) student = await db.students.findOne({ firebaseUID: id.toString() });
+            }
 
+            if (!student) {
+                console.error(`[ManualToggle] Could not find student by ID/RegID/ERP: ${id}`);
+                continue;
+            }
+
+            const targetStudentId = (student._id || student.id || id).toString();
             const currentStatus = student.studentStatus || "in";
 
             if (currentStatus === "in") {
                 // MARK OUT (HOME-LEAVE or GATE-PASS)
                 const { records: existingPasses } = await db.gatePasses.list({
-                    studentId: id.toString(),
+                    studentId: targetStudentId,
                     status: "out",
                 });
 
@@ -115,7 +125,7 @@ export async function POST(request: NextRequest) {
                 const passReason = reason || `Manual ${targetType} Override`;
 
                 await db.gatePasses.create({
-                    studentId: id.toString(),
+                    studentId: targetStudentId,
                     firebaseUID: student.firebaseUID,
                     studentName: student.name,
                     hostelName: student.hostelName,
@@ -134,7 +144,7 @@ export async function POST(request: NextRequest) {
                 // Also create an approved permission record so dashboard calendars and logs show HOME-LEAVE
                 try {
                     await db.permissions.create({
-                        studentId: id.toString(),
+                        studentId: targetStudentId,
                         studentName: student.name,
                         hostelName: student.hostelName,
                         roomNumber: student.roomNumber,
@@ -151,11 +161,11 @@ export async function POST(request: NextRequest) {
                     console.warn("Non-blocking permission creation notice:", permErr);
                 }
 
-                await db.students.update(id.toString(), { studentStatus: "out" });
+                await db.students.update(targetStudentId, { studentStatus: "out" });
                 await writeAdminAuditLog({
                     action: "MANUAL_STATUS_OVERRIDE_OUT",
                     entityType: "student",
-                    entityId: id.toString(),
+                    entityId: targetStudentId,
                     entityName: student.name,
                     details: { status: "out", requestType: targetType, reason: passReason },
                     performedBy: operator || userType
@@ -163,7 +173,7 @@ export async function POST(request: NextRequest) {
             } else {
                 // MARK IN (Returned)
                 const openPassesBySIDRes = await db.gatePasses.list({
-                    studentId: id.toString(),
+                    studentId: targetStudentId,
                     status: "out",
                 });
                 
@@ -190,11 +200,11 @@ export async function POST(request: NextRequest) {
                     }
                 }
 
-                await db.students.update(id.toString(), { studentStatus: "in" });
+                await db.students.update(targetStudentId, { studentStatus: "in" });
                 await writeAdminAuditLog({
                     action: "MANUAL_STATUS_OVERRIDE_IN",
                     entityType: "student",
-                    entityId: id.toString(),
+                    entityId: targetStudentId,
                     entityName: student.name,
                     details: { status: "in", reason: reason || "Returned to Campus" },
                     performedBy: operator || userType
