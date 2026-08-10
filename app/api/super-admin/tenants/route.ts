@@ -36,9 +36,22 @@ export async function GET(request: NextRequest) {
 
         // 2. ULTRA-OPTIMIZED COUNT FETCH: Get counts per tenant without downloading records
         // Using Promise.all to fetch counts in parallel for best speed
+        const activeDbSource = await db.getSource();
         const tenantStats = await Promise.all(tenantIds.map(async (id: any) => {
-            const [studentRes, trafficRes, settingsRes] = await Promise.all([
-                supabase.from('students').select('*', { count: 'exact', head: true }).eq('tenant_id', id),
+            let studentCount = 0;
+            try {
+                if (activeDbSource === 'PRISMA') {
+                    studentCount = await prisma.student.count({ where: { tenantId: id } });
+                } else {
+                    const studentRes = await supabase.from('students').select('*', { count: 'exact', head: true }).eq('tenant_id', id);
+                    studentCount = studentRes.count || 0;
+                }
+            } catch {
+                const studentRes = await supabase.from('students').select('*', { count: 'exact', head: true }).eq('tenant_id', id);
+                studentCount = studentRes.count || 0;
+            }
+
+            const [trafficRes, settingsRes] = await Promise.all([
                 supabase.from('attendance').select('*', { count: 'exact', head: true }).eq('tenant_id', id).gte('timestamp', tenMinutesAgo),
                 supabase.from('admin_settings').select('university_bank_details').eq('tenant_id', id).maybeSingle()
             ]);
@@ -47,7 +60,7 @@ export async function GET(request: NextRequest) {
             
             return {
                 id,
-                studentCount: studentRes.count || 0,
+                studentCount,
                 liveTraffic: trafficRes.count || 0,
                 renewalUtr: bankDetails.renewalUtr || null,
                 renewalStatus: bankDetails.renewalStatus || null,
