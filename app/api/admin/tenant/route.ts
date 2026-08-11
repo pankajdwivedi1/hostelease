@@ -35,7 +35,9 @@ export async function GET(request: NextRequest) {
                 address: instConfig.address || tenant.address || "",
                 email: instConfig.email || tenant.email || "",
                 phone: instConfig.phone || tenant.phone || "",
-                gstin: instConfig.gstin || tenant.gstin || ""
+                gstin: instConfig.gstin || tenant.gstin || "",
+                contactName: instConfig.contactName || "",
+                contactPhone: instConfig.contactPhone || ""
             }
         });
     } catch (error: any) {
@@ -55,7 +57,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { name, logo, primaryColor, secondaryColor, address, email, phone, gstin } = body;
+        const { name, logo, primaryColor, secondaryColor, address, email, phone, gstin, contactName, contactPhone } = body;
 
         const supabase = getSupabaseAdmin();
         const updateData: any = {};
@@ -79,7 +81,9 @@ export async function POST(request: NextRequest) {
             address: address !== undefined ? address : (existingSettings?.universityBankDetails?.address || ""),
             email: email !== undefined ? email : (existingSettings?.universityBankDetails?.email || ""),
             phone: phone !== undefined ? phone : (existingSettings?.universityBankDetails?.phone || ""),
-            gstin: gstin !== undefined ? gstin : (existingSettings?.universityBankDetails?.gstin || "")
+            gstin: gstin !== undefined ? gstin : (existingSettings?.universityBankDetails?.gstin || ""),
+            contactName: contactName !== undefined ? contactName : (existingSettings?.universityBankDetails?.contactName || ""),
+            contactPhone: contactPhone !== undefined ? contactPhone : (existingSettings?.universityBankDetails?.contactPhone || "")
         };
 
         await db.settings.update({

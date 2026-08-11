@@ -1127,6 +1127,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     email: "",
     phone: "",
     gstin: "",
+    contactName: "",
+    contactPhone: "",
     primaryColor: "#3b82f6",
     secondaryColor: "#1e40af"
   });
@@ -2325,7 +2327,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 ${tenantFormData.address ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin-bottom: 2px;">📍 ${tenantFormData.address}</p>` : ''}
                 ${tenantFormData.email ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px;">✉️ ${tenantFormData.email}</p>` : ''}
                 ${tenantFormData.phone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px;">📞 ${tenantFormData.phone}</p>` : ''}
-                ${tenantFormData.gstin ? `<p style="font-size: 10px; font-weight: 800; color: #4338ca;">GSTIN: ${tenantFormData.gstin}</p>` : ''}
+                ${(tenantFormData.contactName || tenantFormData.contactPhone) ? `<p style="font-size: 10px; font-weight: 700; color: #4338ca; margin-top: 3px;">👤 Coordinator: ${tenantFormData.contactName || 'Dr Pankaj Dwivedi'}${tenantFormData.contactPhone ? ' • 📱 Mobile: ' + tenantFormData.contactPhone : ''}</p>` : ''}
+                ${tenantFormData.gstin ? `<p style="font-size: 10px; font-weight: 800; color: #4338ca; margin-top: 2px;">GSTIN: ${tenantFormData.gstin}</p>` : ''}
               </div>
               <div style="text-align: right;">
                 <h3>Billed From (Provider)</h3>
@@ -2611,6 +2614,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           email: data.tenant.email || "",
           phone: data.tenant.phone || "",
           gstin: data.tenant.gstin || "",
+          contactName: data.tenant.contactName || "",
+          contactPhone: data.tenant.contactPhone || "",
           primaryColor: data.tenant.primaryColor || "#3b82f6",
           secondaryColor: data.tenant.secondaryColor || "#1e40af"
         });
@@ -13524,6 +13529,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             onChange={(e) => setTenantFormData({ ...tenantFormData, phone: e.target.value })}
                             className="w-full p-3.5 rounded-2xl border-2 border-gray-100 text-xs font-bold focus:border-blue-500 outline-none transition-all"
                             placeholder="e.g. +91 9981414729 / 0755-2529015"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Coordinator / Contact Name</label>
+                          <input
+                            type="text"
+                            value={tenantFormData.contactName}
+                            onChange={(e) => setTenantFormData({ ...tenantFormData, contactName: e.target.value })}
+                            className="w-full p-3.5 rounded-2xl border-2 border-gray-100 text-xs font-bold focus:border-blue-500 outline-none transition-all"
+                            placeholder="e.g. Dr Pankaj Dwivedi"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Coordinator Mobile Number</label>
+                          <input
+                            type="text"
+                            value={tenantFormData.contactPhone}
+                            onChange={(e) => setTenantFormData({ ...tenantFormData, contactPhone: e.target.value })}
+                            className="w-full p-3.5 rounded-2xl border-2 border-gray-100 text-xs font-bold focus:border-blue-500 outline-none transition-all"
+                            placeholder="e.g. 7974704918"
                           />
                         </div>
 
