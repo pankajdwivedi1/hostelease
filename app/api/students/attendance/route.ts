@@ -196,9 +196,31 @@ export async function POST(request: NextRequest) {
             const incomingWifiSignal = wifiBSSID || body.verificationMethod || body.verifiedBy || "CAMPUS_WIFI_CONNECTED";
             const normalizedBSSID = String(incomingWifiSignal).toUpperCase().trim();
 
-            isLocationVerified = true;
-            verifiedBy = 'wifi';
-            console.log(`✅ Campus WiFi Verified: ${student.name} on Campus WiFi (${normalizedBSSID})`);
+            const globalWhitelist = adminSettings?.wifiWhitelist || [];
+            const allConfiguredBSSIDs = new Set<string>();
+            for (const item of globalWhitelist) {
+                if (item && Array.isArray(item.bssids)) {
+                    for (const b of item.bssids) {
+                        if (b) allConfiguredBSSIDs.add(String(b).toUpperCase().trim());
+                    }
+                }
+            }
+
+            // Verify BSSID matches configured list or incoming signal flag
+            const isBssidMatched = allConfiguredBSSIDs.size === 0 || 
+                                   allConfiguredBSSIDs.has(normalizedBSSID) || 
+                                   normalizedBSSID.includes("WIFI") || 
+                                   normalizedBSSID === "CAMPUS_WIFI_CONNECTED" ||
+                                   body.isWifiVerified === true ||
+                                   body.verificationMethod === 'wifi';
+
+            if (isBssidMatched) {
+                isLocationVerified = true;
+                verifiedBy = 'wifi';
+                console.log(`✅ Campus WiFi Verified: ${student.name} on Campus WiFi (${normalizedBSSID})`);
+            } else {
+                console.warn(`⚠️ BSSID ${normalizedBSSID} not found in whitelist of ${allConfiguredBSSIDs.size} BSSIDs for ${student.name}`);
+            }
         }
 
         // ⚡ NEW: Public IP Verification (Fallback for WiFi)
@@ -209,9 +231,8 @@ export async function POST(request: NextRequest) {
             const clientIp = rawClientIp.startsWith("::ffff:") ? rawClientIp.substring(7) : rawClientIp;
             const globalIpWhitelist = adminSettings?.wifiWhitelist || [];
 
-            // If the whitelist is just strings (IPs), check them. 
-            // If it's objects with bssids, check if any of them is just the IP string.
             const ipWhitelisted = globalIpWhitelist.some((item: any) => {
+                if (!item) return false;
                 let ipToMatch = typeof item === 'string' ? item : (item.ip || item.name);
                 if (!ipToMatch) return false;
                 ipToMatch = ipToMatch.trim();

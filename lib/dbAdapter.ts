@@ -1266,49 +1266,76 @@ export const db = {
     settings: {
         get: async () => {
             const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                let tenantId = null;
-                try {
-                    tenantId = await getTenantIdOrThrow();
-                } catch (err) {}
+            let tenantId = null;
+            try {
+                tenantId = await getTenantIdOrThrow();
+            } catch (err) {}
 
-                const query = supabase.from('admin_settings').select('*');
-                const { data: allRows, error } = tenantId ? await query.eq('tenant_id', tenantId) : await query;
+            if (source === 'SUPABASE') {
+                const { data: allRows, error } = await supabase.from('admin_settings').select('*');
 
                 if (error) {
                     console.error("Supabase settings.get Error:", error);
                     return null;
                 }
 
-                const rows = Array.isArray(allRows) && allRows.length > 0 ? allRows : [];
-                
-                let targetRows = rows;
-                if (targetRows.length === 0) {
-                    const { data: globalRows } = await supabase.from('admin_settings').select('*');
-                    if (globalRows && globalRows.length > 0) {
-                        targetRows = globalRows;
-                    }
-                }
+                const targetRows = Array.isArray(allRows) && allRows.length > 0 ? allRows : [];
 
                 // Prioritize the tenant's exact row first
                 const exactTenantRow = targetRows.find(s => tenantId && (s.tenant_id === tenantId || s.tenantId === tenantId));
                 const bestRow = exactTenantRow || targetRows.find(s => (s.hostel_locations || s.hostelLocations || []).length > 0) || targetRows[0] || {};
 
-                // Merge wifi whitelist across all rows
-                const wifiMap = new Map<string, any>();
+                // Merge wifi whitelist across all rows in admin_settings
+                const allWifiItems: any[] = [];
                 for (const s of targetRows) {
                     const list = s.wifi_whitelist || s.wifiWhitelist;
                     if (Array.isArray(list)) {
-                        for (const item of list) {
-                            if (item) {
-                                const key = (item.ip || item.hostelName || item.name || JSON.stringify(item)).toString().trim().toLowerCase();
-                                if (!wifiMap.has(key)) {
-                                    wifiMap.set(key, item);
-                                }
-                            }
-                        }
+                        allWifiItems.push(...list);
                     }
                 }
+                
+                const mergeWifiItems = (items: any[]) => {
+                    const hostelMap = new Map<string, any>();
+                    for (const item of items) {
+                        if (!item || typeof item !== 'object') continue;
+                        const rawName = (item.hostelName || item.name || "").toString();
+                        const cleanName = rawName.toUpperCase()
+                            .replace(/IP|\(WARDEN SYNCED\)|\(MANUAL\)|\(SELF-HEALED\)|VERIFIED|WARDEN/gi, "")
+                            .trim();
+                        let hostelKey = cleanName;
+                        if (cleanName.includes("GANGOTRI")) hostelKey = "GANGOTRI HOSTEL";
+                        else if (cleanName.includes("GAYTRI") || cleanName.includes("GAYATRI")) hostelKey = "GAYTRI HOSTEL";
+                        else if (cleanName.includes("BOYS") || cleanName.includes("BH")) hostelKey = "BOYS HOSTEL";
+                        else if (cleanName.includes("GHB") || cleanName.includes("GUEST")) hostelKey = "GHB HOSTEL";
+                        else if (!hostelKey) hostelKey = (item.ip || JSON.stringify(item)).toString().trim();
+
+                        if (!hostelMap.has(hostelKey)) {
+                            hostelMap.set(hostelKey, {
+                                hostelName: hostelKey,
+                                name: item.name || `${hostelKey} IP & BSSIDs`,
+                                ip: item.ip || undefined,
+                                bssids: Array.isArray(item.bssids) ? [...item.bssids] : [],
+                                description: item.description || `${hostelKey} WiFi Routers`,
+                                syncedAt: item.syncedAt,
+                                syncedByStudent: item.syncedByStudent
+                            });
+                        } else {
+                            const existing = hostelMap.get(hostelKey);
+                            if (item.ip && !existing.ip) existing.ip = item.ip;
+                            if (Array.isArray(item.bssids) && item.bssids.length > 0) {
+                                const combinedBssids = new Set([
+                                    ...(existing.bssids || []),
+                                    ...item.bssids.map((b: string) => String(b).toUpperCase().trim())
+                                ]);
+                                existing.bssids = Array.from(combinedBssids);
+                            }
+                            if (item.description && !existing.description) existing.description = item.description;
+                        }
+                    }
+                    return Array.from(hostelMap.values());
+                };
+
+                const mergedWhitelist = mergeWifiItems(allWifiItems);
 
                 const customFormConfig = targetRows.find(s => Array.isArray(s.form_builder_config) && s.form_builder_config.length > 0)?.form_builder_config
                     || targetRows.find(s => Array.isArray(s.formBuilderConfig) && s.formBuilderConfig.length > 0)?.formBuilderConfig;
@@ -1316,7 +1343,7 @@ export const db = {
                 const mergedSettings = {
                     ...bestRow,
                     form_builder_config: (customFormConfig && customFormConfig.length > 0) ? customFormConfig : (bestRow.form_builder_config || bestRow.formBuilderConfig || []),
-                    wifi_whitelist: wifiMap.size > 0 ? Array.from(wifiMap.values()) : (bestRow.wifi_whitelist || bestRow.wifiWhitelist || []),
+                    wifi_whitelist: mergedWhitelist.length > 0 ? mergedWhitelist : (bestRow.wifi_whitelist || bestRow.wifiWhitelist || []),
                     hostel_locations: (bestRow.hostel_locations || bestRow.hostelLocations || []).length > 0
                         ? (bestRow.hostel_locations || bestRow.hostelLocations)
                         : (targetRows.find(s => (s.hostel_locations || s.hostelLocations || []).length > 0)?.hostel_locations || [])
@@ -1330,28 +1357,65 @@ export const db = {
                 } catch (err) {
                     // Fallback when no tenant header/cookie exists
                 }
-                let data = tenantId ? await prisma.adminSettings.findFirst({ where: { tenantId } }) : null;
+                
+                const allAdminSettings = await prisma.adminSettings.findMany();
+                let data = tenantId ? allAdminSettings.find(s => s.tenantId === tenantId) || null : null;
                 if (!data) {
-                    data = await prisma.adminSettings.findFirst();
+                    data = allAdminSettings[0] || null;
                 }
 
                 // ⚡ LOCATION & WIFI WHITELIST MERGING: Merge all wifiWhitelist and location entries across database records
                 try {
-                    const allAdminSettings = await prisma.adminSettings.findMany();
-                    const wifiMap = new Map<string, any>();
+                    const allWifiItems: any[] = [];
                     for (const s of allAdminSettings) {
                         const list = s.wifiWhitelist;
                         if (Array.isArray(list)) {
-                            for (const item of list) {
-                                if (item) {
-                                    const key = (item.ip || item.hostelName || item.name || JSON.stringify(item)).toString().trim().toLowerCase();
-                                    if (!wifiMap.has(key)) {
-                                        wifiMap.set(key, item);
-                                    }
-                                }
-                            }
+                            allWifiItems.push(...(list as any[]));
                         }
                     }
+
+                    const mergeWifiItems = (items: any[]) => {
+                        const hostelMap = new Map<string, any>();
+                        for (const item of items) {
+                            if (!item || typeof item !== 'object') continue;
+                            const rawName = (item.hostelName || item.name || "").toString();
+                            const cleanName = rawName.toUpperCase()
+                                .replace(/IP|\(WARDEN SYNCED\)|\(MANUAL\)|\(SELF-HEALED\)|VERIFIED|WARDEN/gi, "")
+                                .trim();
+                            let hostelKey = cleanName;
+                            if (cleanName.includes("GANGOTRI")) hostelKey = "GANGOTRI HOSTEL";
+                            else if (cleanName.includes("GAYTRI") || cleanName.includes("GAYATRI")) hostelKey = "GAYTRI HOSTEL";
+                            else if (cleanName.includes("BOYS") || cleanName.includes("BH")) hostelKey = "BOYS HOSTEL";
+                            else if (cleanName.includes("GHB") || cleanName.includes("GUEST")) hostelKey = "GHB HOSTEL";
+                            else if (!hostelKey) hostelKey = (item.ip || JSON.stringify(item)).toString().trim();
+
+                            if (!hostelMap.has(hostelKey)) {
+                                hostelMap.set(hostelKey, {
+                                    hostelName: hostelKey,
+                                    name: item.name || `${hostelKey} IP & BSSIDs`,
+                                    ip: item.ip || undefined,
+                                    bssids: Array.isArray(item.bssids) ? [...item.bssids] : [],
+                                    description: item.description || `${hostelKey} WiFi Routers`,
+                                    syncedAt: item.syncedAt,
+                                    syncedByStudent: item.syncedByStudent
+                                });
+                            } else {
+                                const existing = hostelMap.get(hostelKey);
+                                if (item.ip && !existing.ip) existing.ip = item.ip;
+                                if (Array.isArray(item.bssids) && item.bssids.length > 0) {
+                                    const combinedBssids = new Set([
+                                        ...(existing.bssids || []),
+                                        ...item.bssids.map((b: string) => String(b).toUpperCase().trim())
+                                    ]);
+                                    existing.bssids = Array.from(combinedBssids);
+                                }
+                                if (item.description && !existing.description) existing.description = item.description;
+                            }
+                        }
+                        return Array.from(hostelMap.values());
+                    };
+
+                    const mergedWhitelist = mergeWifiItems(allWifiItems);
 
                     let locationsList = data?.hostelLocations;
                     if (!locationsList || (Array.isArray(locationsList) && (locationsList as any[]).length === 0)) {
@@ -1364,7 +1428,7 @@ export const db = {
                     if (data) {
                         data = {
                             ...data,
-                            wifiWhitelist: wifiMap.size > 0 ? Array.from(wifiMap.values()) : (data.wifiWhitelist || []),
+                            wifiWhitelist: mergedWhitelist.length > 0 ? mergedWhitelist : (data.wifiWhitelist || []),
                             hostelLocations: locationsList || []
                         } as any;
                     }

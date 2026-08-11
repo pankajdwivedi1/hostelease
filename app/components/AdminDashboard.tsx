@@ -8426,30 +8426,39 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {hostels.length > 0 ? hostels.map((hostel: any) => {
                           const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
-                          const hostelIpEntry = wl.find((w: any) => {
-                            if (!w || typeof w !== 'object' || !w.ip) return false;
-                            if (w.hostelName && hostel.name && w.hostelName.toLowerCase() === hostel.name.toLowerCase()) {
+
+                          const matchHostelEntry = (w: any, hostelName: string, requireBssids = false) => {
+                            if (!w || typeof w !== 'object') return false;
+                            if (requireBssids && (!Array.isArray(w.bssids) || w.bssids.length === 0)) return false;
+                            if (!requireBssids && !w.ip) return false;
+
+                            const hName = (hostelName || "").toLowerCase().trim();
+                            const wHostelName = (w.hostelName || "").toLowerCase().trim();
+                            const wName = (w.name || "").toLowerCase().trim();
+
+                            const getCoreKey = (str: string) => {
+                              if (str.includes("gangotri")) return "gangotri";
+                              if (str.includes("gaytri") || str.includes("gayatri")) return "gaytri";
+                              if (str.includes("boys") || str.includes(" bh")) return "boys";
+                              if (str.includes("ghb") || str.includes("guest")) return "ghb";
+                              return str.replace(/hostel|ip|bssid|\(.*?\)/gi, "").trim();
+                            };
+
+                            const coreH = getCoreKey(hName);
+                            const coreWH = getCoreKey(wHostelName);
+                            const coreWN = getCoreKey(wName);
+
+                            if (wHostelName && (wHostelName === hName || coreWH === coreH || wHostelName.includes(hName) || hName.includes(wHostelName))) {
                               return true;
                             }
-                            if (w.name && typeof w.name === 'string' && hostel.name) {
-                              const cleanWName = w.name.toLowerCase();
-                              const cleanHName = hostel.name.toLowerCase();
-                              return cleanWName.includes(cleanHName) || cleanHName.includes(cleanWName);
-                            }
-                            return false;
-                          });
-                          const hostelBssidEntry = wl.find((w: any) => {
-                            if (!w || typeof w !== 'object' || !Array.isArray(w.bssids) || w.bssids.length === 0) return false;
-                            if (w.hostelName && hostel.name && w.hostelName.toLowerCase() === hostel.name.toLowerCase()) {
+                            if (wName && (wName === hName || coreWN === coreH || wName.includes(hName) || hName.includes(wName))) {
                               return true;
                             }
-                            if (w.name && typeof w.name === 'string' && hostel.name) {
-                              const cleanWName = w.name.toLowerCase();
-                              const cleanHName = hostel.name.toLowerCase();
-                              return cleanWName.includes(cleanHName) || cleanHName.includes(cleanWName);
-                            }
                             return false;
-                          });
+                          };
+
+                          const hostelIpEntry = wl.find((w: any) => matchHostelEntry(w, hostel.name, false));
+                          const hostelBssidEntry = wl.find((w: any) => matchHostelEntry(w, hostel.name, true));
                           const hasIp = !!hostelIpEntry;
                           const hasBssid = !!hostelBssidEntry;
                           
@@ -9409,45 +9418,54 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                   {/* Room Details Modal */}
                   {selectedRoom && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-                      <div className="bg-white w-full max-w-lg rounded-3xl p-6 md:p-8 shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-100">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+                      <div className="bg-white w-full max-w-lg sm:max-w-xl rounded-3xl p-3.5 sm:p-7 shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-100">
                         <button
                           onClick={() => setSelectedRoom(null)}
-                          className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                          className="absolute top-4 right-4 sm:top-5 sm:right-5 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
                         >
                           ✕
                         </button>
 
-                        <div className="mb-6">
-                          <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                        <div className="mb-3 sm:mb-5">
+                          <h3 className="text-lg sm:text-xl font-black text-slate-800 flex items-center gap-2">
                             <span>🔑 Room {selectedRoom}</span>
                             <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">({activeVisualHostel})</span>
                           </h3>
-                          <p className="text-xs text-slate-500 font-bold mt-1">Occupancy Details & Roommate Contact Cards</p>
+                          <p className="text-[11px] sm:text-xs text-slate-500 font-bold mt-0.5 sm:mt-1">Occupancy Details & Roommate Contact Cards</p>
                         </div>
 
-                        <div className="space-y-3 max-h-[60vh] sm:max-h-[380px] overflow-y-auto pr-1 no-scrollbar">
+                        <div className="space-y-2.5 sm:space-y-3 max-h-[80vh] sm:max-h-none overflow-y-auto pr-0.5 no-scrollbar">
                           {selectedRoomStudents.map(student => {
                             const rStatus = getRoommateStatus(student);
                             const studentIdStr = student.id || student._id;
                             const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString()) || presentStudentIds.includes(studentIdStr?.toString());
                             return (
-                              <div key={student.id} className="p-2 sm:p-3 bg-slate-50 rounded-2xl border border-slate-100 flex flex-row items-end sm:items-center justify-between gap-3 hover:border-slate-200 transition-all">
-                                <div className="flex items-center gap-3.5 min-w-0">
+                              <div key={student.id} className="p-2.5 sm:p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-row items-center justify-between gap-2.5 sm:gap-3 hover:border-slate-200 transition-all">
+                                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                                   {/* Avatar or Profile Image */}
-                                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-sm sm:text-base shadow-md overflow-hidden shrink-0 border border-slate-200">
+                                  <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-xs sm:text-sm shadow-md overflow-hidden shrink-0 border border-slate-200">
                                     {student.profilePicture ? (
                                       <img src={student.profilePicture} alt={student.name} className="w-full h-full object-cover" />
                                     ) : (
                                       student.name.slice(0, 2).toUpperCase()
                                     )}
                                   </div>
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <h4 className="font-bold text-slate-800 text-xs sm:text-sm leading-snug truncate">{student.name}</h4>
-                                       {showFlashingBlueDot ? (hasMarkedAttendance ? (<span className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 shadow-sm" title="Night Attendance Marked" />) : (<span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shrink-0 shadow-sm" title="Night Attendance Not Marked" />)) : (hasMarkedAttendance && (<span className="w-2.5 h-2.5 bg-blue-600 rounded-full shrink-0 shadow-sm" title="Night Attendance Marked" />))}
-
-                                    </div>
+                                  <div className="min-w-0 flex-1">
+                                    <h4 className="font-bold text-slate-800 text-xs sm:text-sm leading-snug break-words" title={student.name}>
+                                      <span>{student.name}</span>
+                                      {showFlashingBlueDot ? (
+                                        hasMarkedAttendance ? (
+                                          <span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 ml-1.5 align-middle shadow-sm" title="Night Attendance Marked" />
+                                        ) : (
+                                          <span className="inline-block w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shrink-0 ml-1.5 align-middle shadow-sm" title="Night Attendance Not Marked" />
+                                        )
+                                      ) : (
+                                        hasMarkedAttendance && (
+                                          <span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full shrink-0 ml-1.5 align-middle shadow-sm" title="Night Attendance Marked" />
+                                        )
+                                      )}
+                                    </h4>
                                     <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
                                       Reg ID: {student.registrationId || "N/A"}
                                     </p>
@@ -10708,8 +10726,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                     {/* Name, Status & Email */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-1 min-w-0">
-                        <h3 className="text-xs sm:text-sm font-bold text-gray-900 leading-snug truncate min-w-0 shrink">{selectedStudent.name}</h3>
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap min-w-0">
+                        <h3 className="text-xs sm:text-base font-bold text-gray-900 leading-snug break-words" title={selectedStudent.name}>{selectedStudent.name}</h3>
                         <span className={`shrink-0 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border ${selectedStudent.studentStatus === 'out' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-green-50 text-green-600 border-green-200'}`}>
                           {selectedStudent.studentStatus || 'in'}
                         </span>
@@ -10723,7 +10741,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <button
                             onClick={() => handleManualToggle(selectedStudent.id, "out")}
                             disabled={isTogglingStatus}
-                            className="shrink-0 px-2 py-0.5 rounded-md bg-amber-500 text-white text-[9px] font-black uppercase tracking-wider hover:bg-amber-600 transition-all active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer"
+                            className="shrink-0 px-2 py-0.5 rounded-md bg-amber-500 text-white text-[9px] font-black uppercase tracking-wider hover:bg-amber-600 transition-all active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer sm:hidden"
                           >
                             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
                             Mark IN
@@ -10733,7 +10751,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                       <p className="text-xs text-gray-500 font-medium truncate mb-2">{selectedStudent.email}</p>
 
-                      {/* Profile Lock Status & Toggle */}
+                      {/* Profile Actions: Lock Status & Desktop Mark IN Toggle */}
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           onClick={() => handleToggleProfileLock(selectedStudent.id, !!selectedStudent.isProfileLocked)}
@@ -10758,9 +10776,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             </>
                           )}
                         </button>
+
+                        {selectedStudent.studentStatus === 'out' && (
+                          <button
+                            onClick={() => handleManualToggle(selectedStudent.id, "out")}
+                            disabled={isTogglingStatus}
+                            className="hidden sm:flex px-2.5 py-1 rounded-lg bg-amber-500 text-white text-[10px] font-black uppercase tracking-wider hover:bg-amber-600 transition-all active:scale-95 items-center gap-1.5 shadow-2xs cursor-pointer border border-amber-600"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+                            Mark IN
+                          </button>
+                        )}
                       </div>
+
                       {selectedStudent.isProfileLocked && (
-                        <p className="text-[9px] text-amber-600 font-bold uppercase tracking-tight mt-1">Student cannot edit profile anymore</p>
+                        <p className={`text-[9px] text-amber-600 font-bold uppercase tracking-tight mt-1 ${selectedStudent.studentStatus === 'out' ? 'sm:hidden' : ''}`}>
+                          Student cannot edit profile anymore
+                        </p>
                       )}
                     </div>
                   </div>
@@ -15049,25 +15081,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                     {/* Subscription status card */}
                     {subscriptionStatus && (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div className="bg-slate-50 border border-slate-100 p-5 rounded-2xl">
-                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Plan Status</p>
-                          <div className="flex items-center gap-2">
-                            <span className={`w-3.5 h-3.5 rounded-full ${subscriptionStatus.isExpired ? 'bg-red-500' : 'bg-green-500'}`}></span>
-                            <p className="text-lg font-black text-slate-800 uppercase">
+                      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-5 rounded-xl sm:rounded-2xl min-w-0">
+                          <p className="text-[8px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-0.5 sm:mb-1 truncate">Plan Status</p>
+                          <div className="flex items-center gap-1.5 sm:gap-2">
+                            <span className={`w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 rounded-full shrink-0 ${subscriptionStatus.isExpired ? 'bg-red-500' : 'bg-green-500'}`}></span>
+                            <p className="text-xs sm:text-lg font-black text-slate-800 uppercase truncate">
                               {subscriptionStatus.status || "Active"}
                             </p>
                           </div>
                         </div>
-                        <div className="bg-slate-50 border border-slate-100 p-5 rounded-2xl">
-                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Days Remaining</p>
-                          <p className="text-lg font-black text-slate-800">
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-5 rounded-xl sm:rounded-2xl min-w-0">
+                          <p className="text-[8px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-0.5 sm:mb-1 truncate">Days Remaining</p>
+                          <p className="text-xs sm:text-lg font-black text-slate-800 truncate">
                             {subscriptionStatus.daysRemaining !== null ? `${subscriptionStatus.daysRemaining} Days` : "Lifetime / N/A"}
                           </p>
                         </div>
-                        <div className="bg-slate-50 border border-slate-100 p-5 rounded-2xl">
-                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Expires On</p>
-                          <p className="text-lg font-black text-slate-800">
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-5 rounded-xl sm:rounded-2xl min-w-0">
+                          <p className="text-[8px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-0.5 sm:mb-1 truncate">Expires On</p>
+                          <p className="text-xs sm:text-lg font-black text-slate-800 truncate">
                             {subscriptionStatus.endDate ? new Date(subscriptionStatus.endDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "Lifetime / N/A"}
                           </p>
                         </div>
@@ -15098,27 +15130,27 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <div className="overflow-x-auto">
                             <table className="w-full text-left text-xs border-collapse">
                               <thead>
-                                <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-black uppercase tracking-wider text-[10px]">
-                                  <th className="py-3.5 px-5">Date</th>
-                                  <th className="py-3.5 px-5">Period</th>
-                                  <th className="py-3.5 px-5">Reference ID</th>
-                                  <th className="py-3.5 px-5">Amount</th>
-                                  <th className="py-3.5 px-5 text-right">Invoice</th>
+                                <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-black uppercase tracking-wider text-[8px] sm:text-[10px]">
+                                  <th className="py-2.5 px-1.5 sm:py-3.5 sm:px-5">Date</th>
+                                  <th className="py-2.5 px-1.5 sm:py-3.5 sm:px-5">Period</th>
+                                  <th className="py-2.5 px-1.5 sm:py-3.5 sm:px-5">Reference ID</th>
+                                  <th className="py-2.5 px-1.5 sm:py-3.5 sm:px-5">Amount</th>
+                                  <th className="py-2.5 px-1.5 sm:py-3.5 sm:px-5 text-right">Invoice</th>
                                 </tr>
                               </thead>
-                              <tbody className="font-bold text-slate-700">
+                              <tbody className="font-bold text-slate-700 text-[9px] sm:text-xs">
                                 {billingHistory.map((tx: any) => (
                                   <tr key={tx.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                                    <td className="py-3.5 px-5">{new Date(tx.date).toLocaleDateString("en-IN")}</td>
-                                    <td className="py-3.5 px-5">{tx.billingPeriod || "1 Year"}</td>
-                                    <td className="py-3.5 px-5 font-mono select-all text-slate-500">{tx.utr || "N/A"}</td>
-                                    <td className="py-3.5 px-5 text-emerald-600">₹{tx.amount?.toLocaleString("en-IN") || 0}</td>
-                                    <td className="py-3.5 px-5 text-right">
+                                    <td className="py-2.5 px-1.5 sm:py-3.5 sm:px-5 whitespace-nowrap">{new Date(tx.date).toLocaleDateString("en-IN")}</td>
+                                    <td className="py-2.5 px-1.5 sm:py-3.5 sm:px-5 whitespace-nowrap">{tx.billingPeriod || "1 Year"}</td>
+                                    <td className="py-2.5 px-1.5 sm:py-3.5 sm:px-5 font-mono select-all text-slate-500 text-[8px] sm:text-xs break-all sm:break-normal">{tx.utr || "N/A"}</td>
+                                    <td className="py-2.5 px-1.5 sm:py-3.5 sm:px-5 text-emerald-600 whitespace-nowrap">₹{tx.amount?.toLocaleString("en-IN") || 0}</td>
+                                    <td className="py-2.5 px-1.5 sm:py-3.5 sm:px-5 text-right">
                                       <button
                                         onClick={() => generateInvoicePDF(tx, subscriptionStatus?.name)}
-                                        className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-lg transition-all text-[10px] uppercase tracking-wider active:scale-95 shadow-md shadow-blue-500/10"
+                                        className="px-1.5 py-1 sm:px-3.5 sm:py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-md sm:rounded-lg transition-all text-[8px] sm:text-[10px] uppercase tracking-wider active:scale-95 shadow-md shadow-blue-500/10 whitespace-nowrap"
                                       >
-                                        📥 Invoice
+                                        📥 <span className="hidden sm:inline">Invoice</span><span className="sm:hidden">PDF</span>
                                       </button>
                                     </td>
                                   </tr>
@@ -16031,8 +16063,73 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               const upiId = subscriptionStatus?.paymentSettings?.upiId || "pankaj86.dwivedi-1@okicici";
               const qrUrl = subscriptionStatus?.paymentSettings?.customQrCodeUrl || `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(`upi://pay?pa=${upiId}&pn=${accountName}&am=${finalTotal}&cu=INR&tn=Hosteleaze Renewal`)}`;
 
+              const summarySection = (
+                <div className="bg-slate-900 text-white p-3 sm:p-3.5 rounded-xl space-y-2 shadow-md shrink-0">
+                  <div className="flex items-center justify-between gap-1 text-[9.5px] sm:text-xs text-slate-300">
+                    <span className="truncate">Subtotal ({totalStudents} students × {selectedPlanMonths} months)</span>
+                    <span className="shrink-0 whitespace-nowrap">₹{baseTotal.toLocaleString("en-IN")}</span>
+                  </div>
+                  {totalDiscountPercent > 0 && (
+                    <div className="flex items-center justify-between gap-1 text-[8.5px] sm:text-[11px] text-emerald-400 font-bold">
+                      <span className="truncate">
+                        {paymentMethod === "bank" && bankBonus > 0
+                          ? (baseDiscount > 0
+                              ? `Discount (${baseDiscount}% Plan + ${bankBonus}% Bank = ${totalDiscountPercent}% Total OFF)`
+                              : `Discount (${bankBonus}% Direct Bonus OFF)`
+                            )
+                          : `Discount (${baseDiscount}% Plan OFF)`
+                        }
+                      </span>
+                      <span className="shrink-0 whitespace-nowrap">-₹{discountAmount.toLocaleString("en-IN")}</span>
+                    </div>
+                  )}
+                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Total Amount Payable</p>
+                      <p className="text-lg sm:text-xl font-black text-emerald-400">₹{finalTotal.toLocaleString("en-IN")}</p>
+                    </div>
+
+                    {paymentMethod === "razorpay" ? (
+                      <button
+                        onClick={() => handleRazorpayRenewal(selectedPlanMonths)}
+                        disabled={isProcessingPayment}
+                        className="px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md shadow-blue-500/25 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                      >
+                        {isProcessingPayment ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Processing...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Pay & Renew via Razorpay ⚡</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleDirectPaymentSubmit(finalTotal)}
+                        disabled={isSubmittingDirect || !utrNumber.trim()}
+                        className="px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md shadow-emerald-500/25 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                      >
+                        {isSubmittingDirect ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Verifying...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Submit Direct Payment & Renew 🚀</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+
               const durationSection = (
-                <div className="space-y-2.5 sm:space-y-3 lg:flex-1 lg:flex lg:flex-col lg:justify-between">
+                <div className="space-y-2.5 sm:space-y-3">
                   {/* College & Student Stats Banner */}
                   <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl flex items-center justify-between flex-wrap gap-2">
                     <div>
@@ -16048,11 +16145,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
 
                   {/* Plan Options Selector (1M, 3M, 6M, 12M) */}
-                  <div className="lg:flex-1 lg:flex lg:flex-col lg:justify-center">
+                  <div>
                     <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1">
                       Select Subscription Duration
                     </label>
-                    <div className="grid grid-cols-2 gap-2 lg:flex-1">
+                    <div className="grid grid-cols-2 gap-2">
                       {(() => {
                         const bankDiscountVal = subscriptionStatus?.paymentSettings?.bankTransferDiscount ?? 2.5;
                         return [
@@ -16098,7 +16195,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             label: "12 Months",
                             tag: "Annual Plan",
                             discount: subscriptionStatus?.paymentSettings?.discount12Month ?? 30,
-                            badge: `Best Value (${subscriptionStatus?.paymentSettings?.discount12Month ?? 30}% OFF)`,
+                            badge: "BEST VALUE",
                             points: [
                               `${subscriptionStatus?.paymentSettings?.discount12Month ?? 30}% Maximum Discount`,
                               `+${bankDiscountVal}% Direct Bank Bonus`,
@@ -16114,28 +16211,42 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             key={plan.months}
                             type="button"
                             onClick={() => setSelectedPlanMonths(plan.months)}
-                            className={`relative p-2.5 sm:p-3 rounded-xl border-2 transition-all text-left flex flex-col justify-between ${
+                            className={`relative p-2.5 sm:p-3 rounded-xl border-2 transition-all text-left flex flex-col justify-start gap-1 sm:gap-1.5 ${
                               isSelected
                                 ? "border-blue-600 bg-blue-50/50 shadow-sm ring-1 ring-blue-600/20"
                                 : "border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50/50"
                             }`}
                           >
                             {plan.badge && (
-                              <span className={`absolute -top-2 right-1.5 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded-full shadow-sm ${
+                              <span className={`absolute -top-2 left-2 px-1.5 py-0.5 text-[7px] sm:text-[8px] font-black uppercase tracking-wider rounded-full shadow-sm ${
                                 plan.months === 12 ? "bg-amber-500 text-white" : "bg-blue-600 text-white"
                               }`}>
                                 {plan.badge}
                               </span>
                             )}
-                            <div>
-                              <p className={`text-xs font-black uppercase ${isSelected ? "text-blue-700" : "text-slate-800"}`}>
-                                {plan.label}
-                              </p>
-                              <p className="text-[9px] text-slate-400 font-medium mt-0.5">{plan.tag}</p>
+
+                            <div className="flex items-start justify-between gap-1 w-full mt-0.5">
+                              <div>
+                                <p className={`text-xs font-black uppercase ${isSelected ? "text-blue-700" : "text-slate-800"}`}>
+                                  {plan.label}
+                                </p>
+                                <p className="text-[8.5px] sm:text-[9px] text-slate-400 font-medium">{plan.tag}</p>
+                              </div>
+                              <div className="shrink-0">
+                                {plan.discount > 0 ? (
+                                  <span className="text-[7.5px] sm:text-[8px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200 uppercase tracking-wider inline-block shadow-2xs">
+                                    {plan.discount}% OFF
+                                  </span>
+                                ) : (
+                                  <span className="text-[7.5px] sm:text-[8px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wider inline-block">
+                                    Standard
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
                             {/* Inner Feature Points */}
-                            <ul className="my-1 space-y-0.5 text-[7.5px] sm:text-[8px] lg:text-[8.5px] font-semibold text-slate-600 leading-tight">
+                            <ul className="space-y-0.5 text-[7.5px] sm:text-[8px] lg:text-[8.5px] font-semibold text-slate-600 leading-tight">
                               {plan.points.map((pt, idx) => (
                                 <li key={idx} className="flex items-start gap-0.5">
                                   <span className="text-blue-600 font-bold shrink-0">✓</span>
@@ -16143,20 +16254,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 </li>
                               ))}
                             </ul>
-
-                            <div className="pt-1 border-t border-slate-100">
-                              {plan.discount > 0 ? (
-                                <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
-                                  {plan.discount}% OFF
-                                </span>
-                              ) : (
-                                <span className="text-[8px] font-bold text-slate-400">Standard</span>
-                              )}
-                            </div>
                           </button>
                         );
                       })}
                     </div>
+                  </div>
+
+                  {/* Summary Box on Mobile View (Positioned directly ABOVE Payment Method on mobile) */}
+                  <div className="lg:hidden my-2">
+                    {summarySection}
                   </div>
 
                   {/* Payment Method Switcher (Razorpay vs Direct Transfer) */}
@@ -16164,99 +16270,34 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1">
                       Payment Method
                     </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                       <button
                         type="button"
                         onClick={() => setPaymentMethod("razorpay")}
-                        className={`py-2 sm:py-2.5 px-3 rounded-xl border-2 font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                        className={`py-1.5 sm:py-2.5 px-1.5 sm:px-3 rounded-xl border-2 font-bold text-[9.5px] sm:text-xs flex items-center justify-center gap-1 transition-all ${
                           paymentMethod === "razorpay"
                             ? "border-blue-600 bg-blue-600 text-white shadow-sm"
                             : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
                         }`}
                       >
-                        <span>⚡ Pay via Razorpay</span>
+                        <span className="truncate">💳 Online Gateway</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setPaymentMethod("bank")}
-                        className={`py-2 sm:py-2.5 px-3 rounded-xl border-2 font-bold text-xs flex items-center justify-center gap-1 transition-all relative ${
+                        className={`py-1.5 sm:py-2.5 px-1.5 sm:px-3 rounded-xl border-2 font-bold text-[9.5px] sm:text-xs flex items-center justify-center gap-1 transition-all relative flex-wrap sm:flex-nowrap ${
                           paymentMethod === "bank"
                             ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
                             : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
                         }`}
                       >
-                        <span>🏦 Direct Transfer / UPI</span>
-                        <span className="bg-amber-400 text-slate-900 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full shadow-sm">
+                        <span className="truncate">🏦 Direct Bank</span>
+                        <span className="bg-amber-400 text-slate-900 text-[7px] sm:text-[8px] font-black uppercase tracking-wider px-1 py-0.5 rounded-full shadow-sm shrink-0">
                           +{subscriptionStatus?.paymentSettings?.bankTransferDiscount ?? 2.5}% OFF
                         </span>
                       </button>
                     </div>
-                  </div>
-                </div>
-              );
-
-              const summarySection = (
-                <div className="bg-slate-900 text-white p-3 sm:p-3.5 rounded-xl space-y-2 shadow-md shrink-0">
-                  <div className="flex items-center justify-between text-xs text-slate-300">
-                    <span>Subtotal ({totalStudents} students × {selectedPlanMonths} months)</span>
-                    <span>₹{baseTotal.toLocaleString("en-IN")}</span>
-                  </div>
-                  {totalDiscountPercent > 0 && (
-                    <div className="flex items-center justify-between text-[11px] text-emerald-400 font-bold">
-                      <span>
-                        {paymentMethod === "bank" && bankBonus > 0
-                          ? (baseDiscount > 0
-                              ? `Discount (${baseDiscount}% Plan OFF + ${bankBonus}% Direct Bonus = ${totalDiscountPercent}% Total OFF)`
-                              : `Discount (${bankBonus}% Direct Bonus OFF)`
-                            )
-                          : `Discount (${baseDiscount}% Plan OFF)`
-                        }
-                      </span>
-                      <span>-₹{discountAmount.toLocaleString("en-IN")}</span>
-                    </div>
-                  )}
-                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2">
-                    <div>
-                      <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Total Amount Payable</p>
-                      <p className="text-lg sm:text-xl font-black text-emerald-400">₹{finalTotal.toLocaleString("en-IN")}</p>
-                    </div>
-
-                    {paymentMethod === "razorpay" ? (
-                      <button
-                        onClick={() => handleRazorpayRenewal(selectedPlanMonths)}
-                        disabled={isProcessingPayment}
-                        className="px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md shadow-blue-500/25 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
-                      >
-                        {isProcessingPayment ? (
-                          <>
-                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            <span>Processing...</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>Pay & Renew via Razorpay ⚡</span>
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleDirectPaymentSubmit(finalTotal)}
-                        disabled={isSubmittingDirect || !utrNumber.trim()}
-                        className="px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md shadow-emerald-500/25 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
-                      >
-                        {isSubmittingDirect ? (
-                          <>
-                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            <span>Verifying...</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>Submit Direct Payment & Renew 🚀</span>
-                          </>
-                        )}
-                      </button>
-                    )}
                   </div>
                 </div>
               );
@@ -16454,12 +16495,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       {paymentMethod === "bank" ? (
                         <>
                           {bankDetailsCard}
-                          {summarySection}
+                          <div className="hidden lg:block">{summarySection}</div>
                         </>
                       ) : (
                         <>
                           {razorpayServicesCard}
-                          {summarySection}
+                          <div className="hidden lg:block">{summarySection}</div>
                         </>
                       )}
                     </div>

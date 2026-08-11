@@ -1,6 +1,9 @@
 import { headers } from 'next/headers';
 import { cache } from 'react';
 import { prisma } from './prisma';
+import { getSupabaseAdmin } from '@/lib/supabaseServer';
+
+const supabase = getSupabaseAdmin();
 
 /**
  * Resolves the current tenant from the request headers
