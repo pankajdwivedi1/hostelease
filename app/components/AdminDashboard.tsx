@@ -2093,17 +2093,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const finalPaid = (tx.amount && tx.amount > 0 && tx.amount <= grossBase) ? tx.amount : netCalculated;
     const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/logo.jpeg` : '/logo.jpeg';
 
-    // Client Institution Details (General Settings - Screenshot 2)
-    const clientName = collegeName || tenantFormData?.name || "Oriental Group of Institutes (OGI)";
-    const clientAddress = tenantFormData?.address || "Oriental Campus, Raisen Road, Bhopal, MP - 462021";
-    const officialEmail = tenantFormData?.email || "info@oriental.ac.in";
-    const officialPhone = tenantFormData?.phone || "+91 9981414729 / 0755-2529015";
-    const gstin = tenantFormData?.gstin || "";
-    const universityLogo = tenantFormData?.logo || "";
+    // 1. Institution details (From General Settings / Screenshot 2)
+    const clientName = collegeName || settings?.universityName || tenantFormData?.name || "Oriental Group of Institutes (OGI)";
+    const clientAddress = settings?.universityAddress || tenantFormData?.address || "Oriental Campus, Opp Patel Nagar, Raisen Road, Bhopal (M.P.) 462022";
+    const clientEmail = settings?.universityEmail || tenantFormData?.email || "oistbpl@oriental.ac.in, admission@oriental.ac.in";
+    const clientPhone = settings?.universityPhone || tenantFormData?.phone || "Fax: 91 755 2529472, WhatsApp: +91 9993099997";
+    const clientGstin = settings?.universityGstin || tenantFormData?.gstin || "";
 
-    // Operator / Nodal Contact Details (Super Admin / Contact Info - Screenshot 3)
-    const operatorName = adminSettings?.universityBankDetails?.contactName || tenantFormData?.contactName || "Dr Pankaj Dwivedi";
-    const operatorPhone = adminSettings?.universityBankDetails?.contactPhone || tenantFormData?.contactPhone || "7974704918";
+    // 2. Operator contact details (From SuperAdmin / Screenshot 3)
+    const operatorName = tenantFormData?.contactName || "Dr Pankaj Dwivedi";
+    const operatorMobile = tenantFormData?.contactPhone || tenantFormData?.phone || "7974704918";
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -2331,27 +2330,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             <div class="details">
               <div>
                 <h3>Billed To (Client Institution)</h3>
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                  <p style="font-size: 15px; color: #0f172a; margin: 0; font-weight: 800;">${clientName}</p>
-                  ${universityLogo ? `<img src="${universityLogo}" style="height: 26px; max-width: 80px; object-fit: contain; border-radius: 4px;" alt="University Logo" />` : ''}
-                </div>
-
-                <!-- Section 1: Official Institution Details -->
-                <div style="margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed #cbd5e1;">
-                  ${clientAddress ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin: 0 0 2px 0;">📍 ${clientAddress}</p>` : ''}
-                  ${officialEmail || officialPhone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin: 0 0 2px 0;">✉️ ${officialEmail} ${officialPhone ? '• 📞 ' + officialPhone : ''}</p>` : ''}
-                  ${gstin ? `<p style="font-size: 10px; font-weight: 800; color: #4338ca; margin: 2px 0 0 0;">GSTIN: ${gstin}</p>` : ''}
-                </div>
-
-                <!-- Section 2: Authorized Nodal Contact / Operator Details -->
-                <div>
-                  <div style="font-size: 8.5px; font-weight: 900; text-transform: uppercase; color: #64748b; letter-spacing: 0.08em; margin-bottom: 3px;">Authorized Nodal Contact / Operator</div>
-                  ${operatorName ? `<p style="font-size: 11px; font-weight: 700; color: #1e293b; margin: 0 0 2px 0;">👤 ${operatorName}</p>` : ''}
-                  ${operatorPhone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin: 0 0 2px 0;">📞 ${operatorPhone}</p>` : ''}
-                  <p style="font-size: 9px; font-weight: 700; color: #4f46e5; margin: 0;">Quoted Capacity: ${studentCount} Hostelars</p>
+                <p style="font-size: 15px; color: #0f172a; margin-bottom: 3px; font-weight: 800;">${clientName}</p>
+                ${clientAddress ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin-bottom: 2px;">📍 ${clientAddress}</p>` : ''}
+                ${clientEmail ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px;">✉️ ${clientEmail}</p>` : ''}
+                ${clientPhone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 4px;">📞 ${clientPhone}</p>` : ''}
+                ${clientGstin ? `<p style="font-size: 10px; font-weight: 800; color: #4338ca; margin-bottom: 6px;">GSTIN: ${clientGstin}</p>` : ''}
+                
+                <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed #cbd5e1;">
+                  <h3 style="font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin: 0 0 4px 0;">Authorized Node Operator / Contact</h3>
+                  <p style="font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 2px;">👤 ${operatorName}</p>
+                  <p style="font-size: 10px; font-weight: 700; color: #4338ca; margin: 0;">📱 Mobile: ${operatorMobile}</p>
                 </div>
               </div>
-
               <div style="text-align: right;">
                 <h3>Billed From (Provider)</h3>
                 <p style="font-size: 15px; color: #0f172a; margin-bottom: 2px;">Hosteleaze Inc.</p>
