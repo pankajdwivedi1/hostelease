@@ -2056,31 +2056,49 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const fullDateTimeStr = `${formattedDate} • ${formattedTime} IST`;
     const invoiceNo = (tx.id || "tx_invoice").replace('tx_', 'INV-').replace('dir_', 'INV-DIR-').toUpperCase();
     
-    // 1. Strictly use app settings: Rate = ₹30/student/mo, Discounts = 0%, 20%, 30%, 40% (+3% Direct Transfer)
-    const studentCount = tx.studentCount || 446;
+    // 1. Strictly use app settings & live student count (e.g. 448)
+    const studentCount = tx.studentCount || (students && students.length > 0 ? students.length : 448);
     const months = tx.months || (tx.billingPeriod?.includes("1 Month") ? 1 : tx.billingPeriod?.includes("3") ? 3 : tx.billingPeriod?.includes("6") ? 6 : 12);
-    const ratePerStudentMonth = tx.ratePerStudentMonth || 30; // Your exact configured app setting: ₹30
+    const ratePerStudentMonth = tx.ratePerStudentMonth || 30; // ₹30/student/mo
 
-    const paymentMethodText = tx.paymentSource || (tx.remarks?.includes("Razorpay") || tx.id?.includes("rzp") ? "Razorpay (Instant Online Renewal)" : "Direct Bank / UPI Transfer (UTR Verified)");
-    const isDirectTransfer = paymentMethodText.toLowerCase().includes("direct") || paymentMethodText.toLowerCase().includes("bank");
+    // 2. Exact payment mode (UPI Transfer vs Direct Bank Transfer)
+    let paymentMethodText = tx.paymentSource || "";
+    if (!paymentMethodText) {
+      const lowerRemarks = (tx.remarks || "" + tx.billingType || "" + tx.utr || "").toLowerCase();
+      if (lowerRemarks.includes("upi")) {
+        paymentMethodText = "UPI Transfer (UTR Verified)";
+      } else if (lowerRemarks.includes("razorpay") || tx.id?.includes("rzp")) {
+        paymentMethodText = "Razorpay (Instant Online Renewal)";
+      } else {
+        paymentMethodText = "Direct Bank Transfer (UTR Verified)";
+      }
+    }
+    const isDirectTransfer = paymentMethodText.toLowerCase().includes("direct") || paymentMethodText.toLowerCase().includes("bank") || paymentMethodText.toLowerCase().includes("upi");
 
     // Determine discount rule % from app settings based on tenure (0%, 20%, 30%, 40%)
     let discountPercent = tx.discountPercent !== undefined ? Number(tx.discountPercent) : 
       months === 1 ? 0 :
       months === 3 ? 20 :
-      months === 6 ? 30 : 40; // 40% for 12 months (Your exact Annual Plan setting)
+      months === 6 ? 30 : 40; // 40% for 12 months
 
-    // If direct transfer, add your configured 3% direct transfer incentive
+    // If direct transfer, add 3% direct transfer incentive
     if (isDirectTransfer && tx.discountPercent === undefined) {
       discountPercent += 3;
     }
 
-    // 2. Calculate Gross Subtotal at your set rate (₹30), discount amount, and exact net Total Paid
-    const grossBase = studentCount * ratePerStudentMonth * months; // 446 * 30 * 12 = ₹1,60,560
-    const discountAmount = Math.round(grossBase * (discountPercent / 100)); // ₹1,60,560 * 43% = ₹69,041
-    const netCalculated = grossBase - discountAmount; // ₹91,519
+    // 3. Calculate Gross Subtotal at ₹30/student/month
+    const grossBase = studentCount * ratePerStudentMonth * months;
+    const discountAmount = Math.round(grossBase * (discountPercent / 100));
+    const netCalculated = grossBase - discountAmount;
     const finalPaid = (tx.amount && tx.amount > 0 && tx.amount <= grossBase) ? tx.amount : netCalculated;
     const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/logo.jpeg` : '/logo.jpeg';
+
+    // Client contact details
+    const clientName = collegeName || tenantFormData?.name || "Oriental Group of Institutes (OGI)";
+    const clientContact = tenantFormData?.contactName || "Dr Pankaj Dwivedi";
+    const clientPhone = tenantFormData?.phone || tenantFormData?.contactPhone || "7974704918";
+    const clientEmail = tenantFormData?.email || "pankajdwivedi81@gmail.com";
+    const clientAddress = tenantFormData?.address || "Oriental Campus, Raisen Road, Bhopal, MP - 462021";
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -2308,9 +2326,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             <div class="details">
               <div>
                 <h3>Billed To (Client)</h3>
-                <p style="font-size: 15px; color: #0f172a; margin-bottom: 3px; font-weight: 800;">${collegeName || tenantFormData.name || "Partner College"}</p>
-                ${tenantFormData.address ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin-bottom: 2px;">📍 ${tenantFormData.address}</p>` : ''}
-                ${tenantFormData.email || tenantFormData.phone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px;">✉️ ${tenantFormData.email || ''} ${tenantFormData.phone ? '• 📞 ' + tenantFormData.phone : ''}</p>` : ''}
+                <p style="font-size: 15px; color: #0f172a; margin-bottom: 3px; font-weight: 800;">${clientName}</p>
+                ${clientContact ? `<p style="font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 2px;">👤 Attn: ${clientContact}</p>` : ''}
+                ${clientAddress ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin-bottom: 2px;">📍 ${clientAddress}</p>` : ''}
+                ${clientEmail || clientPhone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px;">✉️ ${clientEmail} ${clientPhone ? '• 📞 ' + clientPhone : ''}</p>` : ''}
                 ${tenantFormData.gstin ? `<p style="font-size: 10px; font-weight: 800; color: #4338ca;">GSTIN: ${tenantFormData.gstin}</p>` : ''}
               </div>
               <div style="text-align: right;">

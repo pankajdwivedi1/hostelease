@@ -1027,6 +1027,178 @@ export default function SuperAdminDashboard() {
         }
     };
 
+    const generateSuperAdminInvoicePDF = (log: any, collegeName: string) => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            alert("Popup blocker prevented opening invoice. Please allow popups for this site.");
+            return;
+        }
+
+        const paymentDateObj = new Date(log.date || Date.now());
+        const formattedDate = paymentDateObj.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
+        const formattedTime = paymentDateObj.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+        const fullDateTimeStr = `${formattedDate} • ${formattedTime} IST`;
+        const invoiceNo = (log.id || "tx_invoice").replace('tx_', 'INV-').replace('dir_', 'INV-DIR-').toUpperCase();
+
+        const targetTenant = tenants.find(t => t.name === collegeName || t._id === log.tenantId);
+        const studentCount = targetTenant?.studentCount || targetTenant?.totalHostelars || 448;
+        const months = log.months || (log.billingPeriod?.includes("1 Month") ? 1 : log.billingPeriod?.includes("3") ? 3 : log.billingPeriod?.includes("6") ? 6 : 12);
+        const ratePerStudentMonth = 30; // ₹30/student/mo
+
+        let paymentMethodText = log.paymentSource || "";
+        if (!paymentMethodText) {
+            const lowerRemarks = (log.remarks || "" + log.billingType || "" + log.utr || "").toLowerCase();
+            if (lowerRemarks.includes("upi")) {
+                paymentMethodText = "UPI Transfer (UTR Verified)";
+            } else if (lowerRemarks.includes("razorpay") || log.id?.includes("rzp")) {
+                paymentMethodText = "Razorpay (Instant Online Renewal)";
+            } else {
+                paymentMethodText = "Direct Bank Transfer (UTR Verified)";
+            }
+        }
+        const isDirectTransfer = paymentMethodText.toLowerCase().includes("direct") || paymentMethodText.toLowerCase().includes("bank") || paymentMethodText.toLowerCase().includes("upi");
+
+        let discountPercent = months === 1 ? 0 : months === 3 ? 20 : months === 6 ? 30 : 40;
+        if (isDirectTransfer) discountPercent += 3;
+
+        const grossBase = studentCount * ratePerStudentMonth * months;
+        const discountAmount = Math.round(grossBase * (discountPercent / 100));
+        const netCalculated = grossBase - discountAmount;
+        const finalPaid = (log.amount && log.amount > 0 && log.amount <= grossBase) ? log.amount : netCalculated;
+        const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/logo.jpeg` : '/logo.jpeg';
+
+        const clientName = collegeName || targetTenant?.name || "Oriental Group of Institutes (OGI)";
+        const clientContact = targetTenant?.contactName || "Dr Pankaj Dwivedi";
+        const clientPhone = targetTenant?.contactPhone || "7974704918";
+        const clientEmail = targetTenant?.adminEmail || "pankajdwivedi81@gmail.com";
+        const clientAddress = "Oriental Campus, Raisen Road, Bhopal, MP - 462021";
+
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+                <head>
+                    <title>Hosteleaze Tax Invoice ${invoiceNo}</title>
+                    <style>
+                        @page { size: A4 portrait; margin: 6mm 10mm; }
+                        * { box-sizing: border-box; }
+                        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 16px; color: #0f172a; background: #f8fafc; }
+                        .invoice-box { max-width: 760px; margin: auto; padding: 32px; border: 1px solid #e2e8f0; border-radius: 20px; background: #ffffff; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
+                        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; margin-bottom: 24px; }
+                        .brand-wrapper { display: flex; align-items: center; gap: 12px; }
+                        .brand-logo { width: 44px; height: 44px; border-radius: 12px; object-fit: cover; }
+                        .logo-text { font-size: 22px; font-weight: 900; tracking-tight: -0.03em; color: #0f172a; }
+                        .logo-text span { color: #4f46e5; }
+                        .brand-sub { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; }
+                        .title h1 { font-size: 18px; font-weight: 900; color: #0f172a; margin: 0; text-align: right; }
+                        .title-no { font-size: 10px; font-weight: 800; color: #64748b; font-family: monospace; text-align: right; margin-top: 2px; }
+                        .details { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; background: #f8fafc; padding: 18px 20px; border-radius: 14px; border: 1px solid #f1f5f9; }
+                        .details h3 { font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; margin: 0 0 6px 0; }
+                        .summary-box { background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 20px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
+                        .table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+                        .table th { background: #f8fafc; color: #64748b; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; padding: 10px 14px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+                        .table td { padding: 14px; font-size: 12px; font-weight: 700; color: #334155; border-bottom: 1px solid #f1f5f9; }
+                        .totals-wrapper { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 20px; }
+                        .totals-table { width: 280px; font-size: 12px; }
+                        .totals-row { display: flex; justify-content: space-between; padding: 5px 0; font-weight: 700; color: #475569; }
+                        .totals-row.final { border-top: 2px solid #0f172a; padding-top: 10px; font-size: 15px; font-weight: 900; color: #0f172a; }
+                        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 999px; color: #047857; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+                        .footer { border-top: 1px dashed #cbd5e1; pt: 16px; text-align: center; font-size: 10px; color: #94a3b8; font-weight: 600; margin-top: 28px; }
+                        .print-btn { background: #4f46e5; color: #ffffff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer; margin-bottom: 16px; }
+                    </style>
+                </head>
+                <body>
+                    <div style="max-width: 760px; margin: auto;" class="no-print">
+                        <button onclick="window.print()" class="print-btn">🖨️ Print / Save 1-Page A4 PDF Invoice</button>
+                    </div>
+                    <div class="invoice-box">
+                        <div class="header">
+                            <div class="brand-wrapper">
+                                <img src="${logoUrl}" class="brand-logo" alt="Hosteleaze Logo" onerror="this.style.display='none'" />
+                                <div>
+                                    <div class="logo-text">HOSTEL<span>EAZE</span></div>
+                                    <div class="brand-sub">Smart Campus Automation • SAC 998313</div>
+                                </div>
+                            </div>
+                            <div class="title">
+                                <h1>OFFICIAL TAX INVOICE</h1>
+                                <p class="title-no">NO: ${invoiceNo}</p>
+                            </div>
+                        </div>
+
+                        <div class="details">
+                            <div>
+                                <h3>Billed To (Client)</h3>
+                                <p style="font-size: 15px; color: #0f172a; margin-bottom: 3px; font-weight: 800;">${clientName}</p>
+                                ${clientContact ? `<p style="font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 2px;">👤 Attn: ${clientContact}</p>` : ''}
+                                ${clientAddress ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin-bottom: 2px;">📍 ${clientAddress}</p>` : ''}
+                                ${clientEmail || clientPhone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px;">✉️ ${clientEmail} ${clientPhone ? '• 📞 ' + clientPhone : ''}</p>` : ''}
+                            </div>
+                            <div style="text-align: right;">
+                                <h3>Billed From (Provider)</h3>
+                                <p style="font-size: 15px; color: #0f172a; margin-bottom: 2px;">Hosteleaze Inc.</p>
+                                <p style="font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 1px;">Account: DR. PANKAJ DWIVEDI</p>
+                                <p style="font-size: 11px; font-weight: 600; color: #64748b;">Support: support@hosteleaze.com</p>
+                            </div>
+                        </div>
+
+                        <div class="summary-box">
+                            <div>
+                                <div style="font-size: 10px; font-weight: 900; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.08em; margin-bottom: 4px;">Payment Date & Exact Time</div>
+                                <div style="font-size: 14px; font-weight: 800; color: #0f172a;">${fullDateTimeStr}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 10px; font-weight: 900; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.08em; margin-bottom: 4px;">Payment Method</div>
+                                <div style="font-size: 13px; font-weight: 800; color: #4338ca;">${paymentMethodText}</div>
+                            </div>
+                        </div>
+
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Item & Plan Description</th>
+                                    <th style="text-align: center;">Students</th>
+                                    <th style="text-align: center;">Rate / Mo</th>
+                                    <th style="text-align: center;">Duration</th>
+                                    <th style="text-align: right;">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>
+                                        <div style="font-weight: 800; color: #0f172a;">Hosteleaze Enterprise License</div>
+                                        <div style="font-size: 10px; color: #64748b; font-weight: 600;">Full Warden, Student & Admin Gatepass Portals Access</div>
+                                    </td>
+                                    <td style="text-align: center; font-weight: 800;">${studentCount}</td>
+                                    <td style="text-align: center;">₹${ratePerStudentMonth}</td>
+                                    <td style="text-align: center;">${months === 12 ? '1 Year' : months + ' Months'}</td>
+                                    <td style="text-align: right; font-weight: 800;">₹${grossBase.toLocaleString("en-IN")}.00</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div class="totals-wrapper">
+                            <div style="max-width: 320px;">
+                                <div style="font-size: 10px; font-weight: 900; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.08em; margin-bottom: 6px;">Payment Verification & Audit Proof</div>
+                                <div style="font-size: 11px; font-weight: 800; color: #334155; margin-bottom: 2px;">Reference / UTR ID: <span style="font-family: monospace;">${log.utr || log.id}</span></div>
+                                <div class="status-badge" style="margin-top: 8px;">✓ Paid & Verified</div>
+                            </div>
+                            <div class="totals-table">
+                                <div class="totals-row"><span>Gross Subtotal</span><span>₹${grossBase.toLocaleString("en-IN")}.00</span></div>
+                                ${discountAmount > 0 ? `<div class="totals-row" style="color: #e11d48;"><span>Total Discounts (${discountPercent}%)</span><span>-₹${discountAmount.toLocaleString("en-IN")}.00</span></div>` : ''}
+                                <div class="totals-row final"><span>Total Paid</span><span>₹${finalPaid.toLocaleString("en-IN")}.00</span></div>
+                            </div>
+                        </div>
+
+                        <div class="footer">
+                            <p style="margin: 0;">Thank you for trusting Hosteleaze! This is an official computer-generated tax invoice receipt.</p>
+                        </div>
+                    </div>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+    };
+
     const handleCalculateStorage = async (tenantId: string) => {
         setCalculatingStorageFor(tenantId);
         try {
@@ -1376,12 +1548,13 @@ export default function SuperAdminDashboard() {
                                                 <th className="py-3 px-4">UTR Number</th>
                                                 <th className="py-3 px-4">Amount</th>
                                                 <th className="py-3 px-4">Remarks</th>
+                                                <th className="py-3 px-4 text-center">Invoice Receipt</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-50 font-bold">
                                             {billingLogs.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={7} className="py-12 text-center text-slate-400 italic">No billing records found.</td>
+                                                    <td colSpan={8} className="py-12 text-center text-slate-400 italic">No billing records found.</td>
                                                 </tr>
                                             ) : billingLogs.map((log: any, idx: number) => (
                                                 <tr key={log.id || idx} className="hover:bg-slate-50 transition-colors">
@@ -1402,6 +1575,14 @@ export default function SuperAdminDashboard() {
                                                         {log.amount > 0 ? `₹${log.amount.toLocaleString("en-IN")}` : "₹0"}
                                                     </td>
                                                     <td className="py-3 px-4 text-slate-500 leading-normal max-w-xs truncate" title={log.remarks}>{log.remarks || "-"}</td>
+                                                    <td className="py-3 px-4 text-center">
+                                                        <button
+                                                            onClick={() => generateSuperAdminInvoicePDF(log, log.tenantName)}
+                                                            className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-lg font-black text-[9px] shadow-sm flex items-center justify-center gap-1 mx-auto transition-all"
+                                                        >
+                                                            <span>📥</span> INVOICE
+                                                        </button>
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
