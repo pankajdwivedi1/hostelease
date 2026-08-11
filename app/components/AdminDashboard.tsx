@@ -2093,12 +2093,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const finalPaid = (tx.amount && tx.amount > 0 && tx.amount <= grossBase) ? tx.amount : netCalculated;
     const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/logo.jpeg` : '/logo.jpeg';
 
-    // Client contact details
+    // Client Institution Details (General Settings - Screenshot 2)
     const clientName = collegeName || tenantFormData?.name || "Oriental Group of Institutes (OGI)";
-    const clientContact = tenantFormData?.contactName || "Dr Pankaj Dwivedi";
-    const clientPhone = tenantFormData?.phone || tenantFormData?.contactPhone || "7974704918";
-    const clientEmail = tenantFormData?.email || "pankajdwivedi81@gmail.com";
     const clientAddress = tenantFormData?.address || "Oriental Campus, Raisen Road, Bhopal, MP - 462021";
+    const officialEmail = tenantFormData?.email || "info@oriental.ac.in";
+    const officialPhone = tenantFormData?.phone || "+91 9981414729 / 0755-2529015";
+    const gstin = tenantFormData?.gstin || "";
+    const universityLogo = tenantFormData?.logo || "";
+
+    // Operator / Nodal Contact Details (Super Admin / Contact Info - Screenshot 3)
+    const operatorName = adminSettings?.universityBankDetails?.contactName || tenantFormData?.contactName || "Dr Pankaj Dwivedi";
+    const operatorPhone = adminSettings?.universityBankDetails?.contactPhone || tenantFormData?.contactPhone || "7974704918";
 
     printWindow.document.write(`
       <!DOCTYPE html>
