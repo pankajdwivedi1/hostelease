@@ -2323,12 +2323,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             <div class="details">
               <div>
                 <h3>Billed To (Client)</h3>
-                <p style="font-size: 15px; color: #0f172a; margin-bottom: 3px; font-weight: 800;">${collegeName || tenantFormData.name || "Partner College"}</p>
-                ${tenantFormData.address ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin-bottom: 2px;">📍 ${tenantFormData.address}</p>` : ''}
-                ${tenantFormData.email ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px;">✉️ ${tenantFormData.email}</p>` : ''}
-                ${tenantFormData.phone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px;">📞 ${tenantFormData.phone}</p>` : ''}
-                ${(tenantFormData.contactName || tenantFormData.contactPhone) ? `<p style="font-size: 10px; font-weight: 700; color: #4338ca; margin-top: 3px;">👤 Coordinator: ${tenantFormData.contactName || 'Dr Pankaj Dwivedi'}${tenantFormData.contactPhone ? ' • 📱 Mobile: ' + tenantFormData.contactPhone : ''}</p>` : ''}
-                ${tenantFormData.gstin ? `<p style="font-size: 10px; font-weight: 800; color: #4338ca; margin-top: 2px;">GSTIN: ${tenantFormData.gstin}</p>` : ''}
+                <p style="font-size: 15px; color: #0f172a; margin: 0 0 4px 0; font-weight: 800; line-height: 1.2;">${collegeName || tenantFormData.name || "Partner College"}</p>
+                ${tenantFormData.address ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin: 0 0 3px 0; line-height: 1.4;">📍 ${tenantFormData.address}</p>` : ''}
+                ${tenantFormData.email ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin: 0 0 3px 0; line-height: 1.4;">✉️ ${tenantFormData.email}</p>` : ''}
+                ${tenantFormData.phone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin: 0 0 3px 0; line-height: 1.4;">📞 ${tenantFormData.phone}</p>` : ''}
+                ${(tenantFormData.contactName || tenantFormData.contactPhone) ? `<p style="font-size: 10px; font-weight: 700; color: #4338ca; margin: 0 0 3px 0; line-height: 1.4;">👤 Coordinator: ${tenantFormData.contactName || 'Dr Pankaj Dwivedi'}${tenantFormData.contactPhone ? ' • 📱 Mobile: ' + tenantFormData.contactPhone : ''}</p>` : ''}
+                ${tenantFormData.gstin ? `<p style="font-size: 10px; font-weight: 800; color: #4338ca; margin: 0 0 3px 0; line-height: 1.4;">GSTIN: ${tenantFormData.gstin}</p>` : ''}
               </div>
               <div style="text-align: right;">
                 <h3>Billed From (Provider)</h3>
