@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
 /**
  * PATCH: Update University Status/Subscription
  */
-    export async function PATCH(request: NextRequest) {
+export async function PATCH(request: NextRequest) {
     try {
         const body = await request.json();
         const { id, is_active, subscriptionStatus, subscriptionEndDate, createdAt, contactName, contactPhone, totalHostelars, features } = body;
@@ -206,6 +206,8 @@ export async function POST(request: NextRequest) {
         if (!id) return NextResponse.json({ success: false, error: "Tenant ID is required" }, { status: 400 });
 
         const supabase = getSupabaseAdmin();
+        let tenant: any = null;
+
         const updateData: any = {};
         if (typeof is_active !== 'undefined') updateData.is_active = is_active;
         if (subscriptionStatus) updateData.subscription_status = subscriptionStatus;
@@ -216,17 +218,43 @@ export async function POST(request: NextRequest) {
             updateData.created_at = createdAt ? new Date(createdAt).toISOString() : null;
         }
 
-        const { data: tenant, error } = await supabase
-            .from('tenants')
-            .update(updateData)
-            .eq('id', id)
-            .select()
-            .single();
+        if (Object.keys(updateData).length > 0) {
+            const { data, error } = await supabase
+                .from('tenants')
+                .update(updateData)
+                .eq('id', id)
+                .select()
+                .single();
+            if (error || !data) return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
+            tenant = data;
+        } else {
+            const { data, error } = await supabase
+                .from('tenants')
+                .select()
+                .eq('id', id)
+                .single();
+            if (error || !data) return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
+            tenant = data;
+        }
 
-        if (error || !tenant) return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
+        // Update Railway tenant status if active
+        try {
+            await prisma.tenant.update({
+                where: { id },
+                data: {
+                    isActive: typeof is_active !== 'undefined' ? is_active : tenant.is_active,
+                    subscriptionStatus: subscriptionStatus || tenant.subscription_status,
+                    subscriptionEndDate: subscriptionEndDate ? new Date(subscriptionEndDate) : undefined
+                }
+            });
+        } catch (e) {
+            console.warn("Railway tenant update warn:", e);
+        }
 
-        // Update admin_settings if subscription is changing or contact details are provided
+        // Update admin_settings in both Supabase and Railway
         const hasContactUpdates = contactName !== undefined || contactPhone !== undefined || totalHostelars !== undefined || features !== undefined;
+        let bankDetails: any = {};
+
         if (subscriptionStatus || subscriptionEndDate || hasContactUpdates) {
             const { data: settings } = await supabase
                 .from('admin_settings')
@@ -234,7 +262,7 @@ export async function POST(request: NextRequest) {
                 .eq('tenant_id', id)
                 .maybeSingle();
                 
-            let bankDetails = settings?.university_bank_details || {};
+            bankDetails = settings?.university_bank_details || {};
 
             if (subscriptionStatus || subscriptionEndDate) {
                 delete bankDetails.renewalUtr;
@@ -259,25 +287,42 @@ export async function POST(request: NextRequest) {
                     .from('admin_settings')
                     .insert({ tenant_id: id, university_bank_details: bankDetails });
             }
+            try {
+                const railwaySettings = await prisma.adminSettings.findFirst({ where: { tenantId: id } });
+                if (railwaySettings) {
+                    await prisma.adminSettings.update({
+                        where: { id: railwaySettings.id },
+                        data: { universityBankDetails: bankDetails }
+                    });
+                } else {
+                    await prisma.adminSettings.create({
+                        data: { tenantId: id, universityBankDetails: bankDetails }
+                    });
+                }
+            } catch (e) {
+                console.warn("Railway adminSettings sync warn:", e);
+            }
         }
 
-        return NextResponse.json({
-            success: true,
-            tenant: {
-                _id: tenant.id,
-                name: tenant.name,
-                slug: tenant.slug,
-                isActive: tenant.is_active,
-                subscriptionStatus: tenant.subscription_status,
-                subscriptionEndDate: tenant.subscription_end_date,
-                createdAt: tenant.created_at,
-                contactName,
-                contactPhone,
-                totalHostelars,
-                features
-            }
-        });
+        const formattedTenant = {
+            _id: tenant.id,
+            name: tenant.name,
+            slug: tenant.slug,
+            adminEmail: tenant.admin_email,
+            isActive: tenant.is_active,
+            subscriptionStatus: tenant.subscription_status,
+            subscriptionEndDate: tenant.subscription_end_date,
+            primaryColor: tenant.primary_color,
+            createdAt: tenant.created_at,
+            contactName: bankDetails.contactName || contactName,
+            contactPhone: bankDetails.contactPhone || contactPhone,
+            totalHostelars: bankDetails.totalHostelars || totalHostelars,
+            features: bankDetails.features || features
+        };
+
+        return NextResponse.json({ success: true, tenant: formattedTenant });
     } catch (error: any) {
+        console.error("Error updating tenant:", error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }
