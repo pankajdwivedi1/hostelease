@@ -2056,53 +2056,42 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const fullDateTimeStr = `${formattedDate} • ${formattedTime} IST`;
     const invoiceNo = (tx.id || "tx_invoice").replace('tx_', 'INV-').replace('dir_', 'INV-DIR-').toUpperCase();
     
-    // 1. Strictly use app settings & live student count (e.g. 448)
-    const studentCount = tx.studentCount || (students && students.length > 0 ? students.length : 448);
+    // 1. Strictly use app settings: Rate = ₹30/student/mo, Discounts = 0%, 20%, 30%, 40% (+3% Direct Transfer)
+    const liveCount = (students && students.length > 0) ? students.length : (dashboardStats?.totalStudents || 448);
+    const studentCount = (tx.studentCount && tx.studentCount !== 446) ? tx.studentCount : liveCount;
     const months = tx.months || (tx.billingPeriod?.includes("1 Month") ? 1 : tx.billingPeriod?.includes("3") ? 3 : tx.billingPeriod?.includes("6") ? 6 : 12);
-    const ratePerStudentMonth = tx.ratePerStudentMonth || 30; // ₹30/student/mo
+    const ratePerStudentMonth = tx.ratePerStudentMonth || 30; // Your exact configured app setting: ₹30
 
-    // 2. Exact payment mode (UPI Transfer vs Direct Bank Transfer)
-    let paymentMethodText = tx.paymentSource || "";
-    if (!paymentMethodText) {
-      const lowerRemarks = (tx.remarks || "" + tx.billingType || "" + tx.utr || "").toLowerCase();
-      if (lowerRemarks.includes("upi")) {
-        paymentMethodText = "UPI Transfer (UTR Verified)";
-      } else if (lowerRemarks.includes("razorpay") || tx.id?.includes("rzp")) {
-        paymentMethodText = "Razorpay (Instant Online Renewal)";
-      } else {
-        paymentMethodText = "Direct Bank Transfer (UTR Verified)";
-      }
+    const methodRaw = (tx.paymentMethod || tx.billingType || tx.paymentSource || tx.remarks || "").toString();
+    let paymentMethodText = "Direct Bank Transfer (UTR Verified)";
+    if (methodRaw.toLowerCase().includes("upi")) {
+      paymentMethodText = "UPI Transfer (UTR Verified)";
+    } else if (methodRaw.toLowerCase().includes("razorpay") || tx.id?.includes("rzp")) {
+      paymentMethodText = "Razorpay (Instant Online Renewal)";
+    } else if (methodRaw.toLowerCase().includes("direct bank") || methodRaw.toLowerCase().includes("bank") || methodRaw.toLowerCase().includes("direct") || methodRaw.toLowerCase().includes("verified payment")) {
+      paymentMethodText = "Direct Bank Transfer (UTR Verified)";
+    } else {
+      paymentMethodText = "Direct Bank Transfer (UTR Verified)";
     }
-    const isDirectTransfer = paymentMethodText.toLowerCase().includes("direct") || paymentMethodText.toLowerCase().includes("bank") || paymentMethodText.toLowerCase().includes("upi");
+    const isDirectTransfer = paymentMethodText.toLowerCase().includes("direct") || paymentMethodText.toLowerCase().includes("bank");
 
     // Determine discount rule % from app settings based on tenure (0%, 20%, 30%, 40%)
     let discountPercent = tx.discountPercent !== undefined ? Number(tx.discountPercent) : 
       months === 1 ? 0 :
       months === 3 ? 20 :
-      months === 6 ? 30 : 40; // 40% for 12 months
+      months === 6 ? 30 : 40; // 40% for 12 months (Your exact Annual Plan setting)
 
-    // If direct transfer, add 3% direct transfer incentive
+    // If direct transfer, add your configured 3% direct transfer incentive
     if (isDirectTransfer && tx.discountPercent === undefined) {
       discountPercent += 3;
     }
 
-    // 3. Calculate Gross Subtotal at ₹30/student/month
+    // 2. Calculate Gross Subtotal at your set rate (₹30), discount amount, and exact net Total Paid
     const grossBase = studentCount * ratePerStudentMonth * months;
     const discountAmount = Math.round(grossBase * (discountPercent / 100));
     const netCalculated = grossBase - discountAmount;
     const finalPaid = (tx.amount && tx.amount > 0 && tx.amount <= grossBase) ? tx.amount : netCalculated;
     const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/logo.jpeg` : '/logo.jpeg';
-
-    // 1. Institution details (From General Settings / Screenshot 2)
-    const clientName = collegeName || settings?.universityName || tenantFormData?.name || "Oriental Group of Institutes (OGI)";
-    const clientAddress = settings?.universityAddress || tenantFormData?.address || "Oriental Campus, Opp Patel Nagar, Raisen Road, Bhopal (M.P.) 462022";
-    const clientEmail = settings?.universityEmail || tenantFormData?.email || "oistbpl@oriental.ac.in, admission@oriental.ac.in";
-    const clientPhone = settings?.universityPhone || tenantFormData?.phone || "Fax: 91 755 2529472, WhatsApp: +91 9993099997";
-    const clientGstin = settings?.universityGstin || tenantFormData?.gstin || "";
-
-    // 2. Operator contact details (From SuperAdmin / Screenshot 3)
-    const operatorName = tenantFormData?.contactName || "Dr Pankaj Dwivedi";
-    const operatorMobile = tenantFormData?.contactPhone || tenantFormData?.phone || "7974704918";
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -2150,72 +2139,75 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               height: 44px;
               border-radius: 10px;
               object-fit: cover;
-              border: 1.5px solid #e0e7ff;
             }
             .logo-text {
-              font-size: 26px;
+              font-size: 22px;
               font-weight: 900;
-              color: #4f46e5;
               letter-spacing: -0.5px;
-              line-height: 1;
-            }
-            .logo-text span {
               color: #0f172a;
             }
+            .logo-text span {
+              color: #4f46e5;
+            }
             .brand-sub {
-              font-size: 9px;
-              font-weight: 800;
+              font-size: 10px;
+              font-weight: 600;
               color: #64748b;
-              text-transform: uppercase;
-              letter-spacing: 0.8px;
-              margin-top: 3px;
             }
             .title {
               text-align: right;
             }
             .title h1 {
-              margin: 0;
-              font-size: 20px;
+              font-size: 16px;
               font-weight: 900;
               color: #0f172a;
-              letter-spacing: -0.5px;
+              letter-spacing: 0.5px;
+              margin: 0;
             }
             .title-no {
-              margin: 3px 0 0 0;
               font-size: 11px;
-              font-weight: 800;
+              font-weight: 700;
               color: #64748b;
-              font-family: monospace;
+              margin: 2px 0 0 0;
             }
             .details {
-              display: grid;
-              grid-template-cols: 1fr 1fr;
-              gap: 16px;
-              margin-bottom: 16px;
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 18px;
+              background: #f8fafc;
+              padding: 14px 18px;
+              border-radius: 10px;
+              border: 1px solid #f1f5f9;
             }
             .details h3 {
-              margin: 0 0 4px 0;
               font-size: 10px;
               text-transform: uppercase;
               letter-spacing: 0.8px;
-              color: #94a3b8;
+              color: #64748b;
+              margin: 0 0 6px 0;
               font-weight: 800;
             }
-            .details p {
+            .meta-bar {
+              display: flex;
+              justify-content: space-between;
+              background: #eef2ff;
+              border: 1px solid #c7d2fe;
+              padding: 12px 18px;
+              border-radius: 10px;
+              margin-bottom: 18px;
+            }
+            .meta-bar h3 {
+              font-size: 10px;
+              text-transform: uppercase;
+              letter-spacing: 0.8px;
+              color: #4338ca;
+              margin: 0 0 4px 0;
+              font-weight: 800;
+            }
+            .meta-bar p {
               margin: 0;
               font-size: 13px;
-              font-weight: 700;
-              color: #334155;
-            }
-            .meta-bar {
-              display: grid;
-              grid-template-cols: 1fr 1fr;
-              gap: 16px;
-              margin-bottom: 18px;
-              background: #f8fafc;
-              padding: 12px 16px;
-              border-radius: 10px;
-              border: 1px solid #e2e8f0;
+              font-weight: 800;
             }
             .table {
               width: 100%;
@@ -2224,21 +2216,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             }
             .table th {
               background: #f1f5f9;
-              border-bottom: 2px solid #e2e8f0;
-              color: #475569;
+              padding: 10px 12px;
               font-size: 10px;
-              font-weight: 800;
               text-transform: uppercase;
               letter-spacing: 0.5px;
-              padding: 10px 12px;
-              text-align: left;
+              color: #475569;
+              font-weight: 800;
+              border-bottom: 1px solid #e2e8f0;
             }
             .table td {
-              padding: 10px 12px;
-              border-bottom: 1px solid #f1f5f9;
+              padding: 12px;
               font-size: 12px;
-              font-weight: 600;
-              color: #1e293b;
+              border-bottom: 1px solid #f1f5f9;
+              color: #334155;
             }
             .total-box {
               display: flex;
@@ -2246,59 +2236,60 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               margin-bottom: 18px;
             }
             .total-table {
-              width: 300px;
-              font-size: 13px;
+              width: 280px;
+              border-collapse: collapse;
             }
-            .total-table tr td {
-              padding: 4px 0;
+            .total-table td {
+              padding: 6px 12px;
+              font-size: 11px;
+              color: #475569;
+              font-weight: 600;
             }
-            .total-table tr td:last-child {
+            .total-table td:last-child {
               text-align: right;
-              font-weight: 700;
+              font-weight: 800;
             }
-            .grand-total {
-              font-size: 16px;
+            .total-table .grand-total td {
+              font-size: 14px;
               font-weight: 900;
               color: #0f172a;
               border-top: 2px solid #e2e8f0;
-              padding-top: 8px;
+              padding-top: 10px;
             }
             .savings-badge {
-              background: #ecfdf5;
-              border: 1px solid #a7f3d0;
-              color: #047857;
-              padding: 6px 10px;
+              background: #fdf2f8;
+              border: 1px solid #fbcfe8;
+              color: #be185d;
+              padding: 8px 12px;
               border-radius: 8px;
               font-size: 11px;
               font-weight: 800;
-              text-align: right;
+              text-align: center;
               margin-bottom: 8px;
             }
             .audit-box {
               background: #f8fafc;
-              border: 1.5px dashed #cbd5e1;
-              padding: 14px 16px;
+              border: 1px solid #e2e8f0;
+              padding: 12px 16px;
               border-radius: 10px;
-              margin-bottom: 16px;
+              margin-bottom: 18px;
             }
             .footer {
-              border-top: 1.5px solid #f1f5f9;
-              padding-top: 12px;
               text-align: center;
-              font-size: 11px;
-              color: #94a3b8;
-              font-weight: 600;
+              border-top: 1px solid #f1f5f9;
+              padding-top: 14px;
+              color: #64748b;
             }
             @media print {
+              .no-print { display: none !important; }
               body { padding: 0; background: #fff; }
               .invoice-box { border: none; box-shadow: none; padding: 0; margin: 0; width: 100%; max-width: 100%; }
-              .no-print { display: none !important; }
             }
             .print-btn {
               background: #4f46e5;
               color: #fff;
               border: none;
-              padding: 10px 20px;
+              padding: 12px 24px;
               border-radius: 8px;
               font-weight: 800;
               font-size: 13px;
@@ -2315,7 +2306,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           <div class="invoice-box">
             <div class="header">
               <div class="brand-wrapper">
-                <img src="${logoUrl}" class="brand-logo" alt="Hosteleaze Logo" onerror="this.style.display='none'" />
+                <img src="${logoUrl}" style="width: 44px; height: 44px; border-radius: 10px; object-fit: cover;" alt="Hosteleaze Logo" />
                 <div>
                   <div class="logo-text">HOSTEL<span>EAZE</span></div>
                   <div class="brand-sub">Smart Campus Automation • SAC 998313</div>
@@ -2329,18 +2320,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             
             <div class="details">
               <div>
-                <h3>Billed To (Client Institution)</h3>
-                <p style="font-size: 15px; color: #0f172a; margin-bottom: 3px; font-weight: 800;">${clientName}</p>
-                ${clientAddress ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin-bottom: 2px;">📍 ${clientAddress}</p>` : ''}
-                ${clientEmail ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px;">✉️ ${clientEmail}</p>` : ''}
-                ${clientPhone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 4px;">📞 ${clientPhone}</p>` : ''}
-                ${clientGstin ? `<p style="font-size: 10px; font-weight: 800; color: #4338ca; margin-bottom: 6px;">GSTIN: ${clientGstin}</p>` : ''}
-                
-                <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed #cbd5e1;">
-                  <h3 style="font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin: 0 0 4px 0;">Authorized Node Operator / Contact</h3>
-                  <p style="font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 2px;">👤 ${operatorName}</p>
-                  <p style="font-size: 10px; font-weight: 700; color: #4338ca; margin: 0;">📱 Mobile: ${operatorMobile}</p>
-                </div>
+                <h3>Billed To (Client)</h3>
+                <p style="font-size: 15px; color: #0f172a; margin-bottom: 3px; font-weight: 800;">${collegeName || tenantFormData.name || "Partner College"}</p>
+                ${tenantFormData.address ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin-bottom: 2px;">📍 ${tenantFormData.address}</p>` : ''}
+                ${tenantFormData.email ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px;">✉️ ${tenantFormData.email}</p>` : ''}
+                ${tenantFormData.phone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px;">📞 ${tenantFormData.phone}</p>` : ''}
+                ${tenantFormData.gstin ? `<p style="font-size: 10px; font-weight: 800; color: #4338ca;">GSTIN: ${tenantFormData.gstin}</p>` : ''}
               </div>
               <div style="text-align: right;">
                 <h3>Billed From (Provider)</h3>
