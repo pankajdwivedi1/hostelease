@@ -2325,13 +2325,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             
             <div class="details">
               <div>
-                <h3>Billed To (Client)</h3>
-                <p style="font-size: 15px; color: #0f172a; margin-bottom: 3px; font-weight: 800;">${clientName}</p>
-                ${clientContact ? `<p style="font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 2px;">👤 Attn: ${clientContact}</p>` : ''}
-                ${clientAddress ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin-bottom: 2px;">📍 ${clientAddress}</p>` : ''}
-                ${clientEmail || clientPhone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px;">✉️ ${clientEmail} ${clientPhone ? '• 📞 ' + clientPhone : ''}</p>` : ''}
-                ${tenantFormData.gstin ? `<p style="font-size: 10px; font-weight: 800; color: #4338ca;">GSTIN: ${tenantFormData.gstin}</p>` : ''}
+                <h3>Billed To (Client Institution)</h3>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                  <p style="font-size: 15px; color: #0f172a; margin: 0; font-weight: 800;">${clientName}</p>
+                  ${universityLogo ? `<img src="${universityLogo}" style="height: 26px; max-width: 80px; object-fit: contain; border-radius: 4px;" alt="University Logo" />` : ''}
+                </div>
+
+                <!-- Section 1: Official Institution Details -->
+                <div style="margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed #cbd5e1;">
+                  ${clientAddress ? `<p style="font-size: 10px; font-weight: 600; color: #475569; margin: 0 0 2px 0;">📍 ${clientAddress}</p>` : ''}
+                  ${officialEmail || officialPhone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin: 0 0 2px 0;">✉️ ${officialEmail} ${officialPhone ? '• 📞 ' + officialPhone : ''}</p>` : ''}
+                  ${gstin ? `<p style="font-size: 10px; font-weight: 800; color: #4338ca; margin: 2px 0 0 0;">GSTIN: ${gstin}</p>` : ''}
+                </div>
+
+                <!-- Section 2: Authorized Nodal Contact / Operator Details -->
+                <div>
+                  <div style="font-size: 8.5px; font-weight: 900; text-transform: uppercase; color: #64748b; letter-spacing: 0.08em; margin-bottom: 3px;">Authorized Nodal Contact / Operator</div>
+                  ${operatorName ? `<p style="font-size: 11px; font-weight: 700; color: #1e293b; margin: 0 0 2px 0;">👤 ${operatorName}</p>` : ''}
+                  ${operatorPhone ? `<p style="font-size: 10px; font-weight: 600; color: #64748b; margin: 0 0 2px 0;">📞 ${operatorPhone}</p>` : ''}
+                  <p style="font-size: 9px; font-weight: 700; color: #4f46e5; margin: 0;">Quoted Capacity: ${studentCount} Hostelars</p>
+                </div>
               </div>
+
               <div style="text-align: right;">
                 <h3>Billed From (Provider)</h3>
                 <p style="font-size: 15px; color: #0f172a; margin-bottom: 2px;">Hosteleaze Inc.</p>
