@@ -18,6 +18,7 @@ export default function RegisterPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [otp, setOtp] = useState("");
+    const [contactCountryCode, setContactCountryCode] = useState("+91");
     const [formData, setFormData] = useState({
         name: "",
         slug: "",
@@ -34,17 +35,18 @@ export default function RegisterPage() {
         setError(null);
 
         const cleanedPhone = formData.contactPhone.replace(/\D/g, "");
-        if (cleanedPhone.length !== 10) {
-            setError("Please enter a valid 10-digit mobile number.");
+        if (!cleanedPhone || cleanedPhone.length < 7 || cleanedPhone.length > 15) {
+            setError("Please enter a valid mobile number (7 to 15 digits).");
             return;
         }
 
         setLoading(true);
         try {
+            const fullPhoneNumber = `${contactCountryCode}${cleanedPhone}`;
             const res = await fetch("/api/public/register/send-otp", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ contactPhone: formData.contactPhone })
+                body: JSON.stringify({ contactPhone: fullPhoneNumber })
             });
             const data = await res.json();
             
@@ -71,11 +73,14 @@ export default function RegisterPage() {
         setLoading(true);
 
         try {
+            const cleanedPhone = formData.contactPhone.replace(/\D/g, "");
+            const fullPhoneNumber = `${contactCountryCode}${cleanedPhone}`;
             const res = await fetch("/api/public/register/verify-and-deploy", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     ...formData,
+                    contactPhone: fullPhoneNumber,
                     accessToken: otp // Use the entered OTP as the token
                 })
             });
@@ -197,14 +202,42 @@ export default function RegisterPage() {
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1 flex items-center gap-2"><Phone className="w-3 h-3" /> Mobile Number</label>
-                                        <input
-                                            type="tel"
-                                            required
-                                            value={formData.contactPhone}
-                                            onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-                                            placeholder="10-digit number"
-                                            className="w-full bg-white/5 border border-white/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/40 outline-none placeholder:text-gray-700"
-                                        />
+                                        <div className="flex items-center gap-2">
+                                            <select
+                                                value={contactCountryCode}
+                                                onChange={(e) => setContactCountryCode(e.target.value)}
+                                                className="bg-white/5 border border-white/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl text-xs font-bold text-white focus:ring-2 focus:ring-blue-500/40 outline-none shrink-0"
+                                            >
+                                                <option value="+91" className="bg-[#050510] text-white">🇮🇳 +91 (India)</option>
+                                                <option value="+1" className="bg-[#050510] text-white">🇺🇸 +1 (USA/Canada)</option>
+                                                <option value="+44" className="bg-[#050510] text-white">🇬🇧 +44 (UK)</option>
+                                                <option value="+971" className="bg-[#050510] text-white">🇦🇪 +971 (UAE)</option>
+                                                <option value="+966" className="bg-[#050510] text-white">🇸🇦 +966 (Saudi Arabia)</option>
+                                                <option value="+977" className="bg-[#050510] text-white">🇳🇵 +977 (Nepal)</option>
+                                                <option value="+880" className="bg-[#050510] text-white">🇧🇩 +880 (Bangladesh)</option>
+                                                <option value="+92" className="bg-[#050510] text-white">🇵🇰 +92 (Pakistan)</option>
+                                                <option value="+94" className="bg-[#050510] text-white">🇱🇰 +94 (Sri Lanka)</option>
+                                                <option value="+61" className="bg-[#050510] text-white">🇦🇺 +61 (Australia)</option>
+                                                <option value="+65" className="bg-[#050510] text-white">🇸🇬 +65 (Singapore)</option>
+                                                <option value="+60" className="bg-[#050510] text-white">🇲🇾 +60 (Malaysia)</option>
+                                                <option value="+49" className="bg-[#050510] text-white">🇩🇪 +49 (Germany)</option>
+                                                <option value="+33" className="bg-[#050510] text-white">🇫🇷 +33 (France)</option>
+                                                <option value="+81" className="bg-[#050510] text-white">🇯🇵 +81 (Japan)</option>
+                                                <option value="+86" className="bg-[#050510] text-white">🇨🇳 +86 (China)</option>
+                                                <option value="+7" className="bg-[#050510] text-white">🇷🇺 +7 (Russia)</option>
+                                                <option value="+27" className="bg-[#050510] text-white">🇿🇦 +27 (South Africa)</option>
+                                                <option value="+55" className="bg-[#050510] text-white">🇧🇷 +55 (Brazil)</option>
+                                            </select>
+                                            <input
+                                                type="tel"
+                                                required
+                                                maxLength={15}
+                                                value={formData.contactPhone}
+                                                onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value.replace(/\D/g, "") })}
+                                                placeholder="Mobile number"
+                                                className="w-full bg-white/5 border border-white/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/40 outline-none placeholder:text-gray-700"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 

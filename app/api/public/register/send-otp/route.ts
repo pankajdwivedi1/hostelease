@@ -13,12 +13,8 @@ export async function POST(request: NextRequest) {
 
     let cleaned = contactPhone.replace(/\D/g, "");
     
-    if (cleaned.length === 12 && cleaned.startsWith("91")) {
-      cleaned = cleaned.substring(2);
-    }
-    
-    if (cleaned.length !== 10) {
-      return NextResponse.json({ success: false, error: "Please enter a valid 10-digit mobile number" }, { status: 400 });
+    if (cleaned.length < 7 || cleaned.length > 15) {
+      return NextResponse.json({ success: false, error: "Please enter a valid mobile number (7 to 15 digits)" }, { status: 400 });
     }
 
     // Check if direct OTP template is configured
