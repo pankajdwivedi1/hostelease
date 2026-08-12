@@ -292,15 +292,18 @@ export default function ParentConsentClient({
         }
     };
 
-    // Auto-recording helper on click
+    // Trigger start camera logic handled via user action to avoid mount lag
     const handleStartClick = async () => {
-        const mediaStream = await startCamera();
-        if (mediaStream) {
-            // Tiny timeout to warm up the camera hardware
-            setTimeout(() => {
-                startRecording(mediaStream);
-            }, 300);
+        await startCamera();
+    };
+
+    // Stop active camera stream
+    const stopCamera = () => {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            setStream(null);
         }
+        setRecordingState("idle");
     };
 
     // Stop recording
@@ -462,69 +465,132 @@ export default function ParentConsentClient({
                             </div>
 
                             <div className="h-px bg-slate-800/40 my-2" />
-                            <div
-                                className={`relative rounded-3xl bg-slate-900 border border-slate-800/80 overflow-hidden shadow-inner flex items-center justify-center mx-auto w-full ${
-                                    isMobile ? "max-w-[92vw]" : "max-w-full"
-                                } ${!reviewAspectRatio && !previewAspectRatio ? (isMobile ? "aspect-[9/16]" : "aspect-video") : ""}`}
-                                style={{
-                                    ...(isMobile ? { maxHeight: "calc(100vh - 260px)" } : {}),
-                                    aspectRatio: reviewAspectRatio ?? previewAspectRatio ?? undefined
-                                }}
-                            >
-                                {(recordingState === "idle" || recordingState === "recording") && stream && (
-                                    <video
-                                        ref={videoPreviewRef}
-                                        autoPlay
-                                        playsInline
-                                        muted
-                                        className="w-full h-full object-cover object-top scale-x-[-1]"
-                                    />
-                                )}
 
-                                {recordingState === "review" && videoUrl && (
-                                    <video
-                                        ref={videoPlaybackRef}
-                                        src={videoUrl}
-                                        controls
-                                        playsInline
-                                        onLoadedMetadata={(e) => {
-                                            const video = e.target as HTMLVideoElement;
-                                            if (video.videoWidth && video.videoHeight) {
-                                                setReviewAspectRatio(video.videoWidth / video.videoHeight);
-                                            }
-                                            if (video.duration === Infinity) {
-                                                video.currentTime = 99.99;
-                                                video.onseeked = () => {
-                                                    video.onseeked = null;
-                                                    video.currentTime = 0;
-                                                };
-                                            }
-                                        }}
-                                        className="w-full h-full object-cover object-top"
-                                    />
-                                )}
-
-                                {recordingState === "error" && (
-                                    <div className="text-center p-6 text-slate-400 space-y-2">
-                                        <AlertTriangle className="w-12 h-12 mx-auto stroke-[1.5] text-rose-500" />
-                                        <p className="text-xs font-bold uppercase tracking-wider text-rose-400">कैमरा/माइक त्रुटि (Camera/Mic Error)</p>
-                                        <p className="text-[11px] leading-relaxed max-w-xs mx-auto">
-                                            कैमरा या माइक्रोफ़ोन कनेक्ट करने में समस्या हुई। कृपया अपने ब्राउज़र की अनुमति जांचें।
-                                        </p>
-                                    </div>
-                                )}
-
+                            {/* Camera / Recording Card Container (Matches Add Student Profile Photo Dimensions) */}
+                            <div className="space-y-3 border-2 border-dashed border-slate-700/80 p-3 sm:p-4 rounded-2xl flex flex-col items-center justify-center bg-slate-900/40 transition-all min-h-[160px] w-full max-w-[280px] sm:max-w-[320px] mx-auto shadow-md">
+                                
+                                {/* Initial State: Before camera is opened (Screenshot 2 structure) */}
                                 {recordingState === "idle" && !stream && (
-                                    <div className="text-center p-6 text-slate-500">
-                                        <Camera className="w-12 h-12 mx-auto stroke-[1.5] mb-2 text-slate-600 animate-pulse" />
-                                        <p className="text-xs font-semibold">कैमरा सक्रिय नहीं है (Camera is offline)</p>
+                                    <div className="flex flex-col items-center gap-3 py-3">
+                                        <button
+                                            type="button"
+                                            onClick={handleStartClick}
+                                            className="px-5 py-2.5 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 rounded-xl text-xs font-bold flex items-center gap-2 border border-purple-500/30 shadow-sm transition-all active:scale-95 cursor-pointer"
+                                        >
+                                            <Camera className="w-4 h-4 text-purple-400" />
+                                            <span>📷 OPEN CAMERA</span>
+                                        </button>
                                     </div>
                                 )}
 
-                                {recordingState === "recording" && (
-                                    <div className="absolute top-4 left-4 bg-red-600 border border-red-500/30 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 animate-pulse shadow-md">
-                                        <span className="w-2 h-2 rounded-full bg-white"></span>
-                                        Recording ({countdown}s)
+                                {/* Active Camera Preview & Recording State (Screenshot 1 structure) */}
+                                {(recordingState === "idle" || recordingState === "recording") && stream && (
+                                    <div className="flex flex-col items-center gap-3 w-full">
+                                        <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden border border-slate-700 bg-black shadow-md">
+                                            <video
+                                                ref={videoPreviewRef}
+                                                autoPlay
+                                                playsInline
+                                                muted
+                                                className="w-full h-full object-cover scale-x-[-1]"
+                                            />
+                                            {recordingState === "recording" && (
+                                                <div className="absolute top-3 left-3 bg-red-600 border border-red-500/30 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 animate-pulse shadow-md text-white">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                                                    Recording ({countdown}s)
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Action buttons directly beneath video preview */}
+                                        <div className="flex items-center justify-center gap-2 w-full">
+                                            {recordingState === "idle" && (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => startRecording()}
+                                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                                                    >
+                                                        <Video className="w-3.5 h-3.5" />
+                                                        <span>START RECORDING</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={stopCamera}
+                                                        className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all border border-slate-700 active:scale-95 cursor-pointer"
+                                                    >
+                                                        CANCEL
+                                                    </button>
+                                                </>
+                                            )}
+
+                                            {recordingState === "recording" && (
+                                                <button
+                                                    type="button"
+                                                    onClick={stopRecording}
+                                                    className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all border border-slate-700 flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                                                >
+                                                    <Square className="w-3.5 h-3.5 text-red-500 fill-red-500 animate-pulse" />
+                                                    <span>STOP RECORDING</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Video Review State */}
+                                {recordingState === "review" && videoUrl && (
+                                    <div className="flex flex-col items-center gap-3 w-full">
+                                        <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden border border-slate-700 bg-black shadow-md">
+                                            <video
+                                                ref={videoPlaybackRef}
+                                                src={videoUrl}
+                                                controls
+                                                playsInline
+                                                className="w-full h-full object-cover"
+                                            />
+                                        </div>
+                                        <div className="flex items-center justify-center gap-2 w-full">
+                                            <button
+                                                type="button"
+                                                onClick={handleRetry}
+                                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all border border-slate-700 flex items-center gap-1 cursor-pointer"
+                                            >
+                                                <RefreshCw className="w-3 h-3" />
+                                                <span>RECORD AGAIN</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleUpload}
+                                                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1 shadow-md active:scale-95 cursor-pointer"
+                                            >
+                                                <UploadCloud className="w-3 h-3" />
+                                                <span>SUBMIT CONSENT</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Error State */}
+                                {recordingState === "error" && (
+                                    <div className="text-center p-4 text-slate-400 space-y-2">
+                                        <AlertTriangle className="w-8 h-8 mx-auto text-rose-500" />
+                                        <p className="text-[10px] font-bold uppercase tracking-wider text-rose-400">Camera/Mic Access Denied</p>
+                                        <button
+                                            type="button"
+                                            onClick={handleStartClick}
+                                            className="px-3 py-1.5 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 text-[10px] font-bold rounded-lg border border-rose-500/30 cursor-pointer"
+                                        >
+                                            Retry Camera
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Uploading State */}
+                                {recordingState === "uploading" && (
+                                    <div className="text-center p-6 text-indigo-300 space-y-2">
+                                        <div className="w-6 h-6 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mx-auto" />
+                                        <p className="text-[10px] font-black uppercase tracking-wider">Uploading Video Consent...</p>
                                     </div>
                                 )}
                             </div>
@@ -537,70 +603,7 @@ export default function ParentConsentClient({
                                 </div>
                             )}
 
-                            <div className="flex flex-col items-center justify-center gap-3">
-                                {recordingState === "idle" && stream && (
-                                    <button
-                                        onClick={() => startRecording()}
-                                        className="w-full max-w-md px-8 py-3.5 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg shadow-red-500/20 hover:shadow-red-500/30 transition-all flex items-center justify-center gap-2 border border-red-500/20"
-                                    >
-                                        <Video className="w-4 h-4" /> Start Recording
-                                    </button>
-                                )}
-
-                                {recordingState === "idle" && !stream && (
-                                    <button
-                                        onClick={handleStartClick}
-                                        className="w-full max-w-md px-8 py-3.5 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg shadow-red-500/20 hover:shadow-red-500/30 transition-all flex items-center justify-center gap-2 border border-red-500/20 hover:scale-[1.01] active:scale-[0.99]"
-                                    >
-                                        <Video className="w-4 h-4 animate-pulse" /> Start Recording
-                                    </button>
-                                )}
-
-                                {recordingState === "recording" && (
-                                    <button
-                                        onClick={stopRecording}
-                                        className="w-full max-w-md px-8 py-3.5 bg-gradient-to-r from-slate-800 to-slate-900 border border-slate-700 text-slate-200 rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2 hover:bg-slate-800/80"
-                                    >
-                                        <Square className="w-4 h-4 text-red-500 fill-red-500 animate-pulse" /> Stop Recording
-                                    </button>
-                                )}
-
-                                {recordingState === "review" && (
-                                    <div className="flex flex-wrap items-center justify-center gap-3 w-full max-w-md">
-                                        <button
-                                            onClick={handleRetry}
-                                            className="flex-1 min-w-[140px] px-6 py-3.5 bg-slate-900 border border-slate-800 text-slate-300 rounded-2xl font-black text-xs uppercase tracking-wider hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
-                                        >
-                                            <RefreshCw className="w-4 h-4" /> Record Again
-                                        </button>
-
-                                        <button
-                                            onClick={handleUpload}
-                                            className="flex-1 min-w-[160px] px-6 py-3.5 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 transition-all flex items-center justify-center gap-2 border border-indigo-500/20"
-                                        >
-                                            <UploadCloud className="w-4 h-4" /> Upload Consent
-                                        </button>
-                                    </div>
-                                )}
-
-                                {recordingState === "uploading" && (
-                                    <div className="flex flex-col items-center justify-center py-2 space-y-2">
-                                        <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin" />
-                                        <span className="text-xs text-indigo-400 font-bold uppercase tracking-wider">
-                                            Uploading consent video...
-                                        </span>
-                                    </div>
-                                )}
-
-                                {recordingState === "error" && (
-                                    <button
-                                        onClick={startCamera}
-                                        className="w-full max-w-md px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-wider hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 shadow-md"
-                                    >
-                                        <RefreshCw className="w-4 h-4" /> Try Reconnecting Camera
-                                    </button>
-                                )}
-                            </div>
+                        </div>
 
 
 
