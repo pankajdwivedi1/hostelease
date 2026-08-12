@@ -2999,8 +2999,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         <span>🚪</span> <span className="truncate">Outing & Attendance</span>
                                     </button>
 
-                                {/* 📶 Always-Visible Campus WiFi Status Card (Right side of Outing & Attendance) */}
-                                {!isParentView && (
+                                    {/* 📶 Always-Visible Campus WiFi Status Card (Right side of Outing & Attendance) */}
                                     <div className={`w-full min-h-[3rem] sm:min-h-[3.25rem] rounded-xl border-2 transition-all duration-500 flex items-center justify-between px-2.5 sm:px-3 py-1.5 text-left shadow-sm ${
                                         highlightLocation
                                             ? 'bg-amber-100 border-amber-400 ring-4 ring-amber-300 shadow-xl scale-[1.02] animate-pulse'
@@ -3050,15 +3049,15 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         </div>
                                     </div>
 
-                                {bankSettings?.isPaymentEnabled && (
-                                    <button
-                                        onClick={() => setShowFeeDetailsModal(true)}
-                                        className="w-full h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5 text-center leading-tight col-span-2"
-                                    >
-                                        <span>💳</span> <span className="truncate">View Fee Details</span>
-                                    </button>
-                                )}
-                            </div>
+                                    {bankSettings?.isPaymentEnabled && (
+                                        <button
+                                            onClick={() => setShowFeeDetailsModal(true)}
+                                            className="w-full h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5 text-center leading-tight col-span-2"
+                                        >
+                                            <span>💳</span> <span className="truncate">View Fee Details</span>
+                                        </button>
+                                    )}
+                                </div>
                             )}
 
                             {showRequestForm && (
