@@ -604,10 +604,6 @@ export default function ParentConsentClient({
                             )}
 
                         </div>
-
-
-
-                        </div>
                     </>
                 )}
             </div>
