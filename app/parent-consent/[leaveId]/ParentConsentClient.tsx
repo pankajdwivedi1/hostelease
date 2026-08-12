@@ -14,12 +14,16 @@ const CONSENT_MIME_TYPES = [
 
 function pickConsentMimeType(): { mimeType: string; fileExt: string } {
     if (typeof MediaRecorder !== "undefined") {
-        for (const mimeType of CONSENT_MIME_TYPES) {
-            if (MediaRecorder.isTypeSupported(mimeType)) {
-                return {
-                    mimeType,
-                    fileExt: mimeType.startsWith("video/mp4") || mimeType.startsWith("video/quicktime") ? "mp4" : "webm",
-                };
+        // Test formats in order of mobile compatibility
+        const types = [
+            { mime: "video/mp4", ext: "mp4" },
+            { mime: "video/mp4;codecs=avc1,mp4a.40.2", ext: "mp4" },
+            { mime: "video/webm;codecs=vp8,opus", ext: "webm" },
+            { mime: "video/webm", ext: "webm" },
+        ];
+        for (const t of types) {
+            if (MediaRecorder.isTypeSupported(t.mime)) {
+                return { mimeType: t.mime, fileExt: t.ext };
             }
         }
     }
@@ -37,7 +41,6 @@ function isMobileDevice(): boolean {
 function getCameraConstraints(isMobile: boolean): MediaStreamConstraints {
     const audioConstraints = {
         echoCancellation: true,
-        noiseSuppression: false, // Ensures voice is NOT suppressed/muted on mobile devices
         autoGainControl: true,
     };
 
@@ -219,33 +222,16 @@ export default function ParentConsentClient({
         let currentStream = activeStream || stream;
         if (!currentStream) return;
 
-        // Verify or acquire active microphone audio track
-        let audioTrack = currentStream.getAudioTracks()[0];
-        if (!audioTrack || !audioTrack.enabled || audioTrack.readyState !== "live") {
-            console.warn("⚠️ Main stream missing active audio track. Acquiring fresh audio track for recording...");
+        // Ensure currentStream has an active audio track; if missing, request fresh combined stream
+        if (currentStream.getAudioTracks().length === 0) {
             try {
-                const freshAudioStream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        echoCancellation: true,
-                        noiseSuppression: false,
-                        autoGainControl: true,
-                    }
-                });
-                const micTrack = freshAudioStream.getAudioTracks()[0];
-                if (micTrack) {
-                    audioTrack = micTrack;
-                }
-            } catch (micErr) {
-                console.error("Failed emergency mic track acquisition:", micErr);
+                const freshCombined = await navigator.mediaDevices.getUserMedia(getCameraConstraints(isMobileDevice()));
+                currentStream = freshCombined;
+                setStream(freshCombined);
+            } catch (e) {
+                console.warn("Could not re-acquire combined video+audio stream:", e);
             }
         }
-
-        const videoTrack = currentStream.getVideoTracks()[0];
-        const combinedTracks: MediaStreamTrack[] = [];
-        if (videoTrack) combinedTracks.push(videoTrack);
-        if (audioTrack) combinedTracks.push(audioTrack);
-
-        const recordingStream = new MediaStream(combinedTracks);
 
         chunksRef.current = [];
         const { mimeType: selectedMimeType } = pickConsentMimeType();
@@ -253,10 +239,14 @@ export default function ParentConsentClient({
         try {
             let mediaRecorder: MediaRecorder;
             try {
-                mediaRecorder = new MediaRecorder(recordingStream, { mimeType: selectedMimeType });
+                if (selectedMimeType) {
+                    mediaRecorder = new MediaRecorder(currentStream, { mimeType: selectedMimeType });
+                } else {
+                    mediaRecorder = new MediaRecorder(currentStream);
+                }
             } catch (optErr) {
-                console.warn("MediaRecorder with mimeType failed, falling back to default constructor...", optErr);
-                mediaRecorder = new MediaRecorder(recordingStream);
+                console.warn("MediaRecorder initialization fallback to default constructor...", optErr);
+                mediaRecorder = new MediaRecorder(currentStream);
             }
 
             mediaRecorder.ondataavailable = (e) => {
@@ -266,7 +256,7 @@ export default function ParentConsentClient({
             };
 
             mediaRecorder.onstop = () => {
-                const actualType = mediaRecorder.mimeType || selectedMimeType || "video/webm";
+                const actualType = mediaRecorder.mimeType || selectedMimeType || "video/mp4";
                 const blob = new Blob(chunksRef.current, { type: actualType });
                 const url = URL.createObjectURL(blob);
                 setVideoUrl(url);
@@ -280,7 +270,7 @@ export default function ParentConsentClient({
             };
 
             mediaRecorderRef.current = mediaRecorder;
-            mediaRecorder.start(1000); // chunk every 1000ms for stable WebM/MP4 duration metadata
+            mediaRecorder.start(); // Start recording without chunk slicing to preserve contiguous container headers
             setRecordingState("recording");
             setCountdown(24); // Start countdown at 24s
 
@@ -560,12 +550,8 @@ export default function ParentConsentClient({
                                                 playsInline
                                                 onLoadedMetadata={(e) => {
                                                     const video = e.target as HTMLVideoElement;
-                                                    if (video.duration === Infinity || isNaN(video.duration)) {
-                                                        video.currentTime = 1e101;
-                                                        video.ontimeupdate = () => {
-                                                            video.ontimeupdate = null;
-                                                            video.currentTime = 0;
-                                                        };
+                                                    if (video.duration === Infinity || isNaN(video.duration) || video.duration > 3600) {
+                                                        video.currentTime = 0;
                                                     }
                                                 }}
                                                 className="w-full h-full object-cover"
