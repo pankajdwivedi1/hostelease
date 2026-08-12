@@ -4,19 +4,18 @@ import React, { useState, useRef, useEffect } from "react";
 import { Camera, Video, Square, RefreshCw, UploadCloud, CheckCircle2, AlertTriangle, ShieldCheck, Play, Pause } from "lucide-react";
 
 const CONSENT_MIME_TYPES = [
-    "video/webm;codecs=vp9,opus",
     "video/webm;codecs=vp8,opus",
+    "video/webm;codecs=h264,opus",
     "video/webm",
     "video/mp4;codecs=avc1,mp4a.40.2",
     "video/mp4;codecs=h264,aac",
     "video/mp4",
-    "video/quicktime;codecs=h264,aac",
     "video/quicktime",
 ];
 
 function pickConsentMimeType(): { mimeType: string; fileExt: string } {
     for (const mimeType of CONSENT_MIME_TYPES) {
-        if (MediaRecorder.isTypeSupported(mimeType)) {
+        if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(mimeType)) {
             return {
                 mimeType,
                 fileExt: mimeType.startsWith("video/mp4") ? "mp4" : "webm",
@@ -37,7 +36,7 @@ function isMobileDevice(): boolean {
 function getCameraConstraints(isMobile: boolean): MediaStreamConstraints {
     const audioConstraints = {
         echoCancellation: true,
-        noiseSuppression: true,
+        noiseSuppression: false, // Ensures voice is NOT suppressed/muted on mobile devices
         autoGainControl: true,
     };
 
@@ -45,9 +44,8 @@ function getCameraConstraints(isMobile: boolean): MediaStreamConstraints {
         return {
             video: {
                 facingMode: "user",
-                width: { ideal: 720 },
-                height: { ideal: 1280 },
-                aspectRatio: { ideal: 9 / 16 },
+                width: { ideal: 640 },
+                height: { ideal: 480 },
                 frameRate: { ideal: 24 },
             },
             audio: audioConstraints,
@@ -59,7 +57,7 @@ function getCameraConstraints(isMobile: boolean): MediaStreamConstraints {
             facingMode: "user",
             width: { ideal: 640 },
             height: { ideal: 480 },
-            frameRate: { ideal: 15 },
+            frameRate: { ideal: 24 },
         },
         audio: audioConstraints,
     };
@@ -139,6 +137,14 @@ export default function ParentConsentClient({
         }
     }, [stream, recordingState]);
 
+    // Guarantee unmuted playback with full volume during review
+    useEffect(() => {
+        if (videoPlaybackRef.current && videoUrl && recordingState === "review") {
+            videoPlaybackRef.current.muted = false;
+            videoPlaybackRef.current.volume = 1.0;
+        }
+    }, [videoUrl, recordingState]);
+
     // Request camera permission and start preview with microphone verification
     const startCamera = async (): Promise<MediaStream | null> => {
         try {
@@ -209,23 +215,36 @@ export default function ParentConsentClient({
 
     // Start video recording with guaranteed audio
     const startRecording = async (activeStream?: MediaStream) => {
-        const currentStream = activeStream || stream;
+        let currentStream = activeStream || stream;
         if (!currentStream) return;
 
-        // Ensure stream has audio track before initializing recorder
-        const audioTracks = currentStream.getAudioTracks();
-        if (audioTracks.length === 0 || !audioTracks[0].enabled) {
-            console.warn("⚠️ Attempting emergency mic track attach prior to recording...");
+        // Verify or acquire active microphone audio track
+        let audioTrack = currentStream.getAudioTracks()[0];
+        if (!audioTrack || !audioTrack.enabled || audioTrack.readyState !== "live") {
+            console.warn("⚠️ Main stream missing active audio track. Acquiring fresh audio track for recording...");
             try {
-                const micOnlyStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                const micTrack = micOnlyStream.getAudioTracks()[0];
+                const freshAudioStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: false,
+                        autoGainControl: true,
+                    }
+                });
+                const micTrack = freshAudioStream.getAudioTracks()[0];
                 if (micTrack) {
-                    currentStream.addTrack(micTrack);
+                    audioTrack = micTrack;
                 }
             } catch (micErr) {
                 console.error("Failed emergency mic track acquisition:", micErr);
             }
         }
+
+        const videoTrack = currentStream.getVideoTracks()[0];
+        const combinedTracks: MediaStreamTrack[] = [];
+        if (videoTrack) combinedTracks.push(videoTrack);
+        if (audioTrack) combinedTracks.push(audioTrack);
+
+        const recordingStream = new MediaStream(combinedTracks);
 
         chunksRef.current = [];
         const { mimeType: selectedMimeType } = pickConsentMimeType();
@@ -233,19 +252,10 @@ export default function ParentConsentClient({
         try {
             let mediaRecorder: MediaRecorder;
             try {
-                mediaRecorder = new MediaRecorder(currentStream, {
-                    mimeType: selectedMimeType,
-                    videoBitsPerSecond: 300000, // 300 kbps (low bitrate, clear enough for consent)
-                    audioBitsPerSecond: 64000   // 64 kbps (clear mono audio)
-                });
+                mediaRecorder = new MediaRecorder(recordingStream, { mimeType: selectedMimeType });
             } catch (optErr) {
-                console.warn("MediaRecorder with bitrates failed, retrying with mimeType only...", optErr);
-                try {
-                    mediaRecorder = new MediaRecorder(currentStream, { mimeType: selectedMimeType });
-                } catch (mimeErr) {
-                    console.warn("MediaRecorder with mimeType failed, falling back to default constructor...", mimeErr);
-                    mediaRecorder = new MediaRecorder(currentStream);
-                }
+                console.warn("MediaRecorder with mimeType failed, falling back to default constructor...", optErr);
+                mediaRecorder = new MediaRecorder(recordingStream);
             }
 
             mediaRecorder.ondataavailable = (e) => {
