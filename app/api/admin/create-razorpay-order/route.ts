@@ -15,29 +15,20 @@ export async function POST(request: NextRequest) {
 
         const supabase = getSupabaseAdmin();
 
-        // 1. Fetch Tenant
-        const { data: tenant, error: tenantError } = await supabase
-            .from('tenants')
-            .select('name')
-            .eq('id', tenantId)
-            .single();
+        // 1. Fetch Tenant, Student Count, and Payment Settings concurrently in parallel for maximum speed!
+        const [
+          { data: tenant, error: tenantError },
+          { count: studentCount },
+          { data: settingsData }
+        ] = await Promise.all([
+          supabase.from('tenants').select('name').eq('id', tenantId).single(),
+          supabase.from('students').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId),
+          supabase.from('platform_settings').select('settings').eq('id', 'boss_payment_config').single()
+        ]);
 
         if (tenantError || !tenant) {
             return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
         }
-
-        // 1b. Fetch student count
-        const { count: studentCount } = await supabase
-            .from('students')
-            .select('*', { count: 'exact', head: true })
-            .eq('tenant_id', tenantId);
-
-        // 2. Fetch Payment Settings
-        const { data: settingsData } = await supabase
-            .from('platform_settings')
-            .select('settings')
-            .eq('id', 'boss_payment_config')
-            .single();
 
         const settings = settingsData?.settings;
         if (!settings || !settings.enableRazorpay || !settings.razorpayKeyId || !settings.razorpayKeySecret) {

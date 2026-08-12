@@ -1314,6 +1314,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [utrNumber, setUtrNumber] = useState("");
   const [isSubmittingDirect, setIsSubmittingDirect] = useState(false);
 
+  // Preload Razorpay Checkout SDK script in background for instant modal popup performance
+  useEffect(() => {
+    if (showRenewalModal && typeof window !== "undefined" && typeof (window as any).Razorpay === "undefined") {
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      document.body.appendChild(script);
+    }
+  }, [showRenewalModal]);
+
   const handleDirectPaymentSubmit = async (finalAmount: number) => {
     if (!utrNumber.trim()) {
       alert("Please enter the Bank / UPI Payment UTR or Reference Transaction ID!");
@@ -1383,6 +1393,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         name: "Hosteleaze Inc.",
         description: `Subscription Renewal (${months} Month${months > 1 ? 's' : ''}) - ${data.collegeName}`,
         order_id: data.orderId,
+        modal: {
+          ondismiss: function () {
+            setIsProcessingPayment(false);
+          }
+        },
         handler: async function (response: any) {
           setIsProcessingPayment(true);
           try {
@@ -1427,7 +1442,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       rzp.open();
     } catch (err: any) {
       alert("Error initiating payment: " + err.message);
-    } finally {
       setIsProcessingPayment(false);
     }
   };
@@ -8319,8 +8333,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
                     </div>
 
-                    {/* IP Detect + Test + Save buttons */}
-                    <div className="flex flex-col sm:flex-row gap-3">
+                    {/* IP Detect + Test + Save buttons side-by-side */}
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
                       <button
                         onClick={async () => {
                           try {
@@ -8359,9 +8373,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             showToast("Error detecting IP: " + e.message, "error");
                           }
                         }}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-green-700 transition-all shadow-lg shadow-green-200 animate-pulse hover:animate-none"
+                        className="flex items-center justify-center gap-1 px-1.5 py-2 sm:px-4 sm:py-2.5 bg-green-600 text-white font-bold text-[8.5px] xs:text-[9.5px] sm:text-xs rounded-xl hover:bg-green-700 transition-all shadow-md leading-tight text-center tracking-tighter whitespace-nowrap"
                       >
-                        ⚡ DETECT & SAVE MY HOSTEL IP
+                        ⚡ Detect & Save My Hostel IP
                       </button>
 
                       <button
@@ -8382,20 +8396,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             showToast("Test failed: " + e.message, "error");
                           }
                         }}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+                        className="flex items-center justify-center gap-1 px-1.5 py-2 sm:px-4 sm:py-2.5 bg-blue-600 text-white font-bold text-[8.5px] xs:text-[9.5px] sm:text-xs rounded-xl hover:bg-blue-700 transition-all shadow-md leading-tight text-center tracking-tighter whitespace-nowrap"
                       >
-                        🔍 TEST CURRENT NETWORK
+                        🔍 Test Current Network
                       </button>
                     </div>
                   </div>
 
-                  {/* All Hostels WiFi IP & BSSID Network Status (Confidential: Only visible to Super Admin & Dean) */}
+                  {/* All Hostels WiFi IP & BSSID Network Status */}
                   {!isWarden && (
                     <div className="space-y-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-xl border border-slate-100 shadow-sm">
                         <div>
-                          <h3 className="font-black text-gray-800 text-xs sm:text-sm uppercase tracking-widest">All Hostel IP Whitelist Status</h3>
-                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Campus-wide connectivity verification</p>
+                          <h3 className="font-bold text-gray-900 text-xs sm:text-sm">All Hostel IP Whitelist Status</h3>
+                          <p className="text-[10px] text-gray-500 font-medium mt-0.5">Campus-wide connectivity verification</p>
                         </div>
                         <button
                           onClick={async () => {
@@ -8416,9 +8430,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               showToast("Error: " + e.message, "error");
                             }
                           }}
-                          className="w-full sm:w-auto px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-md shadow-green-100 flex items-center justify-center gap-1.5"
+                          className="w-full sm:w-auto px-3.5 py-2 bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] sm:text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5"
                         >
-                          ⚡ SYNC MY CURRENT IP
+                          ⚡ Sync My Current IP
                         </button>
                       </div>
 
@@ -8462,229 +8476,235 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           const hasIp = !!hostelIpEntry;
                           const hasBssid = !!hostelBssidEntry;
                           
-                          let badgeText = "⚠️ NOT SET";
+                          let badgeText = "⚠️ Not Set";
                           let badgeStyle = "bg-orange-100 text-orange-800 border-orange-200";
                           let cardStyle = "border-orange-200 bg-orange-50/60";
 
                           if (hasIp && hasBssid) {
-                            badgeText = "✅ IP & BSSID SET";
+                            badgeText = "✅ IP & BSSID Set";
                             badgeStyle = "bg-green-100 text-green-800 border-green-200";
                             cardStyle = "border-green-200 bg-green-50/60";
                           } else if (hasIp) {
-                            badgeText = "✅ IP SET";
+                            badgeText = "✅ IP Set";
                             badgeStyle = "bg-green-100 text-green-800 border-green-200";
                             cardStyle = "border-green-200 bg-green-50/60";
                           } else if (hasBssid) {
-                            badgeText = "📡 BSSID ONLY";
+                            badgeText = "📡 BSSID Only";
                             badgeStyle = "bg-amber-100 text-amber-800 border-amber-200";
                             cardStyle = "border-amber-200 bg-amber-50/60";
                           }
 
                           return (
-                            <div key={hostel._id} className={`p-4 rounded-2xl border-2 transition-all ${cardStyle}`}>
+                            <div key={hostel._id} className={`p-3.5 sm:p-4 rounded-2xl border-2 transition-all ${cardStyle}`}>
                               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                                 <div className="flex items-center gap-2">
                                   <span className="text-lg">🏢</span>
                                   <div>
-                                    <p className="font-black text-gray-900 text-sm uppercase tracking-tight">{hostel.name}</p>
-                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                                      {hostel.attendanceMode === 'gps-only' ? '📍 GPS ONLY' : hostel.attendanceMode === 'biometric' ? '👆 BIOMETRIC' : '📸 CAMERA'}
+                                    <p className="font-bold text-gray-900 text-xs sm:text-sm">{hostel.name}</p>
+                                    <p className="text-[10px] font-medium text-gray-500">
+                                      {hostel.attendanceMode === 'gps-only' ? '📍 GPS Only' : hostel.attendanceMode === 'biometric' ? '👆 Biometric' : '📸 Camera'}
                                     </p>
                                   </div>
                                 </div>
-                                <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border ${badgeStyle}`}>
+                                <span className={`px-2 py-0.5 rounded-lg text-[9px] font-bold border ${badgeStyle}`}>
                                   {badgeText}
                                 </span>
                               </div>
 
-                              {/* IP Configuration Section */}
-                              {hostelIpEntry ? (
-                                <div className="bg-white rounded-xl p-2.5 border border-green-200 mb-2 shadow-sm flex items-center justify-between gap-3">
-                                  <div>
-                                    <p className="text-[9px] font-black text-green-600 uppercase tracking-widest mb-1">🌐 Whitelisted IP</p>
-                                    <p className="text-[12px] font-mono font-bold text-gray-800">IP: {hostelIpEntry.ip}</p>
-                                    <p className="text-[9px] text-gray-500 mt-0.5">{hostelIpEntry.name}</p>
-                                  </div>
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    <button
-                                      onClick={async () => {
-                                        const ipVal = await showPrompt(`Edit whitelisted IP for ${hostel.name}:`, hostelIpEntry.ip);
-                                        if (ipVal !== null) {
-                                          const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
-                                          const updated = wl.map((w: any) =>
-                                            w === hostelIpEntry ? { ...w, ip: ipVal.trim() } : w
-                                          );
-                                          setWifiWhitelist(updated);
-                                          await handleUpdateSettings({ wifiWhitelist: updated });
-                                          showToast(`IP updated for ${hostel.name}`, "success");
-                                        }
-                                      }}
-                                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border border-slate-200"
-                                    >
-                                      ✏️ Edit
-                                    </button>
-                                    <button
-                                      onClick={async () => {
-                                        if (await showConfirm(`Are you sure you want to remove the whitelisted IP for ${hostel.name}?`)) {
-                                          const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
-                                          const updated = wl.map((w: any) => {
-                                            if (w === hostelIpEntry) {
-                                              return { ...w, ip: undefined };
-                                            }
-                                            return w;
-                                          }).filter((w: any) => w.ip || (Array.isArray(w.bssids) && w.bssids.length > 0));
-                                          
-                                          setWifiWhitelist(updated);
-                                          await handleUpdateSettings({ wifiWhitelist: updated });
-                                          showToast(`IP removed for ${hostel.name}`, "success");
-                                        }
-                                      }}
-                                      className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border border-red-100"
-                                    >
-                                      🗑️ Delete
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 mb-2 text-center">
-                                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">No Whitelisted IP Set</p>
-                                  <button
-                                    onClick={async () => {
-                                      const ipVal = await showPrompt(`Enter whitelisted IP address for ${hostel.name} (e.g. 152.58.56.104):`, "");
-                                      if (ipVal) {
-                                        const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
-                                        const existingIdx = wl.findIndex((w: any) =>
-                                          w && typeof w === 'object' && (
-                                            (w.hostelName && w.hostelName.toLowerCase() === hostel.name.toLowerCase()) ||
-                                            (w.name && w.name.toLowerCase().includes(hostel.name.toLowerCase()))
-                                          )
-                                        );
-                                        let updated;
-                                        if (existingIdx >= 0) {
-                                          updated = [...wl];
-                                          updated[existingIdx] = { ...updated[existingIdx], ip: ipVal.trim(), name: `${hostel.name} IP (Manual)` };
-                                        } else {
-                                          updated = [...wl, { name: `${hostel.name} IP (Manual)`, hostelName: hostel.name, ip: ipVal.trim(), bssids: [] }];
-                                        }
-                                        setWifiWhitelist(updated);
-                                        await handleUpdateSettings({ wifiWhitelist: updated });
-                                        showToast(`IP configured for ${hostel.name}`, "success");
-                                      }
-                                    }}
-                                    className="mt-1.5 px-3 py-1 bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all"
-                                  >
-                                    ➕ Configure IP
-                                  </button>
-                                </div>
-                              )}
-
-                              {/* BSSID Configuration Section */}
-                              {hostelBssidEntry ? (
-                                <div className="bg-white rounded-xl p-2.5 border border-amber-200 shadow-sm flex flex-col gap-2">
-                                  <div className="flex items-center justify-between gap-2">
+                              {/* Unified IP & BSSID Configuration Card (Side-by-Side 2 Columns on Mobile & Desktop) */}
+                              <div className="bg-white rounded-xl p-2.5 sm:p-3 border border-slate-200 shadow-sm space-y-3">
+                                <div className="grid grid-cols-2 gap-2 sm:gap-3 items-stretch">
+                                  {/* 1. Whitelisted IP Section (Left Column) */}
+                                  <div className="flex flex-col justify-between h-full space-y-1.5">
                                     <div>
-                                      <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">📡 BSSID Config</p>
-                                      <p className="text-[10px] font-bold text-gray-700">{hostelBssidEntry.bssids?.length || 0} routers configured</p>
+                                      <p className="text-[9px] sm:text-[9.5px] font-bold text-green-700 mb-0.5">🌐 Whitelisted IP</p>
+                                      {hostelIpEntry ? (
+                                        <>
+                                          <p className="text-[10.5px] sm:text-[12px] font-mono font-bold text-gray-800 break-all">IP: {hostelIpEntry.ip}</p>
+                                          <p className="text-[8.5px] sm:text-[9px] text-gray-500 mt-0.5">
+                                            {typeof hostelIpEntry.name === 'string'
+                                              ? hostelIpEntry.name.replace(new RegExp(hostel.name, 'gi'), '').replace(/\s+/g, ' ').trim()
+                                              : hostelIpEntry.name}
+                                          </p>
+                                        </>
+                                      ) : (
+                                        <p className="text-[9.5px] sm:text-[10px] text-slate-400 font-medium">No Whitelisted IP Set</p>
+                                      )}
                                     </div>
-                                    
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                      <button
-                                        onClick={async () => {
-                                          const current = hostelBssidEntry.bssids?.join(", ") || "";
-                                          const bssidVal = await showPrompt(`Edit BSSIDs for ${hostel.name} (comma-separated):`, current);
-                                          if (bssidVal !== null) {
-                                            const bssids = bssidVal.split(",").map((s) => s.trim().toLowerCase()).filter((s) => s !== "");
-                                            const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
-                                            const updated = wl.map((w: any) =>
-                                              w === hostelBssidEntry ? { ...w, bssids } : w
-                                            );
-                                            setWifiWhitelist(updated);
-                                            await handleUpdateSettings({ wifiWhitelist: updated });
-                                            showToast(`BSSIDs updated for ${hostel.name}`, "success");
-                                          }
-                                        }}
-                                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border border-slate-200"
-                                      >
-                                        ✏️ Edit
-                                      </button>
-                                      <button
-                                        onClick={async () => {
-                                          if (await showConfirm(`Are you sure you want to remove the BSSIDs for ${hostel.name}?`)) {
-                                            const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
-                                            const updated = wl.map((w: any) => {
-                                              if (w === hostelBssidEntry) {
-                                                return { ...w, bssids: [] };
+
+                                    <div className="grid grid-cols-2 gap-1.5 sm:gap-2 mt-auto pt-2 w-full">
+                                      {hostelIpEntry ? (
+                                        <>
+                                          <button
+                                            onClick={async () => {
+                                              const ipVal = await showPrompt(`Edit whitelisted IP for ${hostel.name}:`, hostelIpEntry.ip);
+                                              if (ipVal !== null) {
+                                                const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                                                const updated = wl.map((w: any) =>
+                                                  w === hostelIpEntry ? { ...w, ip: ipVal.trim() } : w
+                                                );
+                                                setWifiWhitelist(updated);
+                                                await handleUpdateSettings({ wifiWhitelist: updated });
+                                                showToast(`IP updated for ${hostel.name}`, "success");
                                               }
-                                              return w;
-                                            }).filter((w: any) => w.ip || (Array.isArray(w.bssids) && w.bssids.length > 0));
-                                            
-                                            setWifiWhitelist(updated);
-                                            await handleUpdateSettings({ wifiWhitelist: updated });
-                                            showToast(`BSSIDs removed for ${hostel.name}`, "success");
-                                          }
-                                        }}
-                                        className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border border-red-100"
-                                      >
-                                        🗑️ Delete
-                                      </button>
+                                            }}
+                                            className="w-full flex items-center justify-center gap-1 px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[9.5px] sm:text-[11px] font-bold transition-all border border-slate-200"
+                                          >
+                                            ✏️ Edit
+                                          </button>
+                                          <button
+                                            onClick={async () => {
+                                              if (await showConfirm(`Are you sure you want to remove the whitelisted IP for ${hostel.name}?`)) {
+                                                const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                                                const updated = wl.map((w: any) => {
+                                                  if (w === hostelIpEntry) {
+                                                    return { ...w, ip: undefined };
+                                                  }
+                                                  return w;
+                                                }).filter((w: any) => w.ip || (Array.isArray(w.bssids) && w.bssids.length > 0));
+                                                
+                                                setWifiWhitelist(updated);
+                                                await handleUpdateSettings({ wifiWhitelist: updated });
+                                                showToast(`IP removed for ${hostel.name}`, "success");
+                                              }
+                                            }}
+                                            className="w-full flex items-center justify-center gap-1 px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-[9.5px] sm:text-[11px] font-bold transition-all border border-red-100"
+                                          >
+                                            🗑️ Delete
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <button
+                                          onClick={async () => {
+                                            const ipVal = await showPrompt(`Enter whitelisted IP address for ${hostel.name} (e.g. 152.58.56.104):`, "");
+                                            if (ipVal) {
+                                              const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                                              const existingIdx = wl.findIndex((w: any) =>
+                                                w && typeof w === 'object' && (
+                                                  (w.hostelName && w.hostelName.toLowerCase() === hostel.name.toLowerCase()) ||
+                                                  (w.name && w.name.toLowerCase().includes(hostel.name.toLowerCase()))
+                                                )
+                                              );
+                                              let updated;
+                                              if (existingIdx >= 0) {
+                                                updated = [...wl];
+                                                updated[existingIdx] = { ...updated[existingIdx], ip: ipVal.trim(), name: `${hostel.name} IP (Manual)` };
+                                              } else {
+                                                updated = [...wl, { name: `${hostel.name} IP (Manual)`, hostelName: hostel.name, ip: ipVal.trim(), bssids: [] }];
+                                              }
+                                              setWifiWhitelist(updated);
+                                              await handleUpdateSettings({ wifiWhitelist: updated });
+                                              showToast(`IP configured for ${hostel.name}`, "success");
+                                            }
+                                          }}
+                                          className="col-span-2 w-full flex items-center justify-center gap-1 px-2 py-1.5 bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 rounded-lg text-[9.5px] sm:text-[11px] font-bold transition-all"
+                                        >
+                                          ➕ Configure IP
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
 
-                                  <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-2 mt-1">
-                                    {hostelIpEntry?.syncedByStudent && typeof hostelIpEntry.name === 'string' && !hostelIpEntry.name.toLowerCase().includes("warden") ? (
-                                      <div className="flex bg-blue-50/70 border border-blue-200 rounded-lg px-2 py-1 items-center gap-1.5 max-w-[200px]">
-                                        <span className="text-[8px] font-bold text-blue-800 truncate" title={hostelIpEntry.syncedByStudent}>
-                                          👤 {hostelIpEntry.syncedByStudent}
-                                        </span>
-                                        {hostelIpEntry.syncedAt && (
-                                          <span className="text-[7px] font-medium text-blue-400 shrink-0">({hostelIpEntry.syncedAt})</span>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <div />
+                                  {/* 2. BSSID Config Section (Right Column - Mobile & Desktop) */}
+                                  <div className="flex flex-col justify-between h-full space-y-1.5 border-l border-slate-100 pl-2 sm:pl-3">
+                                    <div>
+                                      <p className="text-[9.5px] font-bold text-amber-700 mb-0.5">📡 BSSID Config</p>
+                                      {hostelBssidEntry ? (
+                                        <p className="text-[10px] font-medium text-gray-700">{hostelBssidEntry.bssids?.length || 0} routers configured</p>
+                                      ) : (
+                                        <p className="text-[10px] text-slate-400 font-medium">No BSSIDs Configured</p>
+                                      )}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-1.5 sm:gap-2 mt-auto pt-2 w-full">
+                                      {hostelBssidEntry ? (
+                                        <>
+                                          <button
+                                            onClick={async () => {
+                                              const current = hostelBssidEntry.bssids?.join(", ") || "";
+                                              const bssidVal = await showPrompt(`Edit BSSIDs for ${hostel.name} (comma-separated):`, current);
+                                              if (bssidVal !== null) {
+                                                const bssids = bssidVal.split(",").map((s) => s.trim().toLowerCase()).filter((s) => s !== "");
+                                                const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                                                const updated = wl.map((w: any) =>
+                                                  w === hostelBssidEntry ? { ...w, bssids } : w
+                                                );
+                                                setWifiWhitelist(updated);
+                                                await handleUpdateSettings({ wifiWhitelist: updated });
+                                                showToast(`BSSIDs updated for ${hostel.name}`, "success");
+                                              }
+                                            }}
+                                            className="w-full flex items-center justify-center gap-1 px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[9.5px] sm:text-[11px] font-bold transition-all border border-slate-200"
+                                          >
+                                            ✏️ Edit
+                                          </button>
+                                          <button
+                                            onClick={async () => {
+                                              if (await showConfirm(`Are you sure you want to remove the BSSIDs for ${hostel.name}?`)) {
+                                                const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                                                const updated = wl.map((w: any) => {
+                                                  if (w === hostelBssidEntry) {
+                                                    return { ...w, bssids: [] };
+                                                  }
+                                                  return w;
+                                                }).filter((w: any) => w.ip || (Array.isArray(w.bssids) && w.bssids.length > 0));
+                                                
+                                                setWifiWhitelist(updated);
+                                                await handleUpdateSettings({ wifiWhitelist: updated });
+                                                showToast(`BSSIDs removed for ${hostel.name}`, "success");
+                                              }
+                                            }}
+                                            className="w-full flex items-center justify-center gap-1 px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-[9.5px] sm:text-[11px] font-bold transition-all border border-red-100"
+                                          >
+                                            🗑️ Delete
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <button
+                                          onClick={async () => {
+                                            const bssidVal = await showPrompt(`Enter BSSID (MAC addresses) for ${hostel.name} (comma-separated):`, "");
+                                            if (bssidVal) {
+                                              const bssids = bssidVal.split(",").map((s) => s.trim().toLowerCase()).filter((s) => s !== "");
+                                              const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                                              const existingIdx = wl.findIndex((w: any) =>
+                                                w && typeof w === 'object' && (
+                                                  (w.hostelName && w.hostelName.toLowerCase() === hostel.name.toLowerCase()) ||
+                                                  (w.name && w.name.toLowerCase().includes(hostel.name.toLowerCase()))
+                                                )
+                                              );
+                                              let updated;
+                                              if (existingIdx >= 0) {
+                                                updated = [...wl];
+                                                updated[existingIdx] = { ...updated[existingIdx], bssids, hostelName: hostel.name };
+                                              } else {
+                                                updated = [...wl, { name: `${hostel.name} IP`, hostelName: hostel.name, bssids, ip: undefined }];
+                                              }
+                                              setWifiWhitelist(updated);
+                                              await handleUpdateSettings({ wifiWhitelist: updated });
+                                              showToast(`BSSIDs configured for ${hostel.name}`, "success");
+                                            }
+                                          }}
+                                          className="col-span-2 w-full flex items-center justify-center gap-1 px-2 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 rounded-lg text-[9.5px] sm:text-[11px] font-bold transition-all"
+                                        >
+                                          ➕ Configure BSSIDs
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Synced Student Badge (if present) */}
+                                {hostelIpEntry?.syncedByStudent && typeof hostelIpEntry.name === 'string' && !hostelIpEntry.name.toLowerCase().includes("warden") && (
+                                  <div className="flex bg-blue-50/70 border border-blue-200 rounded-lg px-2 py-1 items-center gap-1.5 w-max border-t border-slate-100 pt-2 mt-1">
+                                    <span className="text-[8px] font-bold text-blue-800 truncate" title={hostelIpEntry.syncedByStudent}>
+                                      👤 {hostelIpEntry.syncedByStudent}
+                                    </span>
+                                    {hostelIpEntry.syncedAt && (
+                                      <span className="text-[7px] font-medium text-blue-400 shrink-0">({hostelIpEntry.syncedAt})</span>
                                     )}
-
-                                    <div className="text-right shrink-0 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1">
-                                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider block">Network IP</span>
-                                      <span className="text-[11px] font-mono font-bold text-slate-700">
-                                        IP: {hostelIpEntry?.ip || "None"}
-                                      </span>
-                                    </div>
                                   </div>
-                                </div>
-                              ) : (
-                                <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 text-center">
-                                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">No BSSIDs Configured</p>
-                                  <button
-                                    onClick={async () => {
-                                      const bssidVal = await showPrompt(`Enter BSSID (MAC addresses) for ${hostel.name} (comma-separated):`, "");
-                                      if (bssidVal) {
-                                        const bssids = bssidVal.split(",").map((s) => s.trim().toLowerCase()).filter((s) => s !== "");
-                                        const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
-                                        const existingIdx = wl.findIndex((w: any) =>
-                                          w && typeof w === 'object' && (
-                                            (w.hostelName && w.hostelName.toLowerCase() === hostel.name.toLowerCase()) ||
-                                            (w.name && w.name.toLowerCase().includes(hostel.name.toLowerCase()))
-                                          )
-                                        );
-                                        let updated;
-                                        if (existingIdx >= 0) {
-                                          updated = [...wl];
-                                          updated[existingIdx] = { ...updated[existingIdx], bssids, hostelName: hostel.name };
-                                        } else {
-                                          updated = [...wl, { name: `${hostel.name} IP`, hostelName: hostel.name, bssids, ip: undefined }];
-                                        }
-                                        setWifiWhitelist(updated);
-                                        await handleUpdateSettings({ wifiWhitelist: updated });
-                                        showToast(`BSSIDs configured for ${hostel.name}`, "success");
-                                      }
-                                    }}
-                                    className="mt-1.5 px-3 py-1 bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all"
-                                  >
-                                    ➕ Configure BSSID (MACs)
-                                  </button>
-                                </div>
-                              )}
+                                )}
+                              </div>
 
                             </div>
                           );
@@ -13999,26 +14019,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 )}
 
                 {activeSettingsTab === "notification" && (
-                  <div className="space-y-6 animate-in fade-in duration-300">
-                    <div className="bg-indigo-50 border-2 border-indigo-100 p-4 rounded-2xl flex items-start gap-4">
-                      <span className="text-xl sm:text-2xl">🔔</span>
+                  <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
+                    <div className="bg-indigo-50 border-2 border-indigo-100 p-3 sm:p-4 rounded-2xl flex items-start gap-3 sm:gap-4">
+                      <span className="text-lg sm:text-2xl">🔔</span>
                       <div className="flex-1">
-                        <h4 className="text-sm font-black text-indigo-900 uppercase tracking-wide">Web Push Notifications</h4>
-                        <p className="text-xs text-indigo-700 font-bold mt-0.5 uppercase tracking-tight">Configure which instant lockscreen alerts are sent to parents, students, wardens, and deans.</p>
+                        <h4 className="text-xs sm:text-sm font-bold text-indigo-900">Web Push Notifications</h4>
+                        <p className="text-[10px] sm:text-xs text-indigo-700 font-medium mt-0.5">Configure which instant lockscreen alerts are sent to parents, students, wardens, and deans.</p>
                       </div>
                     </div>
 
-                    <div className="space-y-6">
+                    <div className="space-y-4 sm:space-y-6">
                       {/* Parent Alerts */}
-                      <div className="bg-gray-50/50 p-4 rounded-[20px] border border-gray-100 space-y-3">
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Parent Alerts</h4>
-                        <div className="space-y-3">
-                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
-                            <div>
-                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">Night Attendance Absentee Alert</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Vibrate & sound parents when a student misses night curfew</p>
+                      <div className="bg-gray-50/50 p-3 sm:p-4 rounded-[20px] border border-gray-100 space-y-2.5 sm:space-y-3">
+                        <h4 className="text-[9.5px] sm:text-[10px] font-bold text-slate-500 px-1">Parent Alerts</h4>
+                        <div className="space-y-2.5 sm:space-y-3">
+                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">Night Attendance Absentee Alert</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Vibrate & sound parents when a student misses night curfew</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.parentNightAbsent !== false}
@@ -14029,12 +14049,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             </label>
                           </div>
 
-                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
-                            <div>
-                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">Gate Scan Entry/Exit Alerts</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Instant push notification when student checks out or checks in at the gate</p>
+                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">Gate Scan Entry/Exit Alerts</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Instant push notification when student checks out or checks in at the gate</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.parentScanInOut !== false}
@@ -14045,12 +14065,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             </label>
                           </div>
 
-                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
-                            <div>
-                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">Gatepass / Leave Decisions</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Notify parents immediately upon approval/rejection of out-pass requests</p>
+                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">Gatepass / Leave Decisions</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify parents immediately upon approval/rejection of out-pass requests</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.parentLeaveApproval !== false}
@@ -14064,15 +14084,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
 
                       {/* Student Alerts */}
-                      <div className="bg-gray-50/50 p-4 rounded-[20px] border border-gray-100 space-y-3">
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Student Alerts</h4>
-                        <div className="space-y-3">
-                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
-                            <div>
-                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">Gatepass Approval Alerts</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Push updates directly to student when leave is approved/rejected</p>
+                      <div className="bg-gray-50/50 p-3 sm:p-4 rounded-[20px] border border-gray-100 space-y-2.5 sm:space-y-3">
+                        <h4 className="text-[9.5px] sm:text-[10px] font-bold text-slate-500 px-1">Student Alerts</h4>
+                        <div className="space-y-2.5 sm:space-y-3">
+                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">Gatepass Approval Alerts</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Push updates directly to student when leave is approved/rejected</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.studentLeaveStatus !== false}
@@ -14083,12 +14103,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             </label>
                           </div>
 
-                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
-                            <div>
-                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">Curfew Attendance Reminders</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Daily background reminder to mark attendance before curfew hour closes</p>
+                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">Curfew Attendance Reminders</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Daily background reminder to mark attendance before curfew hour closes</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.studentAttendanceReminder !== false}
@@ -14102,15 +14122,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
 
                       {/* Warden Alerts */}
-                      <div className="bg-gray-50/50 p-4 rounded-[20px] border border-gray-100 space-y-3">
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Warden Alerts</h4>
-                        <div className="space-y-3">
-                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
-                            <div>
-                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">New Leave Request Alerts</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Notify wardens instantly when a student submits a new gatepass request</p>
+                      <div className="bg-gray-50/50 p-3 sm:p-4 rounded-[20px] border border-gray-100 space-y-2.5 sm:space-y-3">
+                        <h4 className="text-[9.5px] sm:text-[10px] font-bold text-slate-500 px-1">Warden Alerts</h4>
+                        <div className="space-y-2.5 sm:space-y-3">
+                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">New Leave Request Alerts</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify wardens instantly when a student submits a new gatepass request</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.wardenNewLeaveRequest !== false}
@@ -14121,12 +14141,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             </label>
                           </div>
 
-                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
-                            <div>
-                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">Emergency Scan Failure Alerts</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Push alert when device locks out or checks in with GPS/biometric failures</p>
+                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">Emergency Scan Failure Alerts</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Push alert when device locks out or checks in with GPS/biometric failures</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.wardenScanFailure !== false}
@@ -14140,15 +14160,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
 
                       {/* Dean & Admin Alerts */}
-                      <div className="bg-gray-50/50 p-4 rounded-[20px] border border-gray-100 space-y-3">
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Dean & Super Admin Alerts</h4>
-                        <div className="space-y-3">
-                          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
-                            <div>
-                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">High Security & Lockout Alerts</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Notify deans instantly upon student device resets or locks</p>
+                      <div className="bg-gray-50/50 p-3 sm:p-4 rounded-[20px] border border-gray-100 space-y-2.5 sm:space-y-3">
+                        <h4 className="text-[9.5px] sm:text-[10px] font-bold text-slate-500 px-1">Dean & Super Admin Alerts</h4>
+                        <div className="space-y-2.5 sm:space-y-3">
+                          <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug">High Security & Lockout Alerts</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">Notify deans instantly upon student device resets or locks</p>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
                               <input
                                 type="checkbox"
                                 checked={notificationSettings.deanSecurityAlert !== false}
@@ -14177,30 +14197,30 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <button
                         onClick={() => handleBulkProfileLock(true)}
                         disabled={isUpdatingSettings}
-                        className="flex flex-col items-center justify-center gap-2 p-3 sm:p-6 bg-red-50 text-red-700 border-2 border-red-100 rounded-2xl hover:bg-red-100 transition-all font-black uppercase tracking-widest text-[10px] sm:text-xs shadow-sm hover:shadow-lg disabled:opacity-50 group text-center"
+                        className="flex flex-col items-center justify-center gap-1.5 p-3 sm:p-6 bg-red-50 text-red-700 border-2 border-red-100 rounded-2xl hover:bg-red-100 transition-all font-bold text-[10px] xs:text-[11px] sm:text-xs shadow-sm hover:shadow-lg disabled:opacity-50 group text-center"
                       >
                         <div className="p-2 sm:p-3 bg-red-200 rounded-full text-red-700 group-hover:scale-110 transition-transform shadow-sm">
                           <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                         </div>
-                        Lock All Profiles
-                        <span className="text-[7px] sm:text-[9px] text-red-500/70 font-bold normal-case block mt-0.5 sm:mt-1">Prevents all students from editing their profiles</span>
+                        <span>Lock All Profiles for Students</span>
+                        <span className="hidden sm:block text-[7px] sm:text-[9px] text-red-500/70 font-bold normal-case mt-0.5 sm:mt-1">Prevents all students from editing their profiles</span>
                       </button>
                       <button
                         onClick={() => handleBulkProfileLock(false)}
                         disabled={isUpdatingSettings}
-                        className="flex flex-col items-center justify-center gap-2 p-3 sm:p-6 bg-blue-50 text-blue-700 border-2 border-blue-100 rounded-2xl hover:bg-blue-100 transition-all font-black uppercase tracking-widest text-[10px] sm:text-xs shadow-sm hover:shadow-lg disabled:opacity-50 group text-center"
+                        className="flex flex-col items-center justify-center gap-1.5 p-3 sm:p-6 bg-blue-50 text-blue-700 border-2 border-blue-100 rounded-2xl hover:bg-blue-100 transition-all font-bold text-[10px] xs:text-[11px] sm:text-xs shadow-sm hover:shadow-lg disabled:opacity-50 group text-center"
                       >
                         <div className="p-2 sm:p-3 bg-blue-200 rounded-full text-blue-700 group-hover:scale-110 transition-transform shadow-sm">
                           <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
                         </div>
-                        Unlock All Profiles
-                        <span className="text-[7px] sm:text-[9px] text-blue-500/70 font-bold normal-case block mt-0.5 sm:mt-1">Allows students to update their details</span>
+                        <span>Unlock All Profiles for Students</span>
+                        <span className="hidden sm:block text-[7px] sm:text-[9px] text-blue-500/70 font-bold normal-case mt-0.5 sm:mt-1">Allows students to update their details</span>
                       </button>
                     </div>
 
                     <div className="w-full h-0.5 bg-gray-100/50 my-2"></div>
 
-                    {/* ⚡ NEW: Developer Settings Toggles */}
+                    {/* Developer Settings Toggles */}
                     <div className="space-y-3">
                       <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
                         <div className="flex items-center gap-3">
@@ -14208,8 +14228,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                           </div>
                           <div>
-                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Slightly Overlap the Radii</h3>
-                            <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Accounts for GPS Jitter (+20m offset)</p>
+                            <h3 className="text-xs sm:text-sm font-bold text-slate-900">Slightly Overlap the Radii</h3>
+                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Accounts for GPS jitter (+20m offset)</p>
                           </div>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
@@ -14229,8 +14249,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
                           </div>
                           <div>
-                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Filter the List</h3>
-                            <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Prioritize student's assigned hostel</p>
+                            <h3 className="text-xs sm:text-sm font-bold text-slate-900">Filter the List</h3>
+                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Prioritize student's assigned hostel</p>
                           </div>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
@@ -14250,8 +14270,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
                           </div>
                           <div>
-                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Manual Attendance Mode</h3>
-                            <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Enable warden to manually mark attendance toolbar</p>
+                            <h3 className="text-xs sm:text-sm font-bold text-slate-900">Manual Attendance Mode</h3>
+                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Enable warden to manually mark attendance toolbar</p>
                           </div>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
@@ -14265,17 +14285,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </label>
                       </div>
 
-                      {/* ⚡ NEW: WiFi IP Whitelist Management */}
+                      {/* WiFi IP Whitelist Management */}
                       <div className="bg-white p-4 sm:p-6 rounded-2xl border-2 border-amber-100 shadow-sm hover:border-amber-200 transition-all space-y-4">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                           <div className="flex items-center gap-3">
                             <div className="p-2 bg-amber-50 rounded-lg text-amber-600 font-bold text-sm sm:text-base">📶</div>
                             <div>
-                              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">Campus WiFi IP Whitelist</h3>
-                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Enable 100% reliable tracking via Network IP</p>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Campus WiFi IP Whitelist</h3>
+                              <p className="text-[9px] sm:text-[10px] text-slate-500 font-medium mt-0.5">Enable 100% reliable tracking via Network IP</p>
                             </div>
                           </div>
-                          <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto">
+                          <div className="grid grid-cols-3 gap-1.5 sm:gap-2.5 w-full sm:w-auto items-center">
                             <button
                               onClick={async () => {
                                 const bssid = await showPrompt("Enter WIFI BSSID (e.g. 64:29:43:bb:78:60):");
@@ -14288,9 +14308,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   handleUpdateSettings({ wifiWhitelist: updated });
                                 }
                               }}
-                              className="px-2 py-2 sm:px-4 sm:py-2 bg-amber-600 text-white rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all opacity-100 cursor-pointer text-center flex items-center justify-center min-h-[38px] leading-tight"
+                              className="px-1.5 py-2 sm:px-3.5 sm:py-2.5 bg-amber-600 text-white rounded-xl text-[9.5px] xs:text-[10.5px] sm:text-xs font-bold hover:bg-amber-700 transition-all opacity-100 cursor-pointer text-center flex items-center justify-center min-h-[38px] sm:min-h-[40px] leading-tight whitespace-nowrap shadow-sm"
                             >
-                              + ADD BSSID
+                              + Add BSSID
                             </button>
                             <button
                               onClick={async () => {
@@ -14304,9 +14324,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   handleUpdateSettings({ wifiWhitelist: updated });
                                 }
                               }}
-                              className="px-2 py-2 sm:px-4 sm:py-2 bg-indigo-600 text-white rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all opacity-100 cursor-pointer text-center flex items-center justify-center min-h-[38px] leading-tight"
+                              className="px-1.5 py-2 sm:px-3.5 sm:py-2.5 bg-indigo-600 text-white rounded-xl text-[9.5px] xs:text-[10.5px] sm:text-xs font-bold hover:bg-indigo-700 transition-all opacity-100 cursor-pointer text-center flex items-center justify-center min-h-[38px] sm:min-h-[40px] leading-tight whitespace-nowrap shadow-sm"
                             >
-                              + ADD CAMPUS IP
+                              + Add Campus IP
                             </button>
                             <button
                               onClick={async () => {
@@ -14333,82 +14353,88 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   showToast("IP sync failed: " + err.message, "error");
                                 }
                               }}
-                              className="px-2 py-2 sm:px-4 sm:py-2 bg-green-600 text-white rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-all opacity-100 cursor-pointer text-center flex items-center justify-center min-h-[38px] leading-tight animate-pulse"
+                              className="px-1.5 py-2 sm:px-3.5 sm:py-2.5 bg-green-600 text-white rounded-xl text-[9.5px] xs:text-[10.5px] sm:text-xs font-bold hover:bg-green-700 transition-all opacity-100 cursor-pointer text-center flex items-center justify-center min-h-[38px] sm:min-h-[40px] leading-tight whitespace-nowrap shadow-sm animate-pulse"
                             >
-                              ⚡ SYNC CURRENT IP
+                              ⚡ Sync Current IP
                             </button>
                           </div>
                         </div>
 
                         <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
                           {wifiWhitelist.length === 0 ? (
-                            <p className="text-[10px] text-slate-400 italic text-center py-4 uppercase font-bold">No whitelisted networks configured</p>
+                            <p className="text-[10px] text-slate-400 italic text-center py-4 font-bold">No whitelisted networks configured</p>
                           ) : (
                             wifiWhitelist.map((item, idx) => (
-                              <div key={idx} className="relative p-3 pr-14 sm:pr-20 bg-amber-50 rounded-xl border border-amber-100 group transition-all">
-                                <div className="w-full">
-                                  {item.hostelName || item.bssids ? (
-                                    <>
-                                      <div className="flex items-center gap-2">
-                                        <p className="text-[11px] font-black text-amber-900 uppercase">{item.hostelName || item.name}</p>
-                                        <span className="px-1.5 py-0.5 bg-amber-200 text-amber-700 rounded text-[8px] font-black uppercase">WIFI BSSID</span>
-                                      </div>
-                                      <p className="text-[9px] font-bold text-amber-600 mt-0.5">
-                                        {item.bssids?.length || 0} Routers Configured
-                                      </p>
-                                      <div className="mt-2 flex flex-wrap gap-1.5 p-2 bg-white/40 rounded-lg border border-amber-100/50 border-dashed">
-                                        {item.bssids?.map((b: string, i: number) => (
-                                          <span key={i} className="text-[9px] font-mono font-bold bg-amber-100/80 text-amber-900 px-2 py-0.5 rounded shadow-sm border border-amber-200/50">
-                                            {b}
-                                          </span>
-                                        ))}
-                                        {(!item.bssids || item.bssids.length === 0) && (
-                                          <span className="text-[9px] text-amber-400 italic">No MAC addresses configured</span>
-                                        )}
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <div className="flex items-center gap-2">
-                                        <p className="text-[11px] font-black text-amber-900 uppercase">{item.name || 'Campus IP'}</p>
-                                        <span className="px-1.5 py-0.5 bg-indigo-200 text-indigo-700 rounded text-[8px] font-black uppercase">IP NETWORK</span>
-                                      </div>
-                                      <p className="text-[10px] font-bold text-amber-600 bg-white/40 px-2 py-1 rounded inline-block mt-1 border border-indigo-100 border-dashed">{item.ip}</p>
-                                    </>
-                                  )}
-                                </div>
-                                <div className="absolute top-3 right-3 flex items-center gap-1 sm:gap-1.5">
-                                  {(item.hostelName || item.bssids) && (
+                              <div key={idx} className="p-2.5 sm:p-3 bg-amber-50 rounded-xl border border-amber-100 group transition-all space-y-1.5 w-full">
+                                {/* Header Row with Title, Badges, and Action Buttons */}
+                                <div className="flex items-center justify-between gap-1.5 border-b border-amber-200/50 pb-1.5 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
+                                    <p className="text-[11px] font-black text-amber-900 uppercase tracking-tight">{item.hostelName || item.name}</p>
+                                    <span className="px-1.5 py-0.5 bg-amber-200 text-amber-800 rounded text-[8px] font-bold shrink-0">
+                                      {item.bssids ? "WIFI BSSID" : "IP NETWORK"}
+                                    </span>
+                                    {item.bssids && (
+                                      <span className="text-[9px] font-bold text-amber-700 shrink-0">
+                                        ({item.bssids?.length || 0} Configured)
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {(item.hostelName || item.bssids) && (
+                                      <button
+                                        onClick={async () => {
+                                          const current = item.bssids?.join(", ") || "";
+                                          const newVal = await showPrompt(`Edit BSSIDs for ${item.hostelName || item.name} (comma separated):`, current);
+                                          if (newVal !== null) {
+                                            const updatedBssids = newVal.split(",").map(s => s.trim()).filter(s => s !== "");
+                                            const updatedWhitelist = [...wifiWhitelist];
+                                            updatedWhitelist[idx] = { ...item, bssids: updatedBssids };
+                                            setWifiWhitelist(updatedWhitelist);
+                                            handleUpdateSettings({ wifiWhitelist: updatedWhitelist });
+                                          }
+                                        }}
+                                        className="p-1 bg-amber-200/60 text-amber-800 hover:bg-amber-200 rounded transition-colors border border-amber-300/60"
+                                        title="Edit MAC Addresses"
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                      </button>
+                                    )}
                                     <button
                                       onClick={async () => {
-                                        const current = item.bssids?.join(", ") || "";
-                                        const newVal = await showPrompt(`Edit BSSIDs for ${item.hostelName || item.name} (comma separated):`, current);
-                                        if (newVal !== null) {
-                                          const updatedBssids = newVal.split(",").map(s => s.trim()).filter(s => s !== "");
-                                          const updatedWhitelist = [...wifiWhitelist];
-                                          updatedWhitelist[idx] = { ...item, bssids: updatedBssids };
-                                          setWifiWhitelist(updatedWhitelist);
-                                          handleUpdateSettings({ wifiWhitelist: updatedWhitelist });
+                                        if (await showConfirm(`Remove ${item.hostelName || item.name || 'this entry'}?`)) {
+                                          const updated = wifiWhitelist.filter((_, i) => i !== idx);
+                                          setWifiWhitelist(updated);
+                                          handleUpdateSettings({ wifiWhitelist: updated });
                                         }
                                       }}
-                                      className="p-1.5 bg-amber-200/50 text-amber-700 hover:bg-amber-200 rounded-lg transition-colors border border-amber-200/50"
-                                      title="Edit MAC Addresses"
+                                      className="p-1 text-red-500 hover:text-red-700 rounded transition-colors bg-red-100/60 border border-red-200/60"
+                                      title="Remove Entry"
                                     >
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                     </button>
+                                  </div>
+                                </div>
+
+                                {/* Full-Width BSSIDs 2-Column Grid */}
+                                <div className="w-full">
+                                  {item.hostelName || item.bssids ? (
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 sm:gap-1.5 p-1.5 bg-white/60 rounded-lg border border-amber-200/50 w-full">
+                                      {item.bssids?.map((b: string, i: number) => (
+                                        <span
+                                          key={i}
+                                          className="text-[8px] xs:text-[8.5px] sm:text-[9.5px] font-mono font-bold bg-amber-100/90 text-amber-950 px-1 sm:px-2 py-1 rounded shadow-sm border border-amber-200/70 text-center tracking-tighter whitespace-nowrap overflow-visible"
+                                        >
+                                          {b?.toLowerCase()}
+                                        </span>
+                                      ))}
+                                      {(!item.bssids || item.bssids.length === 0) && (
+                                        <span className="text-[9px] text-amber-400 italic col-span-2">No MAC addresses configured</span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <p className="text-[10px] font-bold text-amber-600 bg-white/60 px-2 py-1 rounded inline-block border border-indigo-100 border-dashed">{item.ip}</p>
                                   )}
-                                  <button
-                                    onClick={async () => {
-                                      if (await showConfirm(`Remove ${item.hostelName || item.name || 'this entry'}?`)) {
-                                        const updated = wifiWhitelist.filter((_, i) => i !== idx);
-                                        setWifiWhitelist(updated);
-                                        handleUpdateSettings({ wifiWhitelist: updated });
-                                      }
-                                    }}
-                                    className="p-1.5 text-red-400 hover:text-red-600 rounded-lg transition-colors bg-red-50 sm:opacity-0 group-hover:opacity-100"
-                                  >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                  </button>
                                 </div>
                               </div>
                             ))
@@ -14446,64 +14472,64 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </label>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Account Name</label>
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3.5">
+                      <div className="space-y-0.5">
+                        <label className="text-[8.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">Account Name</label>
                         <input
                           type="text"
                           value={bankFormData.accountName}
                           onChange={(e) => setBankFormData({ ...bankFormData, accountName: e.target.value })}
-                          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                          className="w-full px-2.5 py-1.5 sm:p-3 rounded-lg sm:rounded-xl border border-gray-200 text-[11px] sm:text-sm font-bold focus:border-indigo-500 outline-none placeholder:text-[8.5px] sm:placeholder:text-xs placeholder:font-normal"
                           placeholder="e.g. ORIENTAL INSTITUTE OF SCIENCE"
                         />
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Account Number</label>
+                      <div className="space-y-0.5">
+                        <label className="text-[8.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">Account Number</label>
                         <input
                           type="text"
                           value={bankFormData.accountNumber}
                           onChange={(e) => setBankFormData({ ...bankFormData, accountNumber: e.target.value })}
-                          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                          className="w-full px-2.5 py-1.5 sm:p-3 rounded-lg sm:rounded-xl border border-gray-200 text-[11px] sm:text-sm font-bold focus:border-indigo-500 outline-none placeholder:text-[8.5px] sm:placeholder:text-xs placeholder:font-normal"
                           placeholder="000000000000"
                         />
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">IFSC Code</label>
+                      <div className="space-y-0.5">
+                        <label className="text-[8.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">IFSC Code</label>
                         <input
                           type="text"
                           value={bankFormData.ifscCode}
                           onChange={(e) => setBankFormData({ ...bankFormData, ifscCode: e.target.value })}
-                          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                          className="w-full px-2.5 py-1.5 sm:p-3 rounded-lg sm:rounded-xl border border-gray-200 text-[11px] sm:text-sm font-bold focus:border-indigo-500 outline-none placeholder:text-[8.5px] sm:placeholder:text-xs placeholder:font-normal"
                           placeholder="SYNB0000..."
                         />
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Bank Name</label>
+                      <div className="space-y-0.5">
+                        <label className="text-[8.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">Bank Name</label>
                         <input
                           type="text"
                           value={bankFormData.bankName}
                           onChange={(e) => setBankFormData({ ...bankFormData, bankName: e.target.value })}
-                          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                          className="w-full px-2.5 py-1.5 sm:p-3 rounded-lg sm:rounded-xl border border-gray-200 text-[11px] sm:text-sm font-bold focus:border-indigo-500 outline-none placeholder:text-[8.5px] sm:placeholder:text-xs placeholder:font-normal"
                           placeholder="Canara Bank"
                         />
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">UPI ID (Optional)</label>
+                      <div className="space-y-0.5">
+                        <label className="text-[8.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">UPI ID (Optional)</label>
                         <input
                           type="text"
                           value={bankFormData.upiId}
                           onChange={(e) => setBankFormData({ ...bankFormData, upiId: e.target.value })}
-                          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                          className="w-full px-2.5 py-1.5 sm:p-3 rounded-lg sm:rounded-xl border border-gray-200 text-[11px] sm:text-sm font-bold focus:border-indigo-500 outline-none placeholder:text-[8.5px] sm:placeholder:text-xs placeholder:font-normal"
                           placeholder="university@upi"
                         />
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Hostel Fee (₹)</label>
+                      <div className="space-y-0.5">
+                        <label className="text-[8.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">Hostel Fee (₹)</label>
                         <input
                           type="number"
                           value={bankFormData.feeAmount}
                           onChange={(e) => setBankFormData({ ...bankFormData, feeAmount: Number(e.target.value) })}
-                          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                          className="w-full px-2.5 py-1.5 sm:p-3 rounded-lg sm:rounded-xl border border-gray-200 text-[11px] sm:text-sm font-bold focus:border-indigo-500 outline-none placeholder:text-[8.5px] sm:placeholder:text-xs placeholder:font-normal"
                           placeholder="45000"
                         />
                       </div>
@@ -14520,7 +14546,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center block mb-2">Upload QR Image (Required for Scan & Pay)</label>
+                      <label className="text-[8.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center block mb-1">Upload QR Image (Required for Scan & Pay)</label>
                       <div
                         className="relative group cursor-pointer"
                         onDragOver={(e) => e.preventDefault()}
@@ -14545,21 +14571,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           }
                         }}
                       >
-                        <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/50 hover:bg-indigo-50/30 hover:border-indigo-300 transition-all group-hover:shadow-lg shadow-indigo-100/50">
+                        <label className="flex flex-col items-center justify-center w-full h-28 sm:h-36 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50 hover:bg-indigo-50/30 hover:border-indigo-300 transition-all group-hover:shadow-md">
                           {bankFormData.qrImage ? (
                             <div className="relative group/img">
-                              <img src={bankFormData.qrImage} alt="QR Preview" className="h-40 w-40 object-contain rounded-lg" />
+                              <img src={bankFormData.qrImage} alt="QR Preview" className="h-24 w-24 object-contain rounded-lg" />
                               <div className="absolute inset-0 bg-black/40 rounded-lg opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
-                                <p className="text-white text-[10px] font-black">CHANGE IMAGE</p>
+                                <p className="text-white text-[9px] font-bold">CHANGE IMAGE</p>
                               </div>
                             </div>
                           ) : (
-                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                              <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mb-3">
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                            <div className="flex flex-col items-center justify-center py-2 text-center">
+                              <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center mb-1.5 shadow-sm">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                               </div>
-                              <p className="mb-2 text-sm text-gray-700 font-bold">Click to upload or <span className="text-indigo-600">Paste (Ctrl+V)</span></p>
-                              <p className="text-xs text-secondary italic">PNG, JPG or SVG (Max 2MB)</p>
+                              <p className="mb-0.5 text-xs text-gray-700 font-bold">Click to upload or <span className="text-indigo-600">Paste (Ctrl+V)</span></p>
+                              <p className="text-[9px] text-gray-400 italic">PNG, JPG or SVG (Max 2MB)</p>
                             </div>
                           )}
                           <input type="file" className="hidden" accept="image/*" onChange={(e) => {
@@ -14574,18 +14600,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         {bankFormData.qrImage && (
                           <button
                             onClick={(e) => { e.preventDefault(); setBankFormData({ ...bankFormData, qrImage: "" }); }}
-                            className="absolute -top-2 -right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
+                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                           </button>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex justify-end pt-4">
+                    {/* Centered Update Bank Configuration Button with decreased font size */}
+                    <div className="flex justify-center pt-3 sm:pt-4 w-full">
                       <button
                         onClick={handleUpdateBankSettings}
-                        className="px-8 py-3 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
+                        className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 text-white font-bold text-[10.5px] sm:text-xs uppercase tracking-wider rounded-xl hover:bg-indigo-700 transition-colors shadow-md text-center"
                       >
                         Update Bank Configuration
                       </button>
@@ -14598,8 +14625,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <div className="bg-emerald-50 border-2 border-emerald-100 p-4 rounded-2xl flex items-start gap-4 mb-4">
                         <span className="text-xl sm:text-2xl">🛡️</span>
                         <div>
-                          <h3 className="text-xs sm:text-sm text-emerald-900 font-black uppercase tracking-wide">Registration Safeguards & De-duplication</h3>
-                          <p className="text-[10px] sm:text-xs text-emerald-800 font-medium mt-0.5">
+                          <h3 className="text-[10.5px] sm:text-sm text-emerald-900 font-bold leading-snug">Registration Safeguards & Deduplication</h3>
+                          <p className="text-[9.5px] sm:text-xs text-emerald-800 font-medium mt-0.5">
                             Prevent duplicate registrations by enforcing strict global uniqueness checks.
                           </p>
                         </div>
@@ -14612,8 +14639,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                             </div>
                             <div>
-                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Enforce Unique ERP ID</h3>
-                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Blocks registration if ERP ID is already used</p>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Enforce Unique ERP ID</h3>
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Blocks registration if ERP ID is already used</p>
                             </div>
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
@@ -14633,8 +14660,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
                             </div>
                             <div>
-                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Enforce Unique Phone</h3>
-                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Ensures phone numbers are globally unique</p>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Enforce Unique Phone</h3>
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Ensures phone numbers are globally unique</p>
                             </div>
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
@@ -14654,8 +14681,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                             </div>
                             <div>
-                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Enforce Unique Email</h3>
-                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Ensures student emails are globally unique</p>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Enforce Unique Email</h3>
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Ensures student emails are globally unique</p>
                             </div>
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
@@ -14675,8 +14702,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                             </div>
                             <div>
-                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Enforce Unique Face Scan</h3>
-                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Prevents duplicate signups using matching faces</p>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Enforce Unique Face Scan</h3>
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Prevents duplicate signups using matching faces</p>
                             </div>
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
@@ -14696,8 +14723,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                             </div>
                             <div>
-                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Allow Deans to Add Students</h3>
-                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Allows college deans to manually add students from their dashboard</p>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Allow Deans to Add Students</h3>
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Allows college deans to manually add students from their dashboard</p>
                             </div>
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
@@ -14718,8 +14745,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                             </div>
                             <div>
-                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Allow Deans to Edit Profiles</h3>
-                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Allows college deans to edit student details from their dashboard</p>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Allow Deans to Edit Profiles</h3>
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Allows college deans to edit student details from their dashboard</p>
                             </div>
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
@@ -14740,8 +14767,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                             </div>
                             <div>
-                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Allow Deans to Remove Students</h3>
-                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Allows college deans to permanently delete students from their dashboard</p>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Allow Deans to Remove Students</h3>
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Allows college deans to permanently delete students from their dashboard</p>
                             </div>
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
@@ -14762,8 +14789,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                             </div>
                             <div>
-                              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Allow Bulk Student Updates</h3>
-                              <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight">Allows bulk student updates onboarding modal from student selection</p>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Allow Bulk Student Updates</h3>
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Allows bulk student updates onboarding modal from student selection</p>
                             </div>
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
@@ -15108,9 +15135,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                     <button
                       onClick={() => setShowRenewalModal(true)}
-                      className="w-full py-4 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2 active:scale-98"
+                      className="w-full py-3.5 sm:py-4 px-3 sm:px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest rounded-2xl shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-1.5 active:scale-98"
                     >
-                      <span>⚡ Renew / Extend Subscription Plan</span>
+                      <span className="whitespace-nowrap">⚡ Renew / Extend Subscription Plan</span>
                     </button>
 
                     {/* Ledger Logs Table */}
@@ -15252,64 +15279,64 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </label>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Account Name</label>
+                <div className="grid grid-cols-2 gap-2 sm:gap-3.5">
+                  <div className="space-y-0.5">
+                    <label className="text-[8.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">Account Name</label>
                     <input
                       type="text"
                       value={bankFormData.accountName}
                       onChange={(e) => setBankFormData({ ...bankFormData, accountName: e.target.value })}
-                      className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                      className="w-full px-2.5 py-1.5 sm:p-3 rounded-lg sm:rounded-xl border border-gray-200 text-[11px] sm:text-sm font-bold focus:border-indigo-500 outline-none placeholder:text-[8.5px] sm:placeholder:text-xs placeholder:font-normal"
                       placeholder="e.g. ORIENTAL INSTITUTE OF SCIENCE"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Account Number</label>
+                  <div className="space-y-0.5">
+                    <label className="text-[8.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">Account Number</label>
                     <input
                       type="text"
                       value={bankFormData.accountNumber}
                       onChange={(e) => setBankFormData({ ...bankFormData, accountNumber: e.target.value })}
-                      className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                      className="w-full px-2.5 py-1.5 sm:p-3 rounded-lg sm:rounded-xl border border-gray-200 text-[11px] sm:text-sm font-bold focus:border-indigo-500 outline-none placeholder:text-[8.5px] sm:placeholder:text-xs placeholder:font-normal"
                       placeholder="000000000000"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">IFSC Code</label>
+                  <div className="space-y-0.5">
+                    <label className="text-[8.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">IFSC Code</label>
                     <input
                       type="text"
                       value={bankFormData.ifscCode}
                       onChange={(e) => setBankFormData({ ...bankFormData, ifscCode: e.target.value })}
-                      className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                      className="w-full px-2.5 py-1.5 sm:p-3 rounded-lg sm:rounded-xl border border-gray-200 text-[11px] sm:text-sm font-bold focus:border-indigo-500 outline-none placeholder:text-[8.5px] sm:placeholder:text-xs placeholder:font-normal"
                       placeholder="SYNB0000..."
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Bank Name</label>
+                  <div className="space-y-0.5">
+                    <label className="text-[8.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">Bank Name</label>
                     <input
                       type="text"
                       value={bankFormData.bankName}
                       onChange={(e) => setBankFormData({ ...bankFormData, bankName: e.target.value })}
-                      className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                      className="w-full px-2.5 py-1.5 sm:p-3 rounded-lg sm:rounded-xl border border-gray-200 text-[11px] sm:text-sm font-bold focus:border-indigo-500 outline-none placeholder:text-[8.5px] sm:placeholder:text-xs placeholder:font-normal"
                       placeholder="Canara Bank"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">UPI ID (Optional)</label>
+                  <div className="space-y-0.5">
+                    <label className="text-[8.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">UPI ID (Optional)</label>
                     <input
                       type="text"
                       value={bankFormData.upiId}
                       onChange={(e) => setBankFormData({ ...bankFormData, upiId: e.target.value })}
-                      className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                      className="w-full px-2.5 py-1.5 sm:p-3 rounded-lg sm:rounded-xl border border-gray-200 text-[11px] sm:text-sm font-bold focus:border-indigo-500 outline-none placeholder:text-[8.5px] sm:placeholder:text-xs placeholder:font-normal"
                       placeholder="university@upi"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Hostel Fee (₹)</label>
+                  <div className="space-y-0.5">
+                    <label className="text-[8.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">Hostel Fee (₹)</label>
                     <input
                       type="number"
                       value={bankFormData.feeAmount}
                       onChange={(e) => setBankFormData({ ...bankFormData, feeAmount: Number(e.target.value) })}
-                      className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold focus:border-indigo-500 outline-none"
+                      className="w-full px-2.5 py-1.5 sm:p-3 rounded-lg sm:rounded-xl border border-gray-200 text-[11px] sm:text-sm font-bold focus:border-indigo-500 outline-none placeholder:text-[8.5px] sm:placeholder:text-xs placeholder:font-normal"
                       placeholder="45000"
                     />
                   </div>
@@ -15326,7 +15353,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center block mb-2">Upload QR Image (Required for Scan & Pay)</label>
+                  <label className="text-[8.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center block mb-1">Upload QR Image (Required for Scan & Pay)</label>
                   <div
                     className="relative group cursor-pointer"
                     onDragOver={(e) => e.preventDefault()}
@@ -15351,21 +15378,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       }
                     }}
                   >
-                    <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/50 hover:bg-indigo-50/30 hover:border-indigo-300 transition-all group-hover:shadow-lg shadow-indigo-100/50">
+                    <label className="flex flex-col items-center justify-center w-full h-28 sm:h-36 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50 hover:bg-indigo-50/30 hover:border-indigo-300 transition-all group-hover:shadow-md">
                       {bankFormData.qrImage ? (
                         <div className="relative group/img">
-                          <img src={bankFormData.qrImage} alt="QR Preview" className="h-40 w-40 object-contain rounded-lg" />
+                          <img src={bankFormData.qrImage} alt="QR Preview" className="h-24 w-24 object-contain rounded-lg" />
                           <div className="absolute inset-0 bg-black/40 rounded-lg opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
-                            <p className="text-white text-[10px] font-black">CHANGE IMAGE</p>
+                            <p className="text-white text-[9px] font-bold">CHANGE IMAGE</p>
                           </div>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                          <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mb-3">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                        <div className="flex flex-col items-center justify-center py-2 text-center">
+                          <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center mb-1.5 shadow-sm">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                           </div>
-                          <p className="mb-2 text-sm text-gray-700 font-bold">Click to upload or <span className="text-indigo-600">Paste (Ctrl+V)</span></p>
-                          <p className="text-xs text-secondary italic">PNG, JPG or SVG (Max 2MB)</p>
+                          <p className="mb-0.5 text-xs text-gray-700 font-bold">Click to upload or <span className="text-indigo-600">Paste (Ctrl+V)</span></p>
+                          <p className="text-[9px] text-gray-400 italic">PNG, JPG or SVG (Max 2MB)</p>
                         </div>
                       )}
                       <input type="file" className="hidden" accept="image/*" onChange={(e) => {
@@ -15380,9 +15407,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     {bankFormData.qrImage && (
                       <button
                         onClick={(e) => { e.preventDefault(); setBankFormData({ ...bankFormData, qrImage: "" }); }}
-                        className="absolute -top-2 -right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                       </button>
                     )}
                   </div>
@@ -16064,36 +16091,53 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               const qrUrl = subscriptionStatus?.paymentSettings?.customQrCodeUrl || `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(`upi://pay?pa=${upiId}&pn=${accountName}&am=${finalTotal}&cu=INR&tn=Hosteleaze Renewal`)}`;
 
               const summarySection = (
-                <div className="bg-slate-900 text-white p-3 sm:p-3.5 rounded-xl space-y-2 shadow-md shrink-0">
-                  <div className="flex items-center justify-between gap-1 text-[9.5px] sm:text-xs text-slate-300">
-                    <span className="truncate">Subtotal ({totalStudents} students × {selectedPlanMonths} months)</span>
-                    <span className="shrink-0 whitespace-nowrap">₹{baseTotal.toLocaleString("en-IN")}</span>
+                <div className="bg-slate-900 text-white p-3 sm:p-3.5 rounded-xl space-y-2 shadow-md shrink-0 w-full max-w-full">
+                  <div className="flex items-center justify-between gap-1 text-[9.5px] sm:text-[12px] font-bold text-slate-300 min-w-0">
+                    <span className="break-words min-w-0 flex-1">Subtotal ({totalStudents} students × {selectedPlanMonths} months)</span>
+                    <span className="shrink-0 whitespace-nowrap ml-1">₹{baseTotal.toLocaleString("en-IN")}</span>
                   </div>
                   {totalDiscountPercent > 0 && (
-                    <div className="flex items-center justify-between gap-1 text-[8.5px] sm:text-[11px] text-emerald-400 font-bold">
-                      <span className="truncate">
+                    <div className="flex items-center justify-between gap-1 text-[9.5px] sm:text-[12px] text-emerald-400 font-bold min-w-0">
+                      <span className="break-words min-w-0 flex-1">
                         {paymentMethod === "bank" && bankBonus > 0
                           ? (baseDiscount > 0
-                              ? `Discount (${baseDiscount}% Plan + ${bankBonus}% Bank = ${totalDiscountPercent}% Total OFF)`
-                              : `Discount (${bankBonus}% Direct Bonus OFF)`
+                              ? `Discount (${baseDiscount}% Plan + ${bankBonus}% Bank or QR code = ${totalDiscountPercent}% Total OFF)`
+                              : `Discount (${bankBonus}% Bank or QR code OFF)`
                             )
                           : `Discount (${baseDiscount}% Plan OFF)`
                         }
                       </span>
-                      <span className="shrink-0 whitespace-nowrap">-₹{discountAmount.toLocaleString("en-IN")}</span>
+                      <span className="shrink-0 whitespace-nowrap ml-1">-₹{discountAmount.toLocaleString("en-IN")}</span>
                     </div>
                   )}
-                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2">
-                    <div>
-                      <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Total Amount Payable</p>
-                      <p className="text-lg sm:text-xl font-black text-emerald-400">₹{finalTotal.toLocaleString("en-IN")}</p>
+
+                  {/* UTR Input Field positioned directly to the RIGHT side of the label for Direct Payment */}
+                  {paymentMethod === "bank" && (
+                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-1.5 min-w-0">
+                      <label className="text-[9px] sm:text-[10.5px] font-black text-emerald-400 tracking-tight shrink-0 whitespace-nowrap">
+                        Enter UTR / Reference ID after transfer
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 420819385012 or UPI Ref No."
+                        value={utrNumber}
+                        onChange={(e) => setUtrNumber(e.target.value)}
+                        className="flex-1 min-w-0 px-1.5 sm:px-2.5 py-1 border border-emerald-500/60 focus:border-emerald-400 bg-slate-950 text-white rounded-md text-[10px] sm:text-xs font-bold tracking-wider outline-none transition-all shadow-inner placeholder:text-slate-400 placeholder:text-[8.5px] sm:placeholder:text-[10px] placeholder:font-medium"
+                      />
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 min-w-0">
+                    <div className="shrink-0">
+                      <p className="text-[8.5px] sm:text-[9px] font-black uppercase text-slate-400 tracking-wider">Total Amount Payable</p>
+                      <p className="text-base sm:text-xl font-black text-emerald-400 leading-none mt-0.5">₹{finalTotal.toLocaleString("en-IN")}</p>
                     </div>
 
                     {paymentMethod === "razorpay" ? (
                       <button
                         onClick={() => handleRazorpayRenewal(selectedPlanMonths)}
                         disabled={isProcessingPayment}
-                        className="px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md shadow-blue-500/25 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                        className="px-3 sm:px-5 py-1.5 sm:py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-black text-[10px] sm:text-xs tracking-wide rounded-lg shadow-md shadow-blue-500/25 transition-all flex items-center gap-1 active:scale-95 disabled:opacity-50 shrink-0 whitespace-nowrap"
                       >
                         {isProcessingPayment ? (
                           <>
@@ -16102,7 +16146,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           </>
                         ) : (
                           <>
-                            <span>Pay & Renew via Razorpay ⚡</span>
+                            <span>Pay & Renew ⚡</span>
                           </>
                         )}
                       </button>
@@ -16110,7 +16154,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <button
                         onClick={() => handleDirectPaymentSubmit(finalTotal)}
                         disabled={isSubmittingDirect || !utrNumber.trim()}
-                        className="px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md shadow-emerald-500/25 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                        className="px-2.5 sm:px-5 py-1.5 sm:py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-[9.5px] sm:text-xs tracking-wide rounded-lg shadow-md shadow-emerald-500/25 transition-all flex items-center gap-1 active:scale-95 disabled:opacity-50 shrink-0 whitespace-nowrap"
                       >
                         {isSubmittingDirect ? (
                           <>
@@ -16160,7 +16204,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             discount: subscriptionStatus?.paymentSettings?.discount1Month ?? 0,
                             points: [
                               "Standard Base Tariff",
-                              `+${bankDiscountVal}% Direct Bank Bonus`,
+                              `+${bankDiscountVal}% Bank or QR Bonus`,
                               "GPS/WIFI Attendance, Gatepass Management",
                               "Warden Controls, Parents Monitoring"
                             ]
@@ -16172,7 +16216,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             discount: subscriptionStatus?.paymentSettings?.discount3Month ?? 10,
                             points: [
                               `${subscriptionStatus?.paymentSettings?.discount3Month ?? 10}% Plan Discount`,
-                              `+${bankDiscountVal}% Direct Bank Bonus`,
+                              `+${bankDiscountVal}% Bank or QR Bonus`,
                               "GPS/WIFI Attendance, Gatepass Management",
                               "Warden Controls, Parents Monitoring"
                             ]
@@ -16185,7 +16229,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             badge: "Popular",
                             points: [
                               `${subscriptionStatus?.paymentSettings?.discount6Month ?? 20}% Plan Discount`,
-                              `+${bankDiscountVal}% Direct Bank Bonus`,
+                              `+${bankDiscountVal}% Bank or QR Bonus`,
                               "GPS/WIFI Attendance, Gatepass Management",
                               "Warden Controls, Parents Monitoring"
                             ]
@@ -16198,7 +16242,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             badge: "BEST VALUE",
                             points: [
                               `${subscriptionStatus?.paymentSettings?.discount12Month ?? 30}% Maximum Discount`,
-                              `+${bankDiscountVal}% Direct Bank Bonus`,
+                              `+${bankDiscountVal}% Bank or QR Bonus`,
                               "GPS/WIFI Attendance, Gatepass Management",
                               "Warden Controls, Parents Monitoring"
                             ]
@@ -16218,7 +16262,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             }`}
                           >
                             {plan.badge && (
-                              <span className={`absolute -top-2 left-2 px-1.5 py-0.5 text-[7px] sm:text-[8px] font-black uppercase tracking-wider rounded-full shadow-sm ${
+                              <span className={`absolute -top-2 left-2 px-1.5 py-0.5 text-[7px] sm:text-[8px] font-black uppercase tracking-wider rounded-md shadow-sm ${
                                 plan.months === 12 ? "bg-amber-500 text-white" : "bg-blue-600 text-white"
                               }`}>
                                 {plan.badge}
@@ -16274,7 +16318,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <button
                         type="button"
                         onClick={() => setPaymentMethod("razorpay")}
-                        className={`py-1.5 sm:py-2.5 px-1.5 sm:px-3 rounded-xl border-2 font-bold text-[9.5px] sm:text-xs flex items-center justify-center gap-1 transition-all ${
+                        className={`py-1.5 sm:py-2.5 px-1.5 sm:px-3 rounded-lg border-2 font-bold text-[9.5px] sm:text-xs flex items-center justify-center gap-1 transition-all ${
                           paymentMethod === "razorpay"
                             ? "border-blue-600 bg-blue-600 text-white shadow-sm"
                             : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
@@ -16286,14 +16330,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <button
                         type="button"
                         onClick={() => setPaymentMethod("bank")}
-                        className={`py-1.5 sm:py-2.5 px-1.5 sm:px-3 rounded-xl border-2 font-bold text-[9.5px] sm:text-xs flex items-center justify-center gap-1 transition-all relative flex-wrap sm:flex-nowrap ${
+                        className={`py-1.5 sm:py-2.5 px-1.5 sm:px-3 rounded-lg border-2 font-bold text-[9.5px] sm:text-xs flex items-center justify-center gap-1 transition-all relative flex-wrap sm:flex-nowrap ${
                           paymentMethod === "bank"
                             ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
                             : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
                         }`}
                       >
-                        <span className="truncate">🏦 Direct Bank</span>
-                        <span className="bg-amber-400 text-slate-900 text-[7px] sm:text-[8px] font-black uppercase tracking-wider px-1 py-0.5 rounded-full shadow-sm shrink-0">
+                        <span className="truncate">🏦 Direct Bank / QR</span>
+                        <span className="bg-amber-400 text-slate-900 text-[7px] sm:text-[8px] font-black uppercase tracking-wider px-1 py-0.5 rounded-md shadow-sm shrink-0">
                           +{subscriptionStatus?.paymentSettings?.bankTransferDiscount ?? 2.5}% OFF
                         </span>
                       </button>
@@ -16303,52 +16347,79 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               );
 
               const bankDetailsCard = (
-                <div className="bg-emerald-50/60 border-2 border-emerald-200/80 p-3 sm:p-3.5 rounded-xl space-y-2.5 animate-in fade-in duration-300 lg:flex-1 lg:flex lg:flex-col lg:justify-between">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-black text-emerald-800 uppercase tracking-wide">
+                <div className="bg-emerald-50/60 border-2 border-emerald-200/80 p-2.5 sm:p-3.5 rounded-xl space-y-2.5 animate-in fade-in duration-300 lg:flex-1 lg:flex lg:flex-col lg:justify-between max-w-full">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 border-b border-emerald-100/80 pb-2 w-full">
+                    <p className="text-[10.5px] sm:text-[11px] font-black text-emerald-800 uppercase tracking-wide leading-tight">
                       🏦 Direct Bank & UPI Transfer Details
                     </p>
-                    <span className="text-[9px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                    <span className="text-[8.5px] sm:text-[9px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm self-start sm:self-auto shrink-0">
                       Extra {bankBonus}% Instant Discount Applied!
                     </span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 items-center lg:flex-1">
                     {/* Account Info List */}
-                    <div className="space-y-1 sm:space-y-1.5 text-[10px] font-bold text-slate-700 bg-white p-2 sm:p-2.5 rounded-lg border border-emerald-100 shadow-sm flex flex-col justify-between h-full">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-0.5 gap-2">
-                        <span className="text-slate-400 font-extrabold uppercase text-[10px]">Bank:</span>
-                        <span className="text-slate-900 font-black text-[10px]">{bankName}</span>
+                    <div className="space-y-1 sm:space-y-1.5 text-[10px] sm:text-[11px] font-bold text-slate-700 bg-white p-2.5 sm:p-3 rounded-lg border border-emerald-100 shadow-sm flex flex-col justify-between h-full min-w-0">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-1 gap-2 min-w-0">
+                        <span className="text-slate-400 font-extrabold uppercase text-[10px] shrink-0">Bank:</span>
+                        <span className="text-slate-900 font-black text-[10px] sm:text-xs text-right break-words min-w-0">{bankName}</span>
                       </div>
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-0.5 gap-2">
-                        <span className="text-slate-400 font-extrabold uppercase text-[10px]">Account Holder:</span>
-                        <span className="text-slate-900 font-black text-[10px]">{accountName}</span>
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-1 gap-2 min-w-0">
+                        <span className="text-slate-400 font-extrabold uppercase text-[10px] shrink-0">Account Holder:</span>
+                        <span className="text-slate-900 font-black text-[10px] sm:text-xs text-right break-words min-w-0">{accountName}</span>
                       </div>
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-0.5 gap-2">
-                        <span className="text-slate-400 font-extrabold uppercase text-[10px]">Account No:</span>
-                        <span className="font-mono font-black text-blue-700 text-[10px]">{accountNumber}</span>
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-1 gap-2 min-w-0">
+                        <span className="text-slate-400 font-extrabold uppercase text-[10px] shrink-0">Account No:</span>
+                        <span className="font-mono font-black text-blue-700 text-[10px] sm:text-xs text-right break-all select-all min-w-0">{accountNumber}</span>
                       </div>
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-0.5 gap-2">
-                        <span className="text-slate-400 font-extrabold uppercase text-[10px]">IFSC:</span>
-                        <span className="font-mono font-black text-blue-700 text-[10px]">{ifsc}</span>
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-1 gap-2 min-w-0">
+                        <span className="text-slate-400 font-extrabold uppercase text-[10px] shrink-0">IFSC:</span>
+                        <span className="font-mono font-black text-blue-700 text-[10px] sm:text-xs text-right break-all select-all min-w-0">{ifsc}</span>
                       </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-slate-400 font-extrabold uppercase text-[10px]">UPI ID:</span>
-                        <span className="font-mono font-black text-emerald-700 text-[10px] truncate max-w-[150px]">{upiId}</span>
-                      </div>
+                      {(() => {
+                        const upiPayeeId = upiId || "pankaj86.dwivedi-1@okicici";
+                        const upiPayeeName = accountName || "Dr. Pankaj Dwivedi";
+                        const upiNote = `Hosteleaze Renewal (${selectedPlanMonths}M)`;
+                        const upiDeepLink = `upi://pay?pa=${encodeURIComponent(upiPayeeId)}&pn=${encodeURIComponent(upiPayeeName)}&am=${finalTotal}&cu=INR&tn=${encodeURIComponent(upiNote)}`;
+                        return (
+                          <div className="flex items-center justify-between gap-2 min-w-0 pt-0.5">
+                            <span className="text-slate-400 font-extrabold uppercase text-[10px] shrink-0">UPI ID:</span>
+                            <a
+                              href={upiDeepLink}
+                              className="font-mono font-black text-emerald-700 hover:text-emerald-800 text-[10px] sm:text-xs text-right break-all select-all min-w-0 leading-tight underline decoration-dashed underline-offset-2 flex items-center gap-0.5"
+                              title="Tap to pay directly via GPay, PhonePe, or Paytm"
+                            >
+                              <span>{upiId}</span>
+                              <span className="text-[10px]">📱</span>
+                            </a>
+                          </div>
+                        );
+                      })()}
                     </div>
 
-                    {/* QR Code Container */}
-                    <div className="flex flex-col items-center justify-center p-1.5 sm:p-2 bg-white rounded-lg border border-emerald-100 shadow-sm text-center h-full w-full">
-                      <img
-                        src={qrUrl}
-                        alt="Payment QR Code"
-                        className="w-full max-w-[160px] sm:max-w-[185px] lg:max-w-[210px] aspect-square rounded border p-0.5 bg-white shadow-inner object-contain"
-                      />
-                      <p className="text-[8px] font-bold text-slate-500 mt-1 uppercase tracking-wider">
-                        Scan with PhonePe, GPay, or Paytm
-                      </p>
-                    </div>
+                    {/* QR Code Container with Instant UPI Deep-Link */}
+                    {(() => {
+                      const upiPayeeId = upiId || "pankaj86.dwivedi-1@okicici";
+                      const upiPayeeName = accountName || "Dr. Pankaj Dwivedi";
+                      const upiNote = `Hosteleaze Renewal (${selectedPlanMonths}M)`;
+                      const upiDeepLink = `upi://pay?pa=${encodeURIComponent(upiPayeeId)}&pn=${encodeURIComponent(upiPayeeName)}&am=${finalTotal}&cu=INR&tn=${encodeURIComponent(upiNote)}`;
+                      return (
+                        <a
+                          href={upiDeepLink}
+                          className="flex flex-col items-center justify-center p-2 sm:p-2.5 bg-white hover:bg-emerald-50/40 rounded-lg border border-emerald-100 hover:border-emerald-300 shadow-sm text-center h-full w-full transition-all group cursor-pointer"
+                          title="Tap QR code to pay via installed UPI app (GPay, PhonePe, Paytm)"
+                        >
+                          <img
+                            src={qrUrl}
+                            alt="Payment QR Code"
+                            className="w-full max-w-[150px] sm:max-w-[185px] lg:max-w-[210px] aspect-square rounded border p-0.5 bg-white shadow-inner object-contain group-hover:scale-[1.02] transition-transform"
+                          />
+                          <p className="text-[8px] sm:text-[9px] font-black text-emerald-700 group-hover:text-emerald-800 mt-1 uppercase tracking-wider flex items-center justify-center gap-1">
+                            <span>📲 Tap QR to Pay via GPay / PhonePe / Paytm</span>
+                          </p>
+                        </a>
+                      );
+                    })()}
                   </div>
 
                   {/* Instructional Notice Line */}
@@ -16372,7 +16443,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             `- *Selected Plan*: ${selectedPlanMonths} Month(s) (${planNameStr})`,
                             `- *Billing Formula*: ${totalStudents} students × ${selectedPlanMonths} month(s) @ ₹${pricePerMonth}/mo`,
                             `- *Subtotal*: ₹${baseTotal.toLocaleString('en-IN')}`,
-                            `- *Discount Applied*: ${paymentMethod === 'bank' && bankBonus > 0 ? (baseDiscount > 0 ? `${baseDiscount}% Plan OFF + ${bankBonus}% Direct Bonus = ${totalDiscountPercent}% Total OFF` : `${bankBonus}% Direct Bonus OFF`) : `${baseDiscount}% Plan OFF`} (-₹${discountAmount.toLocaleString('en-IN')})`,
+                            `- *Discount Applied*: ${paymentMethod === 'bank' && bankBonus > 0 ? (baseDiscount > 0 ? `${baseDiscount}% Plan OFF + ${bankBonus}% Bank or QR code = ${totalDiscountPercent}% Total OFF` : `${bankBonus}% Bank or QR code OFF`) : `${baseDiscount}% Plan OFF`} (-₹${discountAmount.toLocaleString('en-IN')})`,
                             `- *Total Amount Paid*: ₹${finalTotal.toLocaleString('en-IN')}`,
                             `- *Payment UTR / Ref No*: ${utrNumber.trim() || '[Pending]'}`,
                             ``,
@@ -16393,34 +16464,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </p>
                     </div>
                   </div>
-
-                  {/* UTR Input Form */}
-                  <div>
-                    <label className="block text-[9px] font-black uppercase text-slate-600 tracking-wider mb-0.5">
-                      Enter Payment UTR / Reference ID after transfer
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 420819385012 or UPI Ref No."
-                      value={utrNumber}
-                      onChange={(e) => setUtrNumber(e.target.value)}
-                      className="w-full px-3 py-1.5 sm:py-2 border-2 border-emerald-300 focus:border-emerald-600 rounded-lg text-xs font-bold uppercase tracking-wider outline-none transition-all shadow-inner"
-                    />
-                  </div>
                 </div>
               );
 
               const razorpayServicesCard = (
                 <div className="bg-gradient-to-br from-blue-50/90 via-indigo-50/50 to-slate-50 border-2 border-blue-200/90 p-3.5 sm:p-4 rounded-xl space-y-3 animate-in fade-in duration-300 flex-1 flex flex-col justify-between shadow-sm">
                   {/* Header */}
-                  <div className="flex items-center justify-between border-b border-blue-100 pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs font-black shadow-sm">⚡</span>
-                      <p className="text-[11px] sm:text-xs font-black text-blue-950 uppercase tracking-wide">
-                        Supported Razorpay Payment Options
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 border-b border-blue-100 pb-2 w-full">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs font-black shadow-sm shrink-0">⚡</span>
+                      <p className="text-[10.5px] sm:text-xs font-black text-blue-950 uppercase tracking-wide leading-tight">
+                        Supported Payment Options
                       </p>
                     </div>
-                    <span className="text-[9px] font-black bg-blue-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                    <span className="text-[8.5px] sm:text-[9px] font-black bg-blue-600 text-white px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm self-start sm:self-auto shrink-0">
                       Instant Renewal
                     </span>
                   </div>
