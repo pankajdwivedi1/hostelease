@@ -27,10 +27,18 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
-    // Extract core 10 digits (or full digits if less than 10) to query DB flexibly across formats
+    // Normalize target phone number with country code (defaults 10-digit numbers to 91 for India)
+    const normalizePhoneWithCountry = (num: string) => {
+      if (!num) return "";
+      let c = num.replace(/\D/g, "");
+      if (c.length === 10) return "91" + c;
+      return c;
+    };
+
+    const targetNormalized = normalizePhoneWithCountry(cleaned);
     const coreDigits = cleaned.length >= 10 ? cleaned.slice(-10) : cleaned;
 
-    // ⚡ FAST WILDCARD QUERY: Search directly for matching digits with any delimiters in between
+    // ⚡ FAST WILDCARD QUERY: Search directly for matching core digits in student_profiles
     const digitPattern = `%${coreDigits.split("").join("%")}%`;
     
     let { data: students, error } = await supabase
@@ -44,8 +52,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Database error occurred" }, { status: 500 });
     }
 
-    const cleanDbPhone = (num: string) => num ? num.replace(/\D/g, "") : "";
-    
     let matchedStudent = null;
     let studentName = "";
 
@@ -54,15 +60,11 @@ export async function POST(request: NextRequest) {
         const prof = Array.isArray(s.student_profiles) ? s.student_profiles[0] : s.student_profiles;
         if (!prof) continue;
 
-        const fatherClean = cleanDbPhone(prof.father_number);
-        const motherClean = cleanDbPhone(prof.mother_number);
-        const lgClean = cleanDbPhone(prof.local_guardian_phone_number);
+        const fatherNorm = normalizePhoneWithCountry(prof.father_number);
+        const motherNorm = normalizePhoneWithCountry(prof.mother_number);
+        const lgNorm = normalizePhoneWithCountry(prof.local_guardian_phone_number);
 
-        if (
-          (fatherClean && (fatherClean === cleaned || fatherClean.endsWith(coreDigits))) ||
-          (motherClean && (motherClean === cleaned || motherClean.endsWith(coreDigits))) ||
-          (lgClean && (lgClean === cleaned || lgClean.endsWith(coreDigits)))
-        ) {
+        if (fatherNorm === targetNormalized || motherNorm === targetNormalized || lgNorm === targetNormalized) {
           matchedStudent = prof;
           studentName = s.name;
           break;
