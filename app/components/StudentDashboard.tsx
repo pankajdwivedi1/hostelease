@@ -2780,6 +2780,22 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     )}
                                 </div>
 
+                                {/* 🚪 OUTING & ATTENDANCE CARD - Side by Side right next to Daily Attendance in Parent View */}
+                                {isParentView && (
+                                    <button
+                                        onClick={() => setShowPermissionsHistory(true)}
+                                        className="h-12 bg-white px-3 rounded-xl border border-gray-100 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-50 transition-all flex items-center justify-between gap-1 overflow-hidden min-w-0 shadow-sm text-left active:scale-[0.98] cursor-pointer"
+                                    >
+                                        <div className="flex flex-col overflow-hidden min-w-0">
+                                            <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-gray-400 opacity-70 truncate">Outing & Attendance</span>
+                                            <span className="text-[9px] md:text-[10px] font-black text-gray-700 uppercase tracking-tight truncate">View History</span>
+                                        </div>
+                                        <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-sm shrink-0">
+                                            🚪
+                                        </div>
+                                    </button>
+                                )}
+
 
 
                                 {/* ⭐ PROGRESS INDICATORS - Shows only when marking attendance */}
