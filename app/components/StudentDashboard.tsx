@@ -2702,22 +2702,22 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                             {/* Quick Info Grid */}
                             <div className={`grid grid-cols-2 ${gridColsClass} gap-2 sm:gap-3 mb-2`} style={{ fontFamily: 'var(--font-lora), Cambria' }}>
-                                <div className="h-12 bg-gradient-to-br from-blue-50 to-indigo-50 px-3 rounded-xl border border-blue-100 shadow-sm flex flex-col justify-center overflow-hidden min-w-0">
-                                    <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-blue-600 opacity-80 truncate">Current Status</span>
+                                <div className="h-12 bg-gradient-to-br from-blue-50 to-indigo-50 px-2.5 sm:px-3 rounded-xl border border-blue-100 shadow-sm flex flex-col justify-center overflow-hidden min-w-0">
+                                    <span className="block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-blue-600 opacity-80 truncate">Current Status</span>
                                     <div className="flex items-center gap-1.5 min-w-0">
                                         <div className={`w-2 h-2 rounded-full shrink-0 animate-pulse ${studentProfile.studentStatus === 'out' ? 'bg-red-500' : 'bg-green-500'}`} />
-                                        <p className="text-[10px] md:text-xs font-black text-gray-900 uppercase tracking-tight truncate">Currently {studentProfile.studentStatus || 'IN'}</p>
+                                        <p className="text-[9px] md:text-[10.5px] font-black text-gray-900 uppercase tracking-tight truncate">Currently {studentProfile.studentStatus || 'IN'}</p>
                                     </div>
                                 </div>
-                                <div className="h-12 bg-white px-3 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-center overflow-hidden min-w-0">
-                                    <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-gray-400 opacity-70 truncate">Hostel & Room</span>
-                                    <p className="text-[10px] md:text-xs font-black text-gray-900 uppercase tracking-tight truncate">{studentProfile.hostelName}<span className="text-blue-600 ml-1">#{studentProfile.roomNumber}</span></p>
+                                <div className="h-12 bg-white px-2.5 sm:px-3 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-center overflow-hidden min-w-0">
+                                    <span className="block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-gray-400 opacity-70 truncate">Hostel & Room</span>
+                                    <p className="text-[9px] md:text-[10.5px] font-black text-gray-900 uppercase tracking-tight truncate">{studentProfile.hostelName}<span className="text-blue-600 ml-1">#{studentProfile.roomNumber}</span></p>
                                 </div>
                                 {!isParentView && (
-                                    <div className={`h-12 px-3 rounded-xl border shadow-sm flex items-center justify-between gap-1 transition-all duration-500 overflow-hidden min-w-0 ${highlightLocation ? 'bg-red-50 border-red-300 ring-4 ring-red-100 shadow-xl scale-[1.02]' : 'bg-white border-gray-100'}`}>
+                                    <div className={`h-12 px-2.5 sm:px-3 rounded-xl border shadow-sm flex items-center justify-between gap-1 transition-all duration-500 overflow-hidden min-w-0 ${highlightLocation ? 'bg-red-50 border-red-300 ring-4 ring-red-100 shadow-xl scale-[1.02]' : 'bg-white border-gray-100'}`}>
                                         <div className="flex flex-col overflow-hidden min-w-0">
-                                            <span className={`block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${highlightLocation ? 'text-red-500 animate-pulse' : 'text-gray-400 opacity-70'}`}>Location Lock</span>
-                                            <p className="text-[10px] md:text-xs font-black text-gray-700 uppercase tracking-tight truncate">{isAtHostel ? '📍 Verified' : '❌ Not Verified'}</p>
+                                            <span className={`block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${highlightLocation ? 'text-red-500 animate-pulse' : 'text-gray-400 opacity-70'}`}>Location Lock</span>
+                                            <p className="text-[9px] md:text-[10.5px] font-black text-gray-700 uppercase tracking-tight truncate">{isAtHostel ? '📍 Verified' : '❌ Not Verified'}</p>
                                         </div>
                                         <button
                                             onClick={() => {
@@ -2740,10 +2740,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     </div>
                                 )}
 
-                                <div className="h-12 bg-white px-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between gap-1 overflow-hidden min-w-0">
+                                <div className="h-12 bg-white px-2.5 sm:px-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between gap-1 overflow-hidden min-w-0">
                                     <div className="flex flex-col overflow-hidden min-w-0">
-                                        <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-gray-400 opacity-70 truncate">Daily Attendance</span>
-                                        <p className={`text-[10px] md:text-xs font-black uppercase tracking-tight truncate ${isParentView ? attendanceDisplay.textColor : 'text-gray-700'}`}>
+                                        <span className="block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-gray-400 opacity-70 truncate">Daily Attendance</span>
+                                        <p className={`text-[9px] md:text-[10.5px] font-black uppercase tracking-tight truncate ${isParentView ? attendanceDisplay.textColor : 'text-gray-700'}`}>
                                             {isParentView ? (
                                                 attendanceDisplay.text
                                             ) : (
@@ -2783,14 +2783,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 {isParentView && (
                                     <button
                                         onClick={() => setShowPermissionsHistory(true)}
-                                        className="h-12 bg-white px-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between gap-1 overflow-hidden min-w-0 hover:bg-gray-50 transition-all cursor-pointer text-left"
+                                        className="h-12 bg-white px-2.5 sm:px-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between gap-1 overflow-hidden min-w-0 hover:bg-gray-50 transition-all cursor-pointer text-left"
                                     >
                                         <div className="flex flex-col overflow-hidden min-w-0">
-                                            <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-gray-400 opacity-70 truncate">Permissions & History</span>
-                                            <p className="text-[10px] md:text-xs font-black uppercase tracking-tight text-gray-700 truncate">🚪 Outing & Attendance</p>
+                                            <span className="block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-gray-400 opacity-70 truncate">Permissions & History</span>
+                                            <p className="text-[9px] md:text-[10.5px] font-black uppercase tracking-tight text-gray-700 truncate">🚪 Outing & Attendance</p>
                                         </div>
-                                        <div className="p-1.5 rounded-lg bg-gray-50 text-gray-500 shrink-0">
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <div className="p-1 rounded-lg bg-gray-50 text-gray-500 shrink-0">
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                            </svg>
+                                        </div>
+                                    </button>
+                                )}24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                             </svg>
                                         </div>
