@@ -6907,7 +6907,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <button
                       onClick={() => getAccurateLocation('test')}
                       disabled={isLocationChecking}
-                      className="w-full flex items-center justify-center gap-3 py-3.5 bg-indigo-50 text-indigo-700 rounded-xl font-bold border border-indigo-100 hover:bg-indigo-100 transition-all shadow-sm active:scale-95 disabled:opacity-80"
+                      className="w-full flex items-center justify-center gap-3 py-3.5 bg-indigo-50 text-indigo-700 rounded-lg font-bold border border-indigo-100 hover:bg-indigo-100 transition-all shadow-sm active:scale-95 disabled:opacity-80"
                     >
                       {isLocationChecking ? (
                         <div className="flex items-center gap-3">
@@ -7098,7 +7098,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         }}
                         className={`w-full ${
                           isMobile ? 'px-0.5 sm:px-1 py-1 text-[10px] sm:text-[11px] min-h-[28px]' : 'px-3 py-2.5 text-xs lg:text-sm'
-                        } font-bold transition-all duration-150 rounded-xl whitespace-nowrap text-center touch-manipulation active:scale-95 flex items-center justify-center gap-1 ${
+                        } font-bold transition-all duration-150 rounded-lg whitespace-nowrap text-center touch-manipulation active:scale-95 flex items-center justify-center gap-1 ${
                           isGatepass
                             ? 'text-blue-600 hover:bg-blue-50 group'
                             : isActive
@@ -8338,12 +8338,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <button
                         onClick={async () => {
                           try {
-                            const res = await fetch("/api/check-network");
-                            const data = await res.json();
-                            if (data.success && data.ip) {
-                              const ip = data.ip;
+                            const ipRes = await fetch("https://api.ipify.org?format=json");
+                            const ipData = await ipRes.json();
+                            const ip = ipData.ip;
+                            if (ip) {
                               if (ip === "127.0.0.1" || ip === "::1") {
-                                showToast("⚠️ Detected IP is localhost (127.0.0.1). You are running on your local PC, not on the real campus network. To get your real IP, access this app from the live deployed URL on campus WiFi.", "warning");
+                                showToast("⚠️ Detected IP is localhost. Access this app from the live URL on campus WiFi.", "warning");
                                 return;
                               }
                               const targetName = wardenHostelName || "Campus Hostel";
@@ -8367,13 +8367,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 showToast(`✅ IP ${ip} saved successfully for ${targetName}!`, "success");
                               }
                             } else {
-                              showToast("Could not detect IP. Please check your internet connection.", "error");
+                              showToast("Could not detect IP.", "error");
                             }
                           } catch (e: any) {
                             showToast("Error detecting IP: " + e.message, "error");
                           }
                         }}
-                        className="flex items-center justify-center gap-1 px-1.5 py-2 sm:px-4 sm:py-2.5 bg-green-600 text-white font-bold text-[8.5px] xs:text-[9.5px] sm:text-xs rounded-xl hover:bg-green-700 transition-all shadow-md leading-tight text-center tracking-tighter whitespace-nowrap"
+                        className="flex items-center justify-center gap-1 px-1.5 py-2 sm:px-4 sm:py-2.5 bg-green-600 text-white font-bold text-[8.5px] xs:text-[9.5px] sm:text-xs rounded-lg hover:bg-green-700 transition-all shadow-md leading-tight text-center tracking-tighter whitespace-nowrap"
                       >
                         ⚡ Detect & Save My Hostel IP
                       </button>
@@ -8385,18 +8385,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             const data = await res.json();
                             if (data.success) {
                               if (data.ip === "127.0.0.1" || data.ip === "::1") {
-                                showToast(`⚠️ Test Result: IP is ${data.ip} (LOCALHOST). This only happens when you run the app locally on your PC. On the deployed server with campus WiFi, the real IP will be detected correctly.`, "warning");
+                                showToast(`⚠️ Test Result: IP is ${data.ip} (LOCALHOST).`, "warning");
                               } else if (data.isWhitelisted) {
-                                showToast(`✅ TEST PASSED! Your IP (${data.ip}) is whitelisted. Students on this network will be verified instantly.`, "success");
+                                showToast(`✅ TEST PASSED! Your IP (${data.ip}) is whitelisted.`, "success");
                               } else {
-                                showToast(`❌ TEST FAILED: Your IP (${data.ip}) is NOT whitelisted yet. Click "DETECT & SAVE MY HOSTEL IP" to add it.`, "error");
+                                showToast(`❌ TEST FAILED: Your IP (${data.ip}) is NOT whitelisted yet.`, "error");
                               }
                             }
                           } catch (e: any) {
                             showToast("Test failed: " + e.message, "error");
                           }
                         }}
-                        className="flex items-center justify-center gap-1 px-1.5 py-2 sm:px-4 sm:py-2.5 bg-blue-600 text-white font-bold text-[8.5px] xs:text-[9.5px] sm:text-xs rounded-xl hover:bg-blue-700 transition-all shadow-md leading-tight text-center tracking-tighter whitespace-nowrap"
+                        className="flex items-center justify-center gap-1 px-1.5 py-2 sm:px-4 sm:py-2.5 bg-blue-600 text-white font-bold text-[8.5px] xs:text-[9.5px] sm:text-xs rounded-lg hover:bg-blue-700 transition-all shadow-md leading-tight text-center tracking-tighter whitespace-nowrap"
                       >
                         🔍 Test Current Network
                       </button>
@@ -8406,7 +8406,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   {/* All Hostels WiFi IP & BSSID Network Status */}
                   {!isWarden && (
                     <div className="space-y-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-xl border border-slate-100 shadow-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-lg border border-slate-100 shadow-sm">
                         <div>
                           <h3 className="font-bold text-gray-900 text-xs sm:text-sm">All Hostel IP Whitelist Status</h3>
                           <p className="text-[10px] text-gray-500 font-medium mt-0.5">Campus-wide connectivity verification</p>
@@ -8418,7 +8418,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               const data = await res.json();
                               if (data.success && data.ip) {
                                 const ip = data.ip;
-                                const label = await showPrompt("Enter label for this IP (e.g. Campus Admin IP):", `Admin Synced IP`);
+                                const label = await showPrompt("Enter label for this IP:", `Admin Synced IP`);
                                 if (label) {
                                   const updated = [...wifiWhitelist, { name: label, ip }];
                                   setWifiWhitelist(updated);
@@ -8430,7 +8430,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               showToast("Error: " + e.message, "error");
                             }
                           }}
-                          className="w-full sm:w-auto px-3.5 py-2 bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] sm:text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5"
+                          className="w-full sm:w-auto px-3.5 py-2 bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] sm:text-xs rounded-lg transition-all shadow-sm flex items-center justify-center gap-1.5"
                         >
                           ⚡ Sync My Current IP
                         </button>
