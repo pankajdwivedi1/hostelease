@@ -878,31 +878,31 @@ function LoginForm() {
                               <label className="block text-[10px] font-black uppercase tracking-wider text-blue-600 text-center">
                                 Enter your Registered Mobile Number
                               </label>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 w-full">
                                 <select
                                   value={parentCountryCode}
                                   onChange={(e) => setParentCountryCode(e.target.value)}
-                                  className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-3 text-xs font-bold text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none shrink-0"
+                                  className="w-[95px] sm:w-[105px] shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-3 text-xs font-bold text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none cursor-pointer"
                                 >
-                                  <option value="+91">🇮🇳 +91 (India)</option>
-                                  <option value="+1">🇺🇸 +1 (USA/Canada)</option>
-                                  <option value="+44">🇬🇧 +44 (UK)</option>
-                                  <option value="+971">🇦🇪 +971 (UAE)</option>
-                                  <option value="+966">🇸🇦 +966 (Saudi Arabia)</option>
-                                  <option value="+977">🇳🇵 +977 (Nepal)</option>
-                                  <option value="+880">🇧🇩 +880 (Bangladesh)</option>
-                                  <option value="+92">🇵🇰 +92 (Pakistan)</option>
-                                  <option value="+94">🇱🇰 +94 (Sri Lanka)</option>
-                                  <option value="+61">🇦🇺 +61 (Australia)</option>
-                                  <option value="+65">🇸🇬 +65 (Singapore)</option>
-                                  <option value="+60">🇲🇾 +60 (Malaysia)</option>
-                                  <option value="+49">🇩🇪 +49 (Germany)</option>
-                                  <option value="+33">🇫🇷 +33 (France)</option>
-                                  <option value="+81">🇯🇵 +81 (Japan)</option>
-                                  <option value="+86">🇨🇳 +86 (China)</option>
-                                  <option value="+7">🇷🇺 +7 (Russia)</option>
-                                  <option value="+27">🇿🇦 +27 (South Africa)</option>
-                                  <option value="+55">🇧🇷 +55 (Brazil)</option>
+                                  <option value="+91">🇮🇳 +91</option>
+                                  <option value="+1">🇺🇸 +1</option>
+                                  <option value="+44">🇬🇧 +44</option>
+                                  <option value="+971">🇦🇪 +971</option>
+                                  <option value="+966">🇸🇦 +966</option>
+                                  <option value="+977">🇳🇵 +977</option>
+                                  <option value="+880">🇧🇩 +880</option>
+                                  <option value="+92">🇵🇰 +92</option>
+                                  <option value="+94">🇱🇰 +94</option>
+                                  <option value="+61">🇦🇺 +61</option>
+                                  <option value="+65">🇸🇬 +65</option>
+                                  <option value="+60">🇲🇾 +60</option>
+                                  <option value="+49">🇩🇪 +49</option>
+                                  <option value="+33">🇫🇷 +33</option>
+                                  <option value="+81">🇯🇵 +81</option>
+                                  <option value="+86">🇨🇳 +86</option>
+                                  <option value="+7">🇷🇺 +7</option>
+                                  <option value="+27">🇿🇦 +27</option>
+                                  <option value="+55">🇧🇷 +55</option>
                                 </select>
 
                                 <input
@@ -916,7 +916,7 @@ function LoginForm() {
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter") handleSendOtp();
                                   }}
-                                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                  className="flex-1 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
                                   placeholder="Enter mobile number"
                                 />
                               </div>

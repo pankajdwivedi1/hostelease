@@ -202,31 +202,31 @@ export default function RegisterPage() {
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1 flex items-center gap-2"><Phone className="w-3 h-3" /> Mobile Number</label>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 w-full">
                                             <select
                                                 value={contactCountryCode}
                                                 onChange={(e) => setContactCountryCode(e.target.value)}
-                                                className="bg-white/5 border border-white/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl text-xs font-bold text-white focus:ring-2 focus:ring-blue-500/40 outline-none shrink-0"
+                                                className="w-[95px] sm:w-[105px] shrink-0 bg-white/5 border border-white/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl text-xs font-bold text-white focus:ring-2 focus:ring-blue-500/40 outline-none cursor-pointer"
                                             >
-                                                <option value="+91" className="bg-[#050510] text-white">🇮🇳 +91 (India)</option>
-                                                <option value="+1" className="bg-[#050510] text-white">🇺🇸 +1 (USA/Canada)</option>
-                                                <option value="+44" className="bg-[#050510] text-white">🇬🇧 +44 (UK)</option>
-                                                <option value="+971" className="bg-[#050510] text-white">🇦🇪 +971 (UAE)</option>
-                                                <option value="+966" className="bg-[#050510] text-white">🇸🇦 +966 (Saudi Arabia)</option>
-                                                <option value="+977" className="bg-[#050510] text-white">🇳🇵 +977 (Nepal)</option>
-                                                <option value="+880" className="bg-[#050510] text-white">🇧🇩 +880 (Bangladesh)</option>
-                                                <option value="+92" className="bg-[#050510] text-white">🇵🇰 +92 (Pakistan)</option>
-                                                <option value="+94" className="bg-[#050510] text-white">🇱🇰 +94 (Sri Lanka)</option>
-                                                <option value="+61" className="bg-[#050510] text-white">🇦🇺 +61 (Australia)</option>
-                                                <option value="+65" className="bg-[#050510] text-white">🇸🇬 +65 (Singapore)</option>
-                                                <option value="+60" className="bg-[#050510] text-white">🇲🇾 +60 (Malaysia)</option>
-                                                <option value="+49" className="bg-[#050510] text-white">🇩🇪 +49 (Germany)</option>
-                                                <option value="+33" className="bg-[#050510] text-white">🇫🇷 +33 (France)</option>
-                                                <option value="+81" className="bg-[#050510] text-white">🇯🇵 +81 (Japan)</option>
-                                                <option value="+86" className="bg-[#050510] text-white">🇨🇳 +86 (China)</option>
-                                                <option value="+7" className="bg-[#050510] text-white">🇷🇺 +7 (Russia)</option>
-                                                <option value="+27" className="bg-[#050510] text-white">🇿🇦 +27 (South Africa)</option>
-                                                <option value="+55" className="bg-[#050510] text-white">🇧🇷 +55 (Brazil)</option>
+                                                <option value="+91" className="bg-[#050510] text-white">🇮🇳 +91</option>
+                                                <option value="+1" className="bg-[#050510] text-white">🇺🇸 +1</option>
+                                                <option value="+44" className="bg-[#050510] text-white">🇬🇧 +44</option>
+                                                <option value="+971" className="bg-[#050510] text-white">🇦🇪 +971</option>
+                                                <option value="+966" className="bg-[#050510] text-white">🇸🇦 +966</option>
+                                                <option value="+977" className="bg-[#050510] text-white">🇳🇵 +977</option>
+                                                <option value="+880" className="bg-[#050510] text-white">🇧🇩 +880</option>
+                                                <option value="+92" className="bg-[#050510] text-white">🇵🇰 +92</option>
+                                                <option value="+94" className="bg-[#050510] text-white">🇱🇰 +94</option>
+                                                <option value="+61" className="bg-[#050510] text-white">🇦🇺 +61</option>
+                                                <option value="+65" className="bg-[#050510] text-white">🇸🇬 +65</option>
+                                                <option value="+60" className="bg-[#050510] text-white">🇲🇾 +60</option>
+                                                <option value="+49" className="bg-[#050510] text-white">🇩🇪 +49</option>
+                                                <option value="+33" className="bg-[#050510] text-white">🇫🇷 +33</option>
+                                                <option value="+81" className="bg-[#050510] text-white">🇯🇵 +81</option>
+                                                <option value="+86" className="bg-[#050510] text-white">🇨🇳 +86</option>
+                                                <option value="+7" className="bg-[#050510] text-white">🇷🇺 +7</option>
+                                                <option value="+27" className="bg-[#050510] text-white">🇿🇦 +27</option>
+                                                <option value="+55" className="bg-[#050510] text-white">🇧🇷 +55</option>
                                             </select>
                                             <input
                                                 type="tel"
@@ -235,7 +235,7 @@ export default function RegisterPage() {
                                                 value={formData.contactPhone}
                                                 onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value.replace(/\D/g, "") })}
                                                 placeholder="Mobile number"
-                                                className="w-full bg-white/5 border border-white/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/40 outline-none placeholder:text-gray-700"
+                                                className="flex-1 w-full min-w-0 bg-white/5 border border-white/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/40 outline-none placeholder:text-gray-700"
                                             />
                                         </div>
                                     </div>
