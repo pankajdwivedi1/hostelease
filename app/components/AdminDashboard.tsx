@@ -10747,12 +10747,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     {/* Name, Status & Email */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-1 flex-wrap min-w-0">
-                        <h3 className="text-xs sm:text-base font-bold text-gray-900 leading-snug break-words" title={selectedStudent.name}>{selectedStudent.name}</h3>
+                        <h3 className="text-xs sm:text-base font-extrabold text-gray-900 leading-snug tracking-tight shrink-0 whitespace-normal sm:whitespace-nowrap" title={selectedStudent.name}>{selectedStudent.name}</h3>
                         <span className={`shrink-0 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border ${selectedStudent.studentStatus === 'out' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-green-50 text-green-600 border-green-200'}`}>
                           {selectedStudent.studentStatus || 'in'}
                         </span>
                         {Array.isArray(presentStudentIds) && presentStudentIds.includes(selectedStudent.id) && (
-                          <span className="shrink-0 px-1.5 py-0.5 bg-green-100 text-green-700 text-[9px] font-black rounded-full border border-green-200 uppercase tracking-wide flex items-center gap-0.5">
+                          <span className="shrink-0 px-1.5 py-0.5 bg-green-100 text-green-700 text-[9px] font-black rounded-md border border-green-200 uppercase tracking-wide flex items-center gap-0.5">
                             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                             Present
                           </span>
