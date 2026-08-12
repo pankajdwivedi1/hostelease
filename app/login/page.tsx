@@ -882,7 +882,7 @@ function LoginForm() {
                                 <select
                                   value={parentCountryCode}
                                   onChange={(e) => setParentCountryCode(e.target.value)}
-                                  className="w-[95px] sm:w-[105px] shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-3 text-xs font-bold text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none cursor-pointer"
+                                  className="w-[72px] sm:w-[78px] shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-1.5 py-3 text-[11px] sm:text-xs font-bold text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none cursor-pointer"
                                 >
                                   <option value="+91">🇮🇳 +91</option>
                                   <option value="+1">🇺🇸 +1</option>

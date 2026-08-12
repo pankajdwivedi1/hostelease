@@ -206,7 +206,7 @@ export default function RegisterPage() {
                                             <select
                                                 value={contactCountryCode}
                                                 onChange={(e) => setContactCountryCode(e.target.value)}
-                                                className="w-[95px] sm:w-[105px] shrink-0 bg-white/5 border border-white/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl text-xs font-bold text-white focus:ring-2 focus:ring-blue-500/40 outline-none cursor-pointer"
+                                                className="w-[72px] sm:w-[78px] shrink-0 bg-white/5 border border-white/10 px-2 py-3 sm:py-4 rounded-xl sm:rounded-2xl text-[11px] sm:text-xs font-bold text-white focus:ring-2 focus:ring-blue-500/40 outline-none cursor-pointer"
                                             >
                                                 <option value="+91" className="bg-[#050510] text-white">🇮🇳 +91</option>
                                                 <option value="+1" className="bg-[#050510] text-white">🇺🇸 +1</option>
