@@ -5,6 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
+import { ALL_COUNTRIES, getCountryLabel } from "@/lib/countries";
 
 declare global {
   interface Window {
@@ -206,27 +207,13 @@ export default function RegisterPage() {
                                             <select
                                                 value={contactCountryCode}
                                                 onChange={(e) => setContactCountryCode(e.target.value)}
-                                                className="w-[72px] sm:w-[78px] shrink-0 bg-white/5 border border-white/10 px-2 py-3 sm:py-4 rounded-xl sm:rounded-2xl text-[11px] sm:text-xs font-bold text-white focus:ring-2 focus:ring-blue-500/40 outline-none cursor-pointer"
+                                                className="w-[100px] sm:w-[115px] shrink-0 bg-white/5 border border-white/10 px-2 py-3 sm:py-4 rounded-xl sm:rounded-2xl text-[11px] sm:text-xs font-bold text-white focus:ring-2 focus:ring-blue-500/40 outline-none cursor-pointer truncate"
                                             >
-                                                <option value="+91" className="bg-[#050510] text-white">🇮🇳 +91</option>
-                                                <option value="+1" className="bg-[#050510] text-white">🇺🇸 +1</option>
-                                                <option value="+44" className="bg-[#050510] text-white">🇬🇧 +44</option>
-                                                <option value="+971" className="bg-[#050510] text-white">🇦🇪 +971</option>
-                                                <option value="+966" className="bg-[#050510] text-white">🇸🇦 +966</option>
-                                                <option value="+977" className="bg-[#050510] text-white">🇳🇵 +977</option>
-                                                <option value="+880" className="bg-[#050510] text-white">🇧🇩 +880</option>
-                                                <option value="+92" className="bg-[#050510] text-white">🇵🇰 +92</option>
-                                                <option value="+94" className="bg-[#050510] text-white">🇱🇰 +94</option>
-                                                <option value="+61" className="bg-[#050510] text-white">🇦🇺 +61</option>
-                                                <option value="+65" className="bg-[#050510] text-white">🇸🇬 +65</option>
-                                                <option value="+60" className="bg-[#050510] text-white">🇲🇾 +60</option>
-                                                <option value="+49" className="bg-[#050510] text-white">🇩🇪 +49</option>
-                                                <option value="+33" className="bg-[#050510] text-white">🇫🇷 +33</option>
-                                                <option value="+81" className="bg-[#050510] text-white">🇯🇵 +81</option>
-                                                <option value="+86" className="bg-[#050510] text-white">🇨🇳 +86</option>
-                                                <option value="+7" className="bg-[#050510] text-white">🇷🇺 +7</option>
-                                                <option value="+27" className="bg-[#050510] text-white">🇿🇦 +27</option>
-                                                <option value="+55" className="bg-[#050510] text-white">🇧🇷 +55</option>
+                                                {ALL_COUNTRIES.map((c) => (
+                                                    <option value={c.dialCode} key={`${c.code}-${c.dialCode}`} className="bg-[#050510] text-white">
+                                                        {getCountryLabel(c)}
+                                                    </option>
+                                                ))}
                                             </select>
                                             <input
                                                 type="tel"

@@ -10,6 +10,7 @@ import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { showToast, showPrompt } from "@/lib/toast";
+import { ALL_COUNTRIES, getCountryLabel } from "@/lib/countries";
 
 
 
@@ -92,6 +93,9 @@ function LoginForm() {
       if (data.success) {
         setTenantName(data.name);
         setTenantLogo(data.logo);
+        if (data.defaultCountryCode) {
+          setParentCountryCode(data.defaultCountryCode);
+        }
         // ⚡ Persist for instant load next time
         localStorage.setItem("lastTenantName", data.name);
         localStorage.setItem("lastTenantLogo", data.logo || "");
@@ -882,27 +886,13 @@ function LoginForm() {
                                 <select
                                   value={parentCountryCode}
                                   onChange={(e) => setParentCountryCode(e.target.value)}
-                                  className="w-[72px] sm:w-[78px] shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-1.5 py-3 text-[11px] sm:text-xs font-bold text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none cursor-pointer"
+                                  className="w-[110px] sm:w-[125px] shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-2 py-3 text-xs font-bold text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none cursor-pointer truncate"
                                 >
-                                  <option value="+91">🇮🇳 +91</option>
-                                  <option value="+1">🇺🇸 +1</option>
-                                  <option value="+44">🇬🇧 +44</option>
-                                  <option value="+971">🇦🇪 +971</option>
-                                  <option value="+966">🇸🇦 +966</option>
-                                  <option value="+977">🇳🇵 +977</option>
-                                  <option value="+880">🇧🇩 +880</option>
-                                  <option value="+92">🇵🇰 +92</option>
-                                  <option value="+94">🇱🇰 +94</option>
-                                  <option value="+61">🇦🇺 +61</option>
-                                  <option value="+65">🇸🇬 +65</option>
-                                  <option value="+60">🇲🇾 +60</option>
-                                  <option value="+49">🇩🇪 +49</option>
-                                  <option value="+33">🇫🇷 +33</option>
-                                  <option value="+81">🇯🇵 +81</option>
-                                  <option value="+86">🇨🇳 +86</option>
-                                  <option value="+7">🇷🇺 +7</option>
-                                  <option value="+27">🇿🇦 +27</option>
-                                  <option value="+55">🇧🇷 +55</option>
+                                  {ALL_COUNTRIES.map((c) => (
+                                    <option value={c.dialCode} key={`${c.code}-${c.dialCode}`}>
+                                      {getCountryLabel(c)}
+                                    </option>
+                                  ))}
                                 </select>
 
                                 <input

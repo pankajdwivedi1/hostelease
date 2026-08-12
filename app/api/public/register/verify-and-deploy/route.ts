@@ -76,14 +76,18 @@ export async function POST(request: NextRequest) {
 
         if (error) throw error;
 
-        // Store registration details in admin_settings to bypass tenants schema limitations
-        // We use university_bank_details as it's an existing JSONB column
+        // Extract default country code from contactPhone (e.g. +61 or +91)
+        const countryCodeMatch = contactPhone.match(/^\+\d+/);
+        const derivedCountryCode = countryCodeMatch ? countryCodeMatch[0] : "+91";
+
+        // Store registration details & defaultCountryCode in admin_settings
         const { error: settingsError } = await supabase.from('admin_settings').insert({
             tenant_id: tenant.id,
             university_bank_details: {
                 contactName,
                 contactPhone,
-                totalHostelars
+                totalHostelars,
+                defaultCountryCode: derivedCountryCode
             }
         });
 

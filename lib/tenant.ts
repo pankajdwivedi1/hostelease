@@ -152,7 +152,8 @@ export const getTenantFromRequest = cache(async () => {
         subscriptionEndDate: tenant.subscriptionEndDate,
         isActive: tenant.isActive,
         adminEmail: tenant.adminEmail,
-        createdAt: tenant.createdAt
+        createdAt: tenant.createdAt,
+        defaultCountryCode: (tenant as any).defaultCountryCode || (tenant as any).default_country_code || "+91",
     };
 
     // Store in cache
@@ -184,7 +185,24 @@ export async function getTenantConfig() {
             logo: null,
             primaryColor: '#3b82f6',
             secondaryColor: '#1e40af',
+            defaultCountryCode: '+91',
         };
+    }
+
+    let defaultCountryCode = tenant.defaultCountryCode || '+91';
+
+    try {
+        const { data: settings } = await supabase
+            .from('admin_settings')
+            .select('university_bank_details')
+            .eq('tenant_id', tenant._id)
+            .maybeSingle();
+
+        if (settings?.university_bank_details?.defaultCountryCode) {
+            defaultCountryCode = settings.university_bank_details.defaultCountryCode;
+        }
+    } catch (err) {
+        // Fallback to default
     }
 
     return {
@@ -192,6 +210,7 @@ export async function getTenantConfig() {
         logo: tenant.logo,
         primaryColor: tenant.primaryColor,
         secondaryColor: tenant.secondaryColor,
+        defaultCountryCode,
     };
 }
 
