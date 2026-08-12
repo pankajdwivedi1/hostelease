@@ -2607,7 +2607,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     }
 
     const gridColsClass = isParentView 
-        ? "lg:grid-cols-3"
+        ? "md:grid-cols-4"
         : (bankSettings?.isPaymentEnabled ? "lg:grid-cols-5" : "lg:grid-cols-4");
 
     return (
@@ -2780,18 +2780,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     )}
                                 </div>
 
-                                {/* 🚪 OUTING & ATTENDANCE CARD - Side by Side right next to Daily Attendance in Parent View */}
                                 {isParentView && (
                                     <button
                                         onClick={() => setShowPermissionsHistory(true)}
-                                        className="h-12 bg-white px-3 rounded-xl border border-gray-100 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-50 transition-all flex items-center justify-between gap-1 overflow-hidden min-w-0 shadow-sm text-left active:scale-[0.98] cursor-pointer"
+                                        className="h-12 bg-white px-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between gap-1 overflow-hidden min-w-0 hover:bg-gray-50 transition-all cursor-pointer text-left"
                                     >
                                         <div className="flex flex-col overflow-hidden min-w-0">
-                                            <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-gray-400 opacity-70 truncate">Outing & Attendance</span>
-                                            <span className="text-[9px] md:text-[10px] font-black text-gray-700 uppercase tracking-tight truncate">View History</span>
+                                            <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-gray-400 opacity-70 truncate">Permissions & History</span>
+                                            <p className="text-[10px] md:text-xs font-black uppercase tracking-tight text-gray-700 truncate">🚪 Outing & Attendance</p>
                                         </div>
-                                        <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-sm shrink-0">
-                                            🚪
+                                        <div className="p-1.5 rounded-lg bg-gray-50 text-gray-500 shrink-0">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                            </svg>
                                         </div>
                                     </button>
                                 )}
@@ -2989,13 +2990,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-6">
-                                <button
-                                    onClick={() => setShowPermissionsHistory(true)}
-                                    className="w-full h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5"
-                                >
-                                    <span>🚪</span> <span className="truncate">Outing & Attendance</span>
-                                </button>
+                            {!isParentView && (
+                                <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-6">
+                                    <button
+                                        onClick={() => setShowPermissionsHistory(true)}
+                                        className="w-full h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5"
+                                    >
+                                        <span>🚪</span> <span className="truncate">Outing & Attendance</span>
+                                    </button>
 
                                 {/* 📶 Always-Visible Campus WiFi Status Card (Right side of Outing & Attendance) */}
                                 {!isParentView && (
@@ -3047,7 +3049,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                             </span>
                                         </div>
                                     </div>
-                                )}
 
                                 {bankSettings?.isPaymentEnabled && (
                                     <button
@@ -3058,6 +3059,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     </button>
                                 )}
                             </div>
+                            )}
 
                             {showRequestForm && (
                                 <div className="p-6 rounded-3xl border border-blue-100 bg-gradient-to-br from-white to-blue-50/30 shadow-xl shadow-blue-100/50 space-y-6 mb-6 animate-in slide-in-from-top-4 duration-300">
