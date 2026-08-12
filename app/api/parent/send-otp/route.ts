@@ -16,14 +16,8 @@ export async function POST(request: NextRequest) {
     // Clean phone number (keep only digits)
     let cleaned = phoneNumber.replace(/\D/g, "");
     
-    // If it has +91 or 91, let's keep it or match both.
-    // In India, numbers are usually 10 digits. If it starts with 91 and has 12 digits, strip the 91.
-    if (cleaned.length === 12 && cleaned.startsWith("91")) {
-      cleaned = cleaned.substring(2);
-    }
-    
-    if (cleaned.length !== 10) {
-      return NextResponse.json({ success: false, error: "Please enter a valid 10-digit mobile number" }, { status: 400 });
+    if (cleaned.length < 7 || cleaned.length > 15) {
+      return NextResponse.json({ success: false, error: "Please enter a valid mobile number (7 to 15 digits)" }, { status: 400 });
     }
 
     const tenantId = await getCurrentTenantId();
@@ -33,8 +27,11 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
+    // Extract core 10 digits (or full digits if less than 10) to query DB flexibly across formats
+    const coreDigits = cleaned.length >= 10 ? cleaned.slice(-10) : cleaned;
+
     // ⚡ FAST WILDCARD QUERY: Search directly for matching digits with any delimiters in between
-    const digitPattern = `%${cleaned.split("").join("%")}%`;
+    const digitPattern = `%${coreDigits.split("").join("%")}%`;
     
     let { data: students, error } = await supabase
       .from("students")
@@ -47,7 +44,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Database error occurred" }, { status: 500 });
     }
 
-    const cleanDbPhone = (num: string) => num ? num.replace(/\D/g, "").replace(/^91/, "") : "";
+    const cleanDbPhone = (num: string) => num ? num.replace(/\D/g, "") : "";
     
     let matchedStudent = null;
     let studentName = "";
@@ -61,7 +58,11 @@ export async function POST(request: NextRequest) {
         const motherClean = cleanDbPhone(prof.mother_number);
         const lgClean = cleanDbPhone(prof.local_guardian_phone_number);
 
-        if (fatherClean === cleaned || motherClean === cleaned || lgClean === cleaned) {
+        if (
+          (fatherClean && (fatherClean === cleaned || fatherClean.endsWith(coreDigits))) ||
+          (motherClean && (motherClean === cleaned || motherClean.endsWith(coreDigits))) ||
+          (lgClean && (lgClean === cleaned || lgClean.endsWith(coreDigits)))
+        ) {
           matchedStudent = prof;
           studentName = s.name;
           break;

@@ -15,13 +15,8 @@ export async function POST(request: NextRequest) {
     // Clean phone number (keep only digits)
     let cleaned = phoneNumber.replace(/\D/g, "");
     
-    // If it has +91 or 91, let's keep it or match both.
-    if (cleaned.length === 12 && cleaned.startsWith("91")) {
-      cleaned = cleaned.substring(2);
-    }
-    
-    if (cleaned.length !== 10) {
-      return NextResponse.json({ success: false, error: "Please enter a valid 10-digit mobile number" }, { status: 400 });
+    if (cleaned.length < 7 || cleaned.length > 15) {
+      return NextResponse.json({ success: false, error: "Please enter a valid mobile number (7 to 15 digits)" }, { status: 400 });
     }
 
     // ⚡ DUPLICATE CHECK: Verify if this phone number is already registered in the students table

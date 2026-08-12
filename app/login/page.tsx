@@ -34,6 +34,7 @@ function LoginForm() {
   const [mounted, setMounted] = useState(false);
   const [showParentLogin, setShowParentLogin] = useState(false);
   const [parentPhone, setParentPhone] = useState("");
+  const [parentCountryCode, setParentCountryCode] = useState("+91");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [parentLoading, setParentLoading] = useState(false);
@@ -159,8 +160,9 @@ function LoginForm() {
 
 
   const handleSendOtp = async () => {
-    if (!parentPhone || parentPhone.length !== 10) {
-      const errMsg = "Please enter a valid 10-digit mobile number";
+    const cleanNumber = parentPhone.replace(/\D/g, "");
+    if (!cleanNumber || cleanNumber.length < 7 || cleanNumber.length > 15) {
+      const errMsg = "Please enter a valid mobile number";
       setError(errMsg);
       showToast(errMsg, "warning");
       return;
@@ -170,10 +172,12 @@ function LoginForm() {
       setParentLoading(true);
       setError("");
 
+      const fullPhoneNumber = `${parentCountryCode}${cleanNumber}`;
+
       const response = await fetch("/api/parent/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: parentPhone }),
+        body: JSON.stringify({ phoneNumber: fullPhoneNumber }),
       });
 
       const data = await response.json();
@@ -230,10 +234,13 @@ function LoginForm() {
       setParentLoading(true);
       setError("");
 
+      const cleanNumber = parentPhone.replace(/\D/g, "");
+      const fullPhoneNumber = `${parentCountryCode}${cleanNumber}`;
+
       const response = await fetch("/api/parent/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: parentPhone, otp: activeOtp, reqId: parentReqId }),
+        body: JSON.stringify({ phoneNumber: fullPhoneNumber, otp: activeOtp, reqId: parentReqId }),
       });
 
       const data = await response.json();
@@ -871,13 +878,36 @@ function LoginForm() {
                               <label className="block text-[10px] font-black uppercase tracking-wider text-blue-600 text-center">
                                 Enter your Registered Mobile Number
                               </label>
-                              <div className="relative">
-                                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 text-sm font-semibold pointer-events-none">
-                                  +91
-                                </span>
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={parentCountryCode}
+                                  onChange={(e) => setParentCountryCode(e.target.value)}
+                                  className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-3 text-xs font-bold text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none shrink-0"
+                                >
+                                  <option value="+91">🇮🇳 +91 (India)</option>
+                                  <option value="+1">🇺🇸 +1 (USA/Canada)</option>
+                                  <option value="+44">🇬🇧 +44 (UK)</option>
+                                  <option value="+971">🇦🇪 +971 (UAE)</option>
+                                  <option value="+966">🇸🇦 +966 (Saudi Arabia)</option>
+                                  <option value="+977">🇳🇵 +977 (Nepal)</option>
+                                  <option value="+880">🇧🇩 +880 (Bangladesh)</option>
+                                  <option value="+92">🇵🇰 +92 (Pakistan)</option>
+                                  <option value="+94">🇱🇰 +94 (Sri Lanka)</option>
+                                  <option value="+61">🇦🇺 +61 (Australia)</option>
+                                  <option value="+65">🇸🇬 +65 (Singapore)</option>
+                                  <option value="+60">🇲🇾 +60 (Malaysia)</option>
+                                  <option value="+49">🇩🇪 +49 (Germany)</option>
+                                  <option value="+33">🇫🇷 +33 (France)</option>
+                                  <option value="+81">🇯🇵 +81 (Japan)</option>
+                                  <option value="+86">🇨🇳 +86 (China)</option>
+                                  <option value="+7">🇷🇺 +7 (Russia)</option>
+                                  <option value="+27">🇿🇦 +27 (South Africa)</option>
+                                  <option value="+55">🇧🇷 +55 (Brazil)</option>
+                                </select>
+
                                 <input
                                   type="tel"
-                                  maxLength={10}
+                                  maxLength={15}
                                   value={parentPhone}
                                   onChange={(e) => {
                                     setParentPhone(e.target.value.replace(/\D/g, ""));
@@ -886,8 +916,8 @@ function LoginForm() {
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter") handleSendOtp();
                                   }}
-                                  className="w-full rounded-xl border border-slate-200 bg-white pl-12 pr-4 py-3 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
-                                  placeholder="9876543210"
+                                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                  placeholder="Enter mobile number"
                                 />
                               </div>
                               <button
@@ -902,9 +932,9 @@ function LoginForm() {
                           ) : (
                             <div className="space-y-3">
                               <div className="flex justify-between items-center">
-                                <label className="block text-[10px] font-bold uppercase tracking-wider text-green-600">
-                                  OTP SENT TO YOUR REGISTERED MOBILE NUMBER {parentPhone.slice(0, 4)}XXXX{parentPhone.slice(8)}
-                                </label>
+                                 <label className="block text-[10px] font-bold uppercase tracking-wider text-green-600">
+                                   OTP SENT TO {parentCountryCode} {parentPhone.length > 4 ? `${parentPhone.slice(0, 2)}***${parentPhone.slice(-2)}` : parentPhone}
+                                 </label>
                                 <button
                                   type="button"
                                   onClick={() => {

@@ -16,8 +16,8 @@ export async function POST(request: NextRequest) {
 
     // Clean phone number
     let cleaned = phoneNumber.replace(/\D/g, "");
-    if (cleaned.length === 12 && cleaned.startsWith("91")) {
-      cleaned = cleaned.substring(2);
+    if (cleaned.length < 7 || cleaned.length > 15) {
+      return NextResponse.json({ success: false, error: "Please enter a valid mobile number (7 to 15 digits)" }, { status: 400 });
     }
 
     // If client provided reqId, we can verify statelessly directly via MSG91!
