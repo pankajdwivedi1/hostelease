@@ -10222,21 +10222,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <div className="grid grid-cols-3 sm:flex sm:flex-nowrap gap-1.5 sm:gap-3 items-stretch -mt-2.5 sm:mt-0">
                   <button
                     onClick={() => setStatusFilter("all")}
-                    className={`w-full sm:flex-1 min-h-[54px] px-1.5 py-1.5 rounded-xl text-[10px] sm:text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 min-h-[54px] px-1.5 py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
                     <span className="text-center leading-tight">Current Count</span>
                     <span className="text-[10px] sm:text-xs font-black">{studentsLoading ? "..." : statusCounts.all}</span>
                   </button>
                   <button
                     onClick={() => setStatusFilter("in")}
-                    className={`w-full sm:flex-1 min-h-[54px] px-1.5 py-1.5 rounded-xl text-[10px] sm:text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 min-h-[54px] px-1.5 py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
                     <span>In</span>
                     <span className="text-[10px] sm:text-xs font-black">{studentsLoading ? "..." : statusCounts.in}</span>
                   </button>
                   <button
                     onClick={() => setStatusFilter("out")}
-                    className={`w-full sm:flex-1 min-h-[54px] px-2 py-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all flex flex-col justify-center ${statusFilter === "out" ? "bg-blue-600 text-white shadow-md shadow-blue-200" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 min-h-[54px] px-2 py-1 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all flex flex-col justify-center ${statusFilter === "out" ? "bg-blue-600 text-white shadow-md shadow-blue-200" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
                     {!studentsLoading ? (
                       <div className="w-full flex flex-col justify-center gap-0.5 text-[8px] sm:text-[9px] uppercase tracking-wider font-black">
