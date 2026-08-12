@@ -4,25 +4,26 @@ import React, { useState, useRef, useEffect } from "react";
 import { Camera, Video, Square, RefreshCw, UploadCloud, CheckCircle2, AlertTriangle, ShieldCheck, Play, Pause } from "lucide-react";
 
 const CONSENT_MIME_TYPES = [
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+    "video/mp4",
     "video/webm;codecs=vp8,opus",
     "video/webm;codecs=h264,opus",
     "video/webm",
-    "video/mp4;codecs=avc1,mp4a.40.2",
-    "video/mp4;codecs=h264,aac",
-    "video/mp4",
     "video/quicktime",
 ];
 
 function pickConsentMimeType(): { mimeType: string; fileExt: string } {
-    for (const mimeType of CONSENT_MIME_TYPES) {
-        if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(mimeType)) {
-            return {
-                mimeType,
-                fileExt: mimeType.startsWith("video/mp4") ? "mp4" : "webm",
-            };
+    if (typeof MediaRecorder !== "undefined") {
+        for (const mimeType of CONSENT_MIME_TYPES) {
+            if (MediaRecorder.isTypeSupported(mimeType)) {
+                return {
+                    mimeType,
+                    fileExt: mimeType.startsWith("video/mp4") || mimeType.startsWith("video/quicktime") ? "mp4" : "webm",
+                };
+            }
         }
     }
-    return { mimeType: "video/webm", fileExt: "webm" };
+    return { mimeType: "", fileExt: "webm" };
 }
 
 function isMobileDevice(): boolean {
@@ -279,7 +280,7 @@ export default function ParentConsentClient({
             };
 
             mediaRecorderRef.current = mediaRecorder;
-            mediaRecorder.start(100); // chunk every 100ms
+            mediaRecorder.start(1000); // chunk every 1000ms for stable WebM/MP4 duration metadata
             setRecordingState("recording");
             setCountdown(24); // Start countdown at 24s
 
@@ -557,6 +558,16 @@ export default function ParentConsentClient({
                                                 src={videoUrl}
                                                 controls
                                                 playsInline
+                                                onLoadedMetadata={(e) => {
+                                                    const video = e.target as HTMLVideoElement;
+                                                    if (video.duration === Infinity || isNaN(video.duration)) {
+                                                        video.currentTime = 1e101;
+                                                        video.ontimeupdate = () => {
+                                                            video.ontimeupdate = null;
+                                                            video.currentTime = 0;
+                                                        };
+                                                    }
+                                                }}
                                                 className="w-full h-full object-cover"
                                             />
                                         </div>
