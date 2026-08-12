@@ -923,7 +923,7 @@ function LoginForm() {
                             <div className="space-y-3">
                               <div className="flex justify-between items-center">
                                  <label className="block text-[10px] font-bold uppercase tracking-wider text-green-600">
-                                   OTP SENT TO {parentCountryCode} {parentPhone.length > 4 ? `${parentPhone.slice(0, 2)}***${parentPhone.slice(-2)}` : parentPhone}
+                                   OTP Sent to your registered mobile number
                                  </label>
                                 <button
                                   type="button"
