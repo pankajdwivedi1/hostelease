@@ -10127,7 +10127,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
                 </div>
 
-                <div className="flex flex-row flex-wrap sm:flex-nowrap gap-1.5 sm:gap-3 items-stretch">
+                <div className="grid grid-cols-3 sm:flex sm:flex-nowrap gap-1.5 sm:gap-3 items-stretch">
                   <button
                     onClick={() => setHostelFilter("all")}
                     className={`flex-1 sm:flex-1 min-w-[110px] px-2 py-1 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[36px] ${hostelFilter === "all"
@@ -10219,7 +10219,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </button>
                 </div>
 
-                <div className="grid grid-cols-3 sm:flex sm:flex-nowrap gap-2 md:gap-3 items-stretch">
+                <div className="grid grid-cols-3 sm:flex sm:flex-nowrap gap-1.5 sm:gap-3 items-stretch -mt-2.5 sm:mt-0">
                   <button
                     onClick={() => setStatusFilter("all")}
                     className={`w-full sm:flex-1 min-h-[54px] px-1.5 py-1.5 rounded-xl text-[10px] sm:text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
