@@ -10130,7 +10130,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <div className="grid grid-cols-3 sm:flex sm:flex-nowrap gap-1.5 sm:gap-3 items-stretch">
                   <button
                     onClick={() => setHostelFilter("all")}
-                    className={`flex-1 sm:flex-1 min-w-[110px] px-2 py-1 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[36px] ${hostelFilter === "all"
+                    className={`flex-1 sm:flex-1 min-w-[110px] px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[36px] ${hostelFilter === "all"
                       ? "bg-blue-600 text-background"
                       : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                       }`}
@@ -10154,7 +10154,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <button
                         key={h._id || h.name}
                         onClick={() => setHostelFilter(h.name)}
-                        className={`flex-1 sm:flex-1 min-w-[110px] px-2 py-1 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[36px] ${hostelFilter === h.name
+                        className={`flex-1 sm:flex-1 min-w-[110px] px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[36px] ${hostelFilter === h.name
                           ? "bg-blue-600 text-background"
                           : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                           }`}
@@ -10192,7 +10192,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <button
                           key={h._id || h.name}
                           onClick={() => setHostelFilter(h.name)}
-                          className={`flex-1 sm:flex-1 min-w-[110px] px-1 sm:px-2 py-1 rounded-lg text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[36px] ${hostelFilter === h.name
+                          className={`flex-1 sm:flex-1 min-w-[110px] px-1 sm:px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold transition-colors flex flex-col items-center justify-center gap-0.5 min-h-[36px] ${hostelFilter === h.name
                             ? "bg-blue-600 text-background"
                             : "bg-filler text-foreground hover:bg-[#E8E8E6]"
                             }`}
@@ -10209,7 +10209,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   <button
                     onClick={exportToExcel}
                     disabled={studentsLoading}
-                    className="flex-1 sm:flex-none px-2 sm:px-3 py-1 rounded-lg bg-green-600 hover:bg-green-700 active:scale-95 text-white text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 min-h-[36px] shadow-sm cursor-pointer whitespace-nowrap"
+                    className="flex-1 sm:flex-none px-2 sm:px-3 py-1 rounded-lg bg-green-600 hover:bg-green-700 active:scale-95 text-white text-[10px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 min-h-[36px] shadow-sm cursor-pointer whitespace-nowrap"
                     title="Export Excel with Column Selector"
                   >
                     <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -10225,18 +10225,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     className={`w-full sm:flex-1 min-h-[54px] px-1.5 py-1.5 rounded-xl text-[10px] sm:text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 ${statusFilter === "all" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
                     <span className="text-center leading-tight">Current Count</span>
-                    <span className="text-xs font-black">{studentsLoading ? "..." : statusCounts.all}</span>
+                    <span className="text-[10px] sm:text-xs font-black">{studentsLoading ? "..." : statusCounts.all}</span>
                   </button>
                   <button
                     onClick={() => setStatusFilter("in")}
-                    className={`w-full sm:flex-1 min-h-[54px] px-1.5 py-1.5 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 min-h-[54px] px-1.5 py-1.5 rounded-xl text-[10px] sm:text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 ${statusFilter === "in" ? "bg-blue-600 text-background" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
                     <span>In</span>
-                    <span className="text-xs font-black">{studentsLoading ? "..." : statusCounts.in}</span>
+                    <span className="text-[10px] sm:text-xs font-black">{studentsLoading ? "..." : statusCounts.in}</span>
                   </button>
                   <button
                     onClick={() => setStatusFilter("out")}
-                    className={`w-full sm:flex-1 min-h-[54px] px-2 py-1 rounded-xl text-xs font-bold transition-all flex flex-col justify-center ${statusFilter === "out" ? "bg-blue-600 text-white shadow-md shadow-blue-200" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                    className={`w-full sm:flex-1 min-h-[54px] px-2 py-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all flex flex-col justify-center ${statusFilter === "out" ? "bg-blue-600 text-white shadow-md shadow-blue-200" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
                   >
                     {!studentsLoading ? (
                       <div className="w-full flex flex-col justify-center gap-0.5 text-[8px] sm:text-[9px] uppercase tracking-wider font-black">
