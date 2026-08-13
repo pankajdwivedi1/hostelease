@@ -163,19 +163,56 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
   };
 
   const handleHostelSelect = (hostel: string) => {
-    setSelectedHostels((prev) =>
-      prev.includes(hostel)
-        ? prev.filter((h) => h !== hostel)
-        : [...prev, hostel]
-    );
+    let nextHostels: string[];
+    if (selectedHostels.includes(hostel)) {
+      nextHostels = selectedHostels.filter((h) => h !== hostel);
+    } else {
+      nextHostels = [...selectedHostels, hostel];
+    }
+    setSelectedHostels(nextHostels);
 
-    // Load existing fields for this hostel
-    const existingRule = enforcementRules[hostel.toLowerCase().trim()];
-    if (existingRule) {
-      setSelectedFields(existingRule.enforcedFields);
-      setNotificationPriority(existingRule.notificationPriority);
-      setSuccessMessage(existingRule.successMessage);
-      setAutoCloseNotification(existingRule.autoCloseNotification);
+    if (nextHostels.length === 0) {
+      setSelectedFields([]);
+    } else {
+      const existingRule = enforcementRules[hostel.toLowerCase().trim()];
+      if (existingRule) {
+        setSelectedFields(existingRule.enforcedFields || []);
+        setNotificationPriority(existingRule.notificationPriority || "normal");
+        setSuccessMessage(existingRule.successMessage || "All required fields have been completed! Thank you.");
+        setAutoCloseNotification(existingRule.autoCloseNotification ?? true);
+      }
+    }
+  };
+
+  const deactivateAllRules = async () => {
+    if (!confirm("Are you sure you want to deactivate all field enforcement rules for all hostels? Students will not be prompted on login.")) {
+      return;
+    }
+    try {
+      setLoading(true);
+      const tenantParam = getTenantParam();
+      for (const h of hostels) {
+        await fetch(`/api/admin/field-enforcement${tenantParam}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            hostelName: h,
+            enforcedFields: [],
+            isActive: false,
+            notificationPriority: "normal",
+            successMessage: "All required fields have been completed! Thank you.",
+            autoCloseNotification: true,
+          }),
+        });
+      }
+      setSelectedFields([]);
+      setSelectedHostels([]);
+      setMessage("✓ All field enforcement rules have been deactivated successfully.");
+      await loadEnforcementRules();
+    } catch (err: any) {
+      setMessage("Failed to deactivate rules: " + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -348,7 +385,16 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
 
           {/* Step 1: Hostel Selection */}
           <div className="bg-white rounded-lg sm:rounded-xl p-4 sm:p-6 border border-slate-200">
-            <h3 className="text-xs sm:text-sm font-bold text-slate-900 mb-3 sm:mb-4">STEP 1: SELECT HOSTELS</h3>
+            <div className="flex items-center justify-between gap-2 mb-3 sm:mb-4">
+              <h3 className="text-xs sm:text-sm font-bold text-slate-900">STEP 1: SELECT HOSTELS</h3>
+              <button
+                onClick={deactivateAllRules}
+                disabled={loading}
+                className="px-3 py-1 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 rounded-lg text-[10px] sm:text-xs font-bold transition flex items-center gap-1"
+              >
+                🚫 Deactivate All Enforcement
+              </button>
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
               {hostels.map((hostel) => (
                 <button

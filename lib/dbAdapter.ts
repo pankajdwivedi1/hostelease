@@ -743,25 +743,48 @@ const mapGatePassToSnakeCase = (g: any) => {
     const fieldMap: any = {
         studentId: 'student_id',
         firebaseUID: 'firebase_uid',
+        firebaseUid: 'firebase_uid',
         studentName: 'student_name',
         hostelName: 'hostel_name',
         roomNumber: 'room_number',
         registrationId: 'registration_id',
         checkOutTime: 'check_out_time',
         checkOutISTTime: 'check_out_ist_time',
+        checkOutIstTime: 'check_out_ist_time',
         checkOutISTDate: 'check_out_ist_date',
+        checkOutIstDate: 'check_out_ist_date',
         checkInTime: 'check_in_time',
         checkInISTTime: 'check_in_ist_time',
+        checkInIstTime: 'check_in_ist_time',
         checkInISTDate: 'check_in_ist_date',
+        checkInIstDate: 'check_in_ist_date',
         status: 'status',
         durationMinutes: 'duration_minutes',
         type: 'type',
+        requestType: 'type',
+        request_type: 'type',
         permissionId: 'permission_id',
         gateName: 'gate_name',
         qrTokenUsedOut: 'qr_token_used_out',
         qrTokenUsedIn: 'qr_token_used_in',
-        phoneNumber: 'phone_number'
+        phoneNumber: 'phone_number',
+        reason: 'reason',
+        destination: 'destination',
+        parentMobile: 'parent_mobile',
+        manualUpdate: 'manual_update',
+        updatedBy: 'updated_by',
+        tenantId: 'tenant_id',
+        tenant_id: 'tenant_id'
     };
+
+    const validSnakeColumns = new Set([
+        '_id', 'student_id', 'firebase_uid', 'student_name', 'hostel_name', 'room_number',
+        'registration_id', 'check_out_time', 'check_out_ist_time', 'check_out_ist_date',
+        'check_in_time', 'check_in_ist_time', 'check_in_ist_date', 'status', 'duration_minutes',
+        'gate_name', 'qr_token_used_out', 'qr_token_used_in', 'type', 'reason', 'destination',
+        'parent_mobile', 'permission_id', 'phone_number', 'tenant_id', 'created_at', 'updated_at',
+        'manual_update', 'updated_by'
+    ]);
 
     Object.keys(g).forEach(key => {
         let value = g[key];
@@ -774,8 +797,11 @@ const mapGatePassToSnakeCase = (g: any) => {
         }
 
         if (fieldMap[key]) {
+            if (key === 'studentId' && typeof value === 'object' && value) {
+                value = value._id || value.id || String(value);
+            }
             mapped[fieldMap[key]] = value;
-        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
+        } else if (validSnakeColumns.has(key)) {
             mapped[key] = value;
         }
     });
@@ -850,8 +876,18 @@ const mapPermissionToSnakeCase = (p: any) => {
         deanStatus: 'dean_status',
         parentStatus: 'parent_status',
         requestType: 'request_type',
-        parentConsentUrl: 'parent_consent_url'
+        parentConsentUrl: 'parent_consent_url',
+        tenantId: 'tenant_id',
+        studentName: 'student_name',
+        hostelName: 'hostel_name',
+        roomNumber: 'room_number'
     };
+
+    const validSnakeColumns = new Set([
+        '_id', 'student_id', 'from_date_time', 'to_date_time', 'reason', 'status',
+        'warden_status', 'dean_status', 'parent_status', 'request_type', 'parent_consent_url',
+        'tenant_id', 'student_name', 'hostel_name', 'room_number', 'created_at', 'updated_at'
+    ]);
 
     Object.keys(p).forEach(key => {
         let value = p[key];
@@ -860,8 +896,11 @@ const mapPermissionToSnakeCase = (p: any) => {
         }
 
         if (fieldMap[key]) {
+            if (key === 'studentId' && typeof value === 'object' && value) {
+                value = value._id || value.id || String(value);
+            }
             mapped[fieldMap[key]] = value;
-        } else if (!['_id', 'createdAt', 'updatedAt', 'id', '__v'].includes(key)) {
+        } else if (validSnakeColumns.has(key)) {
             mapped[key] = value;
         }
     });
@@ -1122,15 +1161,18 @@ const getDbSource = async (): Promise<string> => {
         return cachedDbSource;
     }
 
-    // ⚡ Fast path: Check process.env.NEXT_PUBLIC_DB_SOURCE first
+    // 1. Check process.env.NEXT_PUBLIC_DB_SOURCE first for instant response
     let envSource = (process.env.NEXT_PUBLIC_DB_SOURCE || '').toUpperCase();
     if (envSource === 'RAILWAY') envSource = 'PRISMA';
-    if (envSource === 'SUPABASE' || envSource === 'PRISMA' || envSource === 'MONGODB') {
-        cachedDbSource = envSource;
+
+    // If envSource is explicitly RAILWAY/PRISMA, use it immediately to avoid network timeouts on broken Supabase connection
+    if (envSource === 'PRISMA') {
+        cachedDbSource = 'PRISMA';
         lastDbSourceCheck = now;
-        return envSource;
+        return 'PRISMA';
     }
 
+    // 2. Check dynamic database setting from admin_settings with a strict 1s timeout
     try {
         let tenantId = null;
         try {
@@ -1138,7 +1180,10 @@ const getDbSource = async (): Promise<string> => {
         } catch (err) {}
 
         const query = supabase.from('admin_settings').select('active_database_source');
-        const { data } = tenantId ? await query.eq('tenant_id', tenantId).limit(1).maybeSingle() : await query.limit(1).maybeSingle();
+        const fetchPromise = tenantId ? query.eq('tenant_id', tenantId).limit(1).maybeSingle() : query.limit(1).maybeSingle();
+        const timeoutPromise = new Promise<{ data: any }>((resolve) => setTimeout(() => resolve({ data: null }), 1000));
+        
+        const { data } = await Promise.race([fetchPromise, timeoutPromise]);
 
         if (data?.active_database_source) {
             let src = String(data.active_database_source).toUpperCase();
@@ -1149,9 +1194,15 @@ const getDbSource = async (): Promise<string> => {
         }
     } catch {}
 
-    cachedDbSource = 'SUPABASE';
+    if (envSource === 'SUPABASE' || envSource === 'PRISMA' || envSource === 'MONGODB') {
+        cachedDbSource = envSource;
+        lastDbSourceCheck = now;
+        return envSource;
+    }
+
+    cachedDbSource = 'PRISMA';
     lastDbSourceCheck = now;
-    return 'SUPABASE';
+    return 'PRISMA';
 };
 
 export const db = {

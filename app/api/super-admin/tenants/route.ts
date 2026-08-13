@@ -22,48 +22,88 @@ export async function GET(request: NextRequest) {
         const now = new Date();
         const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000).toISOString();
 
-        // 1. Fetch tenants with deletion filter
-        let query = supabase.from('tenants').select('*');
-        
-        if (showDeleted) {
-            query = query.eq('is_deleted', true);
-        } else {
-            query = query.or('is_deleted.is.null,is_deleted.eq.false');
+        const activeDbSource = await db.getSource();
+        let tenants: any[] = [];
+
+        // 1. Fetch tenants with deletion filter from active DB (Railway/Prisma or Supabase)
+        if (activeDbSource === 'PRISMA') {
+            try {
+                const prismaTenants = await prisma.tenant.findMany({
+                    where: showDeleted ? { isDeleted: true } : { isDeleted: false },
+                    orderBy: { createdAt: 'desc' }
+                });
+                tenants = prismaTenants.map(t => ({
+                    id: t.id,
+                    name: t.name,
+                    slug: t.slug,
+                    admin_email: t.adminEmail,
+                    is_active: t.isActive,
+                    is_deleted: t.isDeleted || false,
+                    deleted_at: t.deletedAt,
+                    subscription_status: t.subscriptionStatus,
+                    subscription_end_date: t.subscriptionEndDate,
+                    primary_color: t.primaryColor,
+                    created_at: t.createdAt
+                }));
+            } catch (e: any) {
+                console.warn("Prisma tenant list fetch error, falling back to Supabase:", e?.message);
+            }
         }
 
-        const { data: tenants, error: tenantError } = await query.order('created_at', { ascending: false });
-        if (tenantError) throw tenantError;
+        if ((!tenants || tenants.length === 0) && activeDbSource !== 'PRISMA') {
+            let query = supabase.from('tenants').select('*');
+            if (showDeleted) {
+                query = query.eq('is_deleted', true);
+            } else {
+                query = query.or('is_deleted.is.null,is_deleted.eq.false');
+            }
+            const { data } = await query.order('created_at', { ascending: false });
+            tenants = data || [];
+        }
 
         const tenantIds = tenants?.map((t: any) => t.id) || [];
 
-        // 2. ULTRA-OPTIMIZED COUNT FETCH: Get counts per tenant without downloading records
-        // Using Promise.all to fetch counts in parallel for best speed
-        const activeDbSource = await db.getSource();
+        // 2. Get counts per tenant from active DB without hanging fallbacks
         const tenantStats = await Promise.all(tenantIds.map(async (id: any) => {
             let studentCount = 0;
-            try {
-                if (activeDbSource === 'PRISMA') {
+            let liveTraffic = 0;
+            let bankDetails: any = {};
+
+            if (activeDbSource === 'PRISMA') {
+                try {
                     studentCount = await prisma.student.count({ where: { tenantId: id } });
-                } else {
-                    const studentRes = await supabase.from('students').select('*', { count: 'exact', head: true }).eq('tenant_id', id);
-                    studentCount = studentRes.count || 0;
+                } catch (e: any) {
+                    console.warn("Student count error on Railway:", e?.message);
                 }
-            } catch {
-                const studentRes = await supabase.from('students').select('*', { count: 'exact', head: true }).eq('tenant_id', id);
-                studentCount = studentRes.count || 0;
+                try {
+                    const [traffic, settings] = await Promise.all([
+                        prisma.attendance.count({ where: { tenantId: id, timestamp: { gte: new Date(now.getTime() - 10 * 60 * 1000) } } }).catch(() => 0),
+                        prisma.adminSettings.findFirst({ where: { tenantId: id } }).catch(() => null)
+                    ]);
+                    liveTraffic = traffic;
+                    bankDetails = settings?.universityBankDetails || {};
+                } catch (e: any) {
+                    console.warn("Traffic/settings fetch error on Railway:", e?.message);
+                }
+            } else {
+                try {
+                    const [studentRes, trafficRes, settingsRes] = await Promise.all([
+                        supabase.from('students').select('*', { count: 'exact', head: true }).eq('tenant_id', id),
+                        supabase.from('attendance').select('*', { count: 'exact', head: true }).eq('tenant_id', id).gte('timestamp', tenMinutesAgo),
+                        supabase.from('admin_settings').select('university_bank_details').eq('tenant_id', id).maybeSingle()
+                    ]);
+                    studentCount = studentRes?.count || 0;
+                    liveTraffic = trafficRes?.count || 0;
+                    bankDetails = settingsRes?.data?.university_bank_details || {};
+                } catch (e: any) {
+                    console.warn("Supabase stats error:", e?.message);
+                }
             }
 
-            const [trafficRes, settingsRes] = await Promise.all([
-                supabase.from('attendance').select('*', { count: 'exact', head: true }).eq('tenant_id', id).gte('timestamp', tenMinutesAgo),
-                supabase.from('admin_settings').select('university_bank_details').eq('tenant_id', id).maybeSingle()
-            ]);
-            
-            const bankDetails = settingsRes.data?.university_bank_details || {};
-            
             return {
                 id,
                 studentCount,
-                liveTraffic: trafficRes.count || 0,
+                liveTraffic,
                 renewalUtr: bankDetails.renewalUtr || null,
                 renewalStatus: bankDetails.renewalStatus || null,
                 renewalSubmittedAt: bankDetails.renewalSubmittedAt || null,
@@ -104,10 +144,17 @@ export async function GET(request: NextRequest) {
             };
         }) || [];
 
-        const { count: globalPulse } = await supabase
-            .from('attendance')
-            .select('*', { count: 'exact', head: true })
-            .gte('timestamp', tenMinutesAgo);
+        let globalPulse = 0;
+        try {
+            if (activeDbSource === 'PRISMA') {
+                globalPulse = await prisma.attendance.count({ where: { timestamp: { gte: new Date(now.getTime() - 10 * 60 * 1000) } } });
+            } else {
+                const { count } = await supabase.from('attendance').select('*', { count: 'exact', head: true }).gte('timestamp', tenMinutesAgo);
+                globalPulse = count || 0;
+            }
+        } catch {
+            globalPulse = 0;
+        }
 
         return NextResponse.json({ 
             success: true, 

@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
                     checkOutISTTime: istTime,
                     checkOutISTDate: istDate,
                     status: "out",
-                    requestType: targetType,
+                    type: targetType,
                     reason: passReason,
                     gateName: "Management Override",
                     qrTokenUsedOut: "MANUAL_BY_" + userType.toUpperCase(),
