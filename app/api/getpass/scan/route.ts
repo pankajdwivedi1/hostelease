@@ -11,10 +11,14 @@ function getISTStrings(date: Date) {
     const istOffset = 5.5 * 60 * 60 * 1000;
     const istDate = new Date(date.getTime() + istOffset);
 
-    const hours = String(istDate.getUTCHours()).padStart(2, "0");
+    let rawHours = istDate.getUTCHours();
     const minutes = String(istDate.getUTCMinutes()).padStart(2, "0");
     const seconds = String(istDate.getUTCSeconds()).padStart(2, "0");
-    const istTime = `${hours}:${minutes}:${seconds}`;
+    const ampm = rawHours >= 12 ? "PM" : "AM";
+    let hours12 = rawHours % 12;
+    if (hours12 === 0) hours12 = 12;
+    const hours = String(hours12).padStart(2, "0");
+    const istTime = `${hours}:${minutes}:${seconds} ${ampm}`;
 
     const day = String(istDate.getUTCDate()).padStart(2, "0");
     const month = String(istDate.getUTCMonth() + 1).padStart(2, "0");

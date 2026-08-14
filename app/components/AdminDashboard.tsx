@@ -1973,19 +1973,36 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     return n;
   };
 
+  const formatDateDDMMYYYY = (dateVal: any) => {
+    if (!dateVal) return "--:--";
+    const str = String(dateVal).trim();
+    if (!str || str === 'undefined' || str === 'null') return "--:--";
+
+    if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(str)) {
+      return str.replace(/\//g, '-');
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      const [y, m, d] = str.split('-');
+      return `${d}-${m}-${y}`;
+    }
+
+    try {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        return `${day}-${month}-${year}`;
+      }
+    } catch (e) {}
+
+    return str;
+  };
+
   const formatDate = (dateString: string | undefined) => {
     if (!dateString) return "N/A";
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return dateString;
-      return date.toLocaleDateString("en-GB", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      });
-    } catch (e) {
-      return dateString;
-    }
+    return formatDateDDMMYYYY(dateString);
   };
 
   // Warden Filter Initialization
@@ -7494,8 +7511,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <h2 className="text-lg font-bold text-foreground">Daily Attendance Monitoring</h2>
                           <p className="text-sm text-secondary">
                             {selectedDate === selectedEndDate
-                              ? `Student entries and absentees for ${selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? 'today' : selectedDate}`
-                              : `Date range report: ${selectedDate} to ${selectedEndDate}`}
+                              ? `Student entries and absentees for ${selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? 'today' : formatDateDDMMYYYY(selectedDate)}`
+                              : `Date range report: ${formatDateDDMMYYYY(selectedDate)} to ${formatDateDDMMYYYY(selectedEndDate)}`}
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -7812,7 +7829,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       {!selectedAttendanceHostel && (
                         <div ref={entryLogsRef} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                           <div className="bg-filler px-1 py-1 flex border-b border-gray-200">
-                            <p className="px-4 py-2 text-xs font-bold text-secondary uppercase tracking-widest">Entry Logs ({selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? 'Today' : selectedDate})</p>
+                            <p className="px-4 py-2 text-xs font-bold text-secondary uppercase tracking-widest">Entry Logs ({selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? 'Today' : formatDateDDMMYYYY(selectedDate)})</p>
                           </div>
                           <div className="overflow-x-hidden">
                             <table className="w-full text-left table-fixed border-collapse">
@@ -7830,7 +7847,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 {attendanceLogsLoading ? (
                                   <tr key="loading-entry-logs"><td colSpan={6} className="px-4 py-12 text-center text-secondary italic text-xs">Refreshing database...</td></tr>
                                 ) : filteredAttendanceLogs.length === 0 ? (
-                                  <tr key="empty-entry-logs"><td colSpan={6} className="px-4 py-12 text-center text-secondary italic text-xs">No entries found for {selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? `${(() => { const [h, m] = (attendanceTimeSettings.startTime || '21:00').split(':'); const hr = parseInt(h, 10); return `${hr % 12 || 12}:${m || '00'} ${hr >= 12 ? 'PM' : 'AM'}`; })()} onwards` : selectedDate}.</td></tr>
+                                  <tr key="empty-entry-logs"><td colSpan={6} className="px-4 py-12 text-center text-secondary italic text-xs">No entries found for {selectedDate === new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] ? `${(() => { const [h, m] = (attendanceTimeSettings.startTime || '21:00').split(':'); const hr = parseInt(h, 10); return `${hr % 12 || 12}:${m || '00'} ${hr >= 12 ? 'PM' : 'AM'}`; })()} onwards` : formatDateDDMMYYYY(selectedDate)}.</td></tr>
                                 ) : (
                                   (showAllEntryLogs ? filteredAttendanceLogs : filteredAttendanceLogs.slice(0, 10)).map((log, idx) => (
                                     <tr key={log._id || log.id || `log-${idx}-${typeof log.studentId === 'object' ? (log.studentId?._id || log.studentId?.id) : log.studentId}`} className="hover:bg-filler/50 transition-colors">
@@ -11606,7 +11623,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <span className="hidden sm:inline">📅 {exportType === 'attendance_matrix' ? 'PERIOD:' : 'DATE:'}</span>
                     <span className="sm:hidden">📅</span>
                     <span className="text-white font-black">
-                      {exportType === 'attendance_matrix' ? `${selectedDate.split('-').reverse().join('-')} to ${selectedEndDate.split('-').reverse().join('-')}` : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
+                      {exportType === 'attendance_matrix' ? `${formatDateDDMMYYYY(selectedDate)} to ${formatDateDDMMYYYY(selectedEndDate)}` : formatDateDDMMYYYY(new Date())}
                     </span>
                   </div>
                 </div>
@@ -11619,7 +11636,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               {exportType === 'attendance_matrix' ? (
                 <div className="p-2 sm:p-3.5 bg-[#0e1424] border-b border-slate-800 shrink-0 flex items-center justify-between gap-1.5 flex-wrap text-[9px] sm:text-xs text-blue-300">
                   <span className="font-bold flex items-center gap-1">
-                    <span>📅</span> <span className="hidden sm:inline">Dynamic Date Matrix Auto-Generated for Period: </span><span className="sm:hidden">Matrix: </span><strong className="text-white font-black">{selectedDate.split('-').reverse().join('-')}</strong> to <strong className="text-white font-black">{selectedEndDate.split('-').reverse().join('-')}</strong>
+                    <span>📅</span> <span className="hidden sm:inline">Dynamic Date Matrix Auto-Generated for Period: </span><span className="sm:hidden">Matrix: </span><strong className="text-white font-black">{formatDateDDMMYYYY(selectedDate)}</strong> to <strong className="text-white font-black">{formatDateDDMMYYYY(selectedEndDate)}</strong>
                   </span>
                   <div className="flex items-center gap-1.5 text-[8px] sm:text-[10px] font-bold">
                     <span className="px-1.5 sm:px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">P = Present</span>
@@ -16072,15 +16089,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               
               let baseDiscount = 0;
               if (selectedPlanMonths === 1) baseDiscount = Number(subscriptionStatus?.paymentSettings?.discount1Month) || 0;
-              else if (selectedPlanMonths === 3) baseDiscount = subscriptionStatus?.paymentSettings?.discount3Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount3Month) : 10;
-              else if (selectedPlanMonths === 6) baseDiscount = subscriptionStatus?.paymentSettings?.discount6Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount6Month) : 20;
+              else if (selectedPlanMonths === 3) baseDiscount = subscriptionStatus?.paymentSettings?.discount3Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount3Month) : 15;
+              else if (selectedPlanMonths === 6) baseDiscount = subscriptionStatus?.paymentSettings?.discount6Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount6Month) : 25;
               else if (selectedPlanMonths >= 12) baseDiscount = subscriptionStatus?.paymentSettings?.discount12Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount12Month) : 30;
 
-              const bankBonus = paymentMethod === "bank" ? (subscriptionStatus?.paymentSettings?.bankTransferDiscount ?? 2.5) : 0;
+              const bankBonus = paymentMethod === "bank" ? (subscriptionStatus?.paymentSettings?.bankTransferDiscount !== undefined ? Number(subscriptionStatus?.paymentSettings?.bankTransferDiscount) : 3) : 0;
               const totalDiscountPercent = baseDiscount + bankBonus;
 
+              const formatINR = (val: number) => {
+                return Number.isInteger(val)
+                  ? val.toLocaleString("en-IN")
+                  : val.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              };
+
               const baseTotal = totalStudents * pricePerMonth * selectedPlanMonths;
-              const discountAmount = Math.round((baseTotal * totalDiscountPercent) / 100);
+              const discountAmount = (baseTotal * totalDiscountPercent) / 100;
               const finalTotal = baseTotal - discountAmount;
 
               const bankName = subscriptionStatus?.paymentSettings?.bankName || "PNB Bank";
@@ -16088,13 +16111,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               const accountNumber = subscriptionStatus?.paymentSettings?.accountNumber || "06102413001048";
               const ifsc = subscriptionStatus?.paymentSettings?.ifsc || "PUNB0061010";
               const upiId = subscriptionStatus?.paymentSettings?.upiId || "pankaj86.dwivedi-1@okicici";
-              const qrUrl = subscriptionStatus?.paymentSettings?.customQrCodeUrl || `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(`upi://pay?pa=${upiId}&pn=${accountName}&am=${finalTotal}&cu=INR&tn=Hosteleaze Renewal`)}`;
+              const qrUrl = subscriptionStatus?.paymentSettings?.customQrCodeUrl || `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(`upi://pay?pa=${upiId}&pn=${accountName}&am=${finalTotal.toFixed(2)}&cu=INR&tn=Hosteleaze Renewal`)}`;
 
               const summarySection = (
                 <div className="bg-slate-900 text-white p-3 sm:p-3.5 rounded-xl space-y-2 shadow-md shrink-0 w-full max-w-full">
                   <div className="flex items-center justify-between gap-1 text-[9.5px] sm:text-[12px] font-bold text-slate-300 min-w-0">
                     <span className="break-words min-w-0 flex-1">Subtotal ({totalStudents} students × {selectedPlanMonths} months)</span>
-                    <span className="shrink-0 whitespace-nowrap ml-1">₹{baseTotal.toLocaleString("en-IN")}</span>
+                    <span className="shrink-0 whitespace-nowrap ml-1">₹{formatINR(baseTotal)}</span>
                   </div>
                   {totalDiscountPercent > 0 && (
                     <div className="flex items-center justify-between gap-1 text-[9.5px] sm:text-[12px] text-emerald-400 font-bold min-w-0">
@@ -16107,7 +16130,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           : `Discount (${baseDiscount}% Plan OFF)`
                         }
                       </span>
-                      <span className="shrink-0 whitespace-nowrap ml-1">-₹{discountAmount.toLocaleString("en-IN")}</span>
+                      <span className="shrink-0 whitespace-nowrap ml-1">-₹{formatINR(discountAmount)}</span>
                     </div>
                   )}
 
@@ -16130,7 +16153,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 min-w-0">
                     <div className="shrink-0">
                       <p className="text-[8.5px] sm:text-[9px] font-black uppercase text-slate-400 tracking-wider">Total Amount Payable</p>
-                      <p className="text-base sm:text-xl font-black text-emerald-400 leading-none mt-0.5">₹{finalTotal.toLocaleString("en-IN")}</p>
+                      <p className="text-base sm:text-xl font-black text-emerald-400 leading-none mt-0.5">₹{formatINR(finalTotal)}</p>
                     </div>
 
                     {paymentMethod === "razorpay" ? (
@@ -16195,13 +16218,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       {(() => {
-                        const bankDiscountVal = subscriptionStatus?.paymentSettings?.bankTransferDiscount ?? 2.5;
+                        const bankDiscountVal = subscriptionStatus?.paymentSettings?.bankTransferDiscount !== undefined ? Number(subscriptionStatus?.paymentSettings?.bankTransferDiscount) : 3;
+                        const d1 = subscriptionStatus?.paymentSettings?.discount1Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount1Month) : 0;
+                        const d3 = subscriptionStatus?.paymentSettings?.discount3Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount3Month) : 15;
+                        const d6 = subscriptionStatus?.paymentSettings?.discount6Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount6Month) : 25;
+                        const d12 = subscriptionStatus?.paymentSettings?.discount12Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount12Month) : 30;
+
                         return [
                           {
                             months: 1,
-                            label: "1 Month",
+                            label: "1 MONTH",
                             tag: "Monthly",
-                            discount: subscriptionStatus?.paymentSettings?.discount1Month ?? 0,
+                            discount: d1,
                             points: [
                               "Standard Base Tariff",
                               `+${bankDiscountVal}% Bank or QR Bonus`,
@@ -16211,11 +16239,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           },
                           {
                             months: 3,
-                            label: "3 Months",
+                            label: "3 MONTHS",
                             tag: "Quarterly",
-                            discount: subscriptionStatus?.paymentSettings?.discount3Month ?? 10,
+                            discount: d3,
                             points: [
-                              `${subscriptionStatus?.paymentSettings?.discount3Month ?? 10}% Plan Discount`,
+                              `${d3}% Plan Discount`,
                               `+${bankDiscountVal}% Bank or QR Bonus`,
                               "GPS/WIFI Attendance, Gatepass Management",
                               "Warden Controls, Parents Monitoring"
@@ -16223,12 +16251,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           },
                           {
                             months: 6,
-                            label: "6 Months",
+                            label: "6 MONTHS",
                             tag: "Half-Yearly",
-                            discount: subscriptionStatus?.paymentSettings?.discount6Month ?? 20,
+                            discount: d6,
                             badge: "Popular",
                             points: [
-                              `${subscriptionStatus?.paymentSettings?.discount6Month ?? 20}% Plan Discount`,
+                              `${d6}% Plan Discount`,
                               `+${bankDiscountVal}% Bank or QR Bonus`,
                               "GPS/WIFI Attendance, Gatepass Management",
                               "Warden Controls, Parents Monitoring"
@@ -16236,12 +16264,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           },
                           {
                             months: 12,
-                            label: "12 Months",
+                            label: "12 MONTHS",
                             tag: "Annual Plan",
-                            discount: subscriptionStatus?.paymentSettings?.discount12Month ?? 30,
+                            discount: d12,
                             badge: "BEST VALUE",
                             points: [
-                              `${subscriptionStatus?.paymentSettings?.discount12Month ?? 30}% Maximum Discount`,
+                              `${d12}% Maximum Discount`,
                               `+${bankDiscountVal}% Bank or QR Bonus`,
                               "GPS/WIFI Attendance, Gatepass Management",
                               "Warden Controls, Parents Monitoring"

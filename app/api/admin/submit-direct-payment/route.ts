@@ -2,6 +2,17 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/dbAdapter";
+
+const DEFAULT_SETTINGS = {
+    pricePerStudentPerMonth: 25,
+    discount1Month: 0,
+    discount3Month: 15,
+    discount6Month: 25,
+    discount12Month: 30,
+    bankTransferDiscount: 3,
+};
 
 export async function POST(request: NextRequest) {
     try {
@@ -12,104 +23,75 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: "Missing tenantId or UTR reference number" }, { status: 400 });
         }
 
-        const supabase = getSupabaseAdmin();
         const durationMonths = Number(months) || 12;
+        const activeSource = await db.getSource();
 
-        // 1. Fetch current tenant subscription details
-        const { data: tenant, error: tenantError } = await supabase
-            .from('tenants')
-            .select('id, name, subscription_end_date, subscription_status')
-            .eq('id', tenantId)
-            .single();
+        let tenantName = "University";
+        let currentEndDate = new Date();
 
-        if (tenantError || !tenant) {
-            return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
-        }
+        if (activeSource === 'PRISMA') {
+            const tenant = await prisma.tenant.findUnique({
+                where: { id: tenantId },
+                select: { id: true, name: true, subscriptionEndDate: true, subscriptionStatus: true }
+            });
 
-        // 2. Calculate new subscription end date
-        const currentEndDate = tenant.subscription_end_date ? new Date(tenant.subscription_end_date) : new Date();
-        const startDate = (currentEndDate > new Date()) ? currentEndDate : new Date();
-        const newEndDate = new Date(startDate);
-        newEndDate.setMonth(newEndDate.getMonth() + durationMonths);
+            if (!tenant) {
+                return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
+            }
 
-        // 3. Update Tenant Subscription
-        const { error: updateError } = await supabase
-            .from('tenants')
-            .update({
-                subscription_status: 'active',
-                subscription_end_date: newEndDate.toISOString(),
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', tenantId);
+            tenantName = tenant.name;
+            currentEndDate = tenant.subscriptionEndDate ? new Date(tenant.subscriptionEndDate) : new Date();
+            const startDate = (currentEndDate > new Date()) ? currentEndDate : new Date();
+            const newEndDate = new Date(startDate);
+            newEndDate.setMonth(newEndDate.getMonth() + durationMonths);
 
-        if (updateError) {
-            console.error("Direct payment tenant update error:", updateError);
-            return NextResponse.json({ success: false, error: "Failed to update tenant subscription" }, { status: 500 });
-        }
+            await prisma.tenant.update({
+                where: { id: tenantId },
+                data: {
+                    subscriptionStatus: 'active',
+                    subscriptionEndDate: newEndDate,
+                    isActive: true
+                }
+            });
 
-        // 4. Log to Super Admin Billing Ledger
-        try {
-            // Fetch student count & payment settings
-            let studentCount = 0;
-            try {
-                const { count } = await supabase
-                    .from('students')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('tenant_id', tenantId);
-                studentCount = count || 0;
-            } catch (e) {}
+            return NextResponse.json({
+                success: true,
+                message: "Direct payment verified & subscription extended!",
+                newEndDate: newEndDate.toISOString()
+            });
 
-            const { data: configData } = await supabase
-                .from('platform_settings')
-                .select('settings')
-                .eq('id', 'boss_payment_config')
-                .maybeSingle();
-
-            const settings = configData?.settings;
-            const pricePerMonth = settings?.pricePerStudentPerMonth || 30;
-            let discountPercent = durationMonths >= 12 ? (settings?.discount12Month ?? 20) : durationMonths >= 6 ? (settings?.discount6Month ?? 10) : durationMonths >= 3 ? (settings?.discount3Month ?? 5) : 0;
-            if (settings?.bankTransferDiscount) discountPercent += Number(settings.bankTransferDiscount);
-
-            const { data: ledgerData } = await supabase
-                .from('platform_settings')
-                .select('settings')
-                .eq('id', 'super_admin_billing_ledger')
+        } else {
+            const supabase = getSupabaseAdmin();
+            const { data: tenant, error: tenantError } = await supabase
+                .from('tenants')
+                .select('id, name, subscription_end_date, subscription_status')
+                .eq('id', tenantId)
                 .single();
 
-            const ledgerList = Array.isArray(ledgerData?.settings) ? ledgerData.settings : [];
-            const newTransaction = {
-                id: `dir_${Date.now()}`,
-                date: new Date().toISOString(),
-                tenantId: tenant.id,
-                tenantName: tenant.name,
-                amount: Number(amount) || 0,
-                utr: String(utrNumber).trim(),
-                billingType: "Verified Payment",
-                paymentSource: "Direct Bank / UPI Transfer (UTR Verified)",
-                studentCount: studentCount || 446,
-                ratePerStudentMonth: pricePerMonth,
-                months: durationMonths,
-                discountPercent: discountPercent,
-                billingPeriod: `${durationMonths} Month${durationMonths > 1 ? 's' : ''}`,
-                remarks: `Direct Bank/UPI Transfer (UTR: ${utrNumber})`
-            };
+            if (tenantError || !tenant) {
+                return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
+            }
+
+            currentEndDate = tenant.subscription_end_date ? new Date(tenant.subscription_end_date) : new Date();
+            const startDate = (currentEndDate > new Date()) ? currentEndDate : new Date();
+            const newEndDate = new Date(startDate);
+            newEndDate.setMonth(newEndDate.getMonth() + durationMonths);
 
             await supabase
-                .from('platform_settings')
-                .upsert({
-                    id: 'super_admin_billing_ledger',
-                    settings: [newTransaction, ...ledgerList],
+                .from('tenants')
+                .update({
+                    subscription_status: 'active',
+                    subscription_end_date: newEndDate.toISOString(),
                     updated_at: new Date().toISOString()
-                });
-        } catch (ledgerErr) {
-            console.error("Direct payment ledger log error:", ledgerErr);
-        }
+                })
+                .eq('id', tenantId);
 
-        return NextResponse.json({
-            success: true,
-            message: "Direct payment verified & subscription extended!",
-            newEndDate: newEndDate.toISOString()
-        });
+            return NextResponse.json({
+                success: true,
+                message: "Direct payment verified & subscription extended!",
+                newEndDate: newEndDate.toISOString()
+            });
+        }
 
     } catch (error: any) {
         console.error("Submit direct payment error:", error);

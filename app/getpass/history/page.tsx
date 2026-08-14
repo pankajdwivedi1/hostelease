@@ -93,6 +93,66 @@ export default function OutingHistoryPage() {
 
     const colleges = ["OIST", "OCT", "OCP", "OPM", "OIPR"];
 
+    const formatDateDDMMYYYY = (dateVal: any) => {
+        if (!dateVal) return "--:--";
+        const str = String(dateVal).trim();
+        if (!str || str === 'undefined' || str === 'null') return "--:--";
+
+        if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(str)) {
+            return str.replace(/\//g, '-');
+        }
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+            const [y, m, d] = str.split('-');
+            return `${d}-${m}-${y}`;
+        }
+
+        try {
+            const d = new Date(str);
+            if (!isNaN(d.getTime())) {
+                const day = String(d.getDate()).padStart(2, "0");
+                const month = String(d.getMonth() + 1).padStart(2, "0");
+                const year = d.getFullYear();
+                return `${day}-${month}-${year}`;
+            }
+        } catch (e) {}
+
+        return str;
+    };
+
+    const formatISTTimeAMPM = (timeStr?: string, isoDateStr?: string) => {
+        if (!timeStr && !isoDateStr) return "--:--";
+        if (timeStr && (timeStr.toUpperCase().includes("AM") || timeStr.toUpperCase().includes("PM"))) {
+            return timeStr.trim();
+        }
+        if (timeStr && /^\d{1,2}:\d{2}(:\d{2})?$/.test(timeStr.trim())) {
+            const parts = timeStr.trim().split(":");
+            let hours = parseInt(parts[0], 10);
+            const minutes = parts[1];
+            const seconds = parts[2] ? `:${parts[2]}` : "";
+            const ampm = hours >= 12 ? "PM" : "AM";
+            hours = hours % 12;
+            if (hours === 0) hours = 12;
+            const formattedHours = String(hours).padStart(2, "0");
+            return `${formattedHours}:${minutes}${seconds} ${ampm}`;
+        }
+        try {
+            const target = isoDateStr || timeStr || "";
+            const d = new Date(target);
+            if (!isNaN(d.getTime())) {
+                const raw = d.toLocaleTimeString("en-IN", {
+                    timeZone: "Asia/Kolkata",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: true,
+                });
+                return raw.replace(/am/i, "AM").replace(/pm/i, "PM");
+            }
+        } catch (e) {}
+        return timeStr || "--:--";
+    };
+
     useEffect(() => {
         setMounted(true);
         const fetchHostelsList = async () => {
@@ -533,12 +593,6 @@ export default function OutingHistoryPage() {
                             {records.map((record) => (
                                 <div key={record._id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3 px-3 bg-[#121421]/90 rounded-2xl border border-white/5 transition-all hover:bg-[#161a29]/90 hover:border-blue-500/20 group gap-2.5">
                                     <div className="flex items-center gap-3 w-full">
-                                        <div
-                                            onClick={() => fetchStudentProfile(record.studentId, record)}
-                                            className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-base text-white cursor-pointer transition-all hover:scale-105 shadow-xl shrink-0 ${record.status === 'out' ? 'bg-[#ff6b6b] shadow-red-500/20' : 'bg-[#00ff88] shadow-green-500/20'}`}
-                                        >
-                                            {record.studentName?.charAt(0).toUpperCase() || "?"}
-                                        </div>
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-1.5 flex-wrap">
                                                 <p
@@ -569,9 +623,9 @@ export default function OutingHistoryPage() {
                                             <div className="flex flex-col items-start sm:items-end">
                                                 <div className="flex items-center gap-1.5 whitespace-nowrap">
                                                     <span className="text-[8px] text-white/70 font-black uppercase tracking-tighter">Out:</span>
-                                                    <span className="text-[10px] font-bold text-white tabular-nums">{record.checkOutISTTime}</span>
+                                                    <span className="text-[10px] font-bold text-white tabular-nums">{formatISTTimeAMPM(record.checkOutISTTime, record.checkOutTime)}</span>
                                                     <span className="text-white/10 text-[10px]">|</span>
-                                                    <span className="text-[10px] text-white/40 font-bold tabular-nums whitespace-nowrap">{record.checkOutISTDate}</span>
+                                                    <span className="text-[10px] text-white/40 font-bold tabular-nums whitespace-nowrap">{formatDateDDMMYYYY(record.checkOutISTDate || record.checkOutTime)}</span>
                                                 </div>
                                             </div>
 
@@ -579,9 +633,9 @@ export default function OutingHistoryPage() {
                                                 <div className="flex flex-col items-start sm:items-end mt-0.5">
                                                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                                                         <span className="text-[8px] text-white/70 font-black uppercase tracking-tighter">In:</span>
-                                                        <span className="text-[10px] font-bold text-green-400 tabular-nums">{record.checkInISTTime}</span>
+                                                        <span className="text-[10px] font-bold text-green-400 tabular-nums">{formatISTTimeAMPM(record.checkInISTTime || record.checkOutISTTime, record.checkInTime || record.checkOutTime)}</span>
                                                         <span className="text-white/10 text-[10px]">|</span>
-                                                        <span className="text-[10px] text-white/40 font-bold tabular-nums whitespace-nowrap">{record.checkInISTDate}</span>
+                                                        <span className="text-[10px] text-white/40 font-bold tabular-nums whitespace-nowrap">{formatDateDDMMYYYY(record.checkInISTDate || record.checkInTime || record.checkOutISTDate)}</span>
                                                     </div>
                                                     {record.type === 'leave' && (
                                                         <div className="flex items-center gap-1 mt-1">
@@ -715,18 +769,40 @@ export default function OutingHistoryPage() {
 
                                             <div className="w-[1px] h-6 sm:h-10 bg-slate-200" />
 
-                                            {/* Recent History — shifted to right side (left of photo on mobile) */}
-                                            <div className="flex flex-col items-start px-2 py-1 sm:px-3 sm:py-2 bg-red-50/60 rounded-lg sm:rounded-2xl border border-red-100/60 shrink-0">
-                                                <p className="text-[7px] sm:text-[9px] font-black text-red-500 uppercase tracking-widest">Recent History</p>
+                                            {/* Recent History — Side-by-Side OUT and IN Timestamps */}
+                                            <div className="flex flex-col items-start px-2 py-1.5 sm:px-3 sm:py-2 bg-slate-50/90 rounded-lg sm:rounded-2xl border border-slate-200/80 shrink-0 shadow-sm">
+                                                <p className="text-[7px] sm:text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Recent Outing Record</p>
                                                 {lastOuting ? (
-                                                    <>
-                                                        <p className="text-gray-900 font-extrabold text-[8.5px] sm:text-xs tracking-tight leading-snug">
-                                                            Date: <span className="text-red-600">{lastOuting.checkInISTDate || lastOuting.checkOutISTDate || "N/A"}</span>
-                                                        </p>
-                                                        <p className="text-gray-900 font-extrabold text-[8.5px] sm:text-xs tracking-tight leading-snug">
-                                                            Time: <span className="text-red-600">{lastOuting.checkInISTTime || lastOuting.checkOutISTTime || "N/A"}</span>
-                                                        </p>
-                                                    </>
+                                                    <div className="flex items-center gap-2 sm:gap-3">
+                                                        {/* OUT TIMESTAMP */}
+                                                        <div className="flex flex-col px-2 py-1 bg-red-50/90 rounded-lg border border-red-100 min-w-[75px] sm:min-w-[90px]">
+                                                            <span className="text-[7px] sm:text-[8px] font-black text-red-500 uppercase tracking-tight">OUT 🚪</span>
+                                                            <span className="text-red-700 font-extrabold text-[8.5px] sm:text-xs leading-tight">
+                                                                {formatDateDDMMYYYY(lastOuting.checkOutISTDate || lastOuting.checkOutTime)}
+                                                            </span>
+                                                            <span className="text-red-600 font-bold text-[8px] sm:text-[10px] tabular-nums">
+                                                                {formatISTTimeAMPM(lastOuting.checkOutISTTime, lastOuting.checkOutTime)}
+                                                            </span>
+                                                        </div>
+
+                                                        {/* IN TIMESTAMP OR STILL OUTSIDE */}
+                                                        {lastOuting.status === 'in' || lastOuting.checkInISTTime || lastOuting.checkInTime ? (
+                                                            <div className="flex flex-col px-2 py-1 bg-green-50/90 rounded-lg border border-green-100 min-w-[75px] sm:min-w-[90px]">
+                                                                <span className="text-[7px] sm:text-[8px] font-black text-green-600 uppercase tracking-tight">IN 🏠</span>
+                                                                <span className="text-green-700 font-extrabold text-[8.5px] sm:text-xs leading-tight">
+                                                                    {formatDateDDMMYYYY(lastOuting.checkInISTDate || lastOuting.checkInTime || lastOuting.checkOutISTDate || lastOuting.checkOutTime)}
+                                                                </span>
+                                                                <span className="text-green-600 font-bold text-[8px] sm:text-[10px] tabular-nums">
+                                                                    {formatISTTimeAMPM(lastOuting.checkInISTTime || lastOuting.checkOutISTTime, lastOuting.checkInTime || lastOuting.checkOutTime)}
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex flex-col px-2 py-1 bg-amber-50 rounded-lg border border-amber-200 min-w-[75px] sm:min-w-[90px] justify-center">
+                                                                <span className="text-[7px] sm:text-[8px] font-black text-amber-600 uppercase tracking-tight">STATUS</span>
+                                                                <span className="text-amber-700 font-extrabold text-[9px] sm:text-xs">🔴 Outside</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 ) : (
                                                     <p className="text-[8px] sm:text-xs text-gray-400 font-semibold italic">No gate pass history yet</p>
                                                 )}

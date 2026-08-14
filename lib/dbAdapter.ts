@@ -3258,7 +3258,16 @@ export const db = {
                 query = query.eq('tenant_id', tenantId);
 
                 if (filters.date) {
-                    query = query.eq('date', filters.date);
+                    const d1 = filters.date.trim();
+                    let d2 = d1;
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(d1)) {
+                        const [y, m, d] = d1.split('-');
+                        d2 = `${d}-${m}-${y}`;
+                    } else if (/^\d{2}-\d{2}-\d{4}$/.test(d1)) {
+                        const [d, m, y] = d1.split('-');
+                        d2 = `${y}-${m}-${d}`;
+                    }
+                    query = query.or(`date.in.("${d1}","${d2}"),ist_date.in.("${d1}","${d2}")`);
                 }
 
                 if (limit) {
@@ -3297,7 +3306,19 @@ export const db = {
                 };
 
                 if (filters.date) {
-                    whereClause.date = filters.date;
+                    const d1 = filters.date.trim();
+                    let d2 = d1;
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(d1)) {
+                        const [y, m, d] = d1.split('-');
+                        d2 = `${d}-${m}-${y}`;
+                    } else if (/^\d{2}-\d{2}-\d{4}$/.test(d1)) {
+                        const [d, m, y] = d1.split('-');
+                        d2 = `${y}-${m}-${d}`;
+                    }
+                    whereClause.OR = [
+                        { date: { in: [d1, d2] } },
+                        { istDate: { in: [d1, d2] } }
+                    ];
                 }
                 if (filters.startDate && filters.endDate) {
                     whereClause.date = { gte: filters.startDate, lte: filters.endDate };

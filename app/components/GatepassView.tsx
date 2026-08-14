@@ -303,10 +303,18 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
         if (!studentId || studentId === "[object Object]") return;
 
+        // ⚡ Ground truth for real-time status: check if student is currently in liveData.currentlyOut
+        const isCurrentlyOut = (liveData?.currentlyOut || []).some((item: any) => {
+            const itemSid = item.studentId || item.student_id || item._id || item.id;
+            return String(itemSid) === String(studentId);
+        });
+        const currentRealStatus = isCurrentlyOut ? 'out' : 'in';
+
         // ✅ Check cache first — instant load (0ms) for revisited students
         const cached = profileCache.current.get(studentId);
         if (cached && Date.now() - cached.ts < CACHE_TTL) {
-            setSelectedStudent(cached.student);
+            const studentWithFreshStatus = { ...cached.student, studentStatus: currentRealStatus };
+            setSelectedStudent(studentWithFreshStatus);
             setLastOuting(cached.lastOuting);
             setIsProfileModalOpen(true);
             setIsLoadingProfile(false);
@@ -329,7 +337,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
             motherName: fallbackRecord?.motherName || "",
             motherNumber: fallbackRecord?.motherNumber || "",
             erpInformation: fallbackRecord?.erpId || fallbackRecord?.erpInformation || "",
-            studentStatus: fallbackRecord?.status === "out" ? "out" : "in",
+            studentStatus: currentRealStatus,
             collegeName: fallbackRecord?.collegeName || "",
             branch: fallbackRecord?.branch || "",
             year: fallbackRecord?.year || "",
@@ -353,12 +361,13 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
             if (res.ok) {
                 const data = await res.json();
                 if (data.student) {
+                    const freshStudent = { ...data.student, studentStatus: currentRealStatus };
                     profileCache.current.set(studentId, {
-                        student: data.student,
+                        student: freshStudent,
                         lastOuting: data.lastOuting || null,
                         ts: Date.now(),
                     });
-                    setSelectedStudent(data.student);
+                    setSelectedStudent(freshStudent);
                     if (data.lastOuting) setLastOuting(data.lastOuting);
                     setProfileError(null);
                 }
@@ -409,6 +418,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                             recentActivity: data.recentActivity || prev.recentActivity
                         };
                     }
+                    profileCache.current.clear();
                     return data;
                 });
                 setLoading(false);
@@ -565,6 +575,19 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                             }
                             if (newRecent.length > 20) newRecent.pop();
                         }
+
+                        // ⚡ STRICT SORTING: Always sort by actual scan time DESC (newest on top)
+                        newCurrentlyOut.sort((a, b) => {
+                            const timeA = new Date(a.checkOutTime || a.createdAt || 0).getTime();
+                            const timeB = new Date(b.checkOutTime || b.createdAt || 0).getTime();
+                            return timeB - timeA;
+                        });
+
+                        newRecent.sort((a, b) => {
+                            const timeA = new Date(a.checkInTime || a.checkOutTime || a.createdAt || 0).getTime();
+                            const timeB = new Date(b.checkInTime || b.checkOutTime || b.createdAt || 0).getTime();
+                            return timeB - timeA;
+                        });
 
                         return {
                             ...prev,
@@ -811,6 +834,76 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         const mm = String(ist.getMonth() + 1).padStart(2, "0");
         const yyyy = ist.getFullYear();
         return `${dd}-${mm}-${yyyy}`;
+    };
+
+    const formatDateDDMMYYYY = (dateVal: any) => {
+        if (!dateVal) return "--:--";
+        const str = String(dateVal).trim();
+        if (!str || str === 'undefined' || str === 'null') return "--:--";
+
+        if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(str)) {
+            return str.replace(/\//g, '-');
+        }
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+            const [y, m, d] = str.split('-');
+            return `${d}-${m}-${y}`;
+        }
+
+        try {
+            const d = new Date(str);
+            if (!isNaN(d.getTime())) {
+                const day = String(d.getDate()).padStart(2, "0");
+                const month = String(d.getMonth() + 1).padStart(2, "0");
+                const year = d.getFullYear();
+                return `${day}-${month}-${year}`;
+            }
+        } catch (e) {}
+
+        return str;
+    };
+
+    // Standardize any timestamp or 24h string to 12-hour AM/PM format
+    const formatISTTimeAMPM = (timeStr?: string, isoDateStr?: string) => {
+        if (!timeStr && !isoDateStr) return "--:--";
+
+        // If timeStr is already in AM/PM format
+        if (timeStr && (timeStr.toUpperCase().includes("AM") || timeStr.toUpperCase().includes("PM"))) {
+            return timeStr.trim();
+        }
+
+        // If timeStr is in 24-hour HH:mm or HH:mm:ss format
+        if (timeStr && /^\d{1,2}:\d{2}(:\d{2})?$/.test(timeStr.trim())) {
+            const parts = timeStr.trim().split(":");
+            let hours = parseInt(parts[0], 10);
+            const minutes = parts[1];
+            const seconds = parts[2] ? `:${parts[2]}` : "";
+            const ampm = hours >= 12 ? "PM" : "AM";
+            hours = hours % 12;
+            if (hours === 0) hours = 12;
+            const formattedHours = String(hours).padStart(2, "0");
+            return `${formattedHours}:${minutes}${seconds} ${ampm}`;
+        }
+
+        // Fallback: parse isoDateStr or timeStr as Date
+        try {
+            const target = isoDateStr || timeStr || "";
+            const d = new Date(target);
+            if (!isNaN(d.getTime())) {
+                const raw = d.toLocaleTimeString("en-IN", {
+                    timeZone: "Asia/Kolkata",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: true,
+                });
+                return raw.replace(/am/i, "AM").replace(/pm/i, "PM");
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        return timeStr || "--:--";
     };
 
     // ===================== Duration formatter =====================
@@ -1242,7 +1335,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                         {record.currentDurationText || formatDuration(record.currentDurationMinutes || 0)}
                                                     </span>
                                                     <span className="text-[8px] text-[rgba(255,255,255,0.25)] font-bold uppercase tracking-widest">
-                                                        {record.checkOutISTTime}
+                                                        {formatISTTimeAMPM(record.checkOutISTTime, record.checkOutTime)}
                                                     </span>
                                                 </div>
                                             </div>
@@ -1297,7 +1390,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                         {record.durationMinutes !== undefined ? formatDuration(record.durationMinutes) : '-'}
                                                     </span>
                                                     <span className="text-[8px] text-[rgba(255,255,255,0.25)] font-bold uppercase tracking-widest">
-                                                        {record.checkInISTTime}
+                                                        {formatISTTimeAMPM(record.checkInISTTime || record.checkOutISTTime, record.checkInTime || record.checkOutTime)}
                                                     </span>
                                                 </div>
                                             </div>
@@ -1384,18 +1477,40 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
                                             <div className="w-[1px] h-6 sm:h-10 bg-slate-200" />
 
-                                            {/* Recent History — shifted to right side (left of photo on mobile) */}
-                                            <div className="flex flex-col items-start px-2 py-1 sm:px-3 sm:py-2 bg-red-50/60 rounded-lg sm:rounded-2xl border border-red-100/60 shrink-0">
-                                                <p className="text-[7px] sm:text-[9px] font-black text-red-500 uppercase tracking-widest">Recent History</p>
+                                            {/* Recent History — Side-by-Side OUT and IN Timestamps */}
+                                            <div className="flex flex-col items-start px-2 py-1.5 sm:px-3 sm:py-2 bg-slate-50/90 rounded-lg sm:rounded-2xl border border-slate-200/80 shrink-0 shadow-sm">
+                                                <p className="text-[7px] sm:text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Recent Outing Record</p>
                                                 {lastOuting ? (
-                                                    <>
-                                                        <p className="text-gray-900 font-extrabold text-[8.5px] sm:text-xs tracking-tight leading-snug">
-                                                            Date: <span className="text-red-600">{lastOuting.checkInISTDate || lastOuting.checkOutISTDate || "N/A"}</span>
-                                                        </p>
-                                                        <p className="text-gray-900 font-extrabold text-[8.5px] sm:text-xs tracking-tight leading-snug">
-                                                            Time: <span className="text-red-600">{lastOuting.checkInISTTime || lastOuting.checkOutISTTime || "N/A"}</span>
-                                                        </p>
-                                                    </>
+                                                    <div className="flex items-center gap-2 sm:gap-3">
+                                                        {/* OUT TIMESTAMP */}
+                                                        <div className="flex flex-col px-2 py-1 bg-red-50/90 rounded-lg border border-red-100 min-w-[75px] sm:min-w-[90px]">
+                                                            <span className="text-[7px] sm:text-[8px] font-black text-red-500 uppercase tracking-tight">OUT 🚪</span>
+                                                            <span className="text-red-700 font-extrabold text-[8.5px] sm:text-xs leading-tight">
+                                                                {formatDateDDMMYYYY(lastOuting.checkOutISTDate || lastOuting.checkOutTime)}
+                                                            </span>
+                                                            <span className="text-red-600 font-bold text-[8px] sm:text-[10px] tabular-nums">
+                                                                {formatISTTimeAMPM(lastOuting.checkOutISTTime, lastOuting.checkOutTime)}
+                                                            </span>
+                                                        </div>
+
+                                                        {/* IN TIMESTAMP OR STILL OUTSIDE */}
+                                                        {lastOuting.status === 'in' || lastOuting.checkInISTTime || lastOuting.checkInTime ? (
+                                                            <div className="flex flex-col px-2 py-1 bg-green-50/90 rounded-lg border border-green-100 min-w-[75px] sm:min-w-[90px]">
+                                                                <span className="text-[7px] sm:text-[8px] font-black text-green-600 uppercase tracking-tight">IN 🏠</span>
+                                                                <span className="text-green-700 font-extrabold text-[8.5px] sm:text-xs leading-tight">
+                                                                    {formatDateDDMMYYYY(lastOuting.checkInISTDate || lastOuting.checkInTime || lastOuting.checkOutISTDate || lastOuting.checkOutTime)}
+                                                                </span>
+                                                                <span className="text-green-600 font-bold text-[8px] sm:text-[10px] tabular-nums">
+                                                                    {formatISTTimeAMPM(lastOuting.checkInISTTime || lastOuting.checkOutISTTime, lastOuting.checkInTime || lastOuting.checkOutTime)}
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex flex-col px-2 py-1 bg-amber-50 rounded-lg border border-amber-200 min-w-[75px] sm:min-w-[90px] justify-center">
+                                                                <span className="text-[7px] sm:text-[8px] font-black text-amber-600 uppercase tracking-tight">STATUS</span>
+                                                                <span className="text-amber-700 font-extrabold text-[9px] sm:text-xs">🔴 Outside</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 ) : (
                                                     <p className="text-[8px] sm:text-xs text-gray-400 font-semibold italic">No gate pass history yet</p>
                                                 )}

@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
 
         const months = Number(body.months) || 3;
         const billableStudents = Math.max(1, studentCount || 0);
+        const pricePerMonth = Number(settings.pricePerStudentPerMonth) || 25;
         
         let discountPercent = 0;
         if (months === 1) discountPercent = settings.discount1Month !== undefined ? Number(settings.discount1Month) : 0;
@@ -82,16 +83,16 @@ export async function POST(request: NextRequest) {
         else if (months === 6) discountPercent = settings.discount6Month !== undefined ? Number(settings.discount6Month) : 25;
         else if (months >= 12) discountPercent = settings.discount12Month !== undefined ? Number(settings.discount12Month) : 30;
 
-        const discountMultiplier = (100 - discountPercent) / 100;
-        const pricePerMonth = Number(settings.pricePerStudentPerMonth) || 25;
-        const totalAmountINR = Math.round(billableStudents * pricePerMonth * months * discountMultiplier);
+        const baseTotal = billableStudents * pricePerMonth * months;
+        const discountAmount = (baseTotal * discountPercent) / 100;
+        const totalAmountINR = baseTotal - discountAmount;
         
         if (totalAmountINR <= 0) {
             return NextResponse.json({ success: false, error: "Calculated amount is 0. Cannot create order." }, { status: 400 });
         }
 
-        // Razorpay expects amount in paise (multiply by 100)
-        const amountInPaise = totalAmountINR * 100;
+        // Razorpay expects amount in paise (1 INR = 100 paise)
+        const amountInPaise = Math.round(totalAmountINR * 100);
 
         // Initialize Razorpay
         const razorpay = new Razorpay({
