@@ -2,7 +2,20 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/dbAdapter";
 import Razorpay from "razorpay";
+
+const DEFAULT_SETTINGS = {
+    enableRazorpay: true,
+    razorpayKeyId: "rzp_live_TAKnbp18wnY8Mu",
+    razorpayKeySecret: "KEXn7SaynyjQ0uQhIlscY1Sc",
+    pricePerStudentPerMonth: 25,
+    discount1Month: 0,
+    discount3Month: 15,
+    discount6Month: 25,
+    discount12Month: 30,
+};
 
 export async function POST(request: NextRequest) {
     try {
@@ -13,43 +26,64 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: "Missing tenantId" }, { status: 400 });
         }
 
-        const supabase = getSupabaseAdmin();
+        const activeSource = await db.getSource();
 
-        // 1. Fetch Tenant, Student Count, and Payment Settings concurrently in parallel for maximum speed!
-        const [
-          { data: tenant, error: tenantError },
-          { count: studentCount },
-          { data: settingsData }
-        ] = await Promise.all([
-          supabase.from('tenants').select('name').eq('id', tenantId).single(),
-          supabase.from('students').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId),
-          supabase.from('platform_settings').select('settings').eq('id', 'boss_payment_config').single()
-        ]);
+        let tenantName = "University";
+        let studentCount = 0;
+        let settings: any = DEFAULT_SETTINGS;
 
-        if (tenantError || !tenant) {
-            return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
+        if (activeSource === 'PRISMA') {
+            try {
+                const [tenant, countRow, settingsRow] = await Promise.all([
+                    prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
+                    prisma.student.count({ where: { tenantId } }),
+                    prisma.platformSetting.findUnique({ where: { id: 'boss_payment_config' } })
+                ]);
+                if (tenant) tenantName = tenant.name;
+                studentCount = countRow || 0;
+                if (settingsRow?.settings) {
+                    settings = { ...DEFAULT_SETTINGS, ...(settingsRow.settings as any) };
+                }
+            } catch (e: any) {
+                console.warn("Railway Razorpay fetch warn:", e?.message);
+            }
+        } else {
+            try {
+                const supabase = getSupabaseAdmin();
+                const [
+                    { data: tenant },
+                    { count },
+                    { data: settingsData }
+                ] = await Promise.all([
+                    supabase.from('tenants').select('name').eq('id', tenantId).maybeSingle(),
+                    supabase.from('students').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId),
+                    supabase.from('platform_settings').select('settings').eq('id', 'boss_payment_config').maybeSingle()
+                ]);
+                if (tenant) tenantName = tenant.name;
+                studentCount = count || 0;
+                if (settingsData?.settings) {
+                    settings = { ...DEFAULT_SETTINGS, ...(settingsData.settings as any) };
+                }
+            } catch (e: any) {
+                console.warn("Supabase Razorpay fetch warn:", e?.message);
+            }
         }
 
-        const settings = settingsData?.settings;
         if (!settings || !settings.enableRazorpay || !settings.razorpayKeyId || !settings.razorpayKeySecret) {
             return NextResponse.json({ success: false, error: "Razorpay is not fully configured" }, { status: 400 });
         }
 
-        // 3. Calculate amount: studentCount * pricePerStudentPerMonth * 12 (annual billing)
-        // Or if we just want monthly, let's just do monthly for now or Annual? Let's just do 12 months for standard subscription
-        // The user said "RS 30 per student for monthly". Usually software is billed annually to avoid monthly transaction fees.
-        // I will calculate 12 months.
-        const months = Number(body.months) || 12;
-        const billableStudents = Math.max(1, studentCount || 0); // Minimum 1 student to avoid 0 amount
+        const months = Number(body.months) || 3;
+        const billableStudents = Math.max(1, studentCount || 0);
         
         let discountPercent = 0;
-        if (months === 1) discountPercent = Number(settings.discount1Month) || 0;
-        else if (months === 3) discountPercent = settings.discount3Month !== undefined ? Number(settings.discount3Month) : 5;
-        else if (months === 6) discountPercent = settings.discount6Month !== undefined ? Number(settings.discount6Month) : 10;
-        else if (months >= 12) discountPercent = settings.discount12Month !== undefined ? Number(settings.discount12Month) : 20;
+        if (months === 1) discountPercent = settings.discount1Month !== undefined ? Number(settings.discount1Month) : 0;
+        else if (months === 3) discountPercent = settings.discount3Month !== undefined ? Number(settings.discount3Month) : 15;
+        else if (months === 6) discountPercent = settings.discount6Month !== undefined ? Number(settings.discount6Month) : 25;
+        else if (months >= 12) discountPercent = settings.discount12Month !== undefined ? Number(settings.discount12Month) : 30;
 
         const discountMultiplier = (100 - discountPercent) / 100;
-        const pricePerMonth = settings.pricePerStudentPerMonth || 30;
+        const pricePerMonth = Number(settings.pricePerStudentPerMonth) || 25;
         const totalAmountINR = Math.round(billableStudents * pricePerMonth * months * discountMultiplier);
         
         if (totalAmountINR <= 0) {
@@ -59,13 +93,12 @@ export async function POST(request: NextRequest) {
         // Razorpay expects amount in paise (multiply by 100)
         const amountInPaise = totalAmountINR * 100;
 
-        // 4. Initialize Razorpay
+        // Initialize Razorpay
         const razorpay = new Razorpay({
-            key_id: settings.razorpayKeyId.trim(),
-            key_secret: settings.razorpayKeySecret.trim()
+            key_id: String(settings.razorpayKeyId).trim(),
+            key_secret: String(settings.razorpayKeySecret).trim()
         });
 
-        // 5. Create Order
         // Shorten tenantId and use seconds-level timestamp to stay under Razorpay's 40-character limit
         const shortTenantId = String(tenantId).replace(/[^a-zA-Z0-9]/g, '').slice(-12);
         const options = {
@@ -82,13 +115,12 @@ export async function POST(request: NextRequest) {
             amount: order.amount,
             currency: order.currency,
             keyId: settings.razorpayKeyId,
-            collegeName: tenant.name,
+            collegeName: tenantName,
             totalINR: totalAmountINR
         });
 
     } catch (error: any) {
         console.error("Razorpay Order Error:", error);
-        // Razorpay often nests errors inside error.error
         const errorMessage = error?.error?.description || error?.message || JSON.stringify(error) || "Failed to create order";
         return NextResponse.json({ success: false, error: `Razorpay Error: ${errorMessage}` }, { status: 500 });
     }
