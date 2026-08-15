@@ -3574,19 +3574,21 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                         const { value, displayValue } = getFieldValue(field);
                                                         const lbl = (field.label || '').toLowerCase();
                                                         const isLongField = lbl.includes('address') || lbl.includes('permanent') || field.id.toLowerCase().includes('address') || String(displayValue).length > 20;
+                                                        const isPhone = (field.type === 'tel' || field.id.toLowerCase().includes('phone') || field.id.toLowerCase().includes('mobile') || (field.id.toLowerCase().includes('number') && (field.id.toLowerCase().includes('father') || field.id.toLowerCase().includes('mother') || field.id.toLowerCase().includes('guardian') || field.id.toLowerCase().includes('parent') || field.id.toLowerCase().includes('contact')))) && !field.id.toLowerCase().includes('room') && !field.id.toLowerCase().includes('floor') && !field.id.toLowerCase().includes('erp') && !field.id.toLowerCase().includes('reg') && value !== "N/A";
+                                                        const fieldIcon = field.id.toLowerCase().includes('floor') ? '🏢 ' : field.id.toLowerCase().includes('hostel') ? '🏬 ' : field.id.toLowerCase().includes('state') ? '🗺️ ' : (field.id.toLowerCase().includes('birth') || field.id.toLowerCase().includes('dob')) ? '🎂 ' : field.id.toLowerCase().includes('category') ? '🏷️ ' : (field.id.toLowerCase().includes('joining') || field.id.toLowerCase().includes('date')) ? '🗓️ ' : field.id.toLowerCase().includes('gender') ? '👤 ' : '';
 
                                                         return (
                                                             <div key={field.id} className={`flex flex-col bg-slate-50/80 border border-slate-100 p-2 rounded-lg ${isLongField ? "col-span-2 bg-amber-50/30 border-amber-100" : ""}`}>
                                                                 <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{field.label}</p>
                                                                 {isProfileLoading ? (
                                                                     <div className="h-4 w-16 bg-gray-100 animate-pulse rounded mt-1"></div>
-                                                                ) : (field.type === 'tel' || field.id.toLowerCase().includes('number') || field.id.toLowerCase().includes('phone')) && value !== "N/A" ? (
+                                                                ) : isPhone ? (
                                                                     <a href={`tel:${value}`} title="Click to call" className="text-[11px] font-black text-blue-600 hover:underline flex items-center gap-1">
                                                                         <span>📞</span> {displayValue}
                                                                     </a>
                                                                 ) : (
                                                                     <p className={`text-[11px] font-extrabold break-words ${field.id === 'roomNumber' || field.id === 'floorNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
-                                                                        {field.id === 'roomNumber' && value !== 'N/A' && !value.startsWith('#') ? '#' : ''}{displayValue}
+                                                                        {fieldIcon}{field.id === 'roomNumber' && value !== 'N/A' && !value.startsWith('#') ? '#' : ''}{displayValue}
                                                                     </p>
                                                                 )}
                                                             </div>
@@ -3598,19 +3600,21 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 <div className="hidden sm:grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-6">
                                                     {fieldsToRender.map((field) => {
                                                         const { value, displayValue } = getFieldValue(field);
+                                                        const isPhoneDesktop = (field.type === 'tel' || field.id.toLowerCase().includes('phone') || field.id.toLowerCase().includes('mobile') || (field.id.toLowerCase().includes('number') && (field.id.toLowerCase().includes('father') || field.id.toLowerCase().includes('mother') || field.id.toLowerCase().includes('guardian') || field.id.toLowerCase().includes('parent') || field.id.toLowerCase().includes('contact')))) && !field.id.toLowerCase().includes('room') && !field.id.toLowerCase().includes('floor') && !field.id.toLowerCase().includes('erp') && !field.id.toLowerCase().includes('reg') && value !== "N/A";
+                                                        const fieldIconDesktop = field.id.toLowerCase().includes('floor') ? '🏢 ' : field.id.toLowerCase().includes('hostel') ? '🏬 ' : field.id.toLowerCase().includes('state') ? '🗺️ ' : (field.id.toLowerCase().includes('birth') || field.id.toLowerCase().includes('dob')) ? '🎂 ' : field.id.toLowerCase().includes('category') ? '🏷️ ' : (field.id.toLowerCase().includes('joining') || field.id.toLowerCase().includes('date')) ? '🗓️ ' : field.id.toLowerCase().includes('gender') ? '👤 ' : '';
 
                                                         return (
                                                             <div key={field.id} className={['localGuardianAddress', 'permanentAddress', 'homeAddress'].includes(field.id) ? "md:col-span-2" : ""}>
                                                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{field.label}</p>
                                                                 {isProfileLoading ? (
                                                                     <div className="h-4 w-20 bg-gray-100 animate-pulse rounded mt-1"></div>
-                                                                ) : (field.type === 'tel' || field.id.toLowerCase().includes('number') || field.id.toLowerCase().includes('phone')) && value !== "N/A" ? (
-                                                                    <a href={`tel:${value}`} title="Click to call" className="text-[12px] font-bold text-blue-600 hover:underline">
-                                                                        {value}
+                                                                ) : isPhoneDesktop ? (
+                                                                    <a href={`tel:${value}`} title="Click to call" className="text-[12px] font-bold text-blue-600 hover:underline flex items-center gap-1">
+                                                                        <span>📞</span> {value}
                                                                     </a>
                                                                 ) : (
                                                                     <p className={`text-[12px] font-bold ${field.id === 'roomNumber' || field.id === 'floorNumber' ? 'text-blue-600' : 'text-gray-900'}`}>
-                                                                        {field.id === 'roomNumber' && value !== 'N/A' && !value.startsWith('#') ? '#' : ''}{displayValue}
+                                                                        {fieldIconDesktop}{field.id === 'roomNumber' && value !== 'N/A' && !value.startsWith('#') ? '#' : ''}{displayValue}
                                                                     </p>
                                                                 )}
                                                             </div>
@@ -5010,7 +5014,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 const value = (studentProfile as any)[field.id] || studentProfile.dynamicFields?.[field.id] || "N/A";
                                                 const displayValue = (field.type === 'date' || field.id === 'joiningDate') ? formatDate(value) : value;
                                                 const isLongField = field.id.toLowerCase().includes('address') || String(displayValue).length > 25;
-                                                const isPhoneField = field.id.toLowerCase().includes('phone') || field.id.toLowerCase().includes('number');
+                                                const isPhoneModal = (field.type === 'tel' || field.id.toLowerCase().includes('phone') || field.id.toLowerCase().includes('mobile') || (field.id.toLowerCase().includes('number') && (field.id.toLowerCase().includes('father') || field.id.toLowerCase().includes('mother') || field.id.toLowerCase().includes('guardian') || field.id.toLowerCase().includes('parent') || field.id.toLowerCase().includes('contact')))) && !field.id.toLowerCase().includes('room') && !field.id.toLowerCase().includes('floor') && !field.id.toLowerCase().includes('erp') && !field.id.toLowerCase().includes('reg') && value !== "N/A";
+                                                const fieldIconModal = field.id.toLowerCase().includes('floor') ? '🏢 ' : field.id.toLowerCase().includes('hostel') ? '🏬 ' : field.id.toLowerCase().includes('state') ? '🗺️ ' : (field.id.toLowerCase().includes('birth') || field.id.toLowerCase().includes('dob')) ? '🎂 ' : field.id.toLowerCase().includes('category') ? '🏷️ ' : (field.id.toLowerCase().includes('joining') || field.id.toLowerCase().includes('date')) ? '🗓️ ' : field.id.toLowerCase().includes('gender') ? '👤 ' : '';
 
                                                 return (
                                                     <div 
@@ -5018,7 +5023,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                         className={`flex flex-col bg-slate-50/80 border border-slate-100 p-2 rounded-lg ${isLongField ? 'col-span-2 bg-amber-50/30 border-amber-100' : ''}`}
                                                     >
                                                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{field.label}</p>
-                                                        {isPhoneField && value && value !== "N/A" ? (
+                                                        {isPhoneModal ? (
                                                             <a href={`tel:${value}`} className="text-blue-600 font-black break-words text-[11px] leading-relaxed flex items-center gap-1">
                                                                 <span>📞</span> {displayValue}
                                                             </a>
