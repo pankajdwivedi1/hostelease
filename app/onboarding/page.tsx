@@ -129,6 +129,31 @@ export default function OnboardingPage() {
     }
   }, []);
 
+  // ⚡ Pre-fill email in formData for new user onboarding
+  useEffect(() => {
+    const savedEmail = user?.email || (typeof window !== 'undefined' ? (localStorage.getItem('userEmail') || localStorage.getItem('studentEmail') || '') : '');
+    if (savedEmail) {
+      setFormData(prev => {
+        const updated = { ...prev };
+        let changed = false;
+        formBuilderConfig.forEach(f => {
+          const lowerId = f.id.toLowerCase();
+          const lowerLbl = (f.label || '').toLowerCase();
+          if (f.type === 'email' || lowerId.includes('email') || lowerLbl.includes('email')) {
+            if (!updated[f.id]) {
+              updated[f.id] = savedEmail;
+              changed = true;
+            }
+          }
+        });
+        if (!updated.email) { updated.email = savedEmail; changed = true; }
+        if (!updated.emailAddress) { updated.emailAddress = savedEmail; changed = true; }
+        if (!updated.studentEmail) { updated.studentEmail = savedEmail; changed = true; }
+        return changed ? updated : prev;
+      });
+    }
+  }, [user, formBuilderConfig]);
+
 
 
   // Smooth progress bar animation
@@ -242,11 +267,14 @@ export default function OnboardingPage() {
 
           setUser({ uid: currentUser.uid, email: currentUser.email, source: 'firebase' });
           if (currentUser.email) {
+            if (typeof window !== 'undefined') localStorage.setItem("userEmail", currentUser.email);
             setFormData(prev => ({
               ...prev,
               email: prev.email || currentUser.email || "",
               studentEmail: prev.studentEmail || currentUser.email || "",
-              emailAddress: prev.emailAddress || currentUser.email || ""
+              emailAddress: prev.emailAddress || currentUser.email || "",
+              email_address: prev.email_address || currentUser.email || "",
+              emailId: prev.emailId || currentUser.email || ""
             }));
           }
           try {
@@ -1427,7 +1455,15 @@ export default function OnboardingPage() {
                     <input
                       type={field.type}
                       id={field.id}
-                      value={(formData as any)[field.id] || ""}
+                      value={(() => {
+                        const cur = (formData as any)[field.id];
+                        if (cur !== undefined && cur !== null && cur !== "") return cur;
+                        const isEmailField = field.type === 'email' || field.id.toLowerCase().includes('email') || (field.label || '').toLowerCase().includes('email');
+                        if (isEmailField) {
+                          return user?.email || (typeof window !== 'undefined' ? (localStorage.getItem('userEmail') || localStorage.getItem('studentEmail') || '') : '');
+                        }
+                        return "";
+                      })()}
                       onChange={(e) => handleChange(field.id, e.target.value)}
                       onBlur={(e) => {
                         if (field.id === "phoneNumber" || field.id === "email" || field.id === "erpInformation") {

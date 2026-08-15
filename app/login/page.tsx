@@ -285,8 +285,12 @@ function LoginForm() {
 
       if (!user?.email) throw new Error("No email returned from Google login");
 
-      // Mark as student in localStorage
+      // Mark as student in localStorage & preserve email for onboarding pre-fill
       localStorage.setItem("userType", "student");
+      if (user.email) {
+        localStorage.setItem("userEmail", user.email);
+        localStorage.setItem("studentEmail", user.email);
+      }
 
       setLoadingText("Verifying Account...");
 
