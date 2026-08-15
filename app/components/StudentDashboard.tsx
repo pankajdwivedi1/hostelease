@@ -2958,119 +2958,103 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 )}
                             </div>
 
-                            {/* Action Buttons Grid */}
+                            {/* Action Buttons Row */}
                             {!isParentView && (
-                                <div className="space-y-2.5 sm:space-y-3 mb-3 sm:mb-6">
-                                    {/* ⚡ Row 1: 3-Column Grid — Gatepass | Leave Request | Outing & Attendance */}
-                                    <div className="grid grid-cols-3 gap-1 sm:gap-3">
-                                        {/* Card 1: Gatepass */}
+                                <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-2 sm:mb-4">
+                                    <button
+                                        onClick={() => router.push("/getpass/scan")}
+                                        className="w-full h-12 rounded-xl bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-100 border-2 border-indigo-200 text-indigo-950 font-black hover:border-indigo-400 transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left shadow-sm"
+                                    >
+                                        <div className="w-8 h-8 shrink-0 bg-indigo-200/60 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                                            <svg className="w-4 h-4 text-indigo-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                            </svg>
+                                        </div>
+                                        <div className="flex flex-col overflow-hidden min-w-0">
+                                            <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-indigo-800 truncate">Gatepass</span>
+                                            <span className="text-[10px] md:text-xs font-black text-indigo-950 uppercase tracking-tight block truncate">Scan QR code</span>
+                                        </div>
+                                    </button>
+
+                                    {/* ⚡ SECONDARY ACTION: Go to Leave */}
+                                    {studentProfile?.studentStatus !== "out" && (
                                         <button
-                                            onClick={() => router.push("/getpass/scan")}
-                                            className="w-full h-12 rounded-xl bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-100 border-2 border-indigo-200 text-indigo-950 font-black hover:border-indigo-400 transition-all flex flex-row items-center justify-start gap-1 sm:gap-2.5 group px-1.5 sm:px-3 text-left shadow-sm"
+                                            onClick={() => {
+                                                if (!isAtHostel && !isParentView) {
+                                                    setHighlightLocation(true);
+                                                    // Scroll to top to show the location card
+                                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                    alert("📍 Location Verification Required\n\nPlease verify your location first by clicking the location icon at the top of your dashboard.");
+                                                    return;
+                                                }
+                                                setRequestType("leave");
+                                                setShowRequestForm(true);
+                                            }}
+                                            className={`w-full h-12 rounded-xl font-black border-2 transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left shadow-sm ${isAtHostel || isParentView
+                                                ? "bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100 border-amber-300 text-amber-950 hover:border-amber-400"
+                                                : "bg-gradient-to-r from-slate-50 via-gray-100 to-slate-50 border-slate-300 text-slate-800 hover:border-slate-400"
+                                                }`}
                                         >
-                                            <div className="w-6 h-6 sm:w-8 sm:h-8 shrink-0 bg-indigo-200/60 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                                                <svg className="w-3 h-3 sm:w-4 sm:h-4 text-indigo-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                            <div className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center transition-all ${(isAtHostel || isParentView) ? "bg-amber-200/60 text-amber-800 group-hover:scale-110" : "bg-slate-200/80 text-slate-700"}`}>
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                                                 </svg>
                                             </div>
-                                            <div className="flex flex-col min-w-0 leading-tight">
-                                                <span className="block text-[6.5px] xs:text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight mb-0.5 text-indigo-800 whitespace-nowrap">Gatepass</span>
-                                                <span className="text-[8.5px] xs:text-[9.5px] sm:text-xs font-black text-indigo-950 uppercase tracking-tight block whitespace-nowrap">Scan QR</span>
+                                            <div className="flex flex-col overflow-hidden min-w-0">
+                                                <span className={`block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${(isAtHostel || isParentView) ? "text-amber-800" : "text-slate-600"}`}>Leave Request</span>
+                                                <span className={`text-[10px] md:text-xs font-black uppercase tracking-tight block truncate ${(isAtHostel || isParentView) ? "text-amber-950" : "text-slate-800"}`}>
+                                                    {(isAtHostel || isParentView) ? "Go to Home" : "Locked"}
+                                                </span>
                                             </div>
                                         </button>
+                                    )}
+                                </div>
+                            )}
 
-                                        {/* Card 2: Leave Request */}
-                                        {studentProfile?.studentStatus !== "out" ? (
-                                            <button
-                                                onClick={() => {
-                                                    if (!isAtHostel && !isParentView) {
-                                                        setHighlightLocation(true);
-                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                                                        alert("📍 Location Verification Required\n\nPlease verify your location first by clicking the location icon at the top of your dashboard.");
-                                                        return;
-                                                    }
-                                                    setRequestType("leave");
-                                                    setShowRequestForm(true);
-                                                }}
-                                                className={`w-full h-12 rounded-xl font-black border-2 transition-all flex flex-row items-center justify-start gap-1 sm:gap-2.5 group px-1.5 sm:px-3 text-left shadow-sm ${isAtHostel || isParentView
-                                                    ? "bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100 border-amber-300 text-amber-950 hover:border-amber-400"
-                                                    : "bg-gradient-to-r from-slate-50 via-gray-100 to-slate-50 border-slate-300 text-slate-800 hover:border-slate-400"
-                                                    }`}
-                                            >
-                                                <div className={`w-6 h-6 sm:w-8 sm:h-8 shrink-0 rounded-lg flex items-center justify-center transition-all ${(isAtHostel || isParentView) ? "bg-amber-200/60 text-amber-800 group-hover:scale-110" : "bg-slate-200/80 text-slate-700"}`}>
-                                                    <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                                                    </svg>
-                                                </div>
-                                                <div className="flex flex-col min-w-0 leading-tight">
-                                                    <span className={`block text-[6.5px] xs:text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight mb-0.5 whitespace-nowrap ${(isAtHostel || isParentView) ? "text-amber-800" : "text-slate-600"}`}>Leave Request</span>
-                                                    <span className={`text-[8.5px] xs:text-[9.5px] sm:text-xs font-black uppercase tracking-tight block whitespace-nowrap ${(isAtHostel || isParentView) ? "text-amber-950" : "text-slate-800"}`}>
-                                                        {(isAtHostel || isParentView) ? "Go to Home" : "Locked"}
-                                                    </span>
-                                                </div>
-                                            </button>
-                                        ) : (
-                                            <div className="w-full h-12 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-[8.5px] font-black uppercase text-slate-400">
-                                                Out of Hostel
-                                            </div>
-                                        )}
+                            {!isParentView && (
+                                <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-6">
+                                    <button
+                                        onClick={() => setShowPermissionsHistory(true)}
+                                        className="w-full h-12 rounded-xl bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-100 border-2 border-teal-200 text-teal-950 font-black text-[9.5px] md:text-[11px] uppercase tracking-widest hover:border-teal-400 transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                                    >
+                                        <span>🚪</span> <span className="truncate text-teal-950 font-black">Outing & Attendance</span>
+                                    </button>
 
-                                        {/* Card 3: Outing & Attendance */}
-                                        <button
-                                            onClick={() => setShowPermissionsHistory(true)}
-                                            className="w-full h-12 rounded-xl bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-100 border-2 border-teal-200 text-teal-950 font-black flex flex-row items-center justify-start gap-1 sm:gap-2.5 group px-1.5 sm:px-3 text-left shadow-sm hover:border-teal-400 transition-all"
-                                        >
-                                            <div className="w-6 h-6 sm:w-8 sm:h-8 shrink-0 bg-teal-200/60 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                                                <span className="text-xs sm:text-sm">🚪</span>
-                                            </div>
-                                            <div className="flex flex-col min-w-0 leading-tight">
-                                                <span className="block text-[6.5px] xs:text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight mb-0.5 text-teal-800 whitespace-nowrap">Outing</span>
-                                                <span className="text-[8.5px] xs:text-[9.5px] sm:text-xs font-black text-teal-950 uppercase tracking-tight block whitespace-nowrap">Attendance</span>
-                                            </div>
-                                        </button>
-                                    </div>
-
-                                    {/* ⚡ Row 2: Full-Width Campus WiFi Network Banner (Zero Text Truncation) */}
-                                    <div className={`w-full rounded-xl border-2 transition-all duration-500 flex items-center justify-between px-3 sm:px-4 py-2 text-left shadow-sm ${
+                                    {/* 📶 Always-Visible Campus WiFi Status Card (Right side of Outing & Attendance) */}
+                                    <div className={`w-full min-h-[3rem] sm:min-h-[3.25rem] rounded-xl border-2 transition-all duration-500 flex items-center justify-between px-2.5 sm:px-3 py-1.5 text-left shadow-sm ${
                                         highlightLocation
-                                            ? 'bg-amber-100 border-amber-400 ring-4 ring-amber-300 shadow-xl scale-[1.01] animate-pulse'
+                                            ? 'bg-amber-100 border-amber-400 ring-4 ring-amber-300 shadow-xl scale-[1.02] animate-pulse'
                                             : isOnCampusWifi
-                                                ? 'bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100 border-emerald-300 text-emerald-950'
-                                                : 'bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100 border-amber-300 text-amber-950'
+                                                ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                                                : 'bg-amber-50/90 border-amber-300 text-amber-950'
                                     }`}>
-                                        {/* Left Side: Icon + Title + Full Guidance Text */}
-                                        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2">
-                                            <div className={`w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-xl flex items-center justify-center text-sm sm:text-base ${
-                                                isOnCampusWifi ? 'bg-emerald-200/80 text-emerald-800' : 'bg-amber-200/80 text-amber-800'
-                                            }`}>
-                                                📶
-                                            </div>
+                                        {/* Left Side: Icon + Title + Guidance Subtitle */}
+                                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 pr-1">
+                                            <span className="text-sm sm:text-base shrink-0">📶</span>
                                             <div className="flex flex-col min-w-0">
-                                                <span className={`block text-[8px] sm:text-[9px] font-black uppercase tracking-widest leading-none mb-1 ${
+                                                <span className="block text-[7.5px] sm:text-[8.5px] font-black uppercase tracking-wider leading-none mb-0.5 opacity-70 truncate">
+                                                    Campus WiFi
+                                                </span>
+                                                <p className={`text-[8px] sm:text-[9.5px] font-semibold leading-tight line-clamp-2 ${
                                                     isOnCampusWifi ? 'text-emerald-800' : 'text-amber-800'
                                                 }`}>
-                                                    Campus WiFi Network
-                                                </span>
-                                                <p className={`text-[9px] sm:text-xs font-bold leading-tight ${
-                                                    isOnCampusWifi ? 'text-emerald-950' : 'text-amber-950'
-                                                }`}>
                                                     {isOnCampusWifi
-                                                        ? 'Connected to hostel WiFi network for automated location verification.'
-                                                        : 'Connect to your hostel WiFi network for smooth attendance without GPS location errors.'
+                                                        ? 'Connected to hostel WiFi for smooth attendance.'
+                                                        : 'Connect to your hostel WiFi for smooth attendance without GPS errors.'
                                                     }
                                                 </p>
                                             </div>
                                         </div>
 
-                                        {/* Right Side: Status Badge */}
-                                        <div className="shrink-0 flex flex-col items-end justify-center pl-2 sm:pl-3 border-l border-amber-200/80">
-                                            <div className="flex items-center gap-1.5">
+                                        {/* Right Side: OFFLINE/ONLINE Badge + CONNECTED / NOT CONNECTED underneath */}
+                                        <div className="shrink-0 flex flex-col items-end justify-center pl-1 border-l border-amber-200/60 sm:pl-2">
+                                            <div className="flex items-center gap-1">
                                                 <span className={`inline-block w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${
                                                     isOnCampusWifi
                                                         ? 'bg-emerald-500 animate-pulse shadow-sm shadow-emerald-500/50'
                                                         : 'bg-red-500 animate-pulse shadow-sm shadow-red-500/50'
                                                 }`} />
-                                                <span className={`text-[8.5px] sm:text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                                <span className={`text-[8px] sm:text-[9.5px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full ${
                                                     isOnCampusWifi
                                                         ? 'bg-emerald-200/80 text-emerald-950 border border-emerald-300'
                                                         : 'bg-red-100 text-red-700 border border-red-200'
@@ -3078,7 +3062,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     {isOnCampusWifi ? 'ONLINE' : 'OFFLINE'}
                                                 </span>
                                             </div>
-                                            <span className={`text-[7.5px] sm:text-[8.5px] font-black uppercase tracking-tight mt-1 ${
+                                            <span className={`text-[7.5px] sm:text-[8.5px] font-black uppercase tracking-tight mt-0.5 ${
                                                 isOnCampusWifi ? 'text-emerald-700' : 'text-red-600'
                                             }`}>
                                                 {isOnCampusWifi ? 'CONNECTED' : 'NOT CONNECTED'}
@@ -3089,7 +3073,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     {bankSettings?.isPaymentEnabled && (
                                         <button
                                             onClick={() => setShowFeeDetailsModal(true)}
-                                            className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-100 border-2 border-blue-200 text-blue-950 font-black text-[9.5px] md:text-[11px] uppercase tracking-widest hover:border-blue-400 transition-all flex items-center justify-center gap-1.5 text-center leading-tight"
+                                            className="w-full h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5 text-center leading-tight col-span-2"
                                         >
                                             <span>💳</span> <span className="truncate">View Fee Details</span>
                                         </button>
