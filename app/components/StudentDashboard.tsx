@@ -2962,20 +2962,20 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             {!isParentView && (
                                 <div className="space-y-2.5 sm:space-y-3 mb-3 sm:mb-6">
                                     {/* ⚡ Row 1: 3-Column Grid — Gatepass | Leave Request | Outing & Attendance */}
-                                    <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+                                    <div className="grid grid-cols-3 gap-1 sm:gap-3">
                                         {/* Card 1: Gatepass */}
                                         <button
                                             onClick={() => router.push("/getpass/scan")}
-                                            className="w-full h-12 rounded-xl bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-100 border-2 border-indigo-200 text-indigo-950 font-black hover:border-indigo-400 transition-all flex flex-row items-center justify-start gap-1.5 sm:gap-2.5 group px-2 sm:px-3 text-left shadow-sm"
+                                            className="w-full h-12 rounded-xl bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-100 border-2 border-indigo-200 text-indigo-950 font-black hover:border-indigo-400 transition-all flex flex-row items-center justify-start gap-1 sm:gap-2.5 group px-1.5 sm:px-3 text-left shadow-sm"
                                         >
-                                            <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 bg-indigo-200/60 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                                                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <div className="w-6 h-6 sm:w-8 sm:h-8 shrink-0 bg-indigo-200/60 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                                                <svg className="w-3 h-3 sm:w-4 sm:h-4 text-indigo-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                                                 </svg>
                                             </div>
-                                            <div className="flex flex-col overflow-hidden min-w-0">
-                                                <span className="block text-[7px] sm:text-[8px] font-black uppercase tracking-[0.15em] leading-none mb-1 text-indigo-800 truncate">Gatepass</span>
-                                                <span className="text-[9px] sm:text-xs font-black text-indigo-950 uppercase tracking-tight block truncate">Scan QR</span>
+                                            <div className="flex flex-col min-w-0 leading-tight">
+                                                <span className="block text-[6.5px] xs:text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight mb-0.5 text-indigo-800 whitespace-nowrap">Gatepass</span>
+                                                <span className="text-[8.5px] xs:text-[9.5px] sm:text-xs font-black text-indigo-950 uppercase tracking-tight block whitespace-nowrap">Scan QR</span>
                                             </div>
                                         </button>
 
@@ -2992,25 +2992,25 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     setRequestType("leave");
                                                     setShowRequestForm(true);
                                                 }}
-                                                className={`w-full h-12 rounded-xl font-black border-2 transition-all flex flex-row items-center justify-start gap-1.5 sm:gap-2.5 group px-2 sm:px-3 text-left shadow-sm ${isAtHostel || isParentView
+                                                className={`w-full h-12 rounded-xl font-black border-2 transition-all flex flex-row items-center justify-start gap-1 sm:gap-2.5 group px-1.5 sm:px-3 text-left shadow-sm ${isAtHostel || isParentView
                                                     ? "bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100 border-amber-300 text-amber-950 hover:border-amber-400"
                                                     : "bg-gradient-to-r from-slate-50 via-gray-100 to-slate-50 border-slate-300 text-slate-800 hover:border-slate-400"
                                                     }`}
                                             >
-                                                <div className={`w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-lg flex items-center justify-center transition-all ${(isAtHostel || isParentView) ? "bg-amber-200/60 text-amber-800 group-hover:scale-110" : "bg-slate-200/80 text-slate-700"}`}>
-                                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <div className={`w-6 h-6 sm:w-8 sm:h-8 shrink-0 rounded-lg flex items-center justify-center transition-all ${(isAtHostel || isParentView) ? "bg-amber-200/60 text-amber-800 group-hover:scale-110" : "bg-slate-200/80 text-slate-700"}`}>
+                                                    <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                                                     </svg>
                                                 </div>
-                                                <div className="flex flex-col overflow-hidden min-w-0">
-                                                    <span className={`block text-[7px] sm:text-[8px] font-black uppercase tracking-[0.15em] leading-none mb-1 truncate ${(isAtHostel || isParentView) ? "text-amber-800" : "text-slate-600"}`}>Leave Request</span>
-                                                    <span className={`text-[9px] sm:text-xs font-black uppercase tracking-tight block truncate ${(isAtHostel || isParentView) ? "text-amber-950" : "text-slate-800"}`}>
+                                                <div className="flex flex-col min-w-0 leading-tight">
+                                                    <span className={`block text-[6.5px] xs:text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight mb-0.5 whitespace-nowrap ${(isAtHostel || isParentView) ? "text-amber-800" : "text-slate-600"}`}>Leave Request</span>
+                                                    <span className={`text-[8.5px] xs:text-[9.5px] sm:text-xs font-black uppercase tracking-tight block whitespace-nowrap ${(isAtHostel || isParentView) ? "text-amber-950" : "text-slate-800"}`}>
                                                         {(isAtHostel || isParentView) ? "Go to Home" : "Locked"}
                                                     </span>
                                                 </div>
                                             </button>
                                         ) : (
-                                            <div className="w-full h-12 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-[9px] font-black uppercase text-slate-400">
+                                            <div className="w-full h-12 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-[8.5px] font-black uppercase text-slate-400">
                                                 Out of Hostel
                                             </div>
                                         )}
@@ -3018,14 +3018,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         {/* Card 3: Outing & Attendance */}
                                         <button
                                             onClick={() => setShowPermissionsHistory(true)}
-                                            className="w-full h-12 rounded-xl bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-100 border-2 border-teal-200 text-teal-950 font-black flex flex-row items-center justify-start gap-1.5 sm:gap-2.5 group px-2 sm:px-3 text-left shadow-sm hover:border-teal-400 transition-all"
+                                            className="w-full h-12 rounded-xl bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-100 border-2 border-teal-200 text-teal-950 font-black flex flex-row items-center justify-start gap-1 sm:gap-2.5 group px-1.5 sm:px-3 text-left shadow-sm hover:border-teal-400 transition-all"
                                         >
-                                            <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 bg-teal-200/60 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                                            <div className="w-6 h-6 sm:w-8 sm:h-8 shrink-0 bg-teal-200/60 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                                                 <span className="text-xs sm:text-sm">🚪</span>
                                             </div>
-                                            <div className="flex flex-col overflow-hidden min-w-0">
-                                                <span className="block text-[7px] sm:text-[8px] font-black uppercase tracking-[0.15em] leading-none mb-1 text-teal-800 truncate">Outing</span>
-                                                <span className="text-[9px] sm:text-xs font-black text-teal-950 uppercase tracking-tight block truncate">Attendance</span>
+                                            <div className="flex flex-col min-w-0 leading-tight">
+                                                <span className="block text-[6.5px] xs:text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight mb-0.5 text-teal-800 whitespace-nowrap">Outing</span>
+                                                <span className="text-[8.5px] xs:text-[9.5px] sm:text-xs font-black text-teal-950 uppercase tracking-tight block whitespace-nowrap">Attendance</span>
                                             </div>
                                         </button>
                                     </div>
