@@ -93,7 +93,7 @@ const filterSettingsForPrisma = (data: any) => {
         // 🛡️ Safeguard & delegation settings
         'enforceUniqueErpId', 'enforceUniquePhone', 'enforceUniqueEmail', 'enforceUniqueFace',
         'allowWardenAddStudent', 'allowDeanAddStudent', 'allowWardenEditProfile', 'allowDeanEditProfile',
-        'allowWardenRemoveStudent', 'allowDeanRemoveStudent', 'allowBulkStudentUpdates'
+        'allowWardenRemoveStudent', 'allowDeanRemoveStudent', 'allowBulkStudentUpdates', 'allowBulkPermissionManagement'
     ];
     const filtered: any = {};
     for (const key of settingsFields) {
@@ -582,6 +582,7 @@ const mapSettingsToCamelCase = (s: any) => {
         allowWardenRemoveStudent: s.allow_warden_remove_student !== undefined ? s.allow_warden_remove_student : (s.allowWardenRemoveStudent || false),
         allowDeanRemoveStudent: s.allow_dean_remove_student !== undefined ? s.allow_dean_remove_student : (s.allowDeanRemoveStudent || false),
         allowBulkStudentUpdates: s.allow_bulk_student_updates !== undefined ? s.allow_bulk_student_updates : (s.allowBulkStudentUpdates || false),
+        allowBulkPermissionManagement: s.allow_bulk_permission_management !== undefined ? s.allow_bulk_permission_management : (s.allowBulkPermissionManagement !== undefined ? s.allowBulkPermissionManagement : true),
         createdAt: s.created_at || s.createdAt,
         updatedAt: s.updated_at || s.updatedAt
     };
@@ -626,7 +627,8 @@ const mapSettingsToSnakeCase = (s: any) => {
         allowDeanEditProfile: 'allow_dean_edit_profile',
         allowWardenRemoveStudent: 'allow_warden_remove_student',
         allowDeanRemoveStudent: 'allow_dean_remove_student',
-        allowBulkStudentUpdates: 'allow_bulk_student_updates'
+        allowBulkStudentUpdates: 'allow_bulk_student_updates',
+        allowBulkPermissionManagement: 'allow_bulk_permission_management'
     };
 
     Object.keys(s).forEach(key => {
@@ -845,6 +847,7 @@ const mapPermissionToCamelCase = (p: any) => {
         parentStatus: p.parentStatus || p.parent_status,
         requestType: p.requestType || p.request_type,
         parentConsentUrl: p.parentConsentUrl || p.parent_consent_url,
+        isHidden: p.isHidden ?? p.is_hidden ?? false,
         createdAt: p.createdAt || p.created_at,
         updatedAt: p.updatedAt || p.updated_at
     };
@@ -2451,6 +2454,7 @@ export const db = {
 
                 // 1. Update core students table
                 if (Object.keys(studentUpdate).length > 0) {
+                    studentUpdate.updated_at = new Date().toISOString();
                     const { error } = await supabase
                         .from('students')
                         .update(studentUpdate)
@@ -2515,6 +2519,7 @@ export const db = {
 
                 // General Update
                 const cleanUpdate = filterStudentForPrisma(updateData, true);
+                cleanUpdate.updatedAt = new Date();
                 
                 try {
                     const data = await prisma.student.update({
@@ -3240,64 +3245,66 @@ export const db = {
 
             if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
-                // ⚡ OPTIMIZATION: Use lightweight fields for joined students to save bandwidth/egress
-                // We only need name and room_number as fallbacks for older attendance records
-                // registration_id is in student_profiles, so we query it via nested select
                 const lightStudentFields = '_id,name,room_number,phone_number,hostel_name,student_profiles(registration_id)';
-
-                // ⚡ OPTIMIZATION: Exclude large flagged_photo_url from logs list
-                // We must include room_number, status, device_id, etc. so the UI renders correctly
                 const attendanceFields = '_id,student_id,name,hostel_name,room_number,ist_time,face_match_percentage,face_match_status,marked_by,device_id,location,status,date';
 
-                // Query Supabase with Join
-                // We alias the joined 'students' table as 'studentId' to match Mongo's populated structure
-                let query = supabase
-                    .from('attendance')
-                    .select(`${attendanceFields}, studentId:students!attendance_student_id_fkey(${lightStudentFields})`);
+                let allData: any[] = [];
+                let page = 0;
+                const chunkSize = 1000;
+                const targetLimit = limit || 2000;
 
-                query = query.eq('tenant_id', tenantId);
+                while (allData.length < targetLimit) {
+                    const fetchSize = Math.min(chunkSize, targetLimit - allData.length);
+                    let query = supabase
+                        .from('attendance')
+                        .select(`${attendanceFields}, studentId:students!attendance_student_id_fkey(${lightStudentFields})`)
+                        .eq('tenant_id', tenantId);
 
-                if (filters.date) {
-                    const d1 = filters.date.trim();
-                    let d2 = d1;
-                    if (/^\d{4}-\d{2}-\d{2}$/.test(d1)) {
-                        const [y, m, d] = d1.split('-');
-                        d2 = `${d}-${m}-${y}`;
-                    } else if (/^\d{2}-\d{2}-\d{4}$/.test(d1)) {
-                        const [d, m, y] = d1.split('-');
-                        d2 = `${y}-${m}-${d}`;
+                    if (filters.date) {
+                        const d1 = filters.date.trim();
+                        let d2 = d1;
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(d1)) {
+                            const [y, m, d] = d1.split('-');
+                            d2 = `${d}-${m}-${y}`;
+                        } else if (/^\d{2}-\d{2}-\d{4}$/.test(d1)) {
+                            const [d, m, y] = d1.split('-');
+                            d2 = `${y}-${m}-${d}`;
+                        }
+                        query = query.or(`date.in.("${d1}","${d2}"),ist_date.in.("${d1}","${d2}")`);
                     }
-                    query = query.or(`date.in.("${d1}","${d2}"),ist_date.in.("${d1}","${d2}")`);
+
+                    if (filters.startDate && filters.endDate) {
+                        query = query.gte('date', filters.startDate).lte('date', filters.endDate);
+                    }
+
+                    if (filters.studentId) {
+                        query = query.eq('student_id', filters.studentId);
+                    }
+
+                    if (filters.hostelName && filters.hostelName !== 'all' && filters.hostelName !== '') {
+                        query = query.ilike('hostel_name', `%${filters.hostelName}%`);
+                    }
+
+                    query = query.order('date', { ascending: false }).order('timestamp', { ascending: false });
+
+                    const from = page * chunkSize;
+                    const to = from + fetchSize - 1;
+                    query = query.range(from, to);
+
+                    const { data, error } = await query;
+
+                    if (error) {
+                        console.error("Supabase attendance list error:", error);
+                        throw error;
+                    }
+
+                    if (!data || data.length === 0) break;
+                    allData.push(...data);
+                    if (data.length < fetchSize) break;
+                    page++;
                 }
 
-                if (limit) {
-                    query = query.limit(limit);
-                }
-
-                if (filters.startDate && filters.endDate) {
-                    query = query.gte('date', filters.startDate).lte('date', filters.endDate);
-                }
-
-                if (filters.studentId) {
-                    query = query.eq('student_id', filters.studentId);
-                }
-
-                if (filters.hostelName && filters.hostelName !== 'all' && filters.hostelName !== '') {
-                    // Filter by denormalized hostel_name in attendance table
-                    query = query.ilike('hostel_name', `%${filters.hostelName}%`);
-                }
-
-                // Sort
-                query = query.order('date', { ascending: false }).order('timestamp', { ascending: false });
-
-                const { data, error } = await query;
-
-                if (error) {
-                    console.error("Supabase attendance list error:", error);
-                    throw error;
-                }
-
-                return (data || []).map(mapAttendanceToCamelCase);
+                return allData.map(mapAttendanceToCamelCase);
 
             } else if (source === 'PRISMA') {
                 const tenantId = await getTenantIdOrThrow();
@@ -5127,7 +5134,11 @@ export const db = {
                 query = query.eq('students.tenant_id', tenantId);
 
                 if (filters.studentId) query = query.eq('student_id', filters.studentId);
-                if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
+                if (filters.status === 'hidden') {
+                    query = query.eq('is_hidden', true);
+                } else {
+                    if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
+                }
                 
                 // ⚡ WARDEN FILTER
                 if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
@@ -5173,7 +5184,9 @@ export const db = {
                 };
 
                 if (filters.studentId) whereClause.studentId = filters.studentId;
-                if (filters.status && filters.status !== 'all') whereClause.status = filters.status;
+                if (filters.status && filters.status !== 'all' && filters.status !== 'hidden') {
+                    whereClause.status = filters.status;
+                }
 
                 if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
                     const hostelVariations = filters.authorizedHostels.flatMap((h: string) => [
@@ -5191,17 +5204,39 @@ export const db = {
                     whereClause.student.hostelName = { in: hostelVariations };
                 }
 
-                const total = await prisma.permission.count({
-                    where: whereClause
-                });
+                let total = 0;
+                let records: any[] = [];
 
-                const records = await prisma.permission.findMany({
-                    where: whereClause,
-                    orderBy: { createdAt: 'desc' },
-                    take: options.limit || undefined,
-                    skip: options.offset || undefined,
-                    include: options.populate ? { student: true } : undefined
-                });
+                try {
+                    const testWhere = { ...whereClause };
+                    if (filters.status === 'hidden') {
+                        testWhere.isHidden = true;
+                    } else {
+                        testWhere.OR = [{ isHidden: false }, { isHidden: null }];
+                    }
+
+                    total = await prisma.permission.count({ where: testWhere });
+                    records = await prisma.permission.findMany({
+                        where: testWhere,
+                        orderBy: { createdAt: 'desc' },
+                        take: options.limit || undefined,
+                        skip: options.offset || undefined,
+                        include: options.populate ? { student: true } : undefined
+                    });
+                } catch (dbErr: any) {
+                    // Column permissions.is_hidden does not exist in DB yet, fallback safely!
+                    if (filters.status === 'hidden') {
+                        return { records: [], total: 0 };
+                    }
+                    total = await prisma.permission.count({ where: whereClause });
+                    records = await prisma.permission.findMany({
+                        where: whereClause,
+                        orderBy: { createdAt: 'desc' },
+                        take: options.limit || undefined,
+                        skip: options.offset || undefined,
+                        include: options.populate ? { student: true } : undefined
+                    });
+                }
 
                 const mappedRecords = records.map((p: any) => {
                     const formatted = {
@@ -5219,32 +5254,41 @@ export const db = {
                 await connectDB();
                 const PermissionModel = (await import('@/models/Permission')).default;
                 
+                const mongoFilters = { ...filters };
+                if (mongoFilters.status === 'hidden') {
+                    mongoFilters.isHidden = true;
+                    delete mongoFilters.status;
+                } else {
+                    mongoFilters.isHidden = { $ne: true };
+                    if (mongoFilters.status === 'all') delete mongoFilters.status;
+                }
+
                 // ⚡ WARDEN FILTER for Mongoose
-                if (filters.hostelName || (filters.authorizedHostels && filters.authorizedHostels.length > 0)) {
+                if (mongoFilters.hostelName || (mongoFilters.authorizedHostels && mongoFilters.authorizedHostels.length > 0)) {
                     const StudentModel = (await import('@/models/Student')).default;
                     const studentQuery: any = {};
-                    if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
-                        const hostelVariations = filters.authorizedHostels.flatMap((h: string) => [
+                    if (mongoFilters.authorizedHostels && mongoFilters.authorizedHostels.length > 0) {
+                        const hostelVariations = mongoFilters.authorizedHostels.flatMap((h: string) => [
                             h,
                             h.toUpperCase(),
                             h.toLowerCase()
                         ]);
                         studentQuery.hostelName = { $in: hostelVariations };
-                    } else if (filters.hostelName) {
+                    } else if (mongoFilters.hostelName) {
                         const hostelVariations = [
-                            filters.hostelName,
-                            filters.hostelName.toUpperCase(),
-                            filters.hostelName.toLowerCase()
+                            mongoFilters.hostelName,
+                            mongoFilters.hostelName.toUpperCase(),
+                            mongoFilters.hostelName.toLowerCase()
                         ];
                         studentQuery.hostelName = { $in: hostelVariations };
                     }
                     const matchingStudents = await StudentModel.find(studentQuery, '_id').lean();
-                    filters.studentId = { $in: matchingStudents.map(s => s._id) };
-                    delete filters.hostelName;
-                    delete filters.authorizedHostels;
+                    mongoFilters.studentId = { $in: matchingStudents.map(s => s._id) };
+                    delete mongoFilters.hostelName;
+                    delete mongoFilters.authorizedHostels;
                 }
 
-                let query = PermissionModel.find(filters);
+                let query = PermissionModel.find(mongoFilters);
 
                 if (options.populate) {
                     query = query.populate('studentId');
@@ -5258,7 +5302,7 @@ export const db = {
                 const records = await query.lean();
                 return {
                     records: JSON.parse(JSON.stringify(records)),
-                    total: await PermissionModel.countDocuments(filters)
+                    total: await PermissionModel.countDocuments(mongoFilters)
                 };
             }
         },
@@ -5555,6 +5599,74 @@ export const db = {
                     delete mongoQuery.beforeDate;
                 }
                 await PermissionModel.deleteMany(mongoQuery);
+                return true;
+            }
+        },
+
+        deleteByIds: async (ids: string[]) => {
+            if (!ids || ids.length === 0) return true;
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const chunks = [];
+                for (let i = 0; i < ids.length; i += 100) {
+                    chunks.push(ids.slice(i, i + 100));
+                }
+                for (const chunk of chunks) {
+                    const { error } = await supabase.from('permissions').delete().in('_id', chunk);
+                    if (error) console.warn("Supabase permissions bulk delete notice:", error);
+                }
+                return true;
+            } else if (source === 'PRISMA') {
+                try {
+                    await prisma.permission.deleteMany({
+                        where: { id: { in: ids } }
+                    });
+                } catch (e: any) {
+                    console.warn("Prisma permission bulk delete notice:", e?.message);
+                }
+                return true;
+            } else {
+                await connectDB();
+                const PermissionModel = (await import('@/models/Permission')).default;
+                await PermissionModel.deleteMany({ _id: { $in: ids } });
+                return true;
+            }
+        },
+
+        hideByIds: async (ids: string[], isHidden: boolean = true) => {
+            if (!ids || ids.length === 0) return true;
+            const source = await getDbSource();
+            if (source === 'SUPABASE') {
+                const chunks = [];
+                for (let i = 0; i < ids.length; i += 100) {
+                    chunks.push(ids.slice(i, i + 100));
+                }
+                for (const chunk of chunks) {
+                    const { error } = await supabase.from('permissions').update({ is_hidden: isHidden }).in('_id', chunk);
+                    if (error) console.warn("Supabase permissions bulk hide notice:", error);
+                }
+                return true;
+            } else if (source === 'PRISMA') {
+                let attempts = 0;
+                while (attempts < 3) {
+                    try {
+                        await (prisma.permission as any).updateMany({
+                            where: { id: { in: ids } },
+                            data: { isHidden }
+                        });
+                        break;
+                    } catch (pErr: any) {
+                        attempts++;
+                        console.warn(`Prisma permission bulk hide attempt ${attempts} notice:`, pErr?.message);
+                        if (attempts >= 3) throw pErr;
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+                }
+                return true;
+            } else {
+                await connectDB();
+                const PermissionModel = (await import('@/models/Permission')).default;
+                await PermissionModel.updateMany({ _id: { $in: ids } }, { $set: { isHidden } });
                 return true;
             }
         }

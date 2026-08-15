@@ -163,6 +163,7 @@ model AdminSettings {
   allowWardenRemoveStudent Boolean  @default(false) @map("allow_warden_remove_student")
   allowDeanRemoveStudent   Boolean  @default(false) @map("allow_dean_remove_student")
   allowBulkStudentUpdates  Boolean  @default(false) @map("allow_bulk_student_updates")
+  allowBulkPermissionManagement Boolean? @default(true) @map("allow_bulk_permission_management")
   createdAt                DateTime @default(now()) @map("created_at")
   updatedAt                DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -239,7 +240,7 @@ model Hostel {
 model Permission {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @map("_id")
   studentId    String   @map("student_id")
-  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student      Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
   fromDateTime DateTime @map("from_date_time")
   toDateTime   DateTime @map("to_date_time")
   reason       String
@@ -249,6 +250,7 @@ model Permission {
   requestType  String?  @map("request_type")
   parentStatus String?  @map("parent_status")
   parentConsentUrl String? @map("parent_consent_url")
+  isHidden     Boolean? @default(false) @map("is_hidden")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 

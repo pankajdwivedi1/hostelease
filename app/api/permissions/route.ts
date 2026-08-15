@@ -152,7 +152,15 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { permissionId, status, wardenStatus, deanStatus, parentStatus } = body;
+    const { permissionId, permissionIds, action, isHidden, status, wardenStatus, deanStatus, parentStatus } = body;
+
+    // Handle Bulk Hide / Unhide Action
+    if (action === 'bulkHide' || action === 'bulkUnhide' || (permissionIds && Array.isArray(permissionIds) && action === 'hide')) {
+      const targetIds = permissionIds || (permissionId ? [permissionId] : []);
+      const hideFlag = isHidden !== undefined ? Boolean(isHidden) : action === 'bulkHide' || action === 'hide';
+      await db.permissions.hideByIds(targetIds, hideFlag);
+      return NextResponse.json({ success: true, count: targetIds.length, isHidden: hideFlag });
+    }
 
     if (!permissionId) {
       return NextResponse.json(
@@ -230,5 +238,24 @@ export async function PATCH(request: NextRequest) {
       { error: error.message || "Failed to update permission" },
       { status: 500 }
     );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json().catch(() => ({}));
+    const searchParams = request.nextUrl.searchParams;
+    const idFromQuery = searchParams.get("id");
+    const permissionIds = body.permissionIds || (idFromQuery ? [idFromQuery] : []);
+
+    if (!permissionIds || permissionIds.length === 0) {
+      return NextResponse.json({ error: "No permission IDs provided" }, { status: 400 });
+    }
+
+    await db.permissions.deleteByIds(permissionIds);
+    return NextResponse.json({ success: true, count: permissionIds.length });
+  } catch (error: any) {
+    console.error("Error in DELETE /api/permissions:", error);
+    return NextResponse.json({ error: error.message || "Failed to delete permissions" }, { status: 500 });
   }
 }

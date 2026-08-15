@@ -1298,6 +1298,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         if (fullData.notModified) {
                             console.log("⚡ [Device Caching] Profile unchanged on Railway DB. 0 KB downloaded!");
                             if (isMounted) {
+                                if (fullData.studentStatus) {
+                                    setStudentProfile(prev => prev ? ({ ...prev, studentStatus: fullData.studentStatus }) : prev);
+                                    localStorage.setItem("studentStatus", fullData.studentStatus);
+                                }
                                 setIsFullProfileLoaded(true);
                                 setLoading(false);
                             }
@@ -1870,6 +1874,23 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 setIsAtHostel(true);
                 const displayName = (prioritizeAssignedHostel && studentProfile?.hostelName) ? studentProfile.hostelName : (matchedLocation.name || "Hostel");
                 showToast(`Verification Success✔️, You are ${Math.round(matchedLocation.distance)}m away from ${displayName}. (Accuracy: ${Math.round(accuracy)}m). Daily Attendance / Leave Request button is now active.`, "success");
+                
+                // ⚡ AUTO-SYNC STATUS: If student is inside campus, force fetch latest status from DB
+                if (user && studentProfile) {
+                    const queryParam = user.source === 'supabase'
+                        ? `supabaseId=${user.uid}`
+                        : `firebaseUID=${user.uid || studentProfile.firebaseUID}`;
+                    fetch(`/api/students?${queryParam}&minimal=true${getTenantParam(false)}`, { cache: 'no-store' })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.student?.studentStatus) {
+                                console.log("⚡ [Location Verified] Syncing server status:", data.student.studentStatus);
+                                setStudentProfile(prev => prev ? ({ ...prev, studentStatus: data.student.studentStatus }) : prev);
+                                localStorage.setItem("studentStatus", data.student.studentStatus);
+                            }
+                        })
+                        .catch(e => console.error("Auto-sync status after location verification failed:", e));
+                }
             } else {
                 setIsAtHostel(false);
                 const displayInfo = (prioritizeAssignedHostel && assignedHostelInfo) ? assignedHostelInfo : closestInfo;

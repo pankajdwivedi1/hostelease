@@ -12,6 +12,7 @@ export interface IPermission {
   deanStatus: "pending" | "allowed" | "rejected";
   parentStatus: "pending" | "allowed" | "rejected" | "no_response";
   parentConsentUrl?: string | null;
+  isHidden?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -71,6 +72,11 @@ const PermissionSchema = new Schema<IPermission>(
     parentConsentUrl: {
       type: String,
       default: null,
+    },
+    isHidden: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
   },
   {

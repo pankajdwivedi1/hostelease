@@ -48,7 +48,8 @@ export async function GET(request: NextRequest) {
             allowDeanEditProfile: settings?.allowDeanEditProfile || false,
             allowWardenRemoveStudent: settings?.allowWardenRemoveStudent || false,
             allowDeanRemoveStudent: settings?.allowDeanRemoveStudent || false,
-            allowBulkStudentUpdates: settings?.allowBulkStudentUpdates || false
+            allowBulkStudentUpdates: settings?.allowBulkStudentUpdates || false,
+            allowBulkPermissionManagement: settings?.allowBulkPermissionManagement ?? true
         });
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);
@@ -131,6 +132,7 @@ export async function POST(request: NextRequest) {
         if (body.allowWardenRemoveStudent !== undefined) updateData.allowWardenRemoveStudent = body.allowWardenRemoveStudent;
         if (body.allowDeanRemoveStudent !== undefined) updateData.allowDeanRemoveStudent = body.allowDeanRemoveStudent;
         if (body.allowBulkStudentUpdates !== undefined) updateData.allowBulkStudentUpdates = body.allowBulkStudentUpdates;
+        if (body.allowBulkPermissionManagement !== undefined) updateData.allowBulkPermissionManagement = body.allowBulkPermissionManagement;
 
         const settings = await db.settings.update(updateData);
 

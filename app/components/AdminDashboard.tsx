@@ -1153,6 +1153,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [allowWardenRemoveStudent, setAllowWardenRemoveStudent] = useState(false);
   const [allowDeanRemoveStudent, setAllowDeanRemoveStudent] = useState(false);
   const [allowBulkStudentUpdates, setAllowBulkStudentUpdates] = useState(false);
+  const [allowBulkPermissionManagement, setAllowBulkPermissionManagement] = useState(true);
+  const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([]);
+  const [isDeletingPermissions, setIsDeletingPermissions] = useState(false);
+  const [isHidingPermissions, setIsHidingPermissions] = useState(false);
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
   const [bulkUpdateForm, setBulkUpdateForm] = useState<Record<string, string>>({});
@@ -2740,6 +2744,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (settingsData.allowWardenRemoveStudent !== undefined) setAllowWardenRemoveStudent(settingsData.allowWardenRemoveStudent);
         if (settingsData.allowDeanRemoveStudent !== undefined) setAllowDeanRemoveStudent(settingsData.allowDeanRemoveStudent);
         if (settingsData.allowBulkStudentUpdates !== undefined) setAllowBulkStudentUpdates(settingsData.allowBulkStudentUpdates);
+        if (settingsData.allowBulkPermissionManagement !== undefined) setAllowBulkPermissionManagement(settingsData.allowBulkPermissionManagement);
         if (settingsData.developerPassword) setDeveloperPassword(settingsData.developerPassword);
         if (settingsData.leaveApprovalMethod) setLeaveApprovalMethod(settingsData.leaveApprovalMethod);
         if (settingsData.wifiWhitelist) setWifiWhitelist(settingsData.wifiWhitelist);
@@ -2791,6 +2796,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (key === 'allowWardenRemoveStudent') setAllowWardenRemoveStudent(value);
         if (key === 'allowDeanRemoveStudent') setAllowDeanRemoveStudent(value);
         if (key === 'allowBulkStudentUpdates') setAllowBulkStudentUpdates(value);
+        if (key === 'allowBulkPermissionManagement') setAllowBulkPermissionManagement(value);
       } else {
         alert("Failed to update setting: " + (data.error || "Unknown error"));
       }
@@ -2799,6 +2805,65 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       alert("Error: " + (e.message || "Network error"));
     } finally {
       setIsUpdatingSettings(false);
+    }
+  };
+
+  const handleBulkDeletePermissions = async () => {
+    if (selectedPermissionIds.length === 0) return;
+    if (!await showConfirm(`Are you sure you want to permanently delete ${selectedPermissionIds.length} selected permission record(s)? This action cannot be undone.`)) return;
+
+    try {
+      setIsDeletingPermissions(true);
+      const res = await fetch("/api/permissions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permissionIds: selectedPermissionIds }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Successfully deleted ${selectedPermissionIds.length} permission record(s).`, "success");
+        setSelectedPermissionIds([]);
+        fetchPermissions(filter, true);
+      } else {
+        showToast(data.error || "Failed to delete permissions.", "error");
+      }
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || "Failed to delete permissions.", "error");
+    } finally {
+      setIsDeletingPermissions(false);
+    }
+  };
+
+  const handleBulkHidePermissions = async (shouldHide: boolean = true) => {
+    if (selectedPermissionIds.length === 0) return;
+    const actionText = shouldHide ? "hide" : "unhide";
+    if (!await showConfirm(`Are you sure you want to ${actionText} ${selectedPermissionIds.length} selected permission record(s)?`)) return;
+
+    try {
+      setIsHidingPermissions(true);
+      const res = await fetch("/api/permissions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          permissionIds: selectedPermissionIds,
+          action: shouldHide ? "bulkHide" : "bulkUnhide",
+          isHidden: shouldHide
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Successfully ${shouldHide ? 'hidden' : 'unhidden'} ${selectedPermissionIds.length} permission record(s).`, "success");
+        setSelectedPermissionIds([]);
+        fetchPermissions(filter, true);
+      } else {
+        showToast(data.error || `Failed to ${actionText} permissions.`, "error");
+      }
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || `Failed to ${actionText} permissions.`, "error");
+    } finally {
+      setIsHidingPermissions(false);
     }
   };
 
@@ -4745,6 +4810,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   }, [title]);
 
   useEffect(() => {
+    if (!allowBulkPermissionManagement && filter === "hidden") {
+      setFilter("all");
+      fetchPermissions("all", true);
+    }
+  }, [allowBulkPermissionManagement]);
+
+  useEffect(() => {
     // ⚡ INSTANT TAB SWITCH: Fetch attendance summary and logs only when viewing attendance or rooms
     if (currentTab === "attendance" || currentTab === "rooms") {
       fetchAttendanceSummary();
@@ -5253,7 +5325,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           curr.setDate(curr.getDate() + 1);
         }
 
-        const res = await fetch(`/api/admin/attendance?startDate=${selectedDate}&endDate=${selectedEndDate}&hostelName=${attendanceHostelFilter}&_t=${Date.now()}`);
+        const res = await fetch(`/api/admin/attendance?startDate=${selectedDate}&endDate=${selectedEndDate}&hostelName=${attendanceHostelFilter}&limit=50000&_t=${Date.now()}`);
         const dataJson = await res.json();
         const logs: any[] = dataJson.attendance || [];
 
@@ -6038,7 +6110,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const student = typeof p.studentId === "object" ? p.studentId : null;
       if (!student) return false;
 
-      const matchesStatus = filter === "all" || p.status === filter;
+      let matchesStatus = false;
+      if (filter === "hidden") {
+        matchesStatus = Boolean(p.isHidden);
+      } else if (filter === "all") {
+        matchesStatus = !p.isHidden;
+      } else {
+        matchesStatus = p.status === filter && !p.isHidden;
+      }
       // 🔍 UNIVERSAL SEARCH: Match against all fields from registration form  
       const matchesSearch = searchQuery === "" ||
         student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -7204,7 +7283,36 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       >
                         Rejected
                       </button>
+                      {allowBulkPermissionManagement && (
+                        <button
+                          onClick={() => {
+                            setFilter("hidden");
+                            fetchPermissions("hidden", true);
+                          }}
+                          className={`flex-1 px-2 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-sm font-medium transition-colors ${filter === "hidden" ? "bg-slate-800 text-white font-bold" : "bg-filler text-foreground hover:bg-[#E8E8E6]"}`}
+                        >
+                          👁️ Hidden
+                        </button>
+                      )}
                     </div>
+
+                    {allowBulkPermissionManagement && filteredPermissions.length > 0 && (
+                      <label className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 rounded-lg cursor-pointer text-xs font-bold text-blue-700 transition-colors border border-blue-200 shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={selectedPermissionIds.length > 0 && selectedPermissionIds.length === filteredPermissions.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPermissionIds(filteredPermissions.map(p => p._id));
+                            } else {
+                              setSelectedPermissionIds([]);
+                            }
+                          }}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span>Select All ({filteredPermissions.length})</span>
+                      </label>
+                    )}
 
                     <div className="flex items-center gap-2 flex-1 max-w-sm md:max-w-md w-full">
                       <select
@@ -7266,204 +7374,223 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                         return (
                           <div key={permission._id} className="rounded-lg border border-solid border-[#9CA3AF] bg-filler p-2 md:p-3">
-                            <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-stretch">
-                              {/* Left Side: Student Info & Approvals */}
-                              <div className="w-full md:w-[340px] shrink-0 flex flex-row md:flex-col gap-1 md:gap-2.5">
-                                <div className="flex items-start gap-2 md:gap-4 w-[50%] md:w-full">
-                                  <button
-                                    onClick={() => handleProfileClick(student._id)}
-                                    className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
-                                  >
-                                    {profilePic ? (
-                                      <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
-                                    ) : (
-                                      initials
-                                    )}
-                                  </button>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-[11px] md:text-[13px] font-semibold text-foreground uppercase tracking-tight leading-tight">{student.name}</p>
-                                    <div className="flex flex-col md:flex-row md:items-center md:flex-wrap gap-0.5 md:gap-1.5 mt-0.5 text-[9px] md:text-xs text-secondary font-medium">
-                                      <span className="whitespace-nowrap">{new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
-                                      <span className="hidden md:inline">•</span>
-                                      <span className="whitespace-nowrap">to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
+                            <div className="flex flex-row items-start md:items-stretch gap-2 md:gap-4">
+                              {allowBulkPermissionManagement && (
+                                <div className="flex items-center justify-center shrink-0 pr-1.5 md:pr-2 border-r border-gray-200/60 my-auto self-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedPermissionIds.includes(permission._id)}
+                                    onChange={(e) => {
+                                      const pId = permission._id;
+                                      if (e.target.checked) {
+                                        setSelectedPermissionIds(prev => [...prev, pId]);
+                                      } else {
+                                        setSelectedPermissionIds(prev => prev.filter(id => id !== pId));
+                                      }
+                                    }}
+                                    className="w-4 h-4 md:w-5 md:h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer shadow-sm"
+                                  />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0 flex flex-col md:flex-row gap-2 md:gap-4 items-stretch">
+                                {/* Left Side: Student Info & Approvals */}
+                                <div className="w-full md:w-[340px] shrink-0 flex flex-row md:flex-col gap-1 md:gap-2.5">
+                                  <div className="flex items-start gap-2 md:gap-4 w-[50%] md:w-full">
+                                    <button
+                                      onClick={() => handleProfileClick(student._id)}
+                                      className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                                    >
+                                      {profilePic ? (
+                                        <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
+                                      ) : (
+                                        initials
+                                      )}
+                                    </button>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-[11px] md:text-[13px] font-semibold text-foreground uppercase tracking-tight leading-tight">{student.name}</p>
+                                      <div className="flex flex-col md:flex-row md:items-center md:flex-wrap gap-0.5 md:gap-1.5 mt-0.5 text-[9px] md:text-xs text-secondary font-medium">
+                                        <span className="whitespace-nowrap">{new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
+                                        <span className="hidden md:inline">•</span>
+                                        <span className="whitespace-nowrap">to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
-                                
-                                {/* Permissions Block under name */}
-                                <div className="pl-0 md:pl-8 lg:pl-[52px] w-[50%] md:w-full">
-                                  <div className="flex flex-col items-start gap-0.5 md:gap-1 origin-top-left border border-gray-200 rounded-md p-1 md:p-2 bg-white/30 shadow-sm w-full max-w-full md:max-w-[245px]">
-                                    <div className="flex items-center justify-between w-full">
-                                      <div className="flex items-center gap-1 md:gap-2">
-                                        <span className="text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Parent</span>
-                                        {permission.parentStatus === "rejected" && (
-                                          <span className="text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
-                                            Rejected
-                                          </span>
-                                        )}
-                                        {permission.parentStatus === "allowed" && (
-                                          <span className="text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
-                                            AGREE
-                                          </span>
-                                        )}
-                                        {(!permission.parentStatus || permission.parentStatus === "no_response" || permission.parentStatus === "pending") && (
-                                          <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
-                                            Pending
-                                          </span>
-                                        )}
-                                        {permission.parentConsentUrl && (
-                                          <button
-                                            onMouseEnter={() => prefetchVideo(permission.parentConsentUrl!)}
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              setActiveConsentVideoUrl(
-                                                resolveConsentVideoSrc(
-                                                  permission.parentConsentUrl!,
-                                                  prefetchedVideoUrls
-                                                )
-                                              );
-                                            }}
-                                            className="text-[6px] md:text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-150 px-1.5 py-0.5 rounded uppercase tracking-wider hover:bg-indigo-100 transition-all flex items-center gap-0.5 cursor-pointer ml-1"
-                                            title="Play Consent Video"
-                                          >
-                                            🎥 Play Video
-                                          </button>
-                                        )}
-                                      </div>
-                                      <div className="flex flex-col items-center gap-1 relative">
-                                        <div className="flex items-center gap-1 md:gap-2.5 bg-white p-0.5 md:p-1 rounded-md border border-gray-100">
-                                          <div className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
-                                            <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                          </div>
-                                          <div className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
-                                            <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                      <div className="flex items-center justify-between w-full mt-0.5">
+                                  
+                                  {/* Permissions Block under name */}
+                                  <div className="pl-0 md:pl-8 lg:pl-[52px] w-[50%] md:w-full">
+                                    <div className="flex flex-col items-start gap-0.5 md:gap-1 origin-top-left border border-gray-200 rounded-md p-1 md:p-2 bg-white/30 shadow-sm w-full max-w-full md:max-w-[245px]">
+                                      <div className="flex items-center justify-between w-full">
                                         <div className="flex items-center gap-1 md:gap-2">
-                                          <span className="text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Warden</span>
-                                          {permission.wardenStatus === "rejected" && (
+                                          <span className="text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Parent</span>
+                                          {permission.parentStatus === "rejected" && (
                                             <span className="text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
                                               Rejected
                                             </span>
                                           )}
-                                          {permission.wardenStatus === "allowed" && (
+                                          {permission.parentStatus === "allowed" && (
+                                            <span className="text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
+                                              AGREE
+                                            </span>
+                                          )}
+                                          {(!permission.parentStatus || permission.parentStatus === "no_response" || permission.parentStatus === "pending") && (
+                                            <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                              Pending
+                                            </span>
+                                          )}
+                                          {permission.parentConsentUrl && (
+                                            <button
+                                              onMouseEnter={() => prefetchVideo(permission.parentConsentUrl!)}
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                setActiveConsentVideoUrl(
+                                                  resolveConsentVideoSrc(
+                                                    permission.parentConsentUrl!,
+                                                    prefetchedVideoUrls
+                                                  )
+                                                );
+                                              }}
+                                              className="text-[6px] md:text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-150 px-1.5 py-0.5 rounded uppercase tracking-wider hover:bg-indigo-100 transition-all flex items-center gap-0.5 cursor-pointer ml-1"
+                                              title="Play Consent Video"
+                                            >
+                                              🎥 Play Video
+                                            </button>
+                                          )}
+                                        </div>
+                                        <div className="flex flex-col items-center gap-1 relative">
+                                          <div className="flex items-center gap-1 md:gap-2.5 bg-white p-0.5 md:p-1 rounded-md border border-gray-100">
+                                            <div className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
+                                              <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                            </div>
+                                            <div className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
+                                              <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                        <div className="flex items-center justify-between w-full mt-0.5">
+                                          <div className="flex items-center gap-1 md:gap-2">
+                                            <span className="text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Warden</span>
+                                            {permission.wardenStatus === "rejected" && (
+                                              <span className="text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
+                                                Rejected
+                                              </span>
+                                            )}
+                                            {permission.wardenStatus === "allowed" && (
+                                              <span className="text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
+                                                Accepted
+                                              </span>
+                                            )}
+                                            {permission.wardenStatus === "pending" && (
+                                              <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                                Pending
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="flex flex-col items-center gap-1 relative group">
+                                            <div className="flex items-center gap-1 md:gap-2.5 bg-white p-0.5 md:p-1 rounded-md border border-gray-100">
+                                              <button
+                                                onClick={async () => {
+                                                  if (isOlderThan24Hours) return showToast("Cannot modify: 24 hours have passed.", "error");
+                                                  if (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden') return showToast("Waiting for parent approval.", "error");
+                                                  if (userType === "warden" && await showConfirm("Are you sure you want to approve this permission?")) handleStatusChange(permission._id, "allowed");
+                                                }}
+                                                disabled={userType !== "warden" || permission.deanStatus !== "pending" || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')}
+                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                              >
+                                                <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                              </button>
+                                              <button
+                                                onClick={() => {
+                                                  if (isOlderThan24Hours) return showToast("Cannot modify: 24 hours have passed.", "error");
+                                                  if (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden') return showToast("Waiting for parent approval.", "error");
+                                                  if (userType === "warden") handleStatusChange(permission._id, "rejected");
+                                                }}
+                                                disabled={userType !== "warden" || permission.deanStatus !== "pending" || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')}
+                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                              >
+                                                <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                              </button>
+                                            </div>
+                                            {(leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden') && (
+                                                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+                                                  Waiting for Parent
+                                                </div>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                      <div className="flex items-center justify-between w-full mt-0.5">
+                                        <div className="flex items-center gap-1 md:gap-2">
+                                          <span className="text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Dean</span>
+                                          {permission.deanStatus === "rejected" && (
+                                            <span className="text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
+                                              Rejected
+                                            </span>
+                                          )}
+                                          {permission.deanStatus === "allowed" && (
                                             <span className="text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
                                               Accepted
                                             </span>
                                           )}
-                                          {permission.wardenStatus === "pending" && (
+                                          {permission.deanStatus === "pending" && (
                                             <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
                                               Pending
                                             </span>
                                           )}
                                         </div>
-                                        <div className="flex flex-col items-center gap-1 relative group">
+                                        <div className="flex flex-col items-center gap-1 relative">
                                           <div className="flex items-center gap-1 md:gap-2.5 bg-white p-0.5 md:p-1 rounded-md border border-gray-100">
                                             <button
-                                              onClick={async () => {
+                                              onClick={() => {
                                                 if (isOlderThan24Hours) return showToast("Cannot modify: 24 hours have passed.", "error");
-                                                if (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden') return showToast("Waiting for parent approval.", "error");
-                                                if (userType === "warden" && await showConfirm("Are you sure you want to approve this permission?")) handleStatusChange(permission._id, "allowed");
+                                                if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed");
                                               }}
-                                              disabled={userType !== "warden" || permission.deanStatus !== "pending" || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')}
-                                              className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                              disabled={userType !== "admin" && userType !== "superadmin"}
+                                              className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300"} ${((userType !== "admin" && userType !== "superadmin") || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                             >
                                               <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                             </button>
                                             <button
                                               onClick={() => {
                                                 if (isOlderThan24Hours) return showToast("Cannot modify: 24 hours have passed.", "error");
-                                                if (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden') return showToast("Waiting for parent approval.", "error");
-                                                if (userType === "warden") handleStatusChange(permission._id, "rejected");
+                                                if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected");
                                               }}
-                                              disabled={userType !== "warden" || permission.deanStatus !== "pending" || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')}
-                                              className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isOlderThan24Hours || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                              disabled={userType !== "admin" && userType !== "superadmin"}
+                                              className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${((userType !== "admin" && userType !== "superadmin") || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                             >
                                               <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                             </button>
                                           </div>
-                                          {(leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden') && (
-                                              <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-                                                Waiting for Parent
-                                              </div>
-                                          )}
                                         </div>
                                       </div>
-
-                                    <div className="flex items-center justify-between w-full mt-0.5">
-                                      <div className="flex items-center gap-1 md:gap-2">
-                                        <span className="text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Dean</span>
-                                        {permission.deanStatus === "rejected" && (
-                                          <span className="text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
-                                            Rejected
-                                          </span>
-                                        )}
-                                        {permission.deanStatus === "allowed" && (
-                                          <span className="text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
-                                            Accepted
-                                          </span>
-                                        )}
-                                        {permission.deanStatus === "pending" && (
-                                          <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
-                                            Pending
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="flex flex-col items-center gap-1 relative">
-                                        <div className="flex items-center gap-1 md:gap-2.5 bg-white p-0.5 md:p-1 rounded-md border border-gray-100">
+                                      
+                                      {/* Manual Campus Toggle for Wardens */}
+                                      {student.studentStatus === 'out' && (
+                                        <div className="flex items-center gap-2 w-full mt-1 pt-1 border-t border-gray-100">
+                                          <span className="text-[9px] md:text-[10px] font-black text-amber-600 uppercase whitespace-nowrap tracking-tighter w-12 text-left">Status</span>
                                           <button
-                                            onClick={() => {
-                                              if (isOlderThan24Hours) return showToast("Cannot modify: 24 hours have passed.", "error");
-                                              if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed");
-                                            }}
-                                            disabled={userType !== "admin" && userType !== "superadmin"}
-                                            className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300"} ${((userType !== "admin" && userType !== "superadmin") || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                            onClick={() => handleManualToggle(student._id, "out")}
+                                            className="flex-1 py-1.5 rounded-lg bg-amber-500 text-white text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 shadow-sm transition-all active:scale-95"
                                           >
-                                            <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                          </button>
-                                          <button
-                                            onClick={() => {
-                                              if (isOlderThan24Hours) return showToast("Cannot modify: 24 hours have passed.", "error");
-                                              if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected");
-                                            }}
-                                            disabled={userType !== "admin" && userType !== "superadmin"}
-                                            className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${((userType !== "admin" && userType !== "superadmin") || isOlderThan24Hours) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
-                                          >
-                                            <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                            MARK IN
                                           </button>
                                         </div>
-                                      </div>
+                                      )}
                                     </div>
-                                    
-                                    {/* Manual Campus Toggle for Wardens */}
-                                    {student.studentStatus === 'out' && (
-                                      <div className="flex items-center gap-2 w-full mt-1 pt-1 border-t border-gray-100">
-                                        <span className="text-[9px] md:text-[10px] font-black text-amber-600 uppercase whitespace-nowrap tracking-tighter w-12 text-left">Status</span>
-                                        <button
-                                          onClick={() => handleManualToggle(student._id, "out")}
-                                          className="flex-1 py-1.5 rounded-lg bg-amber-500 text-white text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 shadow-sm transition-all active:scale-95"
-                                        >
-                                          MARK IN
-                                        </button>
-                                      </div>
-                                    )}
                                   </div>
                                 </div>
-                              </div>
 
-                              {/* Vertical Separator */}
-                              <div className="hidden md:block w-[1px] md:w-[2px] bg-blue-500/20 my-1 rounded-full"></div>
+                                {/* Vertical Separator */}
+                                <div className="hidden md:block w-[1px] md:w-[2px] bg-blue-500/20 my-1 rounded-full"></div>
 
-                              {/* Right Side: Reason Message */}
-                              <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                <div className="bg-white/40 p-2 md:p-3 rounded-lg border border-gray-100 h-full">
-                                  <p className="text-[10px] md:text-xs text-foreground/90 font-medium leading-relaxed italic text-justify">
-                                    "{permission.reason}"
-                                  </p>
+                                {/* Right Side: Reason Message */}
+                                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                  <div className="bg-white/40 p-2 md:p-3 rounded-lg border border-gray-100 h-full">
+                                    <p className="text-[10px] md:text-xs text-foreground/90 font-medium leading-relaxed italic text-justify">
+                                      "{permission.reason}"
+                                    </p>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -7481,6 +7608,51 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       >
                         Show All Permissions ({totalPermissionsCount})
                       </button>
+                    </div>
+                  )}
+
+                  {allowBulkPermissionManagement && selectedPermissionIds.length > 0 && (
+                    <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white px-3 py-2 sm:px-5 sm:py-3 rounded-2xl shadow-2xl border border-slate-700/60 backdrop-blur-md flex items-center justify-between sm:justify-start gap-1.5 sm:gap-4 w-[92vw] max-w-lg animate-in slide-in-from-bottom duration-300">
+                      <div className="flex items-center gap-1.5 sm:gap-2 font-bold text-[11px] sm:text-sm text-slate-200 shrink-0">
+                        <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] sm:text-xs font-black">
+                          {selectedPermissionIds.length}
+                        </span>
+                        <span className="hidden xs:inline">Selected</span>
+                      </div>
+                      <div className="h-4 sm:h-6 w-[1px] bg-slate-700 shrink-0"></div>
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-end sm:justify-start">
+                        {filter === 'hidden' ? (
+                          <button
+                            onClick={() => handleBulkHidePermissions(false)}
+                            disabled={isHidingPermissions}
+                            className="px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] sm:text-xs font-bold transition-all flex items-center gap-1 border border-emerald-500 active:scale-95 disabled:opacity-50 whitespace-nowrap shadow-md"
+                          >
+                            <span>👁️</span> <span className="hidden sm:inline">Unhide Selected</span><span className="sm:hidden">Unhide</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleBulkHidePermissions(true)}
+                            disabled={isHidingPermissions}
+                            className="px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-xl text-[10px] sm:text-xs font-bold transition-all flex items-center gap-1 border border-slate-700 active:scale-95 disabled:opacity-50 whitespace-nowrap"
+                          >
+                            <span>👁️</span> <span className="hidden sm:inline">Hide from Dashboard</span><span className="sm:hidden">Hide</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={handleBulkDeletePermissions}
+                          disabled={isDeletingPermissions}
+                          className="px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[10px] sm:text-xs font-bold transition-all flex items-center gap-1 shadow-md shadow-red-900/30 active:scale-95 disabled:opacity-50 whitespace-nowrap"
+                        >
+                          <span>🗑️</span> <span className="hidden sm:inline">Delete Selected</span><span className="sm:hidden">Delete</span>
+                        </button>
+                        <button
+                          onClick={() => setSelectedPermissionIds([])}
+                          className="p-1 sm:p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors ml-0.5 shrink-0"
+                          title="Cancel Selection"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </div>
                     </div>
                   )}
               </div>
@@ -14815,6 +14987,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               type="checkbox"
                               checked={allowBulkStudentUpdates}
                               onChange={(e) => handleToggleDeveloperSetting('allowBulkStudentUpdates', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+
+                        {/* allowBulkPermissionManagement toggle */}
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </div>
+                            <div>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Allow Bulk Permission Management</h3>
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Enables bulk checkbox selection, delete, and hide controls on Leave Permission cards</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={allowBulkPermissionManagement}
+                              onChange={(e) => handleToggleDeveloperSetting('allowBulkPermissionManagement', e.target.checked)}
                               className="sr-only peer"
                             />
                             <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>

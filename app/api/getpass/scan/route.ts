@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
         try {
             const [activityRes, openPassesRes, permissionsRes, consumedRes] = await Promise.all([
                 db.gatePasses.list({ firebaseUID: student.firebaseUID }, { limit: 1, sortField: 'checkOutTime', sortOrder: 'desc' }),
-                db.gatePasses.list({ studentId: student._id.toString(), status: "out" }),
+                db.gatePasses.list({ studentId: student._id.toString(), firebaseUID: student.firebaseUID, status: "out" }),
                 db.permissions.list({ studentId: student._id.toString() }),
                 db.gatePasses.list({ studentId: student._id.toString() })
             ]);

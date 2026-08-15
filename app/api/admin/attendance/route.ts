@@ -13,6 +13,8 @@ export async function GET(request: Request) {
         const hostelName = searchParams.get("hostelName");
         const studentId = searchParams.get("studentId");
         const id = searchParams.get("id");
+        const limitParam = searchParams.get("limit");
+        const limit = limitParam ? parseInt(limitParam, 10) : 2000;
 
         if (id) {
             const record = await db.attendance.getById(id);
@@ -32,7 +34,7 @@ export async function GET(request: Request) {
             studentId
         };
 
-        const attendance = await db.attendance.list(filters);
+        const attendance = await db.attendance.list(filters, { limit });
 
         return NextResponse.json({ success: true, attendance });
     } catch (error: any) {
