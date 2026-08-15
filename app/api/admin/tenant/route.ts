@@ -59,19 +59,29 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { name, logo, primaryColor, secondaryColor, address, email, phone, gstin, contactName, contactPhone } = body;
 
-        const supabase = getSupabaseAdmin();
-        const updateData: any = {};
-        
-        if (name) updateData.name = name;
-        if (logo !== undefined) updateData.logo_url = logo;
-        if (primaryColor) updateData.primary_color = primaryColor;
-        if (secondaryColor) updateData.secondary_color = secondaryColor;
+        const prismaData: any = {};
+        if (name) prismaData.name = name;
+        if (logo !== undefined) prismaData.logoUrl = logo;
+        if (primaryColor) prismaData.primaryColor = primaryColor;
+        if (secondaryColor) prismaData.secondaryColor = secondaryColor;
 
         if (tenant._id) {
-            await supabase
-                .from('tenants')
-                .update(updateData)
-                .eq('id', tenant._id);
+            try {
+                const { prisma } = await import("@/lib/prisma");
+                await prisma.tenant.update({
+                    where: { id: tenant._id },
+                    data: prismaData
+                });
+            } catch (pErr: any) {
+                console.warn("Prisma tenant update notice, falling back to Supabase:", pErr?.message);
+                const supabase = getSupabaseAdmin();
+                const updateData: any = {};
+                if (name) updateData.name = name;
+                if (logo !== undefined) updateData.logo_url = logo;
+                if (primaryColor) updateData.primary_color = primaryColor;
+                if (secondaryColor) updateData.secondary_color = secondaryColor;
+                await supabase.from('tenants').update(updateData).eq('id', tenant._id);
+            }
         }
 
         // Save detailed institution info into existing universityBankDetails column of admin_settings
