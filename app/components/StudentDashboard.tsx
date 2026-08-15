@@ -2950,17 +2950,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 {paymentHistory.some(p => p.status === 'verified') ? (
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                                 ) : (
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                                )}
-                                            </svg>
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Action Buttons Row */}
+                                                    <path strokeLinec                            {/* Action Buttons Row */}
                             {!isParentView && (
-                                <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-2 sm:mb-3">
+                                <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-6">
+                                    {/* Gatepass Button */}
                                     <button
                                         onClick={() => router.push("/getpass/scan")}
                                         className="w-full h-12 rounded-xl bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-100 border-2 border-indigo-200 text-indigo-950 font-black hover:border-indigo-400 transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left shadow-sm"
@@ -2976,52 +2969,52 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         </div>
                                     </button>
 
-                                    {/* ⚡ SECONDARY ACTION: Go to Leave */}
-                                    {studentProfile?.studentStatus !== "out" && (
+                                    {/* 2-Column Row: Leave Request (Left) + Outing & Attendance (Right) */}
+                                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                                        {studentProfile?.studentStatus !== "out" && (
+                                            <button
+                                                onClick={() => {
+                                                    if (!isAtHostel && !isParentView) {
+                                                        setHighlightLocation(true);
+                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                        alert("📍 Location Verification Required\n\nPlease verify your location first by clicking the location icon at the top of your dashboard.");
+                                                        return;
+                                                    }
+                                                    setRequestType("leave");
+                                                    setShowRequestForm(true);
+                                                }}
+                                                className={`w-full h-12 rounded-xl font-black border-2 transition-all flex flex-row items-center justify-start gap-2 group px-2.5 sm:px-3 text-left shadow-sm ${isAtHostel || isParentView
+                                                    ? "bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100 border-amber-300 text-amber-950 hover:border-amber-400"
+                                                    : "bg-gradient-to-r from-slate-50 via-gray-100 to-slate-50 border-slate-300 text-slate-800 hover:border-slate-400"
+                                                    }`}
+                                            >
+                                                <div className={`w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-lg flex items-center justify-center transition-all ${(isAtHostel || isParentView) ? "bg-amber-200/60 text-amber-800 group-hover:scale-110" : "bg-slate-200/80 text-slate-700"}`}>
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                                    </svg>
+                                                </div>
+                                                <div className="flex flex-col min-w-0">
+                                                    <span className={`block text-[7.5px] sm:text-[8px] font-black uppercase tracking-[0.15em] leading-none mb-0.5 truncate ${(isAtHostel || isParentView) ? "text-amber-800" : "text-slate-600"}`}>Leave Request</span>
+                                                    <span className={`text-[9.5px] sm:text-xs font-black uppercase tracking-tight block truncate ${(isAtHostel || isParentView) ? "text-amber-950" : "text-slate-800"}`}>
+                                                        {(isAtHostel || isParentView) ? "Go to Home" : "Locked"}
+                                                    </span>
+                                                </div>
+                                            </button>
+                                        )}
+
                                         <button
-                                            onClick={() => {
-                                                if (!isAtHostel && !isParentView) {
-                                                    setHighlightLocation(true);
-                                                    // Scroll to top to show the location card
-                                                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                                                    alert("📍 Location Verification Required\n\nPlease verify your location first by clicking the location icon at the top of your dashboard.");
-                                                    return;
-                                                }
-                                                setRequestType("leave");
-                                                setShowRequestForm(true);
-                                            }}
-                                            className={`w-full h-12 rounded-xl font-black border-2 transition-all flex flex-row items-center justify-start gap-2 group px-2.5 sm:px-3 text-left shadow-sm ${isAtHostel || isParentView
-                                                ? "bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100 border-amber-300 text-amber-950 hover:border-amber-400"
-                                                : "bg-gradient-to-r from-slate-50 via-gray-100 to-slate-50 border-slate-300 text-slate-800 hover:border-slate-400"
-                                                }`}
+                                            onClick={() => setShowPermissionsHistory(true)}
+                                            className="w-full h-12 rounded-xl bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-100 border-2 border-teal-200 text-teal-950 font-black text-[9.5px] sm:text-[11px] uppercase tracking-widest hover:border-teal-400 transition-all flex flex-row items-center justify-start gap-2 px-2.5 sm:px-3 shadow-sm text-left"
                                         >
-                                            <div className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center transition-all ${(isAtHostel || isParentView) ? "bg-amber-200/60 text-amber-800 group-hover:scale-110" : "bg-slate-200/80 text-slate-700"}`}>
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 001 1v4a1 1 0 001 1m-6 0h6" />
-                                                </svg>
+                                            <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 bg-teal-200/60 rounded-lg flex items-center justify-center text-sm">
+                                                🚪
                                             </div>
                                             <div className="flex flex-col min-w-0">
-                                                <span className={`block text-[8px] font-black uppercase tracking-[0.15em] leading-none mb-0.5 whitespace-normal ${(isAtHostel || isParentView) ? "text-amber-800" : "text-slate-600"}`}>Leave Request</span>
-                                                <span className={`text-[10px] sm:text-xs font-black uppercase tracking-tight block whitespace-normal leading-tight ${(isAtHostel || isParentView) ? "text-amber-950" : "text-slate-800"}`}>
-                                                    {(isAtHostel || isParentView) ? "Go to Home" : "Locked"}
-                                                </span>
+                                                <span className="block text-[7.5px] sm:text-[8px] font-black uppercase tracking-[0.15em] leading-none mb-0.5 text-teal-800 truncate">Permissions</span>
+                                                <span className="text-[9.5px] sm:text-xs font-black text-teal-950 uppercase tracking-tight block truncate">Outing & Attendance</span>
                                             </div>
                                         </button>
-                                    )}
-                                </div>
-                            )}
-
-                            {!isParentView && (
-                                <div className="grid grid-cols-1 gap-2 sm:gap-3 mb-3 sm:mb-6">
-                                    <button
-                                        onClick={() => setShowPermissionsHistory(true)}
-                                        className="w-full h-12 rounded-xl bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-100 border-2 border-teal-200 text-teal-950 font-black text-[10px] md:text-[12px] uppercase tracking-widest hover:border-teal-400 transition-all flex items-center justify-start gap-2.5 px-3 shadow-sm"
-                                    >
-                                        <div className="w-8 h-8 shrink-0 bg-teal-200/60 rounded-lg flex items-center justify-center text-sm">
-                                            🚪
-                                        </div>
-                                        <div className="flex flex-col min-w-0 text-left">
-                                            <span className="block text-[8px] font-black uppercase tracking-[0.15em] leading-none mb-0.5 text-teal-800">History & Permissions</span>
+                                    </div>ack uppercase tracking-[0.15em] leading-none mb-0.5 text-teal-800">History & Permissions</span>
                                             <span className="text-[10px] sm:text-xs font-black text-teal-950 uppercase tracking-tight block truncate">Outing & Attendance</span>
                                         </div>
                                     </button>
