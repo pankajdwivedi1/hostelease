@@ -2723,22 +2723,22 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                             {/* Quick Info Grid */}
                             <div className={`grid grid-cols-2 ${gridColsClass} gap-2 sm:gap-3 mb-2`} style={{ fontFamily: 'var(--font-lora), Cambria' }}>
-                                <div className="h-12 bg-gradient-to-br from-blue-50 to-indigo-50 px-2.5 sm:px-3 rounded-xl border border-blue-100 shadow-sm flex flex-col justify-center overflow-hidden min-w-0">
-                                    <span className="block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-blue-600 opacity-80 truncate">Current Status</span>
+                                <div className="h-12 bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100 px-2.5 sm:px-3 rounded-xl border-2 border-emerald-200 shadow-sm flex flex-col justify-center overflow-hidden min-w-0">
+                                    <span className="block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-emerald-800 truncate">Current Status</span>
                                     <div className="flex items-center gap-1.5 min-w-0">
-                                        <div className={`w-2 h-2 rounded-full shrink-0 animate-pulse ${studentProfile.studentStatus === 'out' ? 'bg-red-500' : 'bg-green-500'}`} />
-                                        <p className="text-[9px] md:text-[10.5px] font-black text-gray-900 uppercase tracking-tight truncate">Currently {studentProfile.studentStatus || 'IN'}</p>
+                                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 animate-pulse ${studentProfile.studentStatus === 'out' ? 'bg-red-500 ring-2 ring-red-200' : 'bg-emerald-500 ring-2 ring-emerald-200'}`} />
+                                        <p className="text-[9.5px] md:text-[11px] font-black text-emerald-950 uppercase tracking-tight truncate">Currently {studentProfile.studentStatus || 'IN'}</p>
                                     </div>
                                 </div>
-                                <div className="h-12 bg-white px-2.5 sm:px-3 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-center overflow-hidden min-w-0">
-                                    <span className="block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-gray-400 opacity-70 truncate">Hostel & Room</span>
-                                    <p className="text-[9px] md:text-[10.5px] font-black text-gray-900 uppercase tracking-tight truncate">{studentProfile.hostelName}<span className="text-blue-600 ml-1">#{studentProfile.roomNumber}</span></p>
+                                <div className="h-12 bg-gradient-to-br from-sky-50 via-blue-50 to-indigo-50 px-2.5 sm:px-3 rounded-xl border-2 border-sky-200 shadow-sm flex flex-col justify-center overflow-hidden min-w-0">
+                                    <span className="block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-sky-800 truncate">Hostel & Room</span>
+                                    <p className="text-[9.5px] md:text-[11px] font-black text-slate-900 uppercase tracking-tight truncate">{studentProfile.hostelName}<span className="text-blue-700 font-black ml-1">#{studentProfile.roomNumber}</span></p>
                                 </div>
                                 {!isParentView && (
-                                    <div className={`h-12 px-2.5 sm:px-3 rounded-xl border shadow-sm flex items-center justify-between gap-1 transition-all duration-500 overflow-hidden min-w-0 ${highlightLocation ? 'bg-red-50 border-red-300 ring-4 ring-red-100 shadow-xl scale-[1.02]' : 'bg-white border-gray-100'}`}>
+                                    <div className={`h-12 px-2.5 sm:px-3 rounded-xl border-2 shadow-sm flex items-center justify-between gap-1 transition-all duration-500 overflow-hidden min-w-0 ${highlightLocation ? 'bg-amber-100 border-amber-400 ring-4 ring-amber-300 shadow-xl scale-[1.02]' : isAtHostel ? 'bg-gradient-to-br from-teal-50 via-emerald-50 to-teal-100 border-teal-200 text-teal-950' : 'bg-gradient-to-br from-rose-50 via-pink-50 to-rose-100 border-rose-200 text-rose-950'}`}>
                                         <div className="flex flex-col overflow-hidden min-w-0">
-                                            <span className={`block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${highlightLocation ? 'text-red-500 animate-pulse' : 'text-gray-400 opacity-70'}`}>Location Lock</span>
-                                            <p className="text-[9px] md:text-[10.5px] font-black text-gray-700 uppercase tracking-tight truncate">{isAtHostel ? '📍 Verified' : '❌ Not Verified'}</p>
+                                            <span className={`block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${highlightLocation ? 'text-amber-800 animate-pulse' : isAtHostel ? 'text-teal-800' : 'text-rose-800'}`}>Location Lock</span>
+                                            <p className={`text-[9.5px] md:text-[11px] font-black uppercase tracking-tight truncate ${isAtHostel ? 'text-teal-950' : 'text-rose-950'}`}>{isAtHostel ? '📍 Verified' : '❌ Not Verified'}</p>
                                         </div>
                                         <button
                                             onClick={() => {
@@ -2746,7 +2746,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 getAccurateLocation();
                                             }}
                                             disabled={isLocationChecking}
-                                            className={`p-1.5 rounded-lg transition-all ${isAtHostel ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'} ${highlightLocation ? 'animate-bounce' : ''}`}
+                                            className={`p-1.5 rounded-lg transition-all ${isAtHostel ? 'bg-emerald-200/60 text-emerald-800' : 'bg-rose-200/60 text-rose-800 hover:bg-rose-200'} ${highlightLocation ? 'animate-bounce' : ''}`}
                                             title="Refresh Location"
                                         >
                                             {isLocationChecking ? (
@@ -2761,10 +2761,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     </div>
                                 )}
 
-                                <div className="h-12 bg-white px-2.5 sm:px-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between gap-1 overflow-hidden min-w-0">
+                                <div className="h-12 bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 px-2.5 sm:px-3 rounded-xl border-2 border-purple-200 shadow-sm flex items-center justify-between gap-1 overflow-hidden min-w-0">
                                     <div className="flex flex-col overflow-hidden min-w-0">
-                                        <span className="block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-gray-400 opacity-70 truncate">Daily Attendance</span>
-                                        <p className={`text-[9px] md:text-[10.5px] font-black uppercase tracking-tight truncate ${isParentView ? attendanceDisplay.textColor : 'text-gray-700'}`}>
+                                        <span className="block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-purple-800 truncate">Daily Attendance</span>
+                                        <p className={`text-[9.5px] md:text-[11px] font-black uppercase tracking-tight truncate ${isParentView ? attendanceDisplay.textColor : 'text-purple-950'}`}>
                                             {isParentView ? (
                                                 attendanceDisplay.text
                                             ) : (
@@ -2963,20 +2963,20 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-2 sm:mb-4">
                                     <button
                                         onClick={() => router.push("/getpass/scan")}
-                                        className="w-full h-12 rounded-xl bg-[#EEF2FF] border-2 border-[#C7D2FE] text-[#4F46E5] font-black hover:bg-[#E0E7FF] transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left"
+                                        className="w-full h-12 rounded-xl bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-100 border-2 border-indigo-200 text-indigo-950 font-black hover:border-indigo-400 transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left shadow-sm"
                                     >
-                                        <div className="w-8 h-8 shrink-0 bg-[#C7D2FE]/50 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                                            <svg className="w-4 h-4 text-[#4F46E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <div className="w-8 h-8 shrink-0 bg-indigo-200/60 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                                            <svg className="w-4 h-4 text-indigo-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                                             </svg>
                                         </div>
                                         <div className="flex flex-col overflow-hidden min-w-0">
-                                            <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 opacity-70 truncate">Gatepass</span>
-                                            <span className="text-[10px] md:text-xs uppercase tracking-tight block truncate">Scan QR code</span>
+                                            <span className="block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-indigo-800 truncate">Gatepass</span>
+                                            <span className="text-[10px] md:text-xs font-black text-indigo-950 uppercase tracking-tight block truncate">Scan QR code</span>
                                         </div>
                                     </button>
 
-                                {/* ⚡ SECONDARY ACTION: Go to Leave */}
+                                    {/* ⚡ SECONDARY ACTION: Go to Leave */}
                                     {studentProfile?.studentStatus !== "out" && (
                                         <button
                                             onClick={() => {
@@ -2990,19 +2990,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 setRequestType("leave");
                                                 setShowRequestForm(true);
                                             }}
-                                            className={`w-full h-12 rounded-xl font-black border-2 transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left ${isAtHostel || isParentView
-                                                ? "bg-[#FFF7ED] border-[#FED7AA] text-[#C2410C] hover:bg-[#FFEDD5]"
-                                                : "bg-gray-50 border-gray-100 text-gray-400 hover:bg-red-50 hover:border-red-200"
+                                            className={`w-full h-12 rounded-xl font-black border-2 transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left shadow-sm ${isAtHostel || isParentView
+                                                ? "bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100 border-amber-300 text-amber-950 hover:border-amber-400"
+                                                : "bg-gradient-to-r from-slate-50 via-gray-100 to-slate-50 border-slate-300 text-slate-800 hover:border-slate-400"
                                                 }`}
                                         >
-                                            <div className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center transition-all ${(isAtHostel || isParentView) ? "bg-[#FED7AA]/50 group-hover:scale-110" : "bg-gray-100 group-hover:bg-red-100"}`}>
+                                            <div className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center transition-all ${(isAtHostel || isParentView) ? "bg-amber-200/60 text-amber-800 group-hover:scale-110" : "bg-slate-200/80 text-slate-700"}`}>
                                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                                                 </svg>
                                             </div>
                                             <div className="flex flex-col overflow-hidden min-w-0">
-                                                <span className={`block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${(isAtHostel || isParentView) ? "opacity-70" : "opacity-40"}`}>Leave Request</span>
-                                                <span className="text-[10px] md:text-xs uppercase tracking-tight block truncate">
+                                                <span className={`block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${(isAtHostel || isParentView) ? "text-amber-800" : "text-slate-600"}`}>Leave Request</span>
+                                                <span className={`text-[10px] md:text-xs font-black uppercase tracking-tight block truncate ${(isAtHostel || isParentView) ? "text-amber-950" : "text-slate-800"}`}>
                                                     {(isAtHostel || isParentView) ? "Go to Home" : "Locked"}
                                                 </span>
                                             </div>
@@ -3015,9 +3015,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-6">
                                     <button
                                         onClick={() => setShowPermissionsHistory(true)}
-                                        className="w-full h-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-bold text-[9px] md:text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5"
+                                        className="w-full h-12 rounded-xl bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-100 border-2 border-teal-200 text-teal-950 font-black text-[9.5px] md:text-[11px] uppercase tracking-widest hover:border-teal-400 transition-all flex items-center justify-center gap-1.5 shadow-sm"
                                     >
-                                        <span>🚪</span> <span className="truncate">Outing & Attendance</span>
+                                        <span>🚪</span> <span className="truncate text-teal-950 font-black">Outing & Attendance</span>
                                     </button>
 
                                     {/* 📶 Always-Visible Campus WiFi Status Card (Right side of Outing & Attendance) */}
