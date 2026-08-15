@@ -1876,10 +1876,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 showToast(`Verification Success✔️, You are ${Math.round(matchedLocation.distance)}m away from ${displayName}. (Accuracy: ${Math.round(accuracy)}m). Daily Attendance / Leave Request button is now active.`, "success");
                 
                 // ⚡ AUTO-SYNC STATUS: If student is inside campus, force fetch latest status from DB
-                if (user && studentProfile) {
-                    const queryParam = user.source === 'supabase'
-                        ? `supabaseId=${user.uid}`
-                        : `firebaseUID=${user.uid || studentProfile.firebaseUID}`;
+                if (studentProfile) {
+                    const queryParam = studentProfile.firebaseUID
+                        ? `firebaseUID=${studentProfile.firebaseUID}`
+                        : `email=${encodeURIComponent(studentProfile.email || '')}`;
                     fetch(`/api/students?${queryParam}&minimal=true${getTenantParam(false)}`, { cache: 'no-store' })
                         .then(res => res.json())
                         .then(data => {
