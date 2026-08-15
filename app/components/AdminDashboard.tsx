@@ -6464,7 +6464,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const hName = log.hostelName || (typeof log.studentId === 'object' ? log.studentId?.hostelName : null) || "Unknown";
       const rNum = log.roomNumber || (typeof log.studentId === 'object' ? log.studentId?.roomNumber : null) || "Unknown";
 
-      if (log.needsReview || log.faceMatchStatus === "flagged" || (log.faceMatchPercentage !== undefined && log.faceMatchPercentage < 80)) {
+      const isManualOrGpsOrWifi = log.faceMatchStatus === 'manual-override' || log.faceMatchStatus === 'auto-approved' || log.faceMatchStatus === 'verified' || log.verificationMethod === 'gps' || log.verificationMethod === 'wifi' || log.verificationMethod === 'manual';
+
+      if (!isManualOrGpsOrWifi && (log.needsReview || log.faceMatchStatus === "flagged" || (typeof log.faceMatchPercentage === 'number' && log.faceMatchPercentage !== null && log.faceMatchPercentage < 80))) {
         alertsList.push({
           type: "face",
           title: "Failed Face Matching",
