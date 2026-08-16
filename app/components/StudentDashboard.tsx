@@ -293,6 +293,21 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const fetchGatePassHistory = async (isFullHistory = false) => {
         const studentId = studentProfile?._id;
         if (!studentId) return;
+
+        // ⚡ INSTANT 0ms LOAD FROM LOCAL CACHE
+        try {
+            const cachedPassesStr = localStorage.getItem(`cached_gatepasses_${studentId}`);
+            if (cachedPassesStr && gatePasses.length === 0) {
+                const cachedPasses = JSON.parse(cachedPassesStr);
+                if (Array.isArray(cachedPasses) && cachedPasses.length > 0) {
+                    setGatePasses(cachedPasses);
+                    console.log("⚡ [PWA Cache] Gatepasses loaded instantly from local device storage!");
+                }
+            }
+        } catch (e) {
+            console.error("Failed to parse cached gatepasses:", e);
+        }
+
         setLoadingGatePasses(true);
         try {
             const limit = isFullHistory ? 1000 : 5;
@@ -302,20 +317,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 if (data.success && data.records) {
                     setGatePasses(prev => {
                         if (!isFullHistory && prev.length > limit) {
-                            // Retain existing full history if already loaded
                             return prev;
                         }
                         return data.records;
                     });
-                } else {
-                    showToast("Failed to fetch outing history.", "error");
+                    // ⚡ SAVE TO LOCAL STORAGE FOR OFFLINE / INSTANT 0ms RE-LOAD
+                    try {
+                        localStorage.setItem(`cached_gatepasses_${studentId}`, JSON.stringify(data.records));
+                    } catch (e) {}
                 }
-            } else {
-                showToast("Failed to fetch outing history.", "error");
             }
         } catch (error) {
             console.error("Error fetching gatepass history:", error);
-            showToast("Failed to fetch outing history.", "error");
+            // Retain cached data on network error
         } finally {
             setLoadingGatePasses(false);
         }
@@ -937,6 +951,17 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             // Fetch Notifications
             const fetchStudentNotifications = async () => {
+                // ⚡ Instant load from LocalStorage cache
+                try {
+                    const cachedNotifsStr = localStorage.getItem(`cached_notifs_${studentProfile._id}`);
+                    if (cachedNotifsStr) {
+                        const cached = JSON.parse(cachedNotifsStr);
+                        if (Array.isArray(cached) && cached.length > 0) {
+                            setNotifications(cached);
+                        }
+                    }
+                } catch (e) {}
+
                 try {
                     const res = await fetch(`/api/student/notifications?studentId=${encodeURIComponent(studentProfile._id)}&hostelName=${encodeURIComponent(studentProfile.hostelName)}${getTenantParam(false)}`);
                     if (!res.ok) throw new Error(`Failed to fetch notifications: ${res.status}`);
@@ -961,6 +986,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         });
 
                         setNotifications(active);
+                        try {
+                            localStorage.setItem(`cached_notifs_${studentProfile._id}`, JSON.stringify(active));
+                        } catch (e) {}
+
                         if (active.length > 0) {
                             showNotification(active[0]);
                         } else {

@@ -1,10 +1,10 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { otpCache } from "@/lib/otpCache";
 import { sendMSG91_WidgetOTP, sendMSG91_OTP } from "@/lib/msg91";
+import { db } from "@/lib/dbAdapter";
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,34 +38,20 @@ export async function POST(request: NextRequest) {
     const targetNormalized = normalizePhoneWithCountry(cleaned);
     const coreDigits = cleaned.length >= 10 ? cleaned.slice(-10) : cleaned;
 
-    // ⚡ FAST WILDCARD QUERY: Search directly for matching core digits in student_profiles
-    const digitPattern = `%${coreDigits.split("").join("%")}%`;
-    
-    let { data: students, error } = await supabase
-      .from("students")
-      .select("name, student_profiles!inner(father_name, mother_name, father_number, mother_number, local_guardian_phone_number)")
-      .eq("tenant_id", tenantId)
-      .or(`father_number.like.${digitPattern},mother_number.like.${digitPattern},local_guardian_phone_number.like.${digitPattern}`, { foreignTable: 'student_profiles' });
-
-    if (error) {
-      console.error("❌ Error fetching students in send-otp:", error);
-      return NextResponse.json({ success: false, error: "Database error occurred" }, { status: 500 });
-    }
+    // ⚡ FAST QUERY: Search directly using unified dbAdapter (Railway PostgreSQL / Prisma)
+    const students = await db.students.list({ search: coreDigits });
 
     let matchedStudent = null;
     let studentName = "";
 
-    if (students) {
+    if (students && students.length > 0) {
       for (const s of students) {
-        const prof = Array.isArray(s.student_profiles) ? s.student_profiles[0] : s.student_profiles;
-        if (!prof) continue;
-
-        const fatherNorm = normalizePhoneWithCountry(prof.father_number);
-        const motherNorm = normalizePhoneWithCountry(prof.mother_number);
-        const lgNorm = normalizePhoneWithCountry(prof.local_guardian_phone_number);
+        const fatherNorm = normalizePhoneWithCountry(s.fatherNumber);
+        const motherNorm = normalizePhoneWithCountry(s.motherNumber);
+        const lgNorm = normalizePhoneWithCountry(s.localGuardianPhoneNumber);
 
         if (fatherNorm === targetNormalized || motherNorm === targetNormalized || lgNorm === targetNormalized) {
-          matchedStudent = prof;
+          matchedStudent = s;
           studentName = s.name;
           break;
         }

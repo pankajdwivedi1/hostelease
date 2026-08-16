@@ -907,8 +907,29 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
     };
 
     // ===================== Duration formatter =====================
-    const formatDuration = (minutes: number) => {
-        if (!minutes) return "Just now";
+    const formatDuration = (minutes: number | null | undefined, returnTimestamp?: any) => {
+        if (returnTimestamp) {
+            try {
+                const d = new Date(returnTimestamp);
+                if (!isNaN(d.getTime())) {
+                    const diffMs = Date.now() - d.getTime();
+                    const diffMins = Math.max(0, Math.floor(diffMs / 60000));
+                    if (diffMins < 2) return "Just now";
+                    if (diffMins >= 1440) {
+                        const days = Math.floor(diffMins / 1440);
+                        const hrs = Math.floor((diffMins % 1440) / 60);
+                        const mins = diffMins % 60;
+                        return `${days}d ${hrs}h ${mins}m`;
+                    }
+                    const hrs = Math.floor(diffMins / 60);
+                    const mins = diffMins % 60;
+                    if (hrs > 0) return `${hrs}h ${mins}m`;
+                    return `${mins}m`;
+                }
+            } catch (e) {}
+        }
+
+        if (minutes === undefined || minutes === null || isNaN(minutes) || minutes <= 0) return "Just now";
         if (minutes >= 1440) {
             const days = Math.floor(minutes / 1440);
             const hrs = Math.floor((minutes % 1440) / 60);
@@ -1387,7 +1408,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                 </div>
                                                 <div className="flex flex-col items-end shrink-0">
                                                     <span className="text-[12px] font-black text-[#00ff88] tabular-nums tracking-tighter">
-                                                        {record.durationMinutes !== undefined ? formatDuration(record.durationMinutes) : '-'}
+                                                        {formatDuration(record.durationMinutes, record.checkInTime || (record as any).check_in_time || record.updatedAt || (record as any).updated_at)}
                                                     </span>
                                                     <span className="text-[8px] text-[rgba(255,255,255,0.25)] font-bold uppercase tracking-widest">
                                                         {formatISTTimeAMPM(record.checkInISTTime || record.checkOutISTTime, record.checkInTime || record.checkOutTime)}

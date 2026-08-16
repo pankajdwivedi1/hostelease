@@ -76,6 +76,11 @@ export interface IAdminSettings {
     wardenScanFailure?: boolean;
     deanSecurityAlert?: boolean;
   };
+  enforceUniqueErpId?: boolean;
+  enforceUniquePhone?: boolean;
+  enforceUniqueEmail?: boolean;
+  enforceUniqueFace?: boolean;
+  qrScanCooldownMinutes?: number;
   allowWardenAddStudent?: boolean;
   allowDeanAddStudent?: boolean;
   allowWardenEditProfile?: boolean;
@@ -226,6 +231,10 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
     enforceUniqueFace: {
       type: Boolean,
       default: false,
+    },
+    qrScanCooldownMinutes: {
+      type: Number,
+      default: 5,
     },
     // ✅ NEW FIX #13: Configurable hostel prefix mapping
     hostelPrefixMap: {

@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     if (adminSettings?.enforceUniqueFace && faceDescriptor && Array.isArray(faceDescriptor) && faceDescriptor.length > 0) {
       const allStudents = await db.students.list({});
       for (const s of allStudents) {
-        if (existingStudent && s.firebaseUID === existingStudent.firebaseUID) continue;
+        if (existingStudent && (s.firebaseUID === existingStudent.firebaseUID || s._id === existingStudent._id)) continue;
         if (s.faceDescriptor && Array.isArray(s.faceDescriptor) && s.faceDescriptor.length === faceDescriptor.length) {
           let sum = 0;
           for (let i = 0; i < faceDescriptor.length; i++) {
@@ -90,7 +90,8 @@ export async function POST(request: NextRequest) {
             sum += diff * diff;
           }
           const distance = Math.sqrt(sum);
-          if (distance < 0.6) { // standard match threshold
+          if (distance < 0.35) { // ⚡ Strict 1-to-MANY threshold (<0.35) to prevent false duplicate blocks across dataset
+            console.warn(`⚠️ Duplicate face detected during registration! Distance=${distance.toFixed(3)} to existing student "${s.name}" (${s.registrationId || s.phoneNumber})`);
             return NextResponse.json(
               { error: "A student profile with this face scan is already registered" },
               { status: 409 }
@@ -380,33 +381,13 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Tenant context not found" }, { status: 400 });
       }
 
-      const { getSupabaseAdmin } = await import("@/lib/supabaseServer");
-      const supabase = getSupabaseAdmin();
-
-      const selectStr = minimal
-        ? "*, student_profiles!inner(*)"
-        : "*, student_profiles!inner(*), student_security(*)";
-
-      const digitPattern = `%${cleaned.split("").join("%")}%`;
-
-      let { data: students, error } = await supabase
-        .from("students")
-        .select(selectStr)
-        .eq("tenant_id", tenantId)
-        .or(`father_number.like.${digitPattern},mother_number.like.${digitPattern},local_guardian_phone_number.like.${digitPattern}`, { foreignTable: 'student_profiles' });
-
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
+      const students = await db.students.list({ search: cleaned });
 
       const cleanDbPhone = (num: string) => num ? num.replace(/\D/g, "").replace(/^91/, "") : "";
       const matchedList = students?.filter((s: any) => {
-        const prof = Array.isArray(s.student_profiles) ? s.student_profiles[0] : s.student_profiles;
-        if (!prof) return false;
-
-        const fatherClean = cleanDbPhone(prof.father_number);
-        const motherClean = cleanDbPhone(prof.mother_number);
-        const lgClean = cleanDbPhone(prof.local_guardian_phone_number);
+        const fatherClean = cleanDbPhone(s.fatherNumber);
+        const motherClean = cleanDbPhone(s.motherNumber);
+        const lgClean = cleanDbPhone(s.localGuardianPhoneNumber);
         return fatherClean === cleaned || motherClean === cleaned || lgClean === cleaned;
       }) || [];
 
@@ -414,11 +395,9 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Student not found for this parent number" }, { status: 404 });
       }
 
-      const camelCasedStudents = matchedList.map((s: any) => db.mapStudentToCamelCase(s));
-      
-      let student = camelCasedStudents[0];
+      let student = matchedList[0];
       if (selectedStudentId) {
-        const found = camelCasedStudents.find((s: any) => s._id === selectedStudentId);
+        const found = matchedList.find((s: any) => s._id === selectedStudentId);
         if (found) {
           student = found;
         }
@@ -427,7 +406,7 @@ export async function GET(request: NextRequest) {
       const tenant = student?.tenantId ? await getTenantById(student.tenantId) : null;
       return NextResponse.json({ 
         student, 
-        students: camelCasedStudents,
+        students: matchedList,
         tenantSlug: tenant?.slug,
         tenantSubscription: tenant ? {
           status: tenant.subscriptionStatus,

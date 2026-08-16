@@ -106,6 +106,18 @@ export async function POST(request: NextRequest) {
         if (!student && typeof firebaseUID === 'string') {
             student = await db.students.findOne({ _id: firebaseUID });
         }
+        if (!student && typeof firebaseUID === 'string') {
+            student = await db.students.findOne({ phoneNumber: firebaseUID });
+        }
+        if (!student && typeof firebaseUID === 'string') {
+            const cleanedPhone = firebaseUID.replace(/\D/g, '').slice(-10);
+            if (cleanedPhone.length === 10) {
+                student = await db.students.findOne({ phoneNumber: cleanedPhone });
+            }
+        }
+        if (!student && typeof firebaseUID === 'string') {
+            student = await db.students.findOne({ registrationId: firebaseUID });
+        }
 
         if (!student) {
             return NextResponse.json(
@@ -226,19 +238,38 @@ export async function POST(request: NextRequest) {
                 // Check for token reuse - prevents same QR code image being scanned twice instantly
                 const isTokenReuse = last.qrTokenUsedOut === token || last.qrTokenUsedIn === token;
 
-                // ⚡ SCAN GUARD: If activity was within 15 seconds OR the token is the same, assume it's a duplicate
-                // This prevents students from accidentally scanning twice in a row
-                if (isTokenReuse || (timeDiff < 15000)) {
-                    console.log(`🚫 [SCAN_GUARD]: Blocked duplicate scan for ${student.name}. Reason: ${isTokenReuse ? 'Token Reused' : `Fast Scan (${timeDiff}ms)`}`);
+                // ⚡ QR SCAN COOLDOWN GUARD: Enforce configurable minimum minutes between consecutive scans
+                let cooldownMinutes = 5;
+                try {
+                    const settings = await db.settings.get();
+                    if (settings?.qrScanCooldownMinutes !== undefined) {
+                        cooldownMinutes = Number(settings.qrScanCooldownMinutes);
+                    }
+                } catch (sErr) {}
+
+                const cooldownMs = Math.max(15000, cooldownMinutes * 60 * 1000);
+
+                if (isTokenReuse || (timeDiff < cooldownMs)) {
+                    const elapsedSecs = Math.floor(timeDiff / 1000);
+                    const remainingSecs = Math.max(1, Math.ceil((cooldownMs - timeDiff) / 1000));
+                    const remainingMins = Math.ceil(remainingSecs / 60);
+                    const isSeconds = remainingSecs < 60;
+                    const remainingText = isSeconds ? `${remainingSecs} second(s)` : `${remainingMins} minute(s)`;
+                    
+                    console.log(`🚫 [SCAN_GUARD]: Blocked scan for ${student.name}. Reason: ${isTokenReuse ? 'Token Reused' : `Cooldown Active (${elapsedSecs}s < ${cooldownMs/1000}s)`}`);
+                    
                     return NextResponse.json({
-                        success: true, 
-                        action: "duplicate_blocked",
-                        message: "Already scanned recently. Please wait a few seconds.",
+                        success: false, 
+                        action: "cooldown_blocked",
+                        error: isTokenReuse 
+                            ? "This QR pass token was already scanned." 
+                            : `Anti-Spoof Cooldown: You scanned ${Math.floor(elapsedSecs/60) > 0 ? `${Math.floor(elapsedSecs/60)}m ago` : `${elapsedSecs}s ago`}. Please wait ${remainingText} before scanning again.`,
+                        message: `Anti-Spoof Cooldown: Please wait ${remainingText} before scanning again.`,
                         newStatus: currentStatus,
                         studentName: student.name,
                         hostelName: student.hostelName,
                         isDuplicate: true
-                    });
+                    }, { status: 400 });
                 }
             }
         } catch (guardError) {

@@ -49,7 +49,8 @@ export async function GET(request: NextRequest) {
             allowWardenRemoveStudent: settings?.allowWardenRemoveStudent || false,
             allowDeanRemoveStudent: settings?.allowDeanRemoveStudent || false,
             allowBulkStudentUpdates: settings?.allowBulkStudentUpdates || false,
-            allowBulkPermissionManagement: settings?.allowBulkPermissionManagement ?? true
+            allowBulkPermissionManagement: settings?.allowBulkPermissionManagement ?? true,
+            qrScanCooldownMinutes: settings?.qrScanCooldownMinutes !== undefined ? settings.qrScanCooldownMinutes : 5
         });
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);
@@ -83,7 +84,8 @@ export async function POST(request: NextRequest) {
             wardenPassword,
             developerPassword,
             notificationSettings,
-            leaveApprovalMethod
+            leaveApprovalMethod,
+            qrScanCooldownMinutes
         } = body;
 
         const updateData: any = {};
@@ -117,6 +119,7 @@ export async function POST(request: NextRequest) {
         if (developerPassword !== undefined) updateData.developerPassword = typeof developerPassword === 'string' ? developerPassword.trim() : developerPassword;
         if (notificationSettings !== undefined) updateData.notificationSettings = notificationSettings;
         if (leaveApprovalMethod !== undefined) updateData.leaveApprovalMethod = leaveApprovalMethod;
+        if (qrScanCooldownMinutes !== undefined) updateData.qrScanCooldownMinutes = Number(qrScanCooldownMinutes);
 
         // Dynamic field safeguard rules
         if (body.enforceUniqueErpId !== undefined) updateData.enforceUniqueErpId = body.enforceUniqueErpId;

@@ -93,7 +93,8 @@ const filterSettingsForPrisma = (data: any) => {
         // 🛡️ Safeguard & delegation settings
         'enforceUniqueErpId', 'enforceUniquePhone', 'enforceUniqueEmail', 'enforceUniqueFace',
         'allowWardenAddStudent', 'allowDeanAddStudent', 'allowWardenEditProfile', 'allowDeanEditProfile',
-        'allowWardenRemoveStudent', 'allowDeanRemoveStudent', 'allowBulkStudentUpdates', 'allowBulkPermissionManagement'
+        'allowWardenRemoveStudent', 'allowDeanRemoveStudent', 'allowBulkStudentUpdates', 'allowBulkPermissionManagement',
+        'qrScanCooldownMinutes'
     ];
     const filtered: any = {};
     for (const key of settingsFields) {
@@ -583,6 +584,7 @@ const mapSettingsToCamelCase = (s: any) => {
         allowDeanRemoveStudent: s.allow_dean_remove_student !== undefined ? s.allow_dean_remove_student : (s.allowDeanRemoveStudent || false),
         allowBulkStudentUpdates: s.allow_bulk_student_updates !== undefined ? s.allow_bulk_student_updates : (s.allowBulkStudentUpdates || false),
         allowBulkPermissionManagement: s.allow_bulk_permission_management !== undefined ? s.allow_bulk_permission_management : (s.allowBulkPermissionManagement !== undefined ? s.allowBulkPermissionManagement : true),
+        qrScanCooldownMinutes: s.qr_scan_cooldown_minutes !== undefined ? s.qr_scan_cooldown_minutes : (s.qrScanCooldownMinutes !== undefined ? s.qrScanCooldownMinutes : 5),
         createdAt: s.created_at || s.createdAt,
         updatedAt: s.updated_at || s.updatedAt
     };
@@ -621,6 +623,7 @@ const mapSettingsToSnakeCase = (s: any) => {
         enforceUniquePhone: 'enforce_unique_phone',
         enforceUniqueEmail: 'enforce_unique_email',
         enforceUniqueFace: 'enforce_unique_face',
+        qrScanCooldownMinutes: 'qr_scan_cooldown_minutes',
         allowWardenAddStudent: 'allow_warden_add_student',
         allowDeanAddStudent: 'allow_dean_add_student',
         allowWardenEditProfile: 'allow_warden_edit_profile',
@@ -1168,11 +1171,16 @@ const getDbSource = async (): Promise<string> => {
     let envSource = (process.env.NEXT_PUBLIC_DB_SOURCE || '').toUpperCase();
     if (envSource === 'RAILWAY') envSource = 'PRISMA';
 
-    // If envSource is explicitly RAILWAY/PRISMA, use it immediately to avoid network timeouts on broken Supabase connection
+    // If envSource is explicitly RAILWAY/PRISMA or SUPABASE, use it immediately to avoid network timeouts
     if (envSource === 'PRISMA') {
         cachedDbSource = 'PRISMA';
         lastDbSourceCheck = now;
         return 'PRISMA';
+    }
+    if (envSource === 'SUPABASE') {
+        cachedDbSource = 'SUPABASE';
+        lastDbSourceCheck = now;
+        return 'SUPABASE';
     }
 
     // 2. Check dynamic database setting from admin_settings via Prisma first (Railway PostgreSQL)
@@ -1822,6 +1830,7 @@ export const db = {
 
                 return mapStudentToCamelCase(data);
             } else if (source === 'PRISMA') {
+                const isUuidString = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
                 let tenantId: string | null = null;
                 try {
                     tenantId = await getTenantIdOrThrow();
@@ -1829,8 +1838,8 @@ export const db = {
 
                 const searchOR: any[] = [];
                 if (filter.firebaseUID) {
+                    if (isUuidString(filter.firebaseUID)) searchOR.push({ id: filter.firebaseUID });
                     searchOR.push(
-                        { id: filter.firebaseUID },
                         { firebaseUid: filter.firebaseUID },
                         { supabaseId: filter.firebaseUID },
                         { email: filter.firebaseUID },
@@ -1840,38 +1849,65 @@ export const db = {
                     );
                 }
                 if (filter.supabaseId) {
+                    if (isUuidString(filter.supabaseId)) searchOR.push({ id: filter.supabaseId });
                     searchOR.push(
-                        { id: filter.supabaseId },
                         { supabaseId: filter.supabaseId },
                         { firebaseUid: filter.supabaseId },
-                        { id: filter.supabaseId },
                         { email: filter.supabaseId }
                     );
                 }
-                if (filter._id) searchOR.push({ id: filter._id });
+                if (filter._id) {
+                    if (isUuidString(filter._id)) searchOR.push({ id: filter._id });
+                    else searchOR.push({ firebaseUid: filter._id }, { email: filter._id });
+                }
                 if (filter.email) searchOR.push({ email: filter.email });
                 if (filter.phoneNumber) searchOR.push({ phoneNumber: filter.phoneNumber });
                 if (filter.registrationId) searchOR.push({ registrationId: filter.registrationId });
                 if (filter.erpInformation) searchOR.push({ erpId: filter.erpInformation }, { erpInformation: filter.erpInformation });
 
                 let student: any = null;
-                if (tenantId && searchOR.length > 0) {
-                    student = await prisma.student.findFirst({
-                        where: {
-                            tenantId,
-                            OR: searchOR
-                        }
-                    });
+                try {
+                    if (tenantId && searchOR.length > 0) {
+                        student = await prisma.student.findFirst({
+                            where: {
+                                tenantId,
+                                OR: searchOR
+                            }
+                        });
+                    }
+
+                    if (!student && searchOR.length > 0) {
+                        student = await prisma.student.findFirst({
+                            where: {
+                                OR: searchOR
+                            }
+                        });
+                    }
+                } catch (pErr: any) {
+                    console.warn("⚠️ [DB_ADAPTER] Prisma student lookup exception, falling back to Supabase:", pErr?.message || pErr);
                 }
 
-                if (!student && searchOR.length > 0) {
-                    student = await prisma.student.findFirst({
-                        where: {
-                            OR: searchOR
-                        }
-                    });
-                }
-                return student ? mapStudentToCamelCase(student) : null;
+                if (student) return mapStudentToCamelCase(student);
+
+                // ⚡ Automatic Supabase Fallback if Prisma returns null or encounters connection timeout
+                try {
+                    const fallbackTenantId = await getTenantIdOrThrow();
+                    let query = supabase.from('students').select('*, student_profiles(*), student_security(*)').eq('tenant_id', fallbackTenantId);
+                    if (filter.firebaseUID) {
+                        query = query.or(`firebase_uid.eq."${filter.firebaseUID}",email.eq."${filter.firebaseUID}",phone_number.eq."${filter.firebaseUID}"`);
+                    } else if (filter.email) {
+                        query = query.eq('email', filter.email);
+                    } else if (filter.phoneNumber) {
+                        query = query.eq('phone_number', filter.phoneNumber);
+                    } else if (filter.registrationId) {
+                        const { data: prof } = await supabase.from('student_profiles').select('student_id').eq('registration_id', filter.registrationId).maybeSingle();
+                        if (prof?.student_id) query = query.eq('_id', prof.student_id);
+                    }
+                    const { data: sData } = await query.maybeSingle();
+                    if (sData) return mapStudentToCamelCase(sData);
+                } catch (sFallbackErr) {}
+
+                return null;
             } else {
                 await connectDB();
                 const StudentModel = (await import('@/models/Student')).default;
@@ -2177,12 +2213,12 @@ export const db = {
                     const { data: profs } = await supabase
                         .from('student_profiles')
                         .select('student_id')
-                        .ilike('registration_id', `%${s}%`);
+                        .or(`registration_id.ilike.%${s}%,father_number.ilike.%${s}%,mother_number.ilike.%${s}%,local_guardian_phone_number.ilike.%${s}%,father_name.ilike.%${s}%,mother_name.ilike.%${s}%,erp_id.ilike.%${s}%`);
                     const regIds = (profs || []).map((p: any) => p.student_id);
                     
                     let orString = `name.ilike.%${s}%,email.ilike.%${s}%,phone_number.ilike.%${s}%,room_number.ilike.%${s}%`;
                     if (regIds.length > 0) {
-                        orString += `,_id.in.(${regIds.join(',')})`;
+                        orString += `,_id.in.("${regIds.join('","')}")`;
                     }
                     query = query.or(orString);
                 }
@@ -2197,7 +2233,7 @@ export const db = {
                     
                     let orString = `name.ilike.%${s}%`;
                     if (matchedIds.length > 0) {
-                        orString += `,_id.in.(${matchedIds.join(',')})`;
+                        orString += `,_id.in.("${matchedIds.join('","')}")`;
                     }
                     query = query.or(orString);
                 }
@@ -2238,7 +2274,14 @@ export const db = {
                         { email: { contains: s, mode: 'insensitive' } },
                         { phoneNumber: { contains: s, mode: 'insensitive' } },
                         { roomNumber: { contains: s, mode: 'insensitive' } },
-                        { registrationId: { contains: s, mode: 'insensitive' } }
+                        { registrationId: { contains: s, mode: 'insensitive' } },
+                        { fatherNumber: { contains: s, mode: 'insensitive' } },
+                        { motherNumber: { contains: s, mode: 'insensitive' } },
+                        { localGuardianPhoneNumber: { contains: s, mode: 'insensitive' } },
+                        { fatherName: { contains: s, mode: 'insensitive' } },
+                        { motherName: { contains: s, mode: 'insensitive' } },
+                        { erpId: { contains: s, mode: 'insensitive' } },
+                        { erpInformation: { contains: s, mode: 'insensitive' } }
                     ];
                 }
                 if (filters.gatepassSearch) {
@@ -2277,7 +2320,14 @@ export const db = {
                         { email: searchRegex },
                         { phoneNumber: searchRegex },
                         { roomNumber: searchRegex },
-                        { registrationId: searchRegex }
+                        { registrationId: searchRegex },
+                        { fatherNumber: searchRegex },
+                        { motherNumber: searchRegex },
+                        { localGuardianPhoneNumber: searchRegex },
+                        { fatherName: searchRegex },
+                        { motherName: searchRegex },
+                        { erpInformation: searchRegex },
+                        { erpId: searchRegex }
                     ];
                 }
 

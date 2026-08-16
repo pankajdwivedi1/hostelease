@@ -1146,6 +1146,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [enforceUniquePhone, setEnforceUniquePhone] = useState(false);
   const [enforceUniqueEmail, setEnforceUniqueEmail] = useState(false);
   const [enforceUniqueFace, setEnforceUniqueFace] = useState(false);
+  const [qrScanCooldownMinutes, setQrScanCooldownMinutes] = useState(5);
   const [allowWardenAddStudent, setAllowWardenAddStudent] = useState(false);
   const [allowDeanAddStudent, setAllowDeanAddStudent] = useState(false);
   const [allowWardenEditProfile, setAllowWardenEditProfile] = useState(false);
@@ -2737,6 +2738,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (settingsData.enforceUniquePhone !== undefined) setEnforceUniquePhone(settingsData.enforceUniquePhone);
         if (settingsData.enforceUniqueEmail !== undefined) setEnforceUniqueEmail(settingsData.enforceUniqueEmail);
         if (settingsData.enforceUniqueFace !== undefined) setEnforceUniqueFace(settingsData.enforceUniqueFace);
+        if (settingsData.qrScanCooldownMinutes !== undefined) setQrScanCooldownMinutes(settingsData.qrScanCooldownMinutes);
         if (settingsData.allowWardenAddStudent !== undefined) setAllowWardenAddStudent(settingsData.allowWardenAddStudent);
         if (settingsData.allowDeanAddStudent !== undefined) setAllowDeanAddStudent(settingsData.allowDeanAddStudent);
         if (settingsData.allowWardenEditProfile !== undefined) setAllowWardenEditProfile(settingsData.allowWardenEditProfile);
@@ -2802,6 +2804,29 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     } catch (e: any) {
       console.error("Failed to update setting", e);
+      alert("Error: " + (e.message || "Network error"));
+    } finally {
+      setIsUpdatingSettings(false);
+    }
+  };
+
+  const handleUpdateQrCooldown = async (val: number) => {
+    try {
+      setIsUpdatingSettings(true);
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ qrScanCooldownMinutes: val })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setQrScanCooldownMinutes(val);
+        showToast(`QR Scan Cooldown set to ${val} minute(s)`, "success");
+      } else {
+        alert("Failed to update setting: " + (data.error || "Unknown error"));
+      }
+    } catch (e: any) {
+      console.error("Failed to update QR scan cooldown", e);
       alert("Error: " + (e.message || "Network error"));
     } finally {
       setIsUpdatingSettings(false);
@@ -6514,12 +6539,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         });
       }
 
+      // Only flag curfew violation if student is marked 'out' AND actually has an active 'out' gatepass/leave
       if (student.studentStatus === 'out') {
         const now = new Date();
         const nowTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false }).substring(0, 5);
         const isPastCurfew = nowTimeStr > (attendanceTimeSettings.endTime || "22:30");
 
         if (isPastCurfew) {
+          // Check if student has an active 'out' gatepass or leave
+          const hasActiveOutPass = (student.gatePasses || []).some((gp: any) => gp.status === 'out');
           const hasApprovedLeave = student.permissions && student.permissions.some((p: any) => {
             if (p.status !== 'allowed' && p.wardenStatus !== 'allowed' && p.deanStatus !== 'allowed') return false;
             const from = new Date(p.fromDateTime);
@@ -6527,7 +6555,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             return now >= from && now <= to;
           });
 
-          if (!hasApprovedLeave) {
+          if (!hasApprovedLeave && (hasActiveOutPass || !student.gatePasses || student.gatePasses.length === 0)) {
             alertsList.push({
               type: "curfew",
               title: "Overnight Curfew Violation",
@@ -14474,6 +14502,37 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           />
                           <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
                         </label>
+                      </div>
+
+                      {/* ⏱️ QR Scan Anti-Spoof Cooldown Minutes */}
+                      <div className="bg-white p-4 rounded-2xl border-2 border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm hover:border-emerald-200 transition-all">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600 font-bold text-base">
+                            ⏱️
+                          </div>
+                          <div>
+                            <h3 className="text-xs sm:text-sm font-bold text-slate-900">QR Scan Anti-Spoof Cooldown</h3>
+                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Minimum minutes a student must wait between scans (prevents instant double-scan tricks)</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="1"
+                            max="60"
+                            value={qrScanCooldownMinutes}
+                            onChange={(e) => {
+                              const val = Math.max(1, Math.min(60, parseInt(e.target.value) || 1));
+                              setQrScanCooldownMinutes(val);
+                            }}
+                            onBlur={(e) => {
+                              const val = Math.max(1, Math.min(60, parseInt(e.target.value) || 1));
+                              handleUpdateQrCooldown(val);
+                            }}
+                            className="w-20 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-center text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                          <span className="text-xs font-bold text-slate-600">Minutes</span>
+                        </div>
                       </div>
 
                       {/* WiFi IP Whitelist Management */}
