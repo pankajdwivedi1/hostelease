@@ -139,13 +139,7 @@ export async function GET(request: NextRequest) {
 
     const { records: permissions, total } = await db.permissions.list(filters, options);
 
-    // Filter out auto-generated management override records so only real student-submitted permissions are displayed
-    const filteredPermissions = (permissions || []).filter((p: any) => {
-      const reasonStr = (p.reason || '').toLowerCase();
-      return !reasonStr.includes('management override') && !reasonStr.includes('manual override');
-    });
-
-    return NextResponse.json({ permissions: filteredPermissions, total: filteredPermissions.length, success: true }, { status: 200 });
+    return NextResponse.json({ permissions, total, success: true }, { status: 200 });
   } catch (error: any) {
     console.error("Error in GET /api/permissions:", error);
     return NextResponse.json(

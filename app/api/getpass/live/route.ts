@@ -59,43 +59,22 @@ export async function GET(request: NextRequest) {
                 returnsFilters.hostelName = hostelName;
             }
 
-            const getStudentIdStr = (p: any): string => {
-                if (!p) return "";
-                const rawId = p.studentId ?? p.student_id;
-                if (typeof rawId === 'object' && rawId !== null) {
-                    return (rawId._id || rawId.id || "").toString();
-                }
-                return (rawId || "").toString();
-            };
-
-            // ⚡ FAST COUNTS: Use Promise.all to fetch counts, out passes, and recent items in parallel
-            const [recentRes, allOutPassesRes, summaryRes, studentsRes, leaveCountRes, outingCountRes] = await Promise.all([
+            // ⚡ FAST COUNTS: Use Promise.all to fetch counts and recent items in parallel
+            // 📡 BANDWIDTH OPTIMIZATION: We fetch ONLY the counts for "leave" and "outing" types 
+            // instead of fetching all 700+ rows of data.
+            const [recentRes, summaryRes, studentsRes, leaveCountRes, outingCountRes] = await Promise.all([
                 db.gatePasses.list(returnsFilters, {
-                    limit: 15,
+                    limit: 5,
                     sortField: source === 'SUPABASE' ? 'check_in_time' : 'checkInTime',
                     sortOrder: 'desc'
                 }),
-                db.gatePasses.list(filters, { limit: 1000 }),
                 db.gatePasses.list(filters, { limit: 1, countOnly: true }),
                 db.students.count(countFilters),
                 db.gatePasses.list({ ...filters, type: 'leave' }, { countOnly: true }),
                 db.gatePasses.list({ ...filters, type: 'outing' }, { countOnly: true })
             ]);
 
-            const outPasses = allOutPassesRes.records || [];
-            const outSet = new Set<string>();
-            outPasses.forEach((p: any) => {
-                const sId = getStudentIdStr(p);
-                if (sId) outSet.add(sId);
-            });
-
-            const miniRecentFiltered = (recentRes.records || [])
-                .filter((p: any) => {
-                    const sId = getStudentIdStr(p);
-                    return !sId || !outSet.has(sId);
-                })
-                .slice(0, 5);
-
+            const { records: miniRecent } = recentRes;
             const uniqueStudentsOut = summaryRes.total || 0;
             const totalStudents = studentsRes || 0;
             const miniLeaveCount = leaveCountRes.total || 0;
@@ -104,7 +83,7 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({
                 success: true,
                 minimal: true,
-                recentActivity: miniRecentFiltered,
+                recentActivity: miniRecent,
                 summary: {
                     totalStudents,
                     glitchFix: totalStudents < uniqueStudentsOut ? (uniqueStudentsOut + 10) : totalStudents,
@@ -136,20 +115,10 @@ export async function GET(request: NextRequest) {
         const openPasses = allOutPassesRes.records || [];
         const recentActivity = recentActivityRes.records || [];
         
-        // Helper: Extract student ID robustly across camelCase and snake_case models
-        const getStudentIdStr = (p: any): string => {
-            if (!p) return "";
-            const rawId = p.studentId ?? p.student_id;
-            if (typeof rawId === 'object' && rawId !== null) {
-                return (rawId._id || rawId.id || "").toString();
-            }
-            return (rawId || "").toString();
-        };
-
         // ⚡ DE-DUPLICATION: Use a Map to keep ONLY the most recent record per student
         const uniqueOutRecords = new Map<string, any>();
         openPasses.forEach((p: any) => {
-            const sId = getStudentIdStr(p);
+            const sId = (typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId)?.toString();
             if (sId && !uniqueOutRecords.has(sId)) {
                 uniqueOutRecords.set(sId, p);
             }
@@ -194,7 +163,7 @@ export async function GET(request: NextRequest) {
         // A student who checked out again belongs strictly in the Outside column, not Returns Today.
         const filteredRecentActivity = recentActivity
             .filter((p: any) => {
-                const sId = getStudentIdStr(p);
+                const sId = (typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId)?.toString();
                 return !sId || !uniqueOutRecords.has(sId);
             })
             .map((p: any) => {
