@@ -538,6 +538,9 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                 checkInTime: raw.check_in_time || raw.checkInTime,
                                 checkOutISTTime: raw.check_out_ist_time || raw.checkOutISTTime,
                                 checkOutISTDate: raw.check_out_ist_date || raw.checkOutISTDate,
+                                checkInISTTime: raw.check_in_ist_time || raw.checkInISTTime,
+                                checkInISTDate: raw.check_in_ist_date || raw.checkInISTDate,
+                                durationMinutes: raw.duration_minutes ?? raw.durationMinutes,
                                 phoneNumber: raw.phone_number || raw.phoneNumber
                             };
 
@@ -940,6 +943,39 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         const mins = minutes % 60;
         if (hrs > 0) return `${hrs}h ${mins}m`;
         return `${mins}m`;
+    };
+
+    // ===================== Outing Duration Formatter for Returned Gatepasses =====================
+    const getCompletedOutingDuration = (record: any) => {
+        let mins = record.durationMinutes ?? record.duration_minutes;
+
+        if (mins === undefined || mins === null || isNaN(mins) || mins <= 0) {
+            const inTime = record.checkInTime || record.check_in_time || record.updatedAt || record.updated_at;
+            const outTime = record.checkOutTime || record.check_out_time;
+            if (inTime && outTime) {
+                const inMs = new Date(inTime).getTime();
+                const outMs = new Date(outTime).getTime();
+                if (!isNaN(inMs) && !isNaN(outMs) && inMs >= outMs) {
+                    mins = Math.floor((inMs - outMs) / 60000);
+                }
+            }
+        }
+
+        if (mins === undefined || mins === null || isNaN(mins) || mins < 1) {
+            return "1m";
+        }
+
+        if (mins >= 1440) {
+            const days = Math.floor(mins / 1440);
+            const hrs = Math.floor((mins % 1440) / 60);
+            const m = mins % 60;
+            return `${days}d ${hrs}h ${m}m`;
+        }
+
+        const hrs = Math.floor(mins / 60);
+        const m = mins % 60;
+        if (hrs > 0) return `${hrs}h ${m}m`;
+        return `${m}m`;
     };
 
     const formatHostelDisplay = (name: string) => {
@@ -1408,7 +1444,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                 </div>
                                                 <div className="flex flex-col items-end shrink-0">
                                                     <span className="text-[12px] font-black text-[#00ff88] tabular-nums tracking-tighter">
-                                                        {formatDuration(record.durationMinutes, record.checkInTime || (record as any).check_in_time || record.updatedAt || (record as any).updated_at)}
+                                                        {getCompletedOutingDuration(record)}
                                                     </span>
                                                     <span className="text-[8px] text-[rgba(255,255,255,0.25)] font-bold uppercase tracking-widest">
                                                         {formatISTTimeAMPM(record.checkInISTTime || record.checkOutISTTime, record.checkInTime || record.checkOutTime)}
