@@ -95,10 +95,14 @@ export async function POST(request: NextRequest) {
 
             if (currentStatus === "in") {
                 // MARK OUT (HOME-LEAVE or GATE-PASS)
-                const { records: existingPasses } = await db.gatePasses.list({
+                const passOutFilters: any = {
                     studentId: id.toString(),
                     status: "out",
-                });
+                };
+                if (student.firebaseUID && String(student.firebaseUID).trim()) {
+                    passOutFilters.firebaseUID = String(student.firebaseUID).trim();
+                }
+                const { records: existingPasses } = await db.gatePasses.list(passOutFilters);
 
                 if (existingPasses && existingPasses.length > 0) {
                     for (const oldPass of existingPasses) {
@@ -166,18 +170,16 @@ export async function POST(request: NextRequest) {
                 });
             } else {
                 // MARK IN (Returned)
-                const openPassesBySIDRes = await db.gatePasses.list({
+                const passInFilters: any = {
                     studentId: id.toString(),
                     status: "out",
-                });
-                
-                const openPassesByFUIDRes = await db.gatePasses.list({
-                    firebaseUID: student.firebaseUID,
-                    status: "out",
-                });
+                };
+                if (student.firebaseUID && String(student.firebaseUID).trim()) {
+                    passInFilters.firebaseUID = String(student.firebaseUID).trim();
+                }
 
-                const combinedPasses = [...(openPassesBySIDRes.records || []), ...(openPassesByFUIDRes.records || [])];
-                const uniqueOpenPasses = Array.from(new Map(combinedPasses.map(p => [p._id, p])).values());
+                const openPassesRes = await db.gatePasses.list(passInFilters);
+                const uniqueOpenPasses = openPassesRes.records || [];
 
                 if (uniqueOpenPasses.length > 0) {
                     for (const pass of uniqueOpenPasses) {

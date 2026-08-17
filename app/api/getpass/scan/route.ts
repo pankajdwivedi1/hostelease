@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { db, supabase } from "@/lib/dbAdapter";
 import { sendMSG91_GatepassAlert } from "@/lib/msg91";
+import { validators } from "@/lib/validation";
 
 /**
  * Helper: Get IST time and date strings
@@ -34,12 +35,14 @@ function getISTStrings(date: Date) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { qrData, firebaseUID, deviceId, isOfflineSync } = body;
+        const { qrData, firebaseUID, email, phoneNumber, registrationId, deviceId, isOfflineSync } = body;
+
+        const effectiveIdentifier = firebaseUID || email || phoneNumber || registrationId;
 
         // Validate required fields
-        if (!qrData || !firebaseUID) {
+        if (!qrData || !effectiveIdentifier) {
             return NextResponse.json(
-                { error: "Missing required fields: qrData, firebaseUID" },
+                { error: "Missing required fields: qrData or student identifier (firebaseUID/email/phone)" },
                 { status: 400 }
             );
         }
@@ -99,24 +102,41 @@ export async function POST(request: NextRequest) {
 
 
         // Find the student with robust multi-attribute fallback
-        let student = await db.students.findOne({ firebaseUID });
-        if (!student && typeof firebaseUID === 'string') {
-            student = await db.students.findOne({ email: firebaseUID });
-        }
-        if (!student && typeof firebaseUID === 'string') {
-            student = await db.students.findOne({ _id: firebaseUID });
-        }
-        if (!student && typeof firebaseUID === 'string') {
-            student = await db.students.findOne({ phoneNumber: firebaseUID });
-        }
-        if (!student && typeof firebaseUID === 'string') {
-            const cleanedPhone = firebaseUID.replace(/\D/g, '').slice(-10);
-            if (cleanedPhone.length === 10) {
-                student = await db.students.findOne({ phoneNumber: cleanedPhone });
+        let student = firebaseUID ? await db.students.findOne({ firebaseUID }) : null;
+
+        const candidateStrings = [firebaseUID, email, phoneNumber, registrationId].filter(Boolean) as string[];
+
+        for (const candidate of candidateStrings) {
+            if (student) break;
+            const s = candidate.trim();
+            if (!s) continue;
+
+            student = await db.students.findOne({ email: s });
+            if (!student) student = await db.students.findOne({ _id: s });
+            if (!student) student = await db.students.findOne({ phoneNumber: s });
+            if (!student) {
+                const { canonical, digitsOnly, last10 } = validators.normalizePhoneNumber(s);
+                if (canonical) student = await db.students.findOne({ phoneNumber: canonical });
+                if (!student && last10 && last10.length === 10) {
+                    student = await db.students.findOne({ phoneNumber: last10 });
+                }
+                if (!student && digitsOnly) {
+                    student = await db.students.findOne({ phoneNumber: digitsOnly });
+                }
             }
-        }
-        if (!student && typeof firebaseUID === 'string') {
-            student = await db.students.findOne({ registrationId: firebaseUID });
+            if (!student) student = await db.students.findOne({ registrationId: s });
+
+            // ⚡ ULTIMATE FALLBACK: Use gatepassSearch (Same search engine as Manual Entry!)
+            if (!student) {
+                try {
+                    const searchResults = await db.students.list({ gatepassSearch: s }, { light: false });
+                    if (searchResults && searchResults.length > 0) {
+                        student = searchResults[0];
+                    }
+                } catch (searchErr) {
+                    console.warn("⚠️ gatepassSearch fallback error:", searchErr);
+                }
+            }
         }
 
         if (!student) {
@@ -124,6 +144,22 @@ export async function POST(request: NextRequest) {
                 { error: "Student not found. Please register first." },
                 { status: 404 }
             );
+        }
+
+        // 🔗 AUTO-LINK & UPGRADE REAL FIREBASE UID:
+        // If student record has a temporary placeholder UID (or different UID) and incoming firebaseUID is provided,
+        // permanently upgrade & link the incoming real official UID to the database!
+        if (student && typeof firebaseUID === 'string' && firebaseUID.trim()) {
+            const cleanUID = firebaseUID.trim();
+            if (cleanUID && student.firebaseUID !== cleanUID) {
+                console.log(`🔗 [AUTO_UPGRADE_SCAN_UID] Upgrading student ${student.name} (${student.email || student.phoneNumber}) from "${student.firebaseUID}" to official UID "${cleanUID}"`);
+                try {
+                    await db.students.update(student._id ? student._id.toString() : student.id, { firebaseUID: cleanUID });
+                    student.firebaseUID = cleanUID;
+                } catch (linkErr) {
+                    console.warn("⚠️ Auto-upgrade scan firebaseUID failed (non-critical):", linkErr);
+                }
+            }
         }
 
         // ============================================================
@@ -240,16 +276,26 @@ export async function POST(request: NextRequest) {
 
                 // ⚡ QR SCAN COOLDOWN GUARD: Enforce configurable minimum minutes between consecutive scans
                 let cooldownMinutes = 5;
+                let allowEmergencyExit = true;
                 try {
                     const settings = await db.settings.get();
                     if (settings?.qrScanCooldownMinutes !== undefined) {
                         cooldownMinutes = Number(settings.qrScanCooldownMinutes);
                     }
+                    if (settings?.allowEmergencyExitWithoutCooldown !== undefined) {
+                        allowEmergencyExit = Boolean(settings.allowEmergencyExitWithoutCooldown);
+                    }
                 } catch (sErr) {}
+
+                // ⚡ DIRECTION-AWARE EMERGENCY OUTING:
+                // If student is currently IN campus and wants to go OUT, and allowEmergencyExit is enabled:
+                // Allow immediate exit without waiting for cooldown (requiring only 3s camera debounce buffer)
+                const isExitAction = currentStatus === "in";
+                const shouldBypassCooldown = isExitAction && allowEmergencyExit && !isTokenReuse && timeDiff >= 3000;
 
                 const cooldownMs = Math.max(15000, cooldownMinutes * 60 * 1000);
 
-                if (isTokenReuse || (timeDiff < cooldownMs)) {
+                if (!shouldBypassCooldown && (isTokenReuse || (timeDiff < cooldownMs))) {
                     const elapsedSecs = Math.floor(timeDiff / 1000);
                     const remainingSecs = Math.max(1, Math.ceil((cooldownMs - timeDiff) / 1000));
                     const remainingMins = Math.ceil(remainingSecs / 60);

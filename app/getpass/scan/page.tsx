@@ -333,7 +333,10 @@ export default function StudentScannerPage() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         qrData: item.qrData,
-                        firebaseUID: item.firebaseUID,
+                        firebaseUID: item.firebaseUID || item.email || item.phoneNumber || item.registrationId,
+                        email: item.email,
+                        phoneNumber: item.phoneNumber,
+                        registrationId: item.registrationId,
                         deviceId: item.deviceId,
                         isOfflineSync: true
                     }),
@@ -440,12 +443,24 @@ export default function StudentScannerPage() {
         }
 
         try {
+            const cachedStr = localStorage.getItem("cachedStudentData");
+            let parsedCached: any = {};
+            try { parsedCached = cachedStr ? JSON.parse(cachedStr) : {}; } catch {}
+
+            const effectiveUID = firebaseUID || localStorage.getItem("firebaseUID") || localStorage.getItem("getpass_uid") || parsedCached.firebaseUID || parsedCached._id || "";
+            const effectiveEmail = localStorage.getItem("studentEmail") || localStorage.getItem("userEmail") || parsedCached.email || "";
+            const effectivePhone = parsedCached.phoneNumber || parsedCached.phone || "";
+            const effectiveRegId = parsedCached.registrationId || "";
+
             const res = await fetch("/api/getpass/scan", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     qrData,
-                    firebaseUID,
+                    firebaseUID: effectiveUID,
+                    email: effectiveEmail,
+                    phoneNumber: effectivePhone,
+                    registrationId: effectiveRegId,
                     deviceId,
                 }),
             });
@@ -487,6 +502,7 @@ export default function StudentScannerPage() {
                 setScanResult({
                     success: false,
                     error: data.error || "Scan failed",
+                    studentName: data.studentName,
                 });
             }
         } catch (err: any) {
@@ -696,6 +712,18 @@ export default function StudentScannerPage() {
                                 ? scanResult.action === "checkout" ? "Checked OUT" : "Checked IN"
                                 : "Scan Failed"}
                         </h2>
+                        {scanResult.studentName && (
+                            <div style={{
+                                fontSize: "14px",
+                                fontWeight: "700",
+                                color: "#f1f5f9",
+                                marginBottom: "6px",
+                                letterSpacing: "0.5px",
+                                textTransform: "uppercase"
+                            }}>
+                                {scanResult.studentName}
+                            </div>
+                        )}
                         <p style={styles.resultMessage}>
                             {scanResult.success ? scanResult.message : scanResult.error}
                         </p>

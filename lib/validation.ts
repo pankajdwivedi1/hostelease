@@ -70,7 +70,43 @@ export const validators = {
    * Sanitize phone number - keep only digits
    */
   sanitizePhoneNumber: (phone: string): string => {
+    if (!phone || typeof phone !== 'string') return '';
     return phone.replace(/\D/g, '').slice(0, 15);
+  },
+
+  /**
+   * Normalize Phone Number for Domestic (Indian) and Foreign (International) Users:
+   * - Indian numbers: Extracts clean 10 digits (removes +91, 91 prefix, leading 0, spaces).
+   * - Foreign numbers: Preserves E.164 international format (+CountryCodeNumber).
+   */
+  normalizePhoneNumber: (phone: string): { canonical: string; digitsOnly: string; last10: string } => {
+    if (!phone || typeof phone !== 'string') {
+      return { canonical: '', digitsOnly: '', last10: '' };
+    }
+
+    const trimmed = phone.trim();
+    const isInternationalWithPlus = trimmed.startsWith('+');
+    const digitsOnly = trimmed.replace(/\D/g, '');
+    let last10 = digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly;
+
+    let canonical = digitsOnly;
+    if (digitsOnly.length === 10) {
+      canonical = digitsOnly;
+    } else if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
+      canonical = digitsOnly.slice(2);
+      last10 = canonical;
+    } else if (digitsOnly.length === 11 && digitsOnly.startsWith('0')) {
+      canonical = digitsOnly.slice(1);
+      last10 = canonical;
+    } else if (isInternationalWithPlus) {
+      canonical = `+${digitsOnly}`;
+    }
+
+    return {
+      canonical,
+      digitsOnly,
+      last10
+    };
   },
 
   /**

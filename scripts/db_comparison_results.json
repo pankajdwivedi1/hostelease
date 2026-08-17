@@ -1,0 +1,107 @@
+[
+  {
+    "table": "tenants",
+    "supabaseCount": 4,
+    "railwayCount": 18,
+    "difference": -14,
+    "diffDetails": "Supabase records missing in Railway: 0 | Railway records not in Supabase: 14"
+  },
+  {
+    "table": "students",
+    "supabaseCount": 447,
+    "railwayCount": 452,
+    "difference": -5,
+    "diffDetails": "Supabase records missing in Railway: 0 | Railway records not in Supabase: 5"
+  },
+  {
+    "table": "attendance",
+    "supabaseCount": 5049,
+    "railwayCount": 5049,
+    "difference": 0,
+    "diffDetails": "Supabase records missing in Railway: 0 | Railway records not in Supabase: 0"
+  },
+  {
+    "table": "admin_settings",
+    "supabaseCount": 14,
+    "railwayCount": 28,
+    "difference": -14,
+    "diffDetails": "Supabase records missing in Railway: 0 | Railway records not in Supabase: 14"
+  },
+  {
+    "table": "gate_passes",
+    "supabaseCount": 6504,
+    "railwayCount": 7005,
+    "difference": -501,
+    "diffDetails": "Supabase records missing in Railway: 0 | Railway records not in Supabase: 501"
+  },
+  {
+    "table": "gate_pass_tokens",
+    "supabaseCount": 0,
+    "railwayCount": 0,
+    "difference": 0,
+    "diffDetails": "N/A"
+  },
+  {
+    "table": "hostels",
+    "supabaseCount": 4,
+    "railwayCount": 7,
+    "difference": -3,
+    "diffDetails": "Supabase records missing in Railway: 0 | Railway records not in Supabase: 3"
+  },
+  {
+    "table": "permissions",
+    "supabaseCount": 11,
+    "railwayCount": 42,
+    "difference": -31,
+    "diffDetails": "Supabase records missing in Railway: 0 | Railway records not in Supabase: 31"
+  },
+  {
+    "table": "transactions",
+    "supabaseCount": 0,
+    "railwayCount": 1,
+    "difference": -1,
+    "diffDetails": "N/A"
+  },
+  {
+    "table": "student_field_progress",
+    "supabaseCount": 5795,
+    "railwayCount": 5795,
+    "difference": 0,
+    "diffDetails": "Supabase records missing in Railway: 0 | Railway records not in Supabase: 0"
+  },
+  {
+    "table": "notifications",
+    "supabaseCount": 0,
+    "railwayCount": 0,
+    "difference": 0,
+    "diffDetails": "N/A"
+  },
+  {
+    "table": "field_enforcement",
+    "supabaseCount": 4,
+    "railwayCount": 4,
+    "difference": 0,
+    "diffDetails": "Supabase records missing in Railway: 0 | Railway records not in Supabase: 0"
+  },
+  {
+    "table": "erp_members",
+    "supabaseCount": 1,
+    "railwayCount": 1,
+    "difference": 0,
+    "diffDetails": "Supabase records missing in Railway: 0 | Railway records not in Supabase: 0"
+  },
+  {
+    "table": "platform_settings",
+    "supabaseCount": 3,
+    "railwayCount": 3,
+    "difference": 0,
+    "diffDetails": "Supabase records missing in Railway: 0 | Railway records not in Supabase: 0"
+  },
+  {
+    "table": "push_subscriptions",
+    "supabaseCount": 268,
+    "railwayCount": 481,
+    "difference": -213,
+    "diffDetails": "Supabase records missing in Railway: 0 | Railway records not in Supabase: 213"
+  }
+]

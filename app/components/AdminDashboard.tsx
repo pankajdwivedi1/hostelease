@@ -1147,6 +1147,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [enforceUniqueEmail, setEnforceUniqueEmail] = useState(false);
   const [enforceUniqueFace, setEnforceUniqueFace] = useState(false);
   const [qrScanCooldownMinutes, setQrScanCooldownMinutes] = useState(5);
+  const [allowEmergencyExitWithoutCooldown, setAllowEmergencyExitWithoutCooldown] = useState(true);
   const [allowWardenAddStudent, setAllowWardenAddStudent] = useState(false);
   const [allowDeanAddStudent, setAllowDeanAddStudent] = useState(false);
   const [allowWardenEditProfile, setAllowWardenEditProfile] = useState(false);
@@ -2739,6 +2740,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (settingsData.enforceUniqueEmail !== undefined) setEnforceUniqueEmail(settingsData.enforceUniqueEmail);
         if (settingsData.enforceUniqueFace !== undefined) setEnforceUniqueFace(settingsData.enforceUniqueFace);
         if (settingsData.qrScanCooldownMinutes !== undefined) setQrScanCooldownMinutes(settingsData.qrScanCooldownMinutes);
+        if (settingsData.allowEmergencyExitWithoutCooldown !== undefined) setAllowEmergencyExitWithoutCooldown(settingsData.allowEmergencyExitWithoutCooldown);
         if (settingsData.allowWardenAddStudent !== undefined) setAllowWardenAddStudent(settingsData.allowWardenAddStudent);
         if (settingsData.allowDeanAddStudent !== undefined) setAllowDeanAddStudent(settingsData.allowDeanAddStudent);
         if (settingsData.allowWardenEditProfile !== undefined) setAllowWardenEditProfile(settingsData.allowWardenEditProfile);
@@ -2791,6 +2793,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (key === 'enforceUniquePhone') setEnforceUniquePhone(value);
         if (key === 'enforceUniqueEmail') setEnforceUniqueEmail(value);
         if (key === 'enforceUniqueFace') setEnforceUniqueFace(value);
+        if (key === 'allowEmergencyExitWithoutCooldown') setAllowEmergencyExitWithoutCooldown(value);
         if (key === 'allowWardenAddStudent') setAllowWardenAddStudent(value);
         if (key === 'allowDeanAddStudent') setAllowDeanAddStudent(value);
         if (key === 'allowWardenEditProfile') setAllowWardenEditProfile(value);
@@ -14441,59 +14444,65 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                     {/* Developer Settings Toggles */}
                     <div className="space-y-3">
-                      <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                      {/* Pair 1: Overlap Radii & Filter List (Side-by-Side on Mobile & Desktop) */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
+                        {/* Slightly Overlap the Radii */}
+                        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border-2 border-slate-100 flex items-center justify-between gap-2 shadow-sm hover:border-indigo-100 transition-all min-w-0">
+                          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                            <div className="p-1.5 sm:p-2 bg-indigo-50 rounded-lg text-indigo-600 shrink-0">
+                              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug truncate">Slightly Overlap Radii</h3>
+                              <p className="text-[8.5px] sm:text-[9.5px] text-slate-500 font-medium leading-tight truncate mt-0.5">GPS jitter (+20m offset)</p>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="text-xs sm:text-sm font-bold text-slate-900">Slightly Overlap the Radii</h3>
-                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Accounts for GPS jitter (+20m offset)</p>
-                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-1">
+                            <input
+                              type="checkbox"
+                              checked={overlapRadius}
+                              onChange={(e) => handleToggleDeveloperSetting('overlapRadius', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 sm:w-10 h-5 sm:h-5.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 sm:after:h-4.5 sm:after:w-4.5 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
                         </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={overlapRadius}
-                            onChange={(e) => handleToggleDeveloperSetting('overlapRadius', e.target.checked)}
-                            className="sr-only peer"
-                          />
-                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                        </label>
+
+                        {/* Filter the List */}
+                        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border-2 border-slate-100 flex items-center justify-between gap-2 shadow-sm hover:border-purple-100 transition-all min-w-0">
+                          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                            <div className="p-1.5 sm:p-2 bg-purple-50 rounded-lg text-purple-600 shrink-0">
+                              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug truncate">Filter the List</h3>
+                              <p className="text-[8.5px] sm:text-[9.5px] text-slate-500 font-medium leading-tight truncate mt-0.5">Prioritize assigned hostel</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-1">
+                            <input
+                              type="checkbox"
+                              checked={prioritizeAssignedHostel}
+                              onChange={(e) => handleToggleDeveloperSetting('prioritizeAssignedHostel', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 sm:w-10 h-5 sm:h-5.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 sm:after:h-4.5 sm:after:w-4.5 after:transition-all peer-checked:bg-purple-600"></div>
+                          </label>
+                        </div>
                       </div>
 
-                      <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-purple-100 transition-all">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
-                          </div>
-                          <div>
-                            <h3 className="text-xs sm:text-sm font-bold text-slate-900">Filter the List</h3>
-                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Prioritize student's assigned hostel</p>
-                          </div>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={prioritizeAssignedHostel}
-                            onChange={(e) => handleToggleDeveloperSetting('prioritizeAssignedHostel', e.target.checked)}
-                            className="sr-only peer"
-                          />
-                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                        </label>
-                      </div>
-
-                      <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-green-100 transition-all">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-green-50 rounded-lg text-green-600">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                      {/* Manual Attendance Mode (Full Width) */}
+                      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-green-100 transition-all">
+                        <div className="flex items-center gap-2.5 sm:gap-3">
+                          <div className="p-1.5 sm:p-2 bg-green-50 rounded-lg text-green-600 shrink-0">
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
                           </div>
                           <div>
                             <h3 className="text-xs sm:text-sm font-bold text-slate-900">Manual Attendance Mode</h3>
-                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Enable warden to manually mark attendance toolbar</p>
+                            <p className="text-[9px] sm:text-[10px] text-slate-500 font-medium mt-0.5">Enable warden to manually mark attendance toolbar</p>
                           </div>
                         </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
+                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
                           <input
                             type="checkbox"
                             checked={enableManualAttendance}
@@ -14504,34 +14513,59 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </label>
                       </div>
 
-                      {/* ⏱️ QR Scan Anti-Spoof Cooldown Minutes */}
-                      <div className="bg-white p-4 rounded-2xl border-2 border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm hover:border-emerald-200 transition-all">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600 font-bold text-base">
-                            ⏱️
+                      {/* Pair 2: QR Scan Cooldown & Emergency Immediate Outing (Side-by-Side on Mobile & Desktop) */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
+                        {/* ⏱️ QR Scan Anti-Spoof Cooldown Minutes */}
+                        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border-2 border-emerald-100 flex items-center justify-between gap-2 shadow-sm hover:border-emerald-200 transition-all min-w-0">
+                          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                            <div className="p-1.5 sm:p-2 bg-emerald-50 rounded-lg text-emerald-600 font-bold text-sm sm:text-base shrink-0">
+                              ⏱️
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug truncate">QR Anti-Spoof Cooldown</h3>
+                              <p className="text-[8.5px] sm:text-[9.5px] text-slate-500 font-medium leading-tight truncate mt-0.5">Wait between scans</p>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="text-xs sm:text-sm font-bold text-slate-900">QR Scan Anti-Spoof Cooldown</h3>
-                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Minimum minutes a student must wait between scans (prevents instant double-scan tricks)</p>
+                          <div className="flex items-center gap-1 shrink-0 ml-1">
+                            <input
+                              type="number"
+                              min="1"
+                              max="60"
+                              value={qrScanCooldownMinutes}
+                              onChange={(e) => {
+                                const val = Math.max(1, Math.min(60, parseInt(e.target.value) || 1));
+                                setQrScanCooldownMinutes(val);
+                              }}
+                              onBlur={(e) => {
+                                const val = Math.max(1, Math.min(60, parseInt(e.target.value) || 1));
+                                handleUpdateQrCooldown(val);
+                              }}
+                              className="w-11 sm:w-14 px-1 py-1 bg-slate-50 border border-slate-200 rounded-lg text-center text-xs sm:text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                            <span className="text-[9px] sm:text-xs font-bold text-slate-600">Min</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min="1"
-                            max="60"
-                            value={qrScanCooldownMinutes}
-                            onChange={(e) => {
-                              const val = Math.max(1, Math.min(60, parseInt(e.target.value) || 1));
-                              setQrScanCooldownMinutes(val);
-                            }}
-                            onBlur={(e) => {
-                              const val = Math.max(1, Math.min(60, parseInt(e.target.value) || 1));
-                              handleUpdateQrCooldown(val);
-                            }}
-                            className="w-20 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-center text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          />
-                          <span className="text-xs font-bold text-slate-600">Minutes</span>
+
+                        {/* ⚡ Emergency Immediate Outing Toggle */}
+                        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border-2 border-emerald-100 flex items-center justify-between gap-2 shadow-sm hover:border-emerald-200 transition-all min-w-0">
+                          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                            <div className="p-1.5 sm:p-2 bg-emerald-50 rounded-lg text-emerald-600 font-bold text-sm sm:text-base shrink-0">
+                              🚪
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="text-[11px] sm:text-xs font-bold text-slate-900 leading-snug truncate">Emergency Outing</h3>
+                              <p className="text-[8.5px] sm:text-[9.5px] text-slate-500 font-medium leading-tight truncate mt-0.5">Bypass cooldown on exit</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-1">
+                            <input
+                              type="checkbox"
+                              checked={allowEmergencyExitWithoutCooldown}
+                              onChange={(e) => handleToggleDeveloperSetting('allowEmergencyExitWithoutCooldown', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 sm:w-10 h-5 sm:h-5.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 sm:after:h-4.5 sm:after:w-4.5 after:transition-all peer-checked:bg-emerald-600"></div>
+                          </label>
                         </div>
                       </div>
 

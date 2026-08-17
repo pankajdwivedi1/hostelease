@@ -419,12 +419,18 @@ export async function GET(request: NextRequest) {
     if (firebaseUID || email) {
       let student = await (db.students as any).findOneFast({ firebaseUID: firebaseUID || undefined, email: email || undefined }, { minimal });
 
-      if (student && firebaseUID && !student.firebaseUID) {
-        db.students.save(student.id || student._id || firebaseUID, {
-          ...student,
-          firebaseUID: firebaseUID
-        }).catch(err => console.error("Non-blocking firebaseUID link error:", err));
-        student.firebaseUID = firebaseUID;
+      // ⚡ AUTOMATIC REAL UID UPGRADE & LINKING:
+      // If student is found by email and incoming firebaseUID is different or placeholder,
+      // immediately upgrade & replace the old/dummy UID with the official real Google UID!
+      if (student && firebaseUID && firebaseUID.trim() && student.firebaseUID !== firebaseUID.trim()) {
+        const targetId = student.id || student._id;
+        console.log(`🔗 [AUTO_UPGRADE_UID] Upgrading student ${student.name} (${student.email}) from "${student.firebaseUID}" to official UID "${firebaseUID.trim()}"`);
+        try {
+          await db.students.update(targetId, { firebaseUID: firebaseUID.trim() });
+          student.firebaseUID = firebaseUID.trim();
+        } catch (linkErr) {
+          console.warn("⚠️ [AUTO_UPGRADE_UID] Failed to update UID in DB:", linkErr);
+        }
       }
 
       if (!student) {

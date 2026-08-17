@@ -40,11 +40,10 @@ const filterStudentForPrisma = (raw: any, isUpdate = false) => {
         filtered.firebaseUid = data.firebaseUID;
     }
 
-    // ⚡ FIX: Prisma update fails if immutable/relational fields (tenantId, id, firebaseUid, supabaseId) are present in update data payload
+    // ⚡ FIX: Remove immutable/relational fields from update payload (allow firebaseUid for auto-linking)
     if (isUpdate) {
         delete filtered.tenantId;
         delete filtered.id;
-        delete filtered.firebaseUid;
         delete filtered.firebaseUID;
         delete filtered.supabaseId;
     }
@@ -94,7 +93,7 @@ const filterSettingsForPrisma = (data: any) => {
         'enforceUniqueErpId', 'enforceUniquePhone', 'enforceUniqueEmail', 'enforceUniqueFace',
         'allowWardenAddStudent', 'allowDeanAddStudent', 'allowWardenEditProfile', 'allowDeanEditProfile',
         'allowWardenRemoveStudent', 'allowDeanRemoveStudent', 'allowBulkStudentUpdates', 'allowBulkPermissionManagement',
-        'qrScanCooldownMinutes'
+        'qrScanCooldownMinutes', 'allowEmergencyExitWithoutCooldown'
     ];
     const filtered: any = {};
     for (const key of settingsFields) {
@@ -585,6 +584,7 @@ const mapSettingsToCamelCase = (s: any) => {
         allowBulkStudentUpdates: s.allow_bulk_student_updates !== undefined ? s.allow_bulk_student_updates : (s.allowBulkStudentUpdates || false),
         allowBulkPermissionManagement: s.allow_bulk_permission_management !== undefined ? s.allow_bulk_permission_management : (s.allowBulkPermissionManagement !== undefined ? s.allowBulkPermissionManagement : true),
         qrScanCooldownMinutes: s.qr_scan_cooldown_minutes !== undefined ? s.qr_scan_cooldown_minutes : (s.qrScanCooldownMinutes !== undefined ? s.qrScanCooldownMinutes : 5),
+        allowEmergencyExitWithoutCooldown: s.allow_emergency_exit_without_cooldown !== undefined ? s.allow_emergency_exit_without_cooldown : (s.allowEmergencyExitWithoutCooldown !== undefined ? s.allowEmergencyExitWithoutCooldown : true),
         createdAt: s.created_at || s.createdAt,
         updatedAt: s.updated_at || s.updatedAt
     };
@@ -624,6 +624,7 @@ const mapSettingsToSnakeCase = (s: any) => {
         enforceUniqueEmail: 'enforce_unique_email',
         enforceUniqueFace: 'enforce_unique_face',
         qrScanCooldownMinutes: 'qr_scan_cooldown_minutes',
+        allowEmergencyExitWithoutCooldown: 'allow_emergency_exit_without_cooldown',
         allowWardenAddStudent: 'allow_warden_add_student',
         allowDeanAddStudent: 'allow_dean_add_student',
         allowWardenEditProfile: 'allow_warden_edit_profile',
@@ -1770,16 +1771,16 @@ export const db = {
 
                 if (filter.firebaseUID) {
                     if (isUuidString(filter.firebaseUID)) {
-                        query = query.or(`firebase_uid.eq.${filter.firebaseUID},supabase_id.eq.${filter.firebaseUID}`);
+                        query = query.or(`_id.eq.${filter.firebaseUID},firebase_uid.eq.${filter.firebaseUID},supabase_id.eq.${filter.firebaseUID}`);
                     } else {
-                        query = query.eq('firebase_uid', filter.firebaseUID);
+                        query = query.or(`firebase_uid.eq.${filter.firebaseUID},email.eq.${filter.firebaseUID},phone_number.eq.${filter.firebaseUID}`);
                     }
                 }
                 if (filter.supabaseId) {
                     if (isUuidString(filter.supabaseId)) {
-                        query = query.or(`supabase_id.eq.${filter.supabaseId},firebase_uid.eq.${filter.supabaseId}`);
+                        query = query.or(`_id.eq.${filter.supabaseId},supabase_id.eq.${filter.supabaseId},firebase_uid.eq.${filter.supabaseId}`);
                     } else {
-                        query = query.eq('firebase_uid', filter.supabaseId);
+                        query = query.or(`supabase_id.eq.${filter.supabaseId},firebase_uid.eq.${filter.supabaseId},email.eq.${filter.supabaseId}`);
                     }
                 }
                 if (filter._id) query = query.eq('_id', filter._id);
@@ -2440,12 +2441,14 @@ export const db = {
                         deviceId: 'device_id',
                         studentStatus: 'student_status',
                         thumbImpressionId: 'thumb_impression_id',
-                        dynamicFields: 'dynamic_fields'
+                        dynamicFields: 'dynamic_fields',
+                        firebaseUID: 'firebase_uid',
+                        firebaseUid: 'firebase_uid'
                     };
 
                     // Fields to explicitly EXCLUDE from update (metadata, identifiers, or computed)
                     const forbidden = [
-                        'id', '_id', 'firebaseuid', 'firebase_uid', 'createdat', 'updatedat',
+                        'id', '_id', 'createdat', 'updatedat',
                         'action', '__v', 'permissions', 'lastcheckinlocation'
                     ];
 
@@ -3880,12 +3883,20 @@ export const db = {
 
                 query = query.eq('tenant_id', tenantId);
 
-                if (filters.studentId && filters.firebaseUID) {
-                    query = query.or(`student_id.eq.${filters.studentId},firebase_uid.eq.${filters.firebaseUID}`);
-                } else if (filters.firebaseUID) {
-                    query = query.eq('firebase_uid', filters.firebaseUID);
-                } else if (filters.studentId) {
-                    query = query.eq('student_id', filters.studentId);
+                const validStudentId = (filters.studentId && String(filters.studentId).trim() !== 'undefined' && String(filters.studentId).trim() !== 'null' && String(filters.studentId).trim() !== '') ? String(filters.studentId).trim() : null;
+                const validFirebaseUID = (filters.firebaseUID && String(filters.firebaseUID).trim() !== 'undefined' && String(filters.firebaseUID).trim() !== 'null' && String(filters.firebaseUID).trim() !== '') ? String(filters.firebaseUID).trim() : null;
+
+                const studentFilterAttempted = ('studentId' in filters && !validStudentId) || ('firebaseUID' in filters && !validFirebaseUID);
+                if (studentFilterAttempted && !validStudentId && !validFirebaseUID) {
+                    return { records: [], total: 0 };
+                }
+
+                if (validStudentId && validFirebaseUID) {
+                    query = query.or(`student_id.eq.${validStudentId},firebase_uid.eq.${validFirebaseUID}`);
+                } else if (validFirebaseUID) {
+                    query = query.eq('firebase_uid', validFirebaseUID);
+                } else if (validStudentId) {
+                    query = query.eq('student_id', validStudentId);
                 }
                 if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
                 if (filters.registrationId) query = query.ilike('registration_id', `%${filters.registrationId}%`);
@@ -3955,15 +3966,23 @@ export const db = {
                     tenantId: tenantId
                 };
 
-                if (filters.studentId && filters.firebaseUID) {
+                const validStudentId = (filters.studentId && String(filters.studentId).trim() !== 'undefined' && String(filters.studentId).trim() !== 'null' && String(filters.studentId).trim() !== '') ? String(filters.studentId).trim() : null;
+                const validFirebaseUID = (filters.firebaseUID && String(filters.firebaseUID).trim() !== 'undefined' && String(filters.firebaseUID).trim() !== 'null' && String(filters.firebaseUID).trim() !== '') ? String(filters.firebaseUID).trim() : null;
+
+                const studentFilterAttempted = ('studentId' in filters && !validStudentId) || ('firebaseUID' in filters && !validFirebaseUID);
+                if (studentFilterAttempted && !validStudentId && !validFirebaseUID) {
+                    return { records: [], total: 0 };
+                }
+
+                if (validStudentId && validFirebaseUID) {
                     whereClause.OR = [
-                        { studentId: filters.studentId },
-                        { firebaseUid: filters.firebaseUID }
+                        { studentId: validStudentId },
+                        { firebaseUid: validFirebaseUID }
                     ];
-                } else if (filters.firebaseUID) {
-                    whereClause.firebaseUid = filters.firebaseUID;
-                } else if (filters.studentId) {
-                    whereClause.studentId = filters.studentId;
+                } else if (validFirebaseUID) {
+                    whereClause.firebaseUid = validFirebaseUID;
+                } else if (validStudentId) {
+                    whereClause.studentId = validStudentId;
                 }
                 if (filters.status && filters.status !== 'all') whereClause.status = filters.status;
                 if (filters.type) whereClause.type = filters.type;
@@ -4060,8 +4079,24 @@ export const db = {
                 const GatePassModel = (await import('@/models/GatePass')).default;
 
                 const mongoQuery: any = {};
-                if (filters.firebaseUID) mongoQuery.firebaseUID = filters.firebaseUID;
-                if (filters.studentId) mongoQuery.studentId = filters.studentId;
+                const validStudentId = (filters.studentId && String(filters.studentId).trim() !== 'undefined' && String(filters.studentId).trim() !== 'null' && String(filters.studentId).trim() !== '') ? String(filters.studentId).trim() : null;
+                const validFirebaseUID = (filters.firebaseUID && String(filters.firebaseUID).trim() !== 'undefined' && String(filters.firebaseUID).trim() !== 'null' && String(filters.firebaseUID).trim() !== '') ? String(filters.firebaseUID).trim() : null;
+
+                const studentFilterAttempted = ('studentId' in filters && !validStudentId) || ('firebaseUID' in filters && !validFirebaseUID);
+                if (studentFilterAttempted && !validStudentId && !validFirebaseUID) {
+                    return { records: [], total: 0 };
+                }
+
+                if (validStudentId && validFirebaseUID) {
+                    mongoQuery.$or = [
+                        { studentId: validStudentId },
+                        { firebaseUID: validFirebaseUID }
+                    ];
+                } else if (validFirebaseUID) {
+                    mongoQuery.firebaseUID = validFirebaseUID;
+                } else if (validStudentId) {
+                    mongoQuery.studentId = validStudentId;
+                }
                 if (filters.status && filters.status !== 'all') mongoQuery.status = filters.status;
                 if (filters.type) mongoQuery.type = filters.type;
                 if (filters.hostelName && filters.hostelName !== "all") {
