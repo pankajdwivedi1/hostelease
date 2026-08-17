@@ -1168,6 +1168,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [bulkFillValue, setBulkFillValue] = useState("");
   const [addStudentForm, setAddStudentForm] = useState<Record<string, string>>({});
   const [isSavingStudent, setIsSavingStudent] = useState(false);
+  const [showHomeLeaveModal, setShowHomeLeaveModal] = useState(false);
+  const [homeLeaveModalStudent, setHomeLeaveModalStudent] = useState<any>(null);
+  const [homeLeaveFromDate, setHomeLeaveFromDate] = useState("");
+  const [homeLeaveToDate, setHomeLeaveToDate] = useState("");
+  const [homeLeaveReason, setHomeLeaveReason] = useState("Home Leave (Manual Approval)");
+  const [isSubmittingHomeLeave, setIsSubmittingHomeLeave] = useState(false);
   const [isWardenCameraOpen, setIsWardenCameraOpen] = useState(false);
   const wardenVideoRef = useRef<HTMLVideoElement>(null);
   const [duplicateWarnings, setDuplicateWarnings] = useState<Record<string, string>>({});
@@ -2833,6 +2839,110 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       alert("Error: " + (e.message || "Network error"));
     } finally {
       setIsUpdatingSettings(false);
+    }
+  };
+
+  const openHomeLeaveModal = (student: any) => {
+    setHomeLeaveModalStudent(student);
+    const now = new Date();
+    const tzOffset = now.getTimezoneOffset() * 60000;
+    const localNow = new Date(now.getTime() - tzOffset);
+    const twoDaysLater = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000 - tzOffset);
+    setHomeLeaveFromDate(localNow.toISOString().slice(0, 16));
+    setHomeLeaveToDate(twoDaysLater.toISOString().slice(0, 16));
+    setHomeLeaveReason("Home Leave (Manual Approval)");
+    setShowHomeLeaveModal(true);
+  };
+
+  const handleConfirmHomeLeave = async () => {
+    if (!homeLeaveModalStudent) return;
+    try {
+      setIsSubmittingHomeLeave(true);
+      const studentId = homeLeaveModalStudent.id || homeLeaveModalStudent._id;
+      const res = await fetch("/api/getpass/manual-toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: studentId.toString(),
+          action: "out",
+          requestType: "HOME-LEAVE",
+          reason: homeLeaveReason || "Home Leave (Manual Approval)",
+          fromDateTime: homeLeaveFromDate,
+          toDateTime: homeLeaveToDate,
+          userType: userType || "warden",
+          operator: userType || "Warden"
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedRoomStudents(prev => prev.map(s => {
+          const sId = s.id || s._id;
+          if (sId?.toString() === studentId?.toString()) {
+            return { ...s, studentStatus: "out", outingType: "leave" };
+          }
+          return s;
+        }));
+        setStudents(prev => prev.map(s => {
+          const sId = s.id || s._id;
+          if (sId?.toString() === studentId?.toString()) {
+            return { ...s, studentStatus: "out", outingType: "leave" };
+          }
+          return s;
+        }));
+        showToast(`Marked ${homeLeaveModalStudent.name} on Home-Leave!`, "success");
+        setShowHomeLeaveModal(false);
+        setHomeLeaveModalStudent(null);
+      } else {
+        alert("Failed to mark home-leave: " + (data.error || "Unknown error"));
+      }
+    } catch (e: any) {
+      console.error("Home leave error:", e);
+      alert("Error: " + (e.message || "Failed to submit"));
+    } finally {
+      setIsSubmittingHomeLeave(false);
+    }
+  };
+
+  const handleUnmarkHomeLeave = async (student: any) => {
+    if (!student) return;
+    const confirmReturn = window.confirm(`Mark ${student.name} as RETURNED (In Campus)?`);
+    if (!confirmReturn) return;
+    try {
+      const studentId = student.id || student._id;
+      const res = await fetch("/api/getpass/manual-toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: studentId.toString(),
+          action: "in",
+          reason: "Returned from Home-Leave",
+          userType: userType || "warden",
+          operator: userType || "Warden"
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedRoomStudents(prev => prev.map(s => {
+          const sId = s.id || s._id;
+          if (sId?.toString() === studentId?.toString()) {
+            return { ...s, studentStatus: "in", outingType: undefined };
+          }
+          return s;
+        }));
+        setStudents(prev => prev.map(s => {
+          const sId = s.id || s._id;
+          if (sId?.toString() === studentId?.toString()) {
+            return { ...s, studentStatus: "in", outingType: undefined };
+          }
+          return s;
+        }));
+        showToast(`Marked ${student.name} as Returned (IN)!`, "success");
+      } else {
+        alert("Failed to mark returned: " + (data.error || "Unknown error"));
+      }
+    } catch (e: any) {
+      console.error("Unmark home leave error:", e);
+      alert("Error: " + (e.message || "Failed to submit"));
     }
   };
 
@@ -6357,7 +6467,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
 
     if (student.studentStatus === 'out') {
-      if (student.outingType === 'leave') {
+      const oType = String(student.outingType || '').toLowerCase().trim();
+      if (oType === 'leave' || oType === 'home-leave' || oType === 'hleave') {
         return 'hleave';
       } else {
         return 'gpass';
@@ -9722,8 +9833,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         {rStatus === 'in' ? '🟢 IN' :
                                          rStatus === 'hleave' ? '🔵 H-LEAVE' : '🟡 G-PASS'}
                                       </span>
-                                      {student.isProfileLocked && (
-                                        <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider">🔒 Locked</span>
+
+                                      {/* 🏠 Direct Home-Leave / Mark Returned Action Button */}
+                                      {rStatus === 'in' ? (
+                                        <button
+                                          onClick={() => openHomeLeaveModal(student)}
+                                          className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
+                                          title="Mark Student on Home-Leave"
+                                        >
+                                          <span>🏠</span> HOME-LEAVE
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleUnmarkHomeLeave(student)}
+                                          className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
+                                          title="Unmark Home-Leave / Mark as Returned"
+                                        >
+                                          <span>🟢</span> UNMARK LEAVE
+                                        </button>
                                       )}
                                     </div>
                                   </div>
@@ -9759,6 +9886,88 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               </div>
                             );
                           })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 🏠 Home Leave Date & Details Modal */}
+                  {showHomeLeaveModal && homeLeaveModalStudent && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+                      <div className="bg-white w-full max-w-md rounded-3xl p-5 sm:p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-100 space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="p-2 bg-amber-50 rounded-xl text-amber-600 text-lg font-bold">
+                              🏠
+                            </div>
+                            <div>
+                              <h3 className="text-base font-black text-slate-800">Mark Home-Leave</h3>
+                              <p className="text-xs font-bold text-slate-400">{homeLeaveModalStudent.name} (Room {homeLeaveModalStudent.roomNumber || selectedRoom})</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setShowHomeLeaveModal(false);
+                              setHomeLeaveModalStudent(null);
+                            }}
+                            className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">From Date & Time</label>
+                            <input
+                              type="datetime-local"
+                              value={homeLeaveFromDate}
+                              onChange={(e) => setHomeLeaveFromDate(e.target.value)}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Expected Return Date & Time</label>
+                            <input
+                              type="datetime-local"
+                              value={homeLeaveToDate}
+                              onChange={(e) => setHomeLeaveToDate(e.target.value)}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Reason / Remarks</label>
+                            <input
+                              type="text"
+                              value={homeLeaveReason}
+                              onChange={(e) => setHomeLeaveReason(e.target.value)}
+                              placeholder="e.g. Family Function / Medical / Festival"
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowHomeLeaveModal(false);
+                              setHomeLeaveModalStudent(null);
+                            }}
+                            className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-wider transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isSubmittingHomeLeave}
+                            onClick={handleConfirmHomeLeave}
+                            className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+                          >
+                            {isSubmittingHomeLeave ? "Saving..." : "Confirm Home-Leave"}
+                          </button>
                         </div>
                       </div>
                     </div>

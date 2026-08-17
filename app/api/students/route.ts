@@ -570,7 +570,9 @@ export async function GET(request: NextRequest) {
       // Create a map of studentId -> outingType for efficient lookup
       activeOutings = new Map(openPasses.map((p: any) => {
         const sId = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
-        return [sId?.toString(), p.type || "outing"];
+        const pType = String(p.type || '').toLowerCase();
+        const normalizedType = (pType === 'leave' || pType === 'home-leave' || pType === 'hleave') ? 'leave' : 'outing';
+        return [sId?.toString(), normalizedType];
       }));
 
       students.forEach((s: any) => {

@@ -92,8 +92,9 @@ export async function POST(request: NextRequest) {
             if (!student) continue;
 
             const currentStatus = student.studentStatus || "in";
+            const isTargetOut = action === 'out' ? true : (action === 'in' ? false : (currentStatus === "in"));
 
-            if (currentStatus === "in") {
+            if (isTargetOut) {
                 // MARK OUT (HOME-LEAVE or GATE-PASS)
                 const passOutFilters: any = {
                     studentId: id.toString(),
@@ -138,26 +139,6 @@ export async function POST(request: NextRequest) {
                     gateName: "Management Override",
                     qrTokenUsedOut: "MANUAL_BY_" + userType.toUpperCase(),
                 });
-
-                // Also create an approved permission record so dashboard calendars and logs show HOME-LEAVE
-                try {
-                    await db.permissions.create({
-                        studentId: id.toString(),
-                        studentName: student.name,
-                        hostelName: student.hostelName,
-                        roomNumber: student.roomNumber,
-                        requestType: targetType === 'HOME-LEAVE' ? 'leave' : 'outing',
-                        reason: passReason,
-                        fromDateTime: now,
-                        toDateTime: new Date(now.getTime() + 24 * 60 * 60 * 1000),
-                        status: 'approved',
-                        parentStatus: 'approved',
-                        wardenStatus: 'approved',
-                        deanStatus: 'approved',
-                    });
-                } catch (permErr) {
-                    console.warn("Non-blocking permission creation notice:", permErr);
-                }
 
                 await db.students.update(id.toString(), { studentStatus: "out" });
                 await writeAdminAuditLog({
