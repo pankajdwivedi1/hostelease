@@ -130,8 +130,12 @@ export async function GET(request: NextRequest) {
         let leaveCount = 0;
         let gatePassCount = 0;
         currentlyOut.forEach((p) => {
-            if (p.type === 'leave') leaveCount++;
-            else gatePassCount++;
+            const t = String(p.type || '').toLowerCase().trim();
+            if (t === 'leave' || t === 'home-leave' || t === 'hleave' || t.includes('leave')) {
+                leaveCount++;
+            } else {
+                gatePassCount++;
+            }
         });
 
         // Use the deduplicated list for display (no extra healing needed as it's already mapped)

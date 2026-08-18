@@ -555,7 +555,8 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                     });
                                     newSummary.studentsOut++;
                                     newSummary.studentsIn--;
-                                    if (mapped.type === 'leave') newSummary.leaveCount++;
+                                    const isLeaveType = String(mapped.type || '').toLowerCase().includes('leave') || String(mapped.type || '').toLowerCase() === 'hleave';
+                                    if (isLeaveType) newSummary.leaveCount++;
                                     else newSummary.gatePassCount++;
                                 }
                                 newRecent.unshift(mapped);
@@ -567,7 +568,8 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                     newCurrentlyOut.splice(index, 1);
                                     newSummary.studentsOut = Math.max(0, newSummary.studentsOut - 1);
                                     newSummary.studentsIn++;
-                                    if (mapped.type === 'leave') newSummary.leaveCount = Math.max(0, newSummary.leaveCount - 1);
+                                    const isLeaveType = String(mapped.type || '').toLowerCase().includes('leave') || String(mapped.type || '').toLowerCase() === 'hleave';
+                                    if (isLeaveType) newSummary.leaveCount = Math.max(0, newSummary.leaveCount - 1);
                                     else newSummary.gatePassCount = Math.max(0, newSummary.gatePassCount - 1);
                                 }
 
@@ -1374,13 +1376,18 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                                                             >
                                                                 {record.studentName}
                                                             </h4>
-                                                            <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${record.type === "leave"
-                                                                ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                                                                : "bg-blue-500/20 text-blue-400 border-blue-500/30"
-                                                                }`}>
-                                                                <span className="text-[9px]">{record.type === "leave" ? "🏠" : "🎫"}</span>
-                                                                <span>{record.type === "leave" ? "HOME-LEAVE" : "GATE-PASS"}</span>
-                                                            </span>
+                                                            {(() => {
+                                                                const isLeaveRecord = String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave';
+                                                                return (
+                                                                    <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${isLeaveRecord
+                                                                        ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                                                        : "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                                                                        }`}>
+                                                                        <span className="text-[9px]">{isLeaveRecord ? "🏠" : "🎫"}</span>
+                                                                        <span>{isLeaveRecord ? "HOME-LEAVE" : "GATE-PASS"}</span>
+                                                                    </span>
+                                                                );
+                                                            })()}
                                                         </div>
                                                         <p className="text-[9px] text-[rgba(255,255,255,0.3)] tracking-tight uppercase m-0 mt-0.5 font-bold truncate">
                                                             {formatHostelDisplay(record.hostelName)} • {record.roomNumber}

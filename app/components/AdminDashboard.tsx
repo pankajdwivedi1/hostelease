@@ -4395,17 +4395,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             } else {
               setStudents(parsed);
               hasCache = true;
-              
-              // If cache is fresh and not forced, return immediately
-              if (!forceRefresh && timestamp) {
-                const age = Date.now() - parseInt(timestamp);
-                const needsUpgrade = parsed[0].floorNumber === undefined || parsed[0].permanentAddress === undefined || parsed[0].fatherName === undefined;
-                const CACHE_FRESH_DURATION = 5 * 60 * 1000; // 5 minutes
-                if (!needsUpgrade && age < CACHE_FRESH_DURATION) {
-                  setStudentsLoading(false);
-                  return;
-                }
-              }
             }
           }
         } catch (e) {
@@ -6461,11 +6450,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   // 2. Roommate Status Helper
   const getRoommateStatus = (student: StudentDetails) => {
-    const isPresent = presentStudentIds.includes(student.id);
-    if (isPresent || student.studentStatus === 'in') {
-      return 'in';
-    }
-
     if (student.studentStatus === 'out') {
       const oType = String(student.outingType || '').toLowerCase().trim();
       if (oType === 'leave' || oType === 'home-leave' || oType === 'hleave') {
@@ -10970,8 +10954,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <div className="flex items-center gap-1.5 flex-wrap">
                                           <h3 className="text-[11px] font-bold text-gray-900 leading-tight group-hover:text-blue-600 transition-colors">{student.name}</h3>
                                           {/* Mobile Status Badge: Right beside student name */}
-                                          <span className={`sm:hidden flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${(student.studentStatus === 'out' && !presentStudentIds.includes(student.id)) ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
-                                            {(student.studentStatus === 'out' && !presentStudentIds.includes(student.id)) ? 'out' : 'in'}
+                                          <span className={`sm:hidden flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${student.studentStatus === 'out' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
+                                            {student.studentStatus === 'out' ? 'out' : 'in'}
                                           </span>
                                         </div>
                                         <p className="text-[10px] text-gray-500 mt-0.5 truncate">
@@ -10991,8 +10975,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       </div>
 
                                       {/* Desktop Status Badge (top-right on desktop) */}
-                                      <span className={`hidden sm:inline-block flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${(student.studentStatus === 'out' && !presentStudentIds.includes(student.id)) ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
-                                        {(student.studentStatus === 'out' && !presentStudentIds.includes(student.id)) ? 'out' : 'in'}
+                                      <span className={`hidden sm:inline-block flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${student.studentStatus === 'out' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
+                                        {student.studentStatus === 'out' ? 'out' : 'in'}
                                       </span>
 
                                       {/* Mobile Action Buttons (shifted to top-right in place of IN on mobile, matching IN style & alignment) */}

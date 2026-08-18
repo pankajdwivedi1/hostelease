@@ -601,13 +601,18 @@ export default function OutingHistoryPage() {
                                                 >
                                                     {record.studentName}
                                                 </p>
-                                                <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${record.type === "leave"
-                                                    ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                                                    : "bg-blue-500/20 text-blue-400 border-blue-500/30"
-                                                    }`}>
-                                                    <span className="text-[9px]">{record.type === "leave" ? "🏠" : "🎫"}</span>
-                                                    <span>{record.type === "leave" ? "HOME-LEAVE" : "GATE-PASS"}</span>
-                                                </span>
+                                                {(() => {
+                                                    const isLeaveRecord = String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave';
+                                                    return (
+                                                        <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border transition-all flex items-center gap-1 shrink-0 ${isLeaveRecord
+                                                            ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                                            : "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                                                            }`}>
+                                                            <span className="text-[9px]">{isLeaveRecord ? "🏠" : "🎫"}</span>
+                                                            <span>{isLeaveRecord ? "HOME-LEAVE" : "GATE-PASS"}</span>
+                                                        </span>
+                                                    );
+                                                })()}
                                             </div>
                                             <p className="text-[10px] text-white/70 mt-1 font-medium truncate uppercase tracking-tighter">
                                                 {formatHostelDisplay(record.hostelName)} • Room {record.roomNumber}
@@ -637,7 +642,7 @@ export default function OutingHistoryPage() {
                                                         <span className="text-white/10 text-[10px]">|</span>
                                                         <span className="text-[10px] text-white/40 font-bold tabular-nums whitespace-nowrap">{formatDateDDMMYYYY(record.checkInISTDate || record.checkInTime || record.checkOutISTDate)}</span>
                                                     </div>
-                                                    {record.type === 'leave' && (
+                                                    {(String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave') && (
                                                         <div className="flex items-center gap-1 mt-1">
                                                             <span className="text-[7px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20 font-black uppercase tracking-tighter">🏠 HOME-LEAVE</span>
                                                         </div>

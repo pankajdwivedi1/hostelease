@@ -3900,7 +3900,15 @@ export const db = {
                 }
                 if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
                 if (filters.registrationId) query = query.ilike('registration_id', `%${filters.registrationId}%`);
-                if (filters.type) query = query.eq('type', filters.type);
+                if (filters.type) {
+                    if (filters.type === 'leave' || filters.type === 'HOME-LEAVE') {
+                        query = query.in('type', ['leave', 'HOME-LEAVE', 'home-leave', 'hleave', 'Leave']);
+                    } else if (filters.type === 'outing' || filters.type === 'GATE-PASS') {
+                        query = query.in('type', ['outing', 'GATE-PASS', 'gate-pass', 'gpass', 'Outing']);
+                    } else {
+                        query = query.eq('type', filters.type);
+                    }
+                }
                 if (filters.erpId) query = query.ilike('students.student_profiles.erp_id', `%${filters.erpId}%`);
                 if (filters.hostelName && filters.hostelName !== 'all') {
                     if (typeof filters.hostelName === 'object' && filters.hostelName.$in) {
@@ -3985,7 +3993,15 @@ export const db = {
                     whereClause.studentId = validStudentId;
                 }
                 if (filters.status && filters.status !== 'all') whereClause.status = filters.status;
-                if (filters.type) whereClause.type = filters.type;
+                if (filters.type) {
+                    if (filters.type === 'leave' || filters.type === 'HOME-LEAVE') {
+                        whereClause.type = { in: ['leave', 'HOME-LEAVE', 'home-leave', 'hleave', 'Leave'] };
+                    } else if (filters.type === 'outing' || filters.type === 'GATE-PASS') {
+                        whereClause.type = { in: ['outing', 'GATE-PASS', 'gate-pass', 'gpass', 'Outing'] };
+                    } else {
+                        whereClause.type = filters.type;
+                    }
+                }
 
                 if (filters.registrationId) {
                     whereClause.registrationId = {
@@ -4098,7 +4114,15 @@ export const db = {
                     mongoQuery.studentId = validStudentId;
                 }
                 if (filters.status && filters.status !== 'all') mongoQuery.status = filters.status;
-                if (filters.type) mongoQuery.type = filters.type;
+                if (filters.type) {
+                    if (filters.type === 'leave' || filters.type === 'HOME-LEAVE') {
+                        mongoQuery.type = { $in: ['leave', 'HOME-LEAVE', 'home-leave', 'hleave', 'Leave'] };
+                    } else if (filters.type === 'outing' || filters.type === 'GATE-PASS') {
+                        mongoQuery.type = { $in: ['outing', 'GATE-PASS', 'gate-pass', 'gpass', 'Outing'] };
+                    } else {
+                        mongoQuery.type = filters.type;
+                    }
+                }
                 if (filters.hostelName && filters.hostelName !== "all") {
                     mongoQuery.hostelName = { $regex: filters.hostelName, $options: "i" };
                 }

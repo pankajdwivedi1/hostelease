@@ -801,16 +801,16 @@ export default function StudentScannerPage() {
                                             fontWeight: "900",
                                             letterSpacing: "0.1em",
                                             textTransform: "uppercase" as const,
-                                            background: record.type === "leave"
+                                            background: (String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave')
                                                 ? "rgba(245, 158, 11, 0.2)"
                                                 : "rgba(59, 130, 246, 0.2)",
-                                            color: record.type === "leave" ? "#f59e0b" : "#60a5fa",
-                                            border: record.type === "leave"
+                                            color: (String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave') ? "#f59e0b" : "#60a5fa",
+                                            border: (String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave')
                                                 ? "1px solid rgba(245,158,11,0.5)"
                                                 : "1px solid rgba(59,130,246,0.5)",
                                             whiteSpace: "nowrap" as const,
                                         }}>
-                                            {record.type === "leave" ? "🏠 LEAVE" : "🎫 PASS"}
+                                            {(String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave') ? "🏠 LEAVE" : "🎫 PASS"}
                                         </span>
 
                                         {/* Duration below the badge */}
