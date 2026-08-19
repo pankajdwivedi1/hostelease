@@ -2893,11 +2893,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         setShowHomeLeaveModal(false);
         setHomeLeaveModalStudent(null);
       } else {
-        alert("Failed to mark home-leave: " + (data.error || "Unknown error"));
+        showToast("Failed to mark home-leave: " + (data.error || "Unknown error"), "error");
       }
     } catch (e: any) {
       console.error("Home leave error:", e);
-      alert("Error: " + (e.message || "Failed to submit"));
+      showToast("Error: " + (e.message || "Failed to submit"), "error");
     } finally {
       setIsSubmittingHomeLeave(false);
     }
@@ -2905,8 +2905,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
   const handleUnmarkHomeLeave = async (student: any) => {
     if (!student) return;
-    const confirmReturn = window.confirm(`Mark ${student.name} as RETURNED (In Campus)?`);
-    if (!confirmReturn) return;
     try {
       const studentId = student.id || student._id;
       const res = await fetch("/api/getpass/manual-toggle", {
@@ -2938,11 +2936,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         }));
         showToast(`Marked ${student.name} as Returned (IN)!`, "success");
       } else {
-        alert("Failed to mark returned: " + (data.error || "Unknown error"));
+        showToast("Failed to mark returned: " + (data.error || "Unknown error"), "error");
       }
     } catch (e: any) {
       console.error("Unmark home leave error:", e);
-      alert("Error: " + (e.message || "Failed to submit"));
+      showToast("Error: " + (e.message || "Failed to submit"), "error");
     }
   };
 
