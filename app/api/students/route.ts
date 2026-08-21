@@ -370,6 +370,29 @@ export async function GET(request: NextRequest) {
       return Math.abs(serverTime - cachedTime) < 1000;
     };
 
+    const enrichStudentOuting = async (stud: any) => {
+      if (!stud) return stud;
+      const sId = (stud.id || stud._id)?.toString();
+      if (!sId) return stud;
+      try {
+        const openPass = await db.gatePasses.findOne({ studentId: sId, status: "out" });
+        if (openPass) {
+          stud.studentStatus = "out";
+          const pType = String(openPass.type || '').toLowerCase();
+          stud.outingType = (pType === 'leave' || pType === 'home-leave' || pType === 'hleave') ? 'leave' : 'outing';
+          stud.leaveReason = openPass.reason;
+          stud.leaveFrom = openPass.checkOutIstDate ? `${openPass.checkOutIstDate} ${openPass.checkOutIstTime || ''}` : openPass.checkOutTime;
+          stud.leaveTo = openPass.expectedReturnDate || openPass.expectedReturnIstDate || null;
+        } else {
+          stud.studentStatus = stud.studentStatus || "in";
+          stud.outingType = undefined;
+        }
+      } catch (err) {
+        console.warn("Failed to enrich single student outing:", err);
+      }
+      return stud;
+    };
+
     if (parentPhone) {
       let cleaned = parentPhone.replace(/\D/g, "");
       if (cleaned.length === 12 && cleaned.startsWith("91")) {
@@ -402,6 +425,8 @@ export async function GET(request: NextRequest) {
           student = found;
         }
       }
+
+      await enrichStudentOuting(student);
 
       const tenant = student?.tenantId ? await getTenantById(student.tenantId) : null;
       return NextResponse.json({ 
@@ -436,8 +461,10 @@ export async function GET(request: NextRequest) {
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
+      await enrichStudentOuting(student);
+
       if (isNotModified(student)) {
-        return NextResponse.json({ notModified: true, success: true, studentStatus: student.studentStatus || "in" }, { status: 200 });
+        return NextResponse.json({ notModified: true, success: true, studentStatus: student.studentStatus || "in", outingType: student.outingType }, { status: 200 });
       }
       const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
       return NextResponse.json({ 
@@ -477,8 +504,10 @@ export async function GET(request: NextRequest) {
       if (!student) {
         return NextResponse.json({ error: "Student not found" }, { status: 404 });
       }
+      await enrichStudentOuting(student);
+
       if (isNotModified(student)) {
-        return NextResponse.json({ notModified: true, success: true, studentStatus: student.studentStatus || "in" }, { status: 200 });
+        return NextResponse.json({ notModified: true, success: true, studentStatus: student.studentStatus || "in", outingType: student.outingType }, { status: 200 });
       }
       const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
       return NextResponse.json({ 
@@ -513,6 +542,8 @@ export async function GET(request: NextRequest) {
           console.error("Failed to auto-link Supabase ID in email query:", linkErr.message);
         }
       }
+
+      await enrichStudentOuting(student);
 
       const tenant = student.tenantId ? await getTenantById(student.tenantId) : null;
       return NextResponse.json({ 

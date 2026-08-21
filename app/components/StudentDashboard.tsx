@@ -39,6 +39,7 @@ interface StudentProfile {
     roomNumber: string;
     profilePicture?: string;
     studentStatus?: "in" | "out";
+    outingType?: string;
     fatherName?: string;
     fatherNumber?: string;
     motherName?: string;
@@ -2752,11 +2753,39 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                             {/* Quick Info Grid */}
                             <div className={`grid grid-cols-2 ${gridColsClass} gap-2 sm:gap-3 mb-2`} style={{ fontFamily: 'var(--font-lora), Cambria' }}>
-                                <div className="h-12 bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100 px-2.5 sm:px-3 rounded-xl border-2 border-emerald-200 shadow-sm flex flex-col justify-center overflow-hidden min-w-0">
-                                    <span className="block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 text-emerald-800 truncate">Current Status</span>
+                                <div className={`h-12 px-2.5 sm:px-3 rounded-xl border-2 shadow-sm flex flex-col justify-center overflow-hidden min-w-0 ${
+                                    studentProfile.studentStatus === 'out'
+                                        ? (studentProfile.outingType === 'leave' || studentProfile.outingType === 'home-leave' || studentProfile.outingType === 'hleave')
+                                            ? 'bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-blue-200'
+                                            : 'bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 border-amber-200'
+                                        : 'bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100 border-emerald-200'
+                                }`}>
+                                    <span className={`block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${
+                                        studentProfile.studentStatus === 'out'
+                                            ? (studentProfile.outingType === 'leave' || studentProfile.outingType === 'home-leave' || studentProfile.outingType === 'hleave')
+                                                ? 'text-blue-800'
+                                                : 'text-amber-800'
+                                            : 'text-emerald-800'
+                                    }`}>Current Status</span>
                                     <div className="flex items-center gap-1.5 min-w-0">
-                                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 animate-pulse ${studentProfile.studentStatus === 'out' ? 'bg-red-500 ring-2 ring-red-200' : 'bg-emerald-500 ring-2 ring-emerald-200'}`} />
-                                        <p className="text-[9.5px] md:text-[11px] font-black text-emerald-950 uppercase tracking-tight truncate">Currently {studentProfile.studentStatus || 'IN'}</p>
+                                        {studentProfile.studentStatus === 'out' ? (
+                                            (studentProfile.outingType === 'leave' || studentProfile.outingType === 'home-leave' || studentProfile.outingType === 'hleave') ? (
+                                                <>
+                                                    <div className="w-2.5 h-2.5 rounded-full shrink-0 bg-blue-500 ring-2 ring-blue-200 animate-pulse" />
+                                                    <p className="text-[9.5px] md:text-[11px] font-black text-blue-950 uppercase tracking-tight truncate">🏠 HOME-LEAVE</p>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="w-2.5 h-2.5 rounded-full shrink-0 bg-amber-500 ring-2 ring-amber-200 animate-pulse" />
+                                                    <p className="text-[9.5px] md:text-[11px] font-black text-amber-950 uppercase tracking-tight truncate">🚪 GATE-PASS</p>
+                                                </>
+                                            )
+                                        ) : (
+                                            <>
+                                                <div className="w-2.5 h-2.5 rounded-full shrink-0 bg-emerald-500 ring-2 ring-emerald-200" />
+                                                <p className="text-[9.5px] md:text-[11px] font-black text-emerald-950 uppercase tracking-tight truncate">🏠 IN CAMPUS</p>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="h-12 bg-gradient-to-br from-sky-50 via-blue-50 to-indigo-50 px-2.5 sm:px-3 rounded-xl border-2 border-sky-200 shadow-sm flex flex-col justify-center overflow-hidden min-w-0">
@@ -4884,9 +4913,21 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 <div className="pt-0.5">
                                                     <div className="flex items-center gap-1.5 flex-wrap">
                                                         <h2 className="text-sm sm:text-base font-black text-slate-900 leading-tight truncate">{studentProfile.name}</h2>
-                                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${studentProfile.studentStatus === 'out' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>
-                                                            ● {studentProfile.studentStatus || 'IN'}
-                                                        </span>
+                                                        {studentProfile.studentStatus === 'out' ? (
+                                                            (studentProfile.outingType === 'leave' || studentProfile.outingType === 'home-leave' || studentProfile.outingType === 'hleave') ? (
+                                                                <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-200 flex items-center gap-1">
+                                                                    <span>🏠</span> HOME-LEAVE
+                                                                </span>
+                                                            ) : (
+                                                                <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
+                                                                    <span>🚪</span> GATE-PASS
+                                                                </span>
+                                                            )
+                                                        ) : (
+                                                            <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                                                <span>●</span> IN CAMPUS
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <p className="text-[9.5px] text-slate-500 font-semibold truncate mt-0.5 font-mono">
                                                         {(() => {
