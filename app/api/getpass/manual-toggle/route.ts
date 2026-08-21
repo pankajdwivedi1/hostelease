@@ -123,6 +123,34 @@ export async function POST(request: NextRequest) {
                 const targetType = requestType || 'HOME-LEAVE';
                 const passReason = reason || `Manual ${targetType} Override`;
 
+                // If dates were provided (e.g. from manual home leave modal), parse them
+                const fromDt = body.fromDateTime ? new Date(body.fromDateTime) : now;
+                const toDt = body.toDateTime ? new Date(body.toDateTime) : new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+
+                let createdPermId: string | undefined;
+                if (targetType === 'HOME-LEAVE' || targetType === 'GATE-PASS' || targetType === 'leave') {
+                    try {
+                        const createdPerm = await db.permissions.create({
+                            studentId: id.toString(),
+                            firebaseUID: student.firebaseUID,
+                            name: student.name,
+                            hostelName: student.hostelName,
+                            roomNumber: student.roomNumber,
+                            registrationId: student.registrationId,
+                            fromDateTime: fromDt,
+                            toDateTime: toDt,
+                            reason: passReason,
+                            status: "allowed",
+                            wardenStatus: "approved",
+                            deanStatus: "approved",
+                            requestType: targetType
+                        });
+                        createdPermId = createdPerm?._id || createdPerm?.id;
+                    } catch (permErr) {
+                        console.error("Failed to create permission record on manual toggle:", permErr);
+                    }
+                }
+
                 await db.gatePasses.create({
                     studentId: id.toString(),
                     firebaseUID: student.firebaseUID,
@@ -136,6 +164,7 @@ export async function POST(request: NextRequest) {
                     status: "out",
                     type: targetType,
                     reason: passReason,
+                    permissionId: createdPermId,
                     gateName: "Management Override",
                     qrTokenUsedOut: "MANUAL_BY_" + userType.toUpperCase(),
                 });

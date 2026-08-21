@@ -611,23 +611,33 @@ export async function GET(request: NextRequest) {
 
       // 3. Fetch Recent/Active Permissions to enrich student leave information (dates & reasons)
       try {
-        const permsResult = await db.permissions.list({}, { limit: 500 });
+        const permsResult = await db.permissions.list({}, { limit: 1000 });
         const permsList = Array.isArray(permsResult) ? permsResult : (permsResult?.records || permsResult?.permissions || []);
-        const permsMap = new Map<string, any>();
+        const permsById = new Map<string, any>();
+        const permsByReg = new Map<string, any>();
+        const permsByName = new Map<string, any>();
         permsList.forEach((perm: any) => {
           const pSid = typeof perm.studentId === 'object' ? (perm.studentId?._id || perm.studentId?.id) : perm.studentId;
-          if (pSid && !permsMap.has(pSid.toString())) {
-            permsMap.set(pSid.toString(), perm);
+          if (pSid && !permsById.has(pSid.toString())) {
+            permsById.set(pSid.toString(), perm);
+          }
+          if (perm.registrationId && !permsByReg.has(perm.registrationId)) {
+            permsByReg.set(perm.registrationId, perm);
+          }
+          if (perm.name && !permsByName.has(perm.name.trim().toLowerCase())) {
+            permsByName.set(perm.name.trim().toLowerCase(), perm);
           }
         });
 
         students.forEach((s: any) => {
           const sId = (s.id || s._id)?.toString();
-          const perm = permsMap.get(sId);
+          const perm = (sId ? permsById.get(sId) : null) || 
+                       (s.registrationId ? permsByReg.get(s.registrationId) : null) ||
+                       (s.name ? permsByName.get(s.name.trim().toLowerCase()) : null);
           if (perm) {
             if (!s.leaveFrom || s.leaveFrom === s.checkOutTime) s.leaveFrom = perm.fromDateTime;
             if (!s.leaveTo) s.leaveTo = perm.toDateTime;
-            if (!s.leaveReason || s.leaveReason === 'Home Leave (Manual Approval)') s.leaveReason = perm.reason;
+            if (!s.leaveReason) s.leaveReason = perm.reason;
             s.permissionStatus = perm.status;
           }
         });

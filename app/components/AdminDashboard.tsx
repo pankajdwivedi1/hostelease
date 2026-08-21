@@ -2880,17 +2880,46 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       });
       const data = await res.json();
       if (data.success) {
+        // Add permission into local permissions list immediately so room cards update in real time
+        const newPermission = {
+          _id: "perm-manual-" + Date.now(),
+          id: "perm-manual-" + Date.now(),
+          studentId: studentId.toString(),
+          registrationId: homeLeaveModalStudent.registrationId,
+          name: homeLeaveModalStudent.name,
+          fromDateTime: homeLeaveFromDate,
+          toDateTime: homeLeaveToDate,
+          reason: homeLeaveReason || "Home Leave (Manual Approval)",
+          status: "allowed",
+          requestType: "HOME-LEAVE"
+        };
+        setPermissions(prev => [newPermission, ...prev]);
+
         setSelectedRoomStudents(prev => prev.map(s => {
           const sId = s.id || s._id;
           if (sId?.toString() === studentId?.toString()) {
-            return { ...s, studentStatus: "out", outingType: "leave" };
+            return {
+              ...s,
+              studentStatus: "out",
+              outingType: "leave",
+              leaveFrom: homeLeaveFromDate,
+              leaveTo: homeLeaveToDate,
+              leaveReason: homeLeaveReason || "Home Leave (Manual Approval)"
+            };
           }
           return s;
         }));
         setStudents(prev => prev.map(s => {
           const sId = s.id || s._id;
           if (sId?.toString() === studentId?.toString()) {
-            return { ...s, studentStatus: "out", outingType: "leave" };
+            return {
+              ...s,
+              studentStatus: "out",
+              outingType: "leave",
+              leaveFrom: homeLeaveFromDate,
+              leaveTo: homeLeaveToDate,
+              leaveReason: homeLeaveReason || "Home Leave (Manual Approval)"
+            };
           }
           return s;
         }));
@@ -2928,14 +2957,28 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         setSelectedRoomStudents(prev => prev.map(s => {
           const sId = s.id || s._id;
           if (sId?.toString() === studentId?.toString()) {
-            return { ...s, studentStatus: "in", outingType: undefined };
+            return {
+              ...s,
+              studentStatus: "in",
+              outingType: undefined,
+              leaveFrom: undefined,
+              leaveTo: undefined,
+              leaveReason: undefined
+            };
           }
           return s;
         }));
         setStudents(prev => prev.map(s => {
           const sId = s.id || s._id;
           if (sId?.toString() === studentId?.toString()) {
-            return { ...s, studentStatus: "in", outingType: undefined };
+            return {
+              ...s,
+              studentStatus: "in",
+              outingType: undefined,
+              leaveFrom: undefined,
+              leaveTo: undefined,
+              leaveReason: undefined
+            };
           }
           return s;
         }));
