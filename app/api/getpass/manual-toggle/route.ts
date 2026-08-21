@@ -210,13 +210,6 @@ export async function POST(request: NextRequest) {
                     gateName: "Management Override",
                     qrTokenUsedOut: "MANUAL_BY_" + userType.toUpperCase(),
                 });
-                    status: "out",
-                    type: targetType,
-                    reason: passReason,
-                    permissionId: createdPermId,
-                    gateName: "Management Override",
-                    qrTokenUsedOut: "MANUAL_BY_" + userType.toUpperCase(),
-                });
 
                 await db.students.update(id.toString(), { studentStatus: "out" });
                 await writeAdminAuditLog({
