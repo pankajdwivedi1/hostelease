@@ -30,17 +30,12 @@ const LandingPage = dynamic(() => import("./components/LandingPage"), {
 });
 
 export default function Dashboard() {
-  const [mounted, setMounted] = useState(false);
   const [userType, setUserType] = useState<string | null>(null);
   const [studentData, setStudentData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isMainDomain, setIsMainDomain] = useState(false);
   const router = useRouter();
   const [siblingStudents, setSiblingStudents] = useState<any[]>([]);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const getInitials = (name: string) => {
     if (!name) return "";
@@ -264,7 +259,7 @@ export default function Dashboard() {
     checkAuth();
   }, [router]);
 
-  if (!mounted || loading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-between py-16 px-4">
         {/* Top spacing to center the main content */}
