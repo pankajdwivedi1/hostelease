@@ -567,28 +567,45 @@ export async function GET(request: NextRequest) {
       const attendanceSummary = await db.attendance.summary(today);
       const presentIdsSet = new Set((attendanceSummary?.presentStudentIds || []).map((id: any) => id?.toString()));
 
-      // Create a map of studentId -> outingType for efficient lookup
-      activeOutings = new Map(openPasses.map((p: any) => {
+      // Create a map of studentId -> outing details for efficient lookup
+      const activeOutingMap = new Map<string, any>();
+      openPasses.forEach((p: any) => {
         const sId = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
+        if (!sId) return;
         const pType = String(p.type || '').toLowerCase();
         const normalizedType = (pType === 'leave' || pType === 'home-leave' || pType === 'hleave') ? 'leave' : 'outing';
-        return [sId?.toString(), normalizedType];
-      }));
+        activeOutingMap.set(sId.toString(), {
+          outingType: normalizedType,
+          reason: p.reason || p.destination || null,
+          fromDateTime: p.fromDateTime || (p.checkOutIstDate ? `${p.checkOutIstDate} ${p.checkOutIstTime || ''}` : p.checkOutTime),
+          toDateTime: p.toDateTime || p.expectedReturnDate || p.expectedReturnIstDate || null,
+          checkOutIstDate: p.checkOutIstDate,
+          checkOutIstTime: p.checkOutIstTime,
+        });
+      });
 
       students.forEach((s: any) => {
         const sId = (s.id || s._id)?.toString();
-        const outingType = activeOutings.get(sId);
+        const passInfo = activeOutingMap.get(sId);
 
         // ⚡ DATA CONSISTENCY FIX:
         // Priority 1: If Gatepass says OUT, stay OUT (Matches Terminal Count: 70)
-        if (outingType) {
+        if (passInfo) {
           s.studentStatus = "out";
-          s.outingType = outingType;
+          s.outingType = passInfo.outingType;
+          s.leaveReason = passInfo.reason;
+          s.leaveFrom = passInfo.fromDateTime;
+          s.leaveTo = passInfo.toDateTime;
+          s.checkOutIstDate = passInfo.checkOutIstDate;
+          s.checkOutIstTime = passInfo.checkOutIstTime;
           syncCount++;
         } else {
           // If no open pass, they are 'in'
           s.studentStatus = "in";
           s.outingType = undefined;
+          s.leaveReason = undefined;
+          s.leaveFrom = undefined;
+          s.leaveTo = undefined;
         }
       });
     } catch (syncError) {

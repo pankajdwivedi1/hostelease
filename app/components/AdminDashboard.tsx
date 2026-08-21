@@ -752,6 +752,11 @@ interface StudentDetails {
   }[];
   thumbImpressionId?: string; // ⚡ NEW: Thumb biometrics
   outingType?: string | null;
+  leaveFrom?: string | Date | null;
+  leaveTo?: string | Date | null;
+  leaveReason?: string | null;
+  checkOutIstDate?: string | null;
+  checkOutIstTime?: string | null;
   permissions: SimplePermission[];
   firebaseUID?: string;
 }
@@ -4446,6 +4451,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           deviceHistory: s.deviceHistory || [],
           attendanceMode: s.attendanceMode || "default",
           outingType: s.outingType,
+          leaveFrom: s.leaveFrom || null,
+          leaveTo: s.leaveTo || null,
+          leaveReason: s.leaveReason || null,
+          checkOutIstDate: s.checkOutIstDate || null,
+          checkOutIstTime: s.checkOutIstTime || null,
           permissions: [],
           gender: s.gender || "",
           dynamicFields: s.dynamicFields || {}
@@ -4954,6 +4964,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     if (currentTab === "attendance" || currentTab === "rooms") {
       if (students.length === 0) {
         fetchStudents();
+      }
+      if (permissions.length === 0) {
+        fetchPermissions('all');
       }
     }
     
@@ -9773,8 +9786,39 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <div className="space-y-2.5 sm:space-y-3 max-h-[80vh] sm:max-h-none overflow-y-auto pr-0.5 no-scrollbar">
                           {selectedRoomStudents.map(student => {
                             const rStatus = getRoommateStatus(student);
-                            const studentIdStr = student.id || student._id;
-                            const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString()) || presentStudentIds.includes(studentIdStr?.toString());
+                            const studentIdStr = (student.id || student._id)?.toString();
+                            const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr) || presentStudentIds.includes(studentIdStr);
+
+                            // Find linked permission from permissions list if available
+                            const studentPermission = permissions.find((p: any) => {
+                              const pSid = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
+                              return pSid && studentIdStr && pSid.toString() === studentIdStr;
+                            });
+
+                            const leaveFrom = studentPermission?.fromDateTime || student.leaveFrom;
+                            const leaveTo = studentPermission?.toDateTime || student.leaveTo;
+                            const leaveReason = studentPermission?.reason || student.leaveReason;
+                            const isHomeLeave = rStatus === 'hleave' || (studentPermission && (studentPermission.status === 'allowed' || studentPermission.status === 'pending'));
+
+                            const formatLeaveDate = (dateVal: any) => {
+                              if (!dateVal) return "";
+                              try {
+                                const d = new Date(dateVal);
+                                if (isNaN(d.getTime())) return String(dateVal);
+                                return d.toLocaleString("en-IN", {
+                                  timeZone: "Asia/Kolkata",
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                  hour12: true
+                                });
+                              } catch {
+                                return String(dateVal);
+                              }
+                            };
+
                             return (
                               <div key={student.id} className="p-2.5 sm:p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-row items-center justify-between gap-2.5 sm:gap-3 hover:border-slate-200 transition-all">
                                 <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
@@ -9835,8 +9879,48 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         </button>
                                       ) : null}
                                     </div>
+
+                                    {/* 📱 Mobile Leave Details Line */}
+                                    {isHomeLeave && (leaveFrom || leaveReason) && (
+                                      <div className="sm:hidden mt-1.5 p-1.5 bg-blue-50/90 border border-blue-200/80 rounded-lg text-left">
+                                        {leaveFrom && (
+                                          <div className="flex items-center gap-1 text-[9px] font-bold text-blue-700 leading-tight">
+                                            <span className="shrink-0">📅</span>
+                                            <span className="truncate">
+                                              {formatLeaveDate(leaveFrom)}
+                                              {leaveTo && ` • to ${formatLeaveDate(leaveTo)}`}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {leaveReason && (
+                                          <p className="text-[8px] text-blue-900 font-medium italic mt-0.5 truncate" title={leaveReason}>
+                                            &ldquo;{leaveReason}&rdquo;
+                                          </p>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
+
+                                {/* 💻 Desktop Leave Details Banner (Middle Area) */}
+                                {isHomeLeave && (leaveFrom || leaveReason) && (
+                                  <div className="hidden sm:flex flex-col justify-center px-3 py-1.5 bg-blue-50/95 border border-blue-200 rounded-xl min-w-0 max-w-[220px] md:max-w-[280px] shrink-0 shadow-2xs">
+                                    {leaveFrom && (
+                                      <div className="flex items-center gap-1 text-[10px] font-bold text-blue-700 leading-snug">
+                                        <span className="shrink-0 text-[11px]">📅</span>
+                                        <span className="truncate">
+                                          {formatLeaveDate(leaveFrom)}
+                                          {leaveTo && ` • to ${formatLeaveDate(leaveTo)}`}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {leaveReason && (
+                                      <p className="text-[10px] text-blue-900 font-medium italic mt-0.5 truncate" title={leaveReason}>
+                                        &ldquo;{leaveReason}&rdquo;
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
 
                                 <div className="flex flex-row sm:flex-col items-center gap-1 sm:gap-1.5 shrink-0 self-end sm:self-center mb-0.5 sm:mb-0">
                                   <a
@@ -10949,22 +11033,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   <div className="flex-1 min-w-0">
                                     <div className="flex justify-between items-start gap-2">
                                       <div className="pr-1 min-w-0">
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                          <h3 className="text-[11px] font-bold text-gray-900 leading-tight group-hover:text-blue-600 transition-colors">{student.name}</h3>
+                                        <div className="flex items-center gap-1.5 overflow-hidden">
+                                          <h3 className="text-[11px] font-bold text-gray-900 leading-tight group-hover:text-blue-600 transition-colors truncate min-w-0 flex-1">{student.name}</h3>
                                           {/* Mobile Status Badge: Right beside student name */}
                                           {(() => {
                                             const oType = String(student.outingType || '').toLowerCase().trim();
                                             const isHomeleave = oType === 'leave' || oType === 'home-leave' || oType === 'hleave';
                                             if (student.studentStatus === 'out') {
                                               return (
-                                                <span className={`sm:hidden flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${isHomeleave ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-yellow-50 text-yellow-700 border-yellow-100'}`}>
-                                                  {isHomeleave ? '🏠 HOME-LEAVE' : '🚪 GATE-PASS'}
+                                                <span className={`sm:hidden flex-shrink-0 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${isHomeleave ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-yellow-50 text-yellow-700 border-yellow-100'}`}>
+                                                  {isHomeleave ? '🏠 H-LEAVE' : '🚪 G-PASS'}
                                                 </span>
                                               );
                                             }
                                             return (
-                                              <span className="sm:hidden flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border bg-green-50 text-green-600 border-green-100">
-                                                in
+                                              <span className="sm:hidden flex-shrink-0 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border bg-green-50 text-green-600 border-green-100">
+                                                IN
                                               </span>
                                             );
                                           })()}
