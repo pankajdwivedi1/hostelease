@@ -114,19 +114,21 @@ export async function writeHostelActivityLog({
           performed_by: operator,
           created_at: new Date().toISOString(),
         });
+        return; // ✅ Successfully written to Supabase
       }
-    } else {
-      // MongoDB fallback
-      const HostelLog = (await import("@/models/HostelLog")).default;
-      await connectDB();
-      await HostelLog.create({
-        hostelName,
-        actionType,
-        studentName,
-        erpId,
-        operator,
-      });
+      // Supabase client unavailable — fall through to MongoDB
     }
+
+    // MongoDB fallback (when source is not PRISMA or not SUPABASE, or Supabase client is null)
+    const HostelLog = (await import("@/models/HostelLog")).default;
+    await connectDB();
+    await HostelLog.create({
+      hostelName,
+      actionType,
+      studentName,
+      erpId,
+      operator,
+    });
   } catch (err) {
     console.error("[AUDIT LOG] writeHostelActivityLog failed:", err);
   }

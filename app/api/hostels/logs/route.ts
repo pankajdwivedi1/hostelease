@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
           .from("admin_audit_logs")
           .select("id, action, entity_name, details, performed_by, created_at")
           .eq("entity_type", "student")
-          .eq("details->isHostelActivity", true)
+          .eq("details->>isHostelActivity", "true")
           .in("action", ["STUDENT_CREATED", "STUDENT_DELETED", "STUDENT_EDITED"])
           .order("created_at", { ascending: false })
           .limit(200);

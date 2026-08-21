@@ -3,6 +3,33 @@ import { createClient } from '@supabase/supabase-js';
 // ⚡ CACHE: Store the Supabase client in a global variable for reuse
 let cachedSupabaseAdmin: any = null;
 
+const createSafeDummyAdminClient = () => {
+    const dummyFn: any = (...args: any[]) => dummyProxy;
+    const dummyProxy: any = new Proxy(dummyFn, {
+        get(target, prop) {
+            if (prop === 'then') return undefined;
+            if (prop === 'auth') {
+                return {
+                    admin: {
+                        getUserById: async () => ({ data: { user: null }, error: null }),
+                        deleteUser: async () => ({ data: null, error: null }),
+                        updateUserById: async () => ({ data: { user: null }, error: null }),
+                    },
+                    getSession: async () => ({ data: { session: null }, error: null }),
+                };
+            }
+            if (prop === 'from') {
+                return () => dummyProxy;
+            }
+            return dummyProxy;
+        },
+        apply(target, thisArg, argumentsList) {
+            return Promise.resolve({ data: null, error: null, count: 0 });
+        }
+    });
+    return dummyProxy;
+};
+
 // This client is for SERVER-SIDE use only.
 // It uses the SERVICE ROLE key to bypass RLS.
 export const getSupabaseAdmin = () => {
@@ -11,28 +38,22 @@ export const getSupabaseAdmin = () => {
     const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/^["']|["']$/g, "");
     const supabaseServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").replace(/^["']|["']$/g, "");
 
-    const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || process.env.NEXT_PHASE?.includes('build');
-
     if (!supabaseUrl || !supabaseServiceKey) {
-        if (isBuildPhase) {
-            console.warn('⚠️ Warning: Missing Supabase Server-Side Environment Variables during build phase. Returning dummy client.');
-            return new Proxy({}, {
-                get(target, prop) {
-                    return () => {};
-                }
-            }) as any;
-        }
-        throw new Error('Missing Supabase Server-Side Environment Variables');
+        return createSafeDummyAdminClient();
     }
 
-    cachedSupabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-        auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-        }
-    });
-
-    return cachedSupabaseAdmin;
+    try {
+        cachedSupabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+            auth: {
+                persistSession: false,
+                autoRefreshToken: false,
+            }
+        });
+        return cachedSupabaseAdmin;
+    } catch (e) {
+        console.warn("⚠️ Failed to initialize Supabase Admin client, using safe dummy fallback:", e);
+        return createSafeDummyAdminClient();
+    }
 };
 
 export async function uploadProfilePictureToSupabase(base64Image: string, tenantId: string, studentId: string): Promise<string> {

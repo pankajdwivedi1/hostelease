@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { auth as firebaseAuth } from "@/lib/firebase";
@@ -1091,7 +1091,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             return () => {
                 clearTimeout(initialNotifTimer);
-                supabase.removeChannel(statusChannel);
+                // Note: Supabase realtime channel removed — using polling-based updates
                 document.removeEventListener('visibilitychange', handleVisibilityChange);
                 window.removeEventListener('focus', syncStatusFromLocalStorage);
                 window.removeEventListener('pageshow', syncStatusFromLocalStorage);
@@ -1283,11 +1283,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     const handleLogout = async () => {
         try {
-            try {
-                await supabase.auth.signOut();
-            } catch (e) {
-                console.warn("Supabase sign out error:", e);
-            }
             try {
                 await firebaseSignOut(firebaseAuth);
             } catch (e) {
@@ -1581,14 +1576,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 return;
             }
 
-            // 1. Try Supabase session first
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                loadData({ uid: session.user.id, email: session.user.email ?? null, source: 'supabase' });
-                return;
-            }
-
-            // 2. Fallback to Firebase session
+            // Auth: Firebase session only (Supabase removed)
             unsubscribeFirebase = onAuthStateChanged(firebaseAuth, (user) => {
                 if (user) {
                     loadData({ uid: user.uid, email: user.email, source: 'firebase' });
