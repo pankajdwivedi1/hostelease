@@ -6181,7 +6181,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const handleProfileClick = async (studentId: string) => {
-    let student = students.find((s) => s.id === studentId);
+    let student = students.find((s) => (s.id || (s as any)._id) === studentId || s.email === studentId || s.registrationId === studentId);
+
+    // If not found in local students array, try fetching from API
+    if (!student && studentId) {
+      try {
+        const queryParam = studentId.includes('@') ? `email=${encodeURIComponent(studentId)}` : `search=${encodeURIComponent(studentId)}`;
+        const res = await fetch(`/api/students?${queryParam}`);
+        const data = await res.json();
+        if (data.student) {
+          student = data.student;
+        } else if (Array.isArray(data.students) && data.students.length > 0) {
+          student = data.students[0];
+        }
+      } catch (err) {
+        console.error("Failed to fetch student by id/email in handleProfileClick", err);
+      }
+    }
 
     // If student is in light mode (e.g. registrationId or fatherName is missing or profilePicture is missing), fetch full details on demand
     if (student && (student.registrationId === undefined || student.fatherName === undefined || !student.profilePicture)) {
@@ -6206,6 +6222,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             localGuardianPhoneNumber: data.student.localGuardianPhoneNumber,
             homeState: data.student.homeState,
             studentStatus: data.student.studentStatus || "in",
+            outingType: data.student.outingType,
             registrationId: data.student.registrationId,
             deviceId: data.student.deviceId,
             webAuthnCredentials: data.student.webAuthnCredentials || [],
@@ -6229,13 +6246,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     // Fallback: Use partial data from permissions if full student list isn't loaded yet
     if (!student) {
       const permissionWithStudent = permissions.find(p =>
-        typeof p.studentId === 'object' && p.studentId._id === studentId
+        typeof p.studentId === 'object' && ((p.studentId as any)._id === studentId || (p.studentId as any).id === studentId)
       );
 
       if (permissionWithStudent && typeof permissionWithStudent.studentId === 'object') {
         const s = permissionWithStudent.studentId;
         student = {
-          id: s._id,
+          id: s._id || s.id,
           name: s.name,
           email: s.email,
           phoneNumber: s.phoneNumber,
@@ -9872,7 +9889,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   {/* Left: Avatar + Name + Reg ID + ERP ID */}
                                   <div className="flex items-center gap-2 shrink-0 min-w-0 max-w-[48%] sm:max-w-[260px]">
                                     {/* Avatar */}
-                                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-[11px] sm:text-xs shadow-sm overflow-hidden shrink-0 border border-slate-200">
+                                    <div 
+                                      onClick={() => handleProfileClick((student._id || student.id)?.toString())}
+                                      className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-[11px] sm:text-xs shadow-sm overflow-hidden shrink-0 border border-slate-200 cursor-pointer hover:opacity-85 transition-opacity"
+                                      title={`Click to view ${student.name}'s details`}
+                                    >
                                       {student.profilePicture ? (
                                         <img src={student.profilePicture} alt={student.name} className="w-full h-full object-cover" />
                                       ) : (
@@ -9882,7 +9903,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                                     {/* Identity Info */}
                                     <div className="min-w-0 flex-1">
-                                      <h4 className="font-bold text-slate-800 text-[11px] sm:text-xs leading-snug break-words" title={student.name}>
+                                      <h4 
+                                        onClick={() => handleProfileClick((student._id || student.id)?.toString())}
+                                        className="font-bold text-slate-800 text-[11px] sm:text-xs leading-snug break-words cursor-pointer hover:text-blue-600 hover:underline transition-colors" 
+                                        title={`Click to view ${student.name}'s details`}
+                                      >
                                         <span>{student.name}</span>
                                         {showFlashingBlueDot ? (
                                           hasMarkedAttendance ? (
@@ -9942,7 +9967,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                        rStatus === 'hleave' ? '🔵 H-LEAVE' : '🟡 G-PASS'}
                                     </span>
 
-                                    {/* Direct Home-Leave / Mark Returned Action Button */}
+                                    {/* Direct Home-Leave / Mark Returned / Convert Outing Action Button */}
                                     {rStatus === 'in' ? (
                                       <button
                                         onClick={() => openHomeLeaveModal(student)}
@@ -9959,7 +9984,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       >
                                         <span>🟢</span> UNMARK LEAVE
                                       </button>
-                                    ) : null}
+                                    ) : (
+                                      <button
+                                        onClick={() => openHomeLeaveModal(student)}
+                                        className="px-2 py-0.5 rounded-full text-[7.5px] sm:text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-all flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer shrink-0"
+                                        title="Convert Active Gatepass Outing to Home-Leave"
+                                      >
+                                        <span>🏠</span> HOME-LEAVE
+                                      </button>
+                                    )}
                                   </div>
 
                                   {/* Right: Contact Icons (Smaller, compact, straight horizontal line) */}

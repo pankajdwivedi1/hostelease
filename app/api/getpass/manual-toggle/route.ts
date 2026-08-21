@@ -105,7 +105,17 @@ export async function POST(request: NextRequest) {
                 }
                 const { records: existingPasses } = await db.gatePasses.list(passOutFilters);
 
+                let initialCheckOutTime = now;
+                let initialIstTime = istTime;
+                let initialIstDate = istDate;
+
                 if (existingPasses && existingPasses.length > 0) {
+                    const firstPass = existingPasses[0];
+                    if (firstPass && firstPass.checkOutTime) {
+                        initialCheckOutTime = new Date(firstPass.checkOutTime);
+                        initialIstTime = firstPass.checkOutISTTime || firstPass.checkOutIstTime || istTime;
+                        initialIstDate = firstPass.checkOutISTDate || firstPass.checkOutIstDate || istDate;
+                    }
                     for (const oldPass of existingPasses) {
                         if (!oldPass) continue;
                         const diffMs = now.getTime() - new Date(oldPass.checkOutTime).getTime();
@@ -155,7 +165,7 @@ export async function POST(request: NextRequest) {
                     passReason = passReason || 'Home Leave (Manual Approval)';
 
                     // Create permission record since Dean/Warden explicitly marked Home Leave
-                    const fromDt = body.fromDateTime ? new Date(body.fromDateTime) : now;
+                    const fromDt = body.fromDateTime ? new Date(body.fromDateTime) : initialCheckOutTime;
                     const toDt = body.toDateTime ? new Date(body.toDateTime) : new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
 
                     try {
@@ -190,9 +200,16 @@ export async function POST(request: NextRequest) {
                     hostelName: student.hostelName,
                     roomNumber: student.roomNumber,
                     registrationId: student.registrationId,
-                    checkOutTime: now,
-                    checkOutISTTime: istTime,
-                    checkOutISTDate: istDate,
+                    checkOutTime: initialCheckOutTime,
+                    checkOutISTTime: initialIstTime,
+                    checkOutISTDate: initialIstDate,
+                    status: "out",
+                    type: targetType,
+                    reason: passReason,
+                    permissionId: createdPermId,
+                    gateName: "Management Override",
+                    qrTokenUsedOut: "MANUAL_BY_" + userType.toUpperCase(),
+                });
                     status: "out",
                     type: targetType,
                     reason: passReason,
