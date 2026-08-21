@@ -9867,12 +9867,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                             return (
                               <div key={student.id} className="p-2.5 sm:p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col gap-2 hover:border-slate-300 transition-all shadow-xs">
-                                {/* Row 1: Student Identity (Left) + Leave Details Box (Right) */}
-                                <div className="flex items-start justify-between gap-1.5 min-w-0">
+                                {/* Row 1: Student Identity (Left) + Leave Details Box (Right, Auto-Adjustable) */}
+                                <div className="flex items-start justify-between gap-2 min-w-0 w-full">
                                   {/* Left: Avatar + Name + Reg ID + ERP ID */}
-                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 shrink-0 min-w-0 max-w-[48%] sm:max-w-[260px]">
                                     {/* Avatar */}
-                                    <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-[11px] sm:text-xs shadow-sm overflow-hidden shrink-0 border border-slate-200">
+                                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-[11px] sm:text-xs shadow-sm overflow-hidden shrink-0 border border-slate-200">
                                       {student.profilePicture ? (
                                         <img src={student.profilePicture} alt={student.name} className="w-full h-full object-cover" />
                                       ) : (
@@ -9905,24 +9905,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     </div>
                                   </div>
 
-                                  {/* Right: Leave Details Box (Matching Screenshot 2) */}
+                                  {/* Right: Leave Details Box (Auto-adjustable / expands smoothly to fill gap) */}
                                   {isHomeLeave && (
-                                    <div className="shrink-0 px-2 py-1 sm:px-2.5 sm:py-1.5 bg-blue-50/90 border border-blue-200/90 rounded-lg text-left shadow-2xs">
+                                    <div className="flex-1 min-w-0 px-2 py-1 sm:px-3 sm:py-1.5 bg-blue-50/90 border border-blue-200/90 rounded-xl text-left shadow-2xs">
                                       <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold text-slate-800 leading-tight">
-                                        <span className="text-slate-500 font-bold shrink-0 text-[7.5px] sm:text-[9px]">Outing:</span>
-                                        <span className="font-bold text-blue-700 flex items-center gap-0.5 whitespace-nowrap">
+                                        <span className="text-slate-500 font-bold shrink-0 text-[7.5px] sm:text-[9px]">Leave:</span>
+                                        <span className="font-bold text-blue-700 flex items-center gap-0.5 truncate">
                                           <span className="text-[9px]">📅</span>
                                           <span>{formatLeaveDate(leaveFrom) || "Active"}</span>
                                         </span>
                                       </div>
                                       {leaveTo && (
                                         <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold text-slate-800 leading-tight mt-0.5">
-                                          <span className="text-slate-500 font-bold shrink-0 text-[7.5px] sm:text-[9px]">Coming:</span>
-                                          <span className="font-bold text-blue-700 whitespace-nowrap">{formatLeaveDate(leaveTo)}</span>
+                                          <span className="text-slate-500 font-bold shrink-0 text-[7.5px] sm:text-[9px]">Return:</span>
+                                          <span className="font-bold text-blue-700 truncate">{formatLeaveDate(leaveTo)}</span>
                                         </div>
                                       )}
                                       {leaveReason && (
-                                        <p className="text-[7.5px] sm:text-[9px] text-slate-600 font-medium italic mt-0.5 truncate max-w-[130px] sm:max-w-[180px]" title={leaveReason}>
+                                        <p className="text-[7.5px] sm:text-[9px] text-slate-600 font-medium italic mt-0.5 truncate w-full" title={leaveReason}>
                                           &ldquo;{leaveReason}&rdquo;
                                         </p>
                                       )}
