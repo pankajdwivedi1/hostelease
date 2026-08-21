@@ -236,8 +236,11 @@ export async function POST(request: NextRequest) {
                 if (uniqueOpenPasses.length > 0) {
                     for (const pass of uniqueOpenPasses) {
                         if (!pass) continue;
-                        const diffMs = now.getTime() - new Date(pass.checkOutTime).getTime();
-                        await db.gatePasses.update(pass._id, {
+                        const passId = (pass._id || pass.id)?.toString();
+                        if (!passId) continue;
+                        const checkOutDateObj = pass.checkOutTime ? new Date(pass.checkOutTime) : now;
+                        const diffMs = Math.max(0, now.getTime() - (isNaN(checkOutDateObj.getTime()) ? now.getTime() : checkOutDateObj.getTime()));
+                        await db.gatePasses.update(passId, {
                             checkInTime: now,
                             checkInISTTime: istTime,
                             checkInISTDate: istDate,
@@ -248,7 +251,7 @@ export async function POST(request: NextRequest) {
 
                         if (pass.permissionId) {
                             try {
-                                await db.permissions.update(pass.permissionId, { status: "completed" });
+                                await db.permissions.update(pass.permissionId.toString(), { status: "completed" });
                             } catch (pErr) {
                                 console.warn("Failed to complete linked permission:", pErr);
                             }
@@ -261,7 +264,7 @@ export async function POST(request: NextRequest) {
                     const activePermsRes = await db.permissions.list({ studentId: id.toString(), status: "allowed" });
                     const activePerms = Array.isArray(activePermsRes) ? activePermsRes : (activePermsRes?.records || activePermsRes?.permissions || []);
                     for (const p of activePerms) {
-                        const pId = p._id || p.id;
+                        const pId = (p._id || p.id)?.toString();
                         if (pId) {
                             await db.permissions.update(pId, { status: "completed" });
                         }

@@ -4871,6 +4871,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         body: JSON.stringify({
           studentId,
           userType: storedUserType,
+          action: currentStatus === 'out' ? 'in' : 'out',
           requestType,
           reason: reason || "Manual Override",
           operator: userEmail || storedUserType
@@ -7596,7 +7597,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 <div className="w-full md:w-[340px] shrink-0 flex flex-row md:flex-col gap-1 md:gap-2.5">
                                   <div className="flex items-start gap-2 md:gap-4 w-[50%] md:w-full">
                                     <button
-                                      onClick={() => handleProfileClick(student._id)}
+                                      onClick={() => handleProfileClick((student._id || student.id)?.toString())}
                                       className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
                                     >
                                       {profilePic ? (
@@ -7769,7 +7770,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <div className="flex items-center gap-2 w-full mt-1 pt-1 border-t border-gray-100">
                                           <span className="text-[9px] md:text-[10px] font-black text-amber-600 uppercase whitespace-nowrap tracking-tighter w-12 text-left">Status</span>
                                           <button
-                                            onClick={() => handleManualToggle(student._id, "out")}
+                                            onClick={() => handleManualToggle((student._id || student.id)?.toString(), "out")}
                                             className="flex-1 py-1.5 rounded-lg bg-amber-500 text-white text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 shadow-sm transition-all active:scale-95"
                                           >
                                             MARK IN
@@ -9861,7 +9862,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             const leaveFrom = studentPermission?.fromDateTime || student.leaveFrom || (student.checkOutIstDate ? `${student.checkOutIstDate} ${student.checkOutIstTime || ''}` : null);
                             const leaveTo = studentPermission?.toDateTime || student.leaveTo;
                             const leaveReason = studentPermission?.reason || student.leaveReason || (rStatus === 'hleave' ? "Home Leave" : null);
-                            const isHomeLeave = rStatus === 'hleave' || (studentPermission && (studentPermission.status === 'allowed' || studentPermission.status === 'pending'));
+                            const isHomeLeave = rStatus === 'hleave';
 
                             const formatLeaveDate = (dateVal: any) => {
                               if (!dateVal) return "";
