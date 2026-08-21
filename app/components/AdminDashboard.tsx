@@ -9823,13 +9823,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             };
 
                             return (
-                              <div key={student.id} className="p-3 sm:p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col gap-2 hover:border-slate-300 transition-all shadow-xs">
+                              <div key={student.id} className="p-2.5 sm:p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col gap-2 hover:border-slate-300 transition-all shadow-xs">
                                 {/* Row 1: Student Identity (Left) + Leave Details Box (Right) */}
-                                <div className="flex items-center justify-between gap-2 min-w-0">
+                                <div className="flex items-start justify-between gap-1.5 min-w-0">
                                   {/* Left: Avatar + Name + Reg ID + ERP ID */}
-                                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
                                     {/* Avatar */}
-                                    <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-xs sm:text-sm shadow-md overflow-hidden shrink-0 border border-slate-200">
+                                    <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-[11px] sm:text-xs shadow-sm overflow-hidden shrink-0 border border-slate-200">
                                       {student.profilePicture ? (
                                         <img src={student.profilePicture} alt={student.name} className="w-full h-full object-cover" />
                                       ) : (
@@ -9839,24 +9839,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                                     {/* Identity Info */}
                                     <div className="min-w-0 flex-1">
-                                      <h4 className="font-bold text-slate-800 text-xs sm:text-sm leading-tight truncate" title={student.name}>
+                                      <h4 className="font-bold text-slate-800 text-[11px] sm:text-xs leading-snug break-words" title={student.name}>
                                         <span>{student.name}</span>
                                         {showFlashingBlueDot ? (
                                           hasMarkedAttendance ? (
-                                            <span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 ml-1.5 align-middle shadow-sm" title="Night Attendance Marked" />
+                                            <span className="inline-block w-2 h-2 bg-blue-600 rounded-full animate-pulse shrink-0 ml-1 align-middle shadow-xs" title="Night Attendance Marked" />
                                           ) : (
-                                            <span className="inline-block w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shrink-0 ml-1.5 align-middle shadow-sm" title="Night Attendance Not Marked" />
+                                            <span className="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse shrink-0 ml-1 align-middle shadow-xs" title="Night Attendance Not Marked" />
                                           )
                                         ) : (
                                           hasMarkedAttendance && (
-                                            <span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full shrink-0 ml-1.5 align-middle shadow-sm" title="Night Attendance Marked" />
+                                            <span className="inline-block w-2 h-2 bg-blue-600 rounded-full shrink-0 ml-1 align-middle shadow-xs" title="Night Attendance Marked" />
                                           )
                                         )}
                                       </h4>
-                                      <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5 truncate">
+                                      <p className="text-[7.5px] sm:text-[9px] font-bold text-slate-400 tracking-tight leading-tight mt-0.5 whitespace-nowrap">
                                         REG ID: {student.registrationId || "N/A"}
                                       </p>
-                                      <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5 truncate">
+                                      <p className="text-[7.5px] sm:text-[9px] font-bold text-slate-400 tracking-tight leading-tight mt-0.5 whitespace-nowrap">
                                         ERP ID: {student.erpInformation || "N/A"}
                                       </p>
                                     </div>
@@ -9864,22 +9864,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                                   {/* Right: Leave Details Box (Matching Screenshot 2) */}
                                   {isHomeLeave && (
-                                    <div className="shrink-0 px-2.5 py-1.5 sm:px-3 sm:py-2 bg-blue-50/80 border border-blue-200/90 rounded-xl text-left shadow-2xs max-w-[170px] sm:max-w-[240px] md:max-w-[280px]">
-                                      <div className="flex items-center gap-1 text-[9.5px] sm:text-[11px] font-semibold text-slate-800 leading-tight">
-                                        <span className="text-slate-500 font-bold shrink-0">Outing:</span>
-                                        <span className="font-bold text-blue-700 flex items-center gap-1 truncate">
-                                          <span>📅</span>
+                                    <div className="shrink-0 px-2 py-1 sm:px-2.5 sm:py-1.5 bg-blue-50/90 border border-blue-200/90 rounded-lg text-left shadow-2xs">
+                                      <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold text-slate-800 leading-tight">
+                                        <span className="text-slate-500 font-bold shrink-0 text-[7.5px] sm:text-[9px]">Outing:</span>
+                                        <span className="font-bold text-blue-700 flex items-center gap-0.5 whitespace-nowrap">
+                                          <span className="text-[9px]">📅</span>
                                           <span>{formatLeaveDate(leaveFrom) || "Active"}</span>
                                         </span>
                                       </div>
                                       {leaveTo && (
-                                        <div className="flex items-center gap-1 text-[9.5px] sm:text-[11px] font-semibold text-slate-800 leading-tight mt-0.5">
-                                          <span className="text-slate-500 font-bold shrink-0">Coming:</span>
-                                          <span className="font-bold text-blue-700 truncate">{formatLeaveDate(leaveTo)}</span>
+                                        <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold text-slate-800 leading-tight mt-0.5">
+                                          <span className="text-slate-500 font-bold shrink-0 text-[7.5px] sm:text-[9px]">Coming:</span>
+                                          <span className="font-bold text-blue-700 whitespace-nowrap">{formatLeaveDate(leaveTo)}</span>
                                         </div>
                                       )}
                                       {leaveReason && (
-                                        <p className="text-[9px] sm:text-[10.5px] text-slate-600 font-medium italic mt-0.5 truncate" title={leaveReason}>
+                                        <p className="text-[7.5px] sm:text-[9px] text-slate-600 font-medium italic mt-0.5 truncate max-w-[130px] sm:max-w-[180px]" title={leaveReason}>
                                           &ldquo;{leaveReason}&rdquo;
                                         </p>
                                       )}
@@ -9891,7 +9891,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100/90">
                                   {/* Left: Status & Action Button */}
                                   <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
-                                    <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider shrink-0 ${
+                                    <span className={`px-2 py-0.5 rounded-full text-[7.5px] sm:text-[8px] font-black uppercase tracking-wider shrink-0 ${
                                       rStatus === 'in' ? 'bg-green-100 text-green-700' :
                                       rStatus === 'hleave' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-800'
                                     }`}>
@@ -9903,7 +9903,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     {rStatus === 'in' ? (
                                       <button
                                         onClick={() => openHomeLeaveModal(student)}
-                                        className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer shrink-0"
+                                        className="px-2 py-0.5 rounded-full text-[7.5px] sm:text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-all flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer shrink-0"
                                         title="Mark Student on Home-Leave"
                                       >
                                         <span>🏠</span> HOME-LEAVE
@@ -9911,7 +9911,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     ) : rStatus === 'hleave' ? (
                                       <button
                                         onClick={() => handleUnmarkHomeLeave(student)}
-                                        className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer shrink-0"
+                                        className="px-2 py-0.5 rounded-full text-[7.5px] sm:text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer shrink-0"
                                         title="Unmark Home-Leave / Mark as Returned"
                                       >
                                         <span>🟢</span> UNMARK LEAVE
@@ -9919,11 +9919,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     ) : null}
                                   </div>
 
-                                  {/* Right: Contact Icons (Smaller, straight horizontal line on the same row) */}
+                                  {/* Right: Contact Icons (Smaller, compact, straight horizontal line) */}
                                   <div className="flex items-center gap-1 shrink-0 ml-auto">
                                     <a
                                       href={`tel:${student.phoneNumber}`}
-                                      className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-xs text-[11px] sm:text-xs"
+                                      className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-md hover:bg-slate-50 transition-colors shadow-2xs text-[10px] sm:text-[11px]"
                                       title="Call Student"
                                     >
                                       📞
@@ -9931,7 +9931,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     {student.fatherNumber && (
                                       <a
                                         href={`tel:${student.fatherNumber}`}
-                                        className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-xs text-[11px] sm:text-xs"
+                                        className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-md hover:bg-slate-50 transition-colors shadow-2xs text-[10px] sm:text-[11px]"
                                         title={`Call Parent: ${student.fatherName || "Father"}`}
                                       >
                                         👨‍👩‍👦
@@ -9941,7 +9941,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       href={`https://wa.me/${student.phoneNumber}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-100/50 transition-colors shadow-xs text-[11px] sm:text-xs"
+                                      className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-md hover:bg-emerald-100/50 transition-colors shadow-2xs text-[10px] sm:text-[11px]"
                                       title="WhatsApp Student"
                                     >
                                       💬
