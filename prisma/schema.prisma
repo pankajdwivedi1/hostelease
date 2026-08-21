@@ -366,3 +366,18 @@ model PushSubscription {
 
   @@map("push_subscriptions")
 }
+
+// 16. admin_audit_logs
+model AdminAuditLog {
+  id          String   @id @default(uuid())
+  action      String
+  entityType  String?  @map("entity_type")
+  entityId    String?  @map("entity_id")
+  entityName  String?  @map("entity_name")
+  details     Json?    @default("{}")
+  performedBy String?  @default("admin") @map("performed_by")
+  tenantSlug  String?  @map("tenant_slug")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("admin_audit_logs")
+}

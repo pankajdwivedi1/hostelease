@@ -1203,28 +1203,8 @@ const getDbSource = async (): Promise<string> => {
             lastDbSourceCheck = now;
             return src;
         }
-    } catch {
-        // Fallback to Supabase REST ping if Prisma query fails
-        try {
-            let tenantId = null;
-            try {
-                tenantId = await getTenantIdOrThrow();
-            } catch (err) {}
-
-            const query = supabase.from('admin_settings').select('active_database_source');
-            const fetchPromise = tenantId ? query.eq('tenant_id', tenantId).limit(1).maybeSingle() : query.limit(1).maybeSingle();
-            const timeoutPromise = new Promise<{ data: any }>((resolve) => setTimeout(() => resolve({ data: null }), 1000));
-            
-            const { data } = await Promise.race([fetchPromise, timeoutPromise]);
-
-            if (data?.active_database_source) {
-                let src = String(data.active_database_source).toUpperCase();
-                if (src === 'RAILWAY') src = 'PRISMA';
-                cachedDbSource = src;
-                lastDbSourceCheck = now;
-                return src;
-            }
-        } catch {}
+    } catch (err) {
+        // Silent fallback to PRISMA (Railway)
     }
 
     if (envSource === 'SUPABASE' || envSource === 'PRISMA' || envSource === 'MONGODB') {

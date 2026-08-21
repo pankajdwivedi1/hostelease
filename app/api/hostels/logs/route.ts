@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import prisma from "@/lib/prisma";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import connectDB from "@/lib/mongodb";
 import HostelLog from "@/models/HostelLog";
@@ -18,11 +19,44 @@ export async function GET(request: NextRequest) {
     const source = await db.getSource();
     let logs: any[] = [];
 
-    if (source === 'SUPABASE') {
+    if (source === 'PRISMA') {
+      const dbLogs = await (prisma as any).adminAuditLog.findMany({
+        where: {
+          entityType: "student",
+          action: { in: ["STUDENT_CREATED", "STUDENT_DELETED", "STUDENT_EDITED"] }
+        },
+        orderBy: { createdAt: "desc" },
+        take: 200
+      });
+
+      const targetHostel = hostelName.toLowerCase().trim();
+      logs = (dbLogs || [])
+        .filter((item: any) => {
+          const details = typeof item.details === 'object' ? (item.details || {}) : {};
+          if (!details.isHostelActivity) return false;
+          if (!details.hostelName) return false;
+          const itemHostel = String(details.hostelName || "").toLowerCase().trim();
+          return itemHostel === targetHostel;
+        })
+        .map((item: any) => {
+          const details = typeof item.details === 'object' ? (item.details || {}) : {};
+          let actionType: 'ADD' | 'DELETE' | 'UPDATE' = 'UPDATE';
+          if (item.action === 'STUDENT_CREATED') actionType = 'ADD';
+          else if (item.action === 'STUDENT_DELETED') actionType = 'DELETE';
+
+          return {
+            id: item.id || item._id,
+            hostelName: details.hostelName || hostelName,
+            actionType,
+            studentName: details.studentName || item.entityName || "Unknown Student",
+            erpId: details.erpId || "N/A",
+            operator: details.operator || item.performedBy || "Admin",
+            createdAt: item.createdAt || new Date().toISOString()
+          };
+        });
+    } else if (source === 'SUPABASE') {
       const supabase = getSupabaseAdmin();
       if (supabase) {
-        // Fetch hostel activity logs specifically (isHostelActivity flag)
-        // filtered at DB level so large datasets don't displace hostel logs
         const targetHostel = hostelName.toLowerCase().trim();
 
         const { data, error } = await supabase
@@ -36,24 +70,16 @@ export async function GET(request: NextRequest) {
 
         if (error) throw error;
 
-
-        // Filter by hostelName in the details JSON field (case insensitive)
-        // IMPORTANT: Only show entries with isHostelActivity:true to avoid duplicates
-        // (both writeAdminAuditLog and writeHostelActivityLog write to this table,
-        //  but only writeHostelActivityLog sets isHostelActivity:true)
         logs = (data || [])
           .filter((item: any) => {
             const details = item.details || {};
-            // Must be a hostel activity log (not a generic admin audit log)
             if (!details.isHostelActivity) return false;
             if (!details.hostelName) return false;
             const itemHostel = (details.hostelName || "").toLowerCase().trim();
             return itemHostel === targetHostel;
           })
-
           .map((item: any) => {
             const details = item.details || {};
-            // Determine action type
             let actionType: 'ADD' | 'DELETE' | 'UPDATE' = 'UPDATE';
             if (item.action === 'STUDENT_CREATED') actionType = 'ADD';
             else if (item.action === 'STUDENT_DELETED') actionType = 'DELETE';
@@ -108,7 +134,11 @@ export async function DELETE(request: NextRequest) {
     }
 
     const source = await db.getSource();
-    if (source === 'SUPABASE') {
+    if (source === 'PRISMA') {
+      await (prisma as any).adminAuditLog.deleteMany({
+        where: { id: { in: logIds } }
+      });
+    } else if (source === 'SUPABASE') {
       const supabase = getSupabaseAdmin();
       if (!supabase) {
         throw new Error("Supabase client could not be initialized");
