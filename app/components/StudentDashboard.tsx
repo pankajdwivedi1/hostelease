@@ -1280,10 +1280,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     if (minimalData.student) {
                         currentStudent = {
                             ...minimalData.student,
-                            studentStatus: minimalData.student.studentStatus || "in"
+                            studentStatus: minimalData.student.studentStatus || "in",
+                            outingType: minimalData.student.outingType
                         };
                         if (isMounted) {
                             setStudentProfile(currentStudent);
+                            localStorage.setItem("cachedStudentData", JSON.stringify(currentStudent));
                             setLoading(false);
                         }
                     }
@@ -1329,8 +1331,17 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             console.log("⚡ [Device Caching] Profile unchanged on Railway DB. 0 KB downloaded!");
                             if (isMounted) {
                                 if (fullData.studentStatus) {
-                                    setStudentProfile(prev => prev ? ({ ...prev, studentStatus: fullData.studentStatus }) : prev);
+                                    setStudentProfile(prev => prev ? ({ ...prev, studentStatus: fullData.studentStatus, outingType: fullData.outingType }) : prev);
                                     localStorage.setItem("studentStatus", fullData.studentStatus);
+                                    const cached = localStorage.getItem("cachedStudentData");
+                                    if (cached) {
+                                        try {
+                                            const parsed = JSON.parse(cached);
+                                            parsed.studentStatus = fullData.studentStatus;
+                                            parsed.outingType = fullData.outingType;
+                                            localStorage.setItem("cachedStudentData", JSON.stringify(parsed));
+                                        } catch(e){}
+                                    }
                                 }
                                 setIsFullProfileLoaded(true);
                                 setLoading(false);
@@ -1341,7 +1352,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         if (fullData.student && isMounted) {
                             const fullStudentData = {
                                 ...fullData.student,
-                                studentStatus: fullData.student.studentStatus || "in"
+                                studentStatus: fullData.student.studentStatus || "in",
+                                outingType: fullData.student.outingType
                             };
                             setStudentProfile(fullStudentData);
                             setIsFullProfileLoaded(true);
@@ -2755,21 +2767,21 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             <div className={`grid grid-cols-2 ${gridColsClass} gap-2 sm:gap-3 mb-2`} style={{ fontFamily: 'var(--font-lora), Cambria' }}>
                                 <div className={`h-12 px-2.5 sm:px-3 rounded-xl border-2 shadow-sm flex flex-col justify-center overflow-hidden min-w-0 ${
                                     studentProfile.studentStatus === 'out'
-                                        ? (studentProfile.outingType === 'leave' || studentProfile.outingType === 'home-leave' || studentProfile.outingType === 'hleave')
+                                        ? String(studentProfile.outingType || '').toLowerCase().includes('leave')
                                             ? 'bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-blue-200'
                                             : 'bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 border-amber-200'
                                         : 'bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100 border-emerald-200'
                                 }`}>
                                     <span className={`block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${
                                         studentProfile.studentStatus === 'out'
-                                            ? (studentProfile.outingType === 'leave' || studentProfile.outingType === 'home-leave' || studentProfile.outingType === 'hleave')
+                                            ? String(studentProfile.outingType || '').toLowerCase().includes('leave')
                                                 ? 'text-blue-800'
                                                 : 'text-amber-800'
                                             : 'text-emerald-800'
                                     }`}>Current Status</span>
                                     <div className="flex items-center gap-1.5 min-w-0">
                                         {studentProfile.studentStatus === 'out' ? (
-                                            (studentProfile.outingType === 'leave' || studentProfile.outingType === 'home-leave' || studentProfile.outingType === 'hleave') ? (
+                                            String(studentProfile.outingType || '').toLowerCase().includes('leave') ? (
                                                 <>
                                                     <div className="w-2.5 h-2.5 rounded-full shrink-0 bg-blue-500 ring-2 ring-blue-200 animate-pulse" />
                                                     <p className="text-[9.5px] md:text-[11px] font-black text-blue-950 uppercase tracking-tight truncate">🏠 HOME-LEAVE</p>
@@ -4914,7 +4926,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     <div className="flex items-center gap-1.5 flex-wrap">
                                                         <h2 className="text-sm sm:text-base font-black text-slate-900 leading-tight truncate">{studentProfile.name}</h2>
                                                         {studentProfile.studentStatus === 'out' ? (
-                                                            (studentProfile.outingType === 'leave' || studentProfile.outingType === 'home-leave' || studentProfile.outingType === 'hleave') ? (
+                                                            String(studentProfile.outingType || '').toLowerCase().includes('leave') ? (
                                                                 <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-200 flex items-center gap-1">
                                                                     <span>🏠</span> HOME-LEAVE
                                                                 </span>

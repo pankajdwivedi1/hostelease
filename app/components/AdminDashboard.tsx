@@ -11314,7 +11314,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <div className="flex items-center gap-1.5 mb-1 flex-wrap min-w-0">
                         <h3 className="text-xs sm:text-base font-extrabold text-gray-900 leading-snug tracking-tight shrink-0 whitespace-normal sm:whitespace-nowrap" title={selectedStudent.name}>{selectedStudent.name}</h3>
                         {selectedStudent.studentStatus === 'out' ? (
-                          (selectedStudent.outingType === 'leave' || selectedStudent.outingType === 'home-leave' || selectedStudent.outingType === 'hleave') ? (
+                          String(selectedStudent.outingType || '').toLowerCase().includes('leave') ? (
                             <span className="shrink-0 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 shadow-2xs">
                               <span>🏠</span>
                               <span>H-LEAVE</span>

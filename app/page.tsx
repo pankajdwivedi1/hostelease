@@ -122,13 +122,13 @@ export default function Dashboard() {
                       } else if (response.ok) {
                         const data = await response.json();
                         if (data.notModified) {
-                          if (data.studentStatus && currentCache.studentStatus !== data.studentStatus) {
-                            const updated = { ...currentCache, studentStatus: data.studentStatus };
+                          if (data.studentStatus && (currentCache.studentStatus !== data.studentStatus || currentCache.outingType !== data.outingType)) {
+                            const updated = { ...currentCache, studentStatus: data.studentStatus, outingType: data.outingType };
                             localStorage.setItem("cachedStudentData", JSON.stringify(updated));
                             setStudentData(updated);
                           }
                         } else if (data.student) {
-                          const updatedStudent = { ...currentCache, ...data.student };
+                          const updatedStudent = { ...currentCache, ...data.student, studentStatus: data.student.studentStatus || "in", outingType: data.student.outingType };
                           localStorage.setItem("cachedStudentData", JSON.stringify(updatedStudent));
                           setStudentData(updatedStudent);
                         }
