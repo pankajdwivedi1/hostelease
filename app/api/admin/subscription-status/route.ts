@@ -22,7 +22,8 @@ const DEFAULT_SETTINGS = {
     discount12Month: 30,
     bankTransferDiscount: 3,
     supportWhatsappNumber: "8269418956",
-    customQrCodeUrl: ""
+    customQrCodeUrl: "",
+    enforceMandatoryPush: false
 };
 
 export async function GET(request: NextRequest) {

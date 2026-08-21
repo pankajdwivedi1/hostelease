@@ -16,6 +16,22 @@ export async function GET(request: NextRequest) {
         const userType = cookieStore.get("userType")?.value;
         const isAdmin = userType === "admin" || userType === "superadmin";
 
+        let enforceMandatoryPush = false;
+        try {
+            const { prisma } = await import("@/lib/prisma");
+            const platformConfig = await prisma.platformSetting.findUnique({
+                where: { id: 'boss_payment_config' }
+            });
+            if (platformConfig?.settings) {
+                const s = platformConfig.settings as any;
+                if (s.enforceMandatoryPush === true) enforceMandatoryPush = true;
+            }
+        } catch (e) {}
+
+        if (settings?.notificationSettings?.enforceMandatoryPush === true) {
+            enforceMandatoryPush = true;
+        }
+
         return NextResponse.json({
             success: true,
             locations: settings?.hostelLocations || [],
@@ -50,7 +66,8 @@ export async function GET(request: NextRequest) {
             allowDeanRemoveStudent: settings?.allowDeanRemoveStudent || false,
             allowBulkStudentUpdates: settings?.allowBulkStudentUpdates || false,
             allowBulkPermissionManagement: settings?.allowBulkPermissionManagement ?? true,
-            qrScanCooldownMinutes: settings?.qrScanCooldownMinutes !== undefined ? settings.qrScanCooldownMinutes : 5
+            qrScanCooldownMinutes: settings?.qrScanCooldownMinutes !== undefined ? settings.qrScanCooldownMinutes : 5,
+            enforceMandatoryPush
         });
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);

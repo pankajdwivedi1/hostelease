@@ -595,7 +595,8 @@ export default function SuperAdminDashboard() {
         paymentVerifiedEnabled: true,
         leaveDecisionEnabled: true,
         outingGracePeriod: 30,
-        absoluteOutingCutoff: "20:30"
+        absoluteOutingCutoff: "20:30",
+        enforceMandatoryPush: false
     });
 
     const [newTenant, setNewTenant] = useState({
@@ -787,7 +788,8 @@ export default function SuperAdminDashboard() {
                     paymentVerifiedEnabled: data.settings.paymentVerifiedEnabled !== false,
                     leaveDecisionEnabled: data.settings.leaveDecisionEnabled !== false,
                     outingGracePeriod: data.settings.outingGracePeriod ?? 30,
-                    absoluteOutingCutoff: data.settings.absoluteOutingCutoff || "20:30"
+                    absoluteOutingCutoff: data.settings.absoluteOutingCutoff || "20:30",
+                    enforceMandatoryPush: data.settings.enforceMandatoryPush === true
                 }));
             }
         } catch (error) {
@@ -2658,6 +2660,26 @@ export default function SuperAdminDashboard() {
                                                 className="sr-only peer"
                                                 checked={paymentSettings.globalPushEnabled}
                                                 onChange={e => setPaymentSettings({...paymentSettings, globalPushEnabled: e.target.checked})}
+                                            />
+                                            <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600 shadow-inner"></div>
+                                        </label>
+                                    </div>
+
+                                    {/* Mandatory Student Push Notification Enforcement */}
+                                    <div className="flex items-center justify-between border-b border-amber-100/50 pb-4 bg-amber-50/80 p-3.5 rounded-2xl border border-amber-200">
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-xs font-black text-amber-950 uppercase tracking-wide">Mandatory Student Notification Lock</p>
+                                                <span className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300">Boss Control</span>
+                                            </div>
+                                            <p className="text-[10px] text-amber-800 font-medium mt-0.5">When enabled, students cannot use their dashboard until phone/browser notifications are switched ON.</p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                            <input 
+                                                type="checkbox" 
+                                                className="sr-only peer"
+                                                checked={paymentSettings.enforceMandatoryPush}
+                                                onChange={e => setPaymentSettings({...paymentSettings, enforceMandatoryPush: e.target.checked})}
                                             />
                                             <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600 shadow-inner"></div>
                                         </label>

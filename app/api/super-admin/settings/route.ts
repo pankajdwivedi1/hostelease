@@ -36,7 +36,8 @@ const DEFAULT_SETTINGS = {
     paymentVerifiedEnabled: true,
     leaveDecisionEnabled: true,
     outingGracePeriod: 30,
-    absoluteOutingCutoff: "20:30"
+    absoluteOutingCutoff: "20:30",
+    enforceMandatoryPush: false
 };
 
 export async function GET(request: NextRequest) {

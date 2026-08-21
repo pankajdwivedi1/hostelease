@@ -270,6 +270,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [overlapRadius, setOverlapRadius] = useState(false); // ⚡ NEW
     const [prioritizeAssignedHostel, setPrioritizeAssignedHostel] = useState(false); // ⚡ NEW
     const [deviceIdState, setDeviceIdState] = useState<string>("");
+    const [enforceMandatoryPush, setEnforceMandatoryPush] = useState<boolean>(false);
+    const [pushPermissionStatus, setPushPermissionStatus] = useState<NotificationPermission | "unsupported">("default");
+    const [isRequestingPush, setIsRequestingPush] = useState<boolean>(false);
 
     // ⚡ FIELD ENFORCEMENT: Dynamic blocker system driven by admin settings
     const [enforcedMissingFields, setEnforcedMissingFields] = useState<{ fieldId: string; fieldLabel: string; displayMode: string; order: number }[]>([]);
@@ -635,6 +638,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 }
                 if (data.overlapRadius !== undefined) setOverlapRadius(data.overlapRadius);
                 if (data.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(data.prioritizeAssignedHostel);
+                if (data.enforceMandatoryPush !== undefined) setEnforceMandatoryPush(data.enforceMandatoryPush === true);
             }
         } catch (e) {
             console.error("Error fetching system settings:", e);
@@ -1167,6 +1171,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     const userType = isParent ? "parent" : "student";
                     
                     await registerPushNotifications(userId, userType);
+                    checkPushPermission();
                 } catch (e) {
                     console.error("Failed to register student/parent push notifications:", e);
                 }
@@ -1174,6 +1179,73 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             initPush();
         }
     }, [studentProfile?._id, isParentView]);
+
+    // ⚡ Realtime Push Notification Permission Watcher & Auto-Unlock
+    const checkPushPermission = useCallback(() => {
+        if (typeof window === "undefined" || !("Notification" in window)) {
+            setPushPermissionStatus("unsupported");
+            return "unsupported";
+        }
+        const current = Notification.permission;
+        setPushPermissionStatus(current);
+        return current;
+    }, []);
+
+    useEffect(() => {
+        checkPushPermission();
+
+        const handleFocusOrVisibility = () => {
+            checkPushPermission();
+        };
+
+        window.addEventListener("focus", handleFocusOrVisibility);
+        document.addEventListener("visibilitychange", handleFocusOrVisibility);
+
+        let permObj: any = null;
+        if (typeof navigator !== "undefined" && navigator.permissions && navigator.permissions.query) {
+            navigator.permissions.query({ name: 'notifications' as any }).then(status => {
+                permObj = status;
+                status.onchange = () => {
+                    checkPushPermission();
+                };
+            }).catch(() => {});
+        }
+
+        return () => {
+            window.removeEventListener("focus", handleFocusOrVisibility);
+            document.removeEventListener("visibilitychange", handleFocusOrVisibility);
+            if (permObj) permObj.onchange = null;
+        };
+    }, [checkPushPermission]);
+
+    const handleEnablePushNotifications = async () => {
+        if (typeof window === "undefined" || !("Notification" in window)) return;
+        setIsRequestingPush(true);
+        try {
+            const isParent = localStorage.getItem("userType") === "parent" || isParentView;
+            const userId = isParent ? (studentProfile?.fatherNumber || (studentProfile?._id ? studentProfile._id + "_parent" : "parent")) : (studentProfile?._id || "");
+            const userType = isParent ? "parent" : "student";
+            
+            await registerPushNotifications(userId, userType);
+            const res = checkPushPermission();
+            if (res === "granted") {
+                showToast("Notifications enabled successfully!", "success");
+            }
+        } catch (e: any) {
+            console.error("Error enabling push notifications:", e);
+        } finally {
+            setIsRequestingPush(false);
+        }
+    };
+
+    const handleOpenAppSettings = () => {
+        try {
+            // Attempt Android intent to app settings
+            window.location.href = "intent:#Intent;action=android.settings.APP_NOTIFICATION_SETTINGS;end";
+        } catch (e) {
+            console.log("Direct intent fallback:", e);
+        }
+    };
 
     // ⚡ OPTIMIZATION: Lazy-load notification images ONLY when the popup is shown
     useEffect(() => {
@@ -4491,6 +4563,79 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     "Save & Continue"
                                                 )}
                                             </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ⚡ MANDATORY PUSH NOTIFICATION ENFORCEMENT LOCK SCREEN */}
+                            {enforceMandatoryPush && pushPermissionStatus !== 'granted' && pushPermissionStatus !== 'unsupported' && !isParentView && (
+                                <div className="fixed inset-0 z-[125] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
+                                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-white/20 p-6 text-center space-y-4">
+                                        <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-orange-500/30 animate-pulse">
+                                            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                            </svg>
+                                        </div>
+
+                                        <div>
+                                            <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                                                {pushPermissionStatus === 'denied' ? '🚫 Notifications Are Blocked' : '🔔 Mandatory Notification Access'}
+                                            </h2>
+                                            <p className="text-slate-500 text-xs mt-1.5 leading-relaxed font-medium">
+                                                {pushPermissionStatus === 'denied'
+                                                    ? 'Campus safety rules require notifications enabled on your phone for Gatepass & Curfew approvals.'
+                                                    : 'To receive gatepass approvals, leave status, and curfew safety alerts, notifications must be enabled on your phone.'}
+                                            </p>
+                                        </div>
+
+                                        {pushPermissionStatus === 'denied' ? (
+                                            <div className="bg-amber-50/90 rounded-2xl p-4 border border-amber-200/80 text-left space-y-2">
+                                                <p className="text-[11px] font-black text-amber-900 uppercase tracking-wider">How to unblock in 2 seconds:</p>
+                                                <ol className="text-[11px] text-amber-950/80 font-semibold space-y-1.5 list-decimal list-inside leading-snug">
+                                                    <li>Tap the <strong className="text-amber-950 font-black">🔒 Lock icon</strong> in your browser address bar above.</li>
+                                                    <li>Tap <strong className="text-amber-950 font-black">Permissions</strong> ➔ Toggle <strong className="text-amber-950 font-black">Notifications</strong> to <strong className="text-green-700 font-black">"Allow"</strong>.</li>
+                                                    <li>Switch back to this app (it will unlock automatically!).</li>
+                                                </ol>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-blue-50 rounded-2xl p-3 border border-blue-100 text-left flex items-start gap-2.5">
+                                                <span className="text-lg">🛡️</span>
+                                                <p className="text-[11px] text-blue-900 font-semibold leading-relaxed">
+                                                    Tap <strong>"Enable Notifications Now"</strong> below and then choose <strong>"Allow"</strong> when your browser asks.
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        <div className="pt-2 space-y-2">
+                                            {pushPermissionStatus === 'denied' ? (
+                                                <>
+                                                    <button
+                                                        onClick={handleOpenAppSettings}
+                                                        className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-orange-500/20 active:scale-98 transition-all flex items-center justify-center gap-2"
+                                                    >
+                                                        <span>⚙️ Open Phone / Browser Settings</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={checkPushPermission}
+                                                        className="w-full py-3 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase tracking-wider transition-all"
+                                                    >
+                                                        🔄 Check Status Again
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <button
+                                                    onClick={handleEnablePushNotifications}
+                                                    disabled={isRequestingPush}
+                                                    className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-blue-500/25 active:scale-98 transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    {isRequestingPush ? (
+                                                        <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                    ) : (
+                                                        <span>🔔 Enable Notifications Now</span>
+                                                    )}
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
