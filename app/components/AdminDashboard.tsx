@@ -6441,8 +6441,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       all: baseList.length,
       in: baseList.filter(s => s.studentStatus === 'in').length,
       out: outStudents.length,
-      leave: outStudents.filter(s => s.outingType === 'leave').length,
-      pass: outStudents.filter(s => s.outingType !== 'leave').length
+      leave: outStudents.filter(s => { const t = String(s.outingType || '').toLowerCase(); return t === 'leave' || t === 'home-leave' || t === 'hleave'; }).length,
+      pass: outStudents.filter(s => { const t = String(s.outingType || '').toLowerCase(); return !(t === 'leave' || t === 'home-leave' || t === 'hleave'); }).length
     };
   }, [students, dropdownFilteredStudents, hostelFilter, isWarden, authorizedHostels, dashboardStats]);
 
@@ -9825,7 +9825,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         >
                                           <span>🏠</span> HOME-LEAVE
                                         </button>
-                                      ) : (
+                                      ) : rStatus === 'hleave' ? (
                                         <button
                                           onClick={() => handleUnmarkHomeLeave(student)}
                                           className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
@@ -9833,7 +9833,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         >
                                           <span>🟢</span> UNMARK LEAVE
                                         </button>
-                                      )}
+                                      ) : null}
                                     </div>
                                   </div>
                                 </div>
@@ -10952,9 +10952,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <div className="flex items-center gap-1.5 flex-wrap">
                                           <h3 className="text-[11px] font-bold text-gray-900 leading-tight group-hover:text-blue-600 transition-colors">{student.name}</h3>
                                           {/* Mobile Status Badge: Right beside student name */}
-                                          <span className={`sm:hidden flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${student.studentStatus === 'out' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
-                                            {student.studentStatus === 'out' ? 'out' : 'in'}
-                                          </span>
+                                          {(() => {
+                                            const oType = String(student.outingType || '').toLowerCase().trim();
+                                            const isHomeleave = oType === 'leave' || oType === 'home-leave' || oType === 'hleave';
+                                            if (student.studentStatus === 'out') {
+                                              return (
+                                                <span className={`sm:hidden flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${isHomeleave ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-yellow-50 text-yellow-700 border-yellow-100'}`}>
+                                                  {isHomeleave ? '🏠 HOME-LEAVE' : '🚪 GATE-PASS'}
+                                                </span>
+                                              );
+                                            }
+                                            return (
+                                              <span className="sm:hidden flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border bg-green-50 text-green-600 border-green-100">
+                                                in
+                                              </span>
+                                            );
+                                          })()}
                                         </div>
                                         <p className="text-[10px] text-gray-500 mt-0.5 truncate">
                                            {(() => {
@@ -10973,9 +10986,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       </div>
 
                                       {/* Desktop Status Badge (top-right on desktop) */}
-                                      <span className={`hidden sm:inline-block flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${student.studentStatus === 'out' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
-                                        {student.studentStatus === 'out' ? 'out' : 'in'}
-                                      </span>
+                                      {(() => {
+                                        const oType = String(student.outingType || '').toLowerCase().trim();
+                                        const isHomeleave = oType === 'leave' || oType === 'home-leave' || oType === 'hleave';
+                                        if (student.studentStatus === 'out') {
+                                          return (
+                                            <span className={`hidden sm:inline-block flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${isHomeleave ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-yellow-50 text-yellow-700 border-yellow-100'}`}>
+                                              {isHomeleave ? '🏠 HOME-LEAVE' : '🚪 GATE-PASS'}
+                                            </span>
+                                          );
+                                        }
+                                        return (
+                                          <span className="hidden sm:inline-block flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border bg-green-50 text-green-600 border-green-100">
+                                            in
+                                          </span>
+                                        );
+                                      })()}
 
                                       {/* Mobile Action Buttons (shifted to top-right in place of IN on mobile, matching IN style & alignment) */}
                                       <div className="sm:hidden flex-shrink-0 flex items-center">
