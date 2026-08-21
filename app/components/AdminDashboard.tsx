@@ -9767,7 +9767,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   {/* Room Details Modal */}
                   {selectedRoom && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-                      <div className="bg-white w-full max-w-lg sm:max-w-xl rounded-3xl p-3.5 sm:p-7 shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-100">
+                      <div className="bg-white w-full max-w-lg sm:max-w-2xl md:max-w-3xl rounded-3xl p-4 sm:p-7 shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-100">
                         <button
                           onClick={() => setSelectedRoom(null)}
                           className="absolute top-4 right-4 sm:top-5 sm:right-5 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
@@ -9783,7 +9783,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <p className="text-[11px] sm:text-xs text-slate-500 font-bold mt-0.5 sm:mt-1">Occupancy Details & Roommate Contact Cards</p>
                         </div>
 
-                        <div className="space-y-2.5 sm:space-y-3 max-h-[80vh] sm:max-h-none overflow-y-auto pr-0.5 no-scrollbar">
+                        <div className="space-y-3 max-h-[80vh] sm:max-h-none overflow-y-auto pr-0.5 no-scrollbar">
                           {selectedRoomStudents.map(student => {
                             const rStatus = getRoommateStatus(student);
                             const studentIdStr = (student.id || student._id)?.toString();
@@ -9823,96 +9823,131 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             };
 
                             return (
-                              <div key={student.id} className="p-2.5 sm:p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-row items-center justify-between gap-2 sm:gap-3 hover:border-slate-200 transition-all">
-                                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-                                  {/* Avatar or Profile Image */}
-                                  <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-xs sm:text-sm shadow-md overflow-hidden shrink-0 border border-slate-200">
-                                    {student.profilePicture ? (
-                                      <img src={student.profilePicture} alt={student.name} className="w-full h-full object-cover" />
-                                    ) : (
-                                      student.name.slice(0, 2).toUpperCase()
-                                    )}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <h4 className="font-bold text-slate-800 text-xs sm:text-sm leading-snug break-words" title={student.name}>
-                                      <span>{student.name}</span>
-                                      {showFlashingBlueDot ? (
-                                        hasMarkedAttendance ? (
-                                          <span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 ml-1.5 align-middle shadow-sm" title="Night Attendance Marked" />
-                                        ) : (
-                                          <span className="inline-block w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shrink-0 ml-1.5 align-middle shadow-sm" title="Night Attendance Not Marked" />
-                                        )
+                              <div key={student.id} className="p-3 sm:p-4 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-300 transition-all shadow-xs">
+                                {/* Top Row on Mobile / Left Column on Desktop */}
+                                <div className="flex items-center justify-between sm:justify-start gap-3 min-w-0">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    {/* Avatar */}
+                                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-xs sm:text-sm shadow-md overflow-hidden shrink-0 border border-slate-200">
+                                      {student.profilePicture ? (
+                                        <img src={student.profilePicture} alt={student.name} className="w-full h-full object-cover" />
                                       ) : (
-                                        hasMarkedAttendance && (
-                                          <span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full shrink-0 ml-1.5 align-middle shadow-sm" title="Night Attendance Marked" />
-                                        )
+                                        student.name.slice(0, 2).toUpperCase()
                                       )}
-                                    </h4>
-                                    <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
-                                      Reg ID: {student.registrationId || "N/A"}
-                                    </p>
-                                    <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
-                                      ERP ID: {student.erpInformation || "N/A"}
-                                    </p>
-                                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                                      <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${
-                                        rStatus === 'in' ? 'bg-green-100 text-green-700' :
-                                        rStatus === 'hleave' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-800'
-                                      }`}>
-                                        {rStatus === 'in' ? '🟢 IN' :
-                                         rStatus === 'hleave' ? '🔵 H-LEAVE' : '🟡 G-PASS'}
-                                      </span>
-
-                                      {/* 🏠 Direct Home-Leave / Mark Returned Action Button */}
-                                      {rStatus === 'in' ? (
-                                        <button
-                                          onClick={() => openHomeLeaveModal(student)}
-                                          className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
-                                          title="Mark Student on Home-Leave"
-                                        >
-                                          <span>🏠</span> HOME-LEAVE
-                                        </button>
-                                      ) : rStatus === 'hleave' ? (
-                                        <button
-                                          onClick={() => handleUnmarkHomeLeave(student)}
-                                          className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
-                                          title="Unmark Home-Leave / Mark as Returned"
-                                        >
-                                          <span>🟢</span> UNMARK LEAVE
-                                        </button>
-                                      ) : null}
                                     </div>
+
+                                    {/* Student Identity */}
+                                    <div className="min-w-0">
+                                      <h4 className="font-bold text-slate-800 text-xs sm:text-sm leading-snug whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] sm:max-w-[180px]" title={student.name}>
+                                        <span>{student.name}</span>
+                                        {showFlashingBlueDot ? (
+                                          hasMarkedAttendance ? (
+                                            <span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 ml-1.5 align-middle shadow-sm" title="Night Attendance Marked" />
+                                          ) : (
+                                            <span className="inline-block w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shrink-0 ml-1.5 align-middle shadow-sm" title="Night Attendance Not Marked" />
+                                          )
+                                        ) : (
+                                          hasMarkedAttendance && (
+                                            <span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full shrink-0 ml-1.5 align-middle shadow-sm" title="Night Attendance Marked" />
+                                          )
+                                        )}
+                                      </h4>
+                                      <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5 whitespace-nowrap">
+                                        Reg ID: {student.registrationId || "N/A"}
+                                      </p>
+                                      <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5 whitespace-nowrap">
+                                        ERP ID: {student.erpInformation || "N/A"}
+                                      </p>
+                                      <div className="flex items-center gap-1.5 mt-1.5 flex-nowrap">
+                                        <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider shrink-0 ${
+                                          rStatus === 'in' ? 'bg-green-100 text-green-700' :
+                                          rStatus === 'hleave' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-800'
+                                        }`}>
+                                          {rStatus === 'in' ? '🟢 IN' :
+                                           rStatus === 'hleave' ? '🔵 H-LEAVE' : '🟡 G-PASS'}
+                                        </span>
+
+                                        {/* 🏠 Direct Home-Leave / Mark Returned Action Button */}
+                                        {rStatus === 'in' ? (
+                                          <button
+                                            onClick={() => openHomeLeaveModal(student)}
+                                            className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer shrink-0"
+                                            title="Mark Student on Home-Leave"
+                                          >
+                                            <span>🏠</span> HOME-LEAVE
+                                          </button>
+                                        ) : rStatus === 'hleave' ? (
+                                          <button
+                                            onClick={() => handleUnmarkHomeLeave(student)}
+                                            className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer shrink-0"
+                                            title="Unmark Home-Leave / Mark as Returned"
+                                          >
+                                            <span>🟢</span> UNMARK LEAVE
+                                          </button>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Mobile Contact Icons (aligned top-right on mobile) */}
+                                  <div className="flex sm:hidden items-center gap-1 shrink-0">
+                                    <a
+                                      href={`tel:${student.phoneNumber}`}
+                                      className="p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-xs"
+                                      title="Call Student"
+                                    >
+                                      📞
+                                    </a>
+                                    {student.fatherNumber && (
+                                      <a
+                                        href={`tel:${student.fatherNumber}`}
+                                        className="p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-xs"
+                                        title={`Call Parent: ${student.fatherName || "Father"}`}
+                                      >
+                                        👨‍👩‍👦
+                                      </a>
+                                    )}
+                                    <a
+                                      href={`https://wa.me/${student.phoneNumber}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1.5 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-100/50 transition-colors shadow-sm text-xs"
+                                      title="WhatsApp Student"
+                                    >
+                                      💬
+                                    </a>
                                   </div>
                                 </div>
 
-                                {/* 📅 Active Leave Details Banner (Marked Area) */}
+                                {/* Middle Column: Leave Details Box (Matching Screenshot 3 format) */}
                                 {isHomeLeave && (
-                                  <div className="flex flex-col justify-center px-2.5 py-1.5 bg-blue-50/95 border border-blue-200/90 rounded-xl min-w-0 max-w-[180px] sm:max-w-[280px] shrink shadow-2xs">
-                                    <div className="flex items-center gap-1 text-[9.5px] sm:text-[10.5px] font-bold text-blue-700 leading-snug">
-                                      <span className="shrink-0">📅</span>
-                                      <span className="truncate">
-                                        {leaveFrom ? (
-                                          <>
-                                            {formatLeaveDate(leaveFrom)}
-                                            {leaveTo && ` • to ${formatLeaveDate(leaveTo)}`}
-                                          </>
-                                        ) : (
-                                          "Home Leave Active"
-                                        )}
+                                  <div className="w-full sm:w-auto flex-1 flex flex-col justify-center px-3.5 py-2 bg-blue-50/80 border border-blue-200/90 rounded-xl text-left shadow-2xs sm:mx-2">
+                                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-800">
+                                      <span className="text-slate-500 font-bold text-[10px] uppercase tracking-wider shrink-0 w-14">Outing:</span>
+                                      <span className="font-bold text-blue-700 flex items-center gap-1 truncate">
+                                        <span>📅</span>
+                                        <span>{formatLeaveDate(leaveFrom) || "Home Leave Active"}</span>
                                       </span>
                                     </div>
+                                    {leaveTo && (
+                                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-800 mt-0.5">
+                                        <span className="text-slate-500 font-bold text-[10px] uppercase tracking-wider shrink-0 w-14">Coming:</span>
+                                        <span className="font-bold text-blue-700 truncate">{formatLeaveDate(leaveTo)}</span>
+                                      </div>
+                                    )}
                                     {leaveReason && (
-                                      <p className="text-[9px] sm:text-[10px] text-blue-900 font-medium italic mt-0.5 truncate" title={leaveReason}>
+                                      <p className="text-[10.5px] text-slate-600 font-medium italic mt-1 truncate" title={leaveReason}>
                                         &ldquo;{leaveReason}&rdquo;
                                       </p>
                                     )}
                                   </div>
                                 )}
 
-                                <div className="flex flex-row sm:flex-col items-center gap-1 sm:gap-1.5 shrink-0 self-end sm:self-center mb-0.5 sm:mb-0">
+                                {/* Desktop Contact Icons (Right Column) */}
+                                <div className="hidden sm:flex flex-col items-center gap-1.5 shrink-0 self-center">
                                   <a
                                     href={`tel:${student.phoneNumber}`}
-                                    className="p-1 sm:p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-[10px] sm:text-xs"
+                                    className="p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-xs"
                                     title="Call Student"
                                   >
                                     📞
@@ -9920,7 +9955,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   {student.fatherNumber && (
                                     <a
                                       href={`tel:${student.fatherNumber}`}
-                                      className="p-1 sm:p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-[10px] sm:text-xs"
+                                      className="p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-xs"
                                       title={`Call Parent: ${student.fatherName || "Father"}`}
                                     >
                                       👨‍👩‍👦
@@ -9930,7 +9965,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     href={`https://wa.me/${student.phoneNumber}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="p-1 sm:p-1.5 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-100/50 transition-colors shadow-sm text-[10px] sm:text-xs"
+                                    className="p-1.5 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-100/50 transition-colors shadow-sm text-xs"
                                     title="WhatsApp Student"
                                   >
                                     💬
