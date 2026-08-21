@@ -120,15 +120,42 @@ export async function POST(request: NextRequest) {
                     }
                 }
 
-                const targetType = requestType || 'HOME-LEAVE';
-                const passReason = reason || `Manual ${targetType} Override`;
-
-                // If dates were provided (e.g. from manual home leave modal), parse them
-                const fromDt = body.fromDateTime ? new Date(body.fromDateTime) : now;
-                const toDt = body.toDateTime ? new Date(body.toDateTime) : new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
-
+                // Determine target outing type:
+                // Only mark as HOME-LEAVE if explicitly requested (e.g. from Visual Rooms Mark Home-Leave)
+                // OR if the student already has an approved HOME-LEAVE permission from Dean/Warden!
+                let targetType = requestType;
+                let passReason = reason;
                 let createdPermId: string | undefined;
-                if (targetType === 'HOME-LEAVE' || targetType === 'GATE-PASS' || targetType === 'leave') {
+
+                if (!targetType || targetType === 'GATE-PASS' || targetType === 'outing') {
+                    // Check if student has an existing approved HOME-LEAVE permission from Dean or Warden
+                    const permsRes = await db.permissions.list({
+                        studentId: id.toString(),
+                        status: "allowed"
+                    }, { limit: 5 });
+                    const activePerms = Array.isArray(permsRes) ? permsRes : (permsRes?.records || permsRes?.permissions || []);
+                    const approvedHomeLeave = activePerms.find((p: any) => {
+                        const rType = String(p.requestType || '').toLowerCase();
+                        return (rType === 'home-leave' || rType === 'leave' || rType === 'hleave') &&
+                               (p.status === 'allowed' || p.wardenStatus === 'approved' || p.deanStatus === 'approved');
+                    });
+
+                    if (approvedHomeLeave) {
+                        targetType = 'HOME-LEAVE';
+                        passReason = passReason || approvedHomeLeave.reason || 'Approved Home Leave';
+                        createdPermId = approvedHomeLeave._id || approvedHomeLeave.id;
+                    } else {
+                        targetType = 'GATE-PASS';
+                        passReason = passReason || 'Gate Pass (Outing)';
+                    }
+                } else if (targetType === 'HOME-LEAVE' || targetType === 'leave') {
+                    targetType = 'HOME-LEAVE';
+                    passReason = passReason || 'Home Leave (Manual Approval)';
+
+                    // Create permission record since Dean/Warden explicitly marked Home Leave
+                    const fromDt = body.fromDateTime ? new Date(body.fromDateTime) : now;
+                    const toDt = body.toDateTime ? new Date(body.toDateTime) : new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+
                     try {
                         const createdPerm = await db.permissions.create({
                             studentId: id.toString(),
@@ -143,12 +170,15 @@ export async function POST(request: NextRequest) {
                             status: "allowed",
                             wardenStatus: "approved",
                             deanStatus: "approved",
-                            requestType: targetType
+                            requestType: "HOME-LEAVE"
                         });
                         createdPermId = createdPerm?._id || createdPerm?.id;
                     } catch (permErr) {
                         console.error("Failed to create permission record on manual toggle:", permErr);
                     }
+                } else {
+                    targetType = 'GATE-PASS';
+                    passReason = passReason || 'Gate Pass (Outing)';
                 }
 
                 await db.gatePasses.create({
