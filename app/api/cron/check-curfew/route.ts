@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import db from "@/lib/dbAdapter";
+import { db } from "@/lib/dbAdapter";
 import { sendPushNotification } from "@/lib/pushNotification";
 
 export const dynamic = "force-dynamic";
