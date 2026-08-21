@@ -59,7 +59,9 @@ export async function POST(request: NextRequest) {
                 message: "Direct payment verified & subscription extended!",
                 newEndDate: newEndDate.toISOString()
             });
+        }
 
+        return NextResponse.json({ success: false, error: "Invalid database source" }, { status: 500 });
     } catch (error: any) {
         console.error("Submit direct payment error:", error);
         return NextResponse.json({ success: false, error: error.message || "Failed to process direct payment" }, { status: 500 });
