@@ -1223,8 +1223,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const data = await res.json();
       if (data.wardenAccounts) setWardenAccounts(data.wardenAccounts);
     } catch (error) {
-      console.error("Failed to fetch warden accounts", error);
-      showToast("Failed to fetch warden accounts.", "error");
+      console.warn("Silent fallback: Failed to fetch warden accounts", error);
     }
   };
 
@@ -2546,8 +2545,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         setHostelLocations([]);
       }
     } catch (error) {
-      console.error("Error fetching locations:", error);
-      showToast("Error fetching hostel locations.", "error");
+      console.warn("Silent fallback: Error fetching locations:", error);
       setHostelLocations([]);
     } finally {
       setIsLocationsLoading(false);
@@ -2567,8 +2565,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         });
       }
     } catch (error) {
-      console.error("Error fetching attendance settings:", error);
-      showToast("Error fetching attendance time settings.", "error");
+      console.warn("Silent fallback: Error fetching attendance settings:", error);
     }
   };
 
@@ -2669,8 +2666,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         });
       }
     } catch (e) {
-      console.error("Failed to fetch tenant config", e);
-      showToast("Failed to fetch university branding config.", "error");
+      console.warn("Silent fallback: Failed to fetch tenant branding config", e);
     }
   };
 
@@ -2776,8 +2772,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         setHostelsConfig(hostelsData.hostels || []);
       }
     } catch (error) {
-      console.error("Error fetching system settings:", error);
-      showToast("Error fetching system settings.", "error");
+      console.warn("Silent fallback: Error fetching system settings:", error);
     }
   };
 
@@ -3827,8 +3822,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const data = await res.json();
       if (data.success) setPayments(data.payments);
     } catch (e) {
-      console.error("Error fetching payments:", e);
-      showToast("Error fetching student payment claims.", "error");
+      console.warn("Silent fallback: Error fetching payments:", e);
     } finally {
       setPaymentsLoading(false);
     }
@@ -3852,8 +3846,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         });
       }
     } catch (e) {
-      console.error("Error fetching bank settings:", e);
-      showToast("Error fetching bank details configurations.", "error");
+      console.warn("Silent fallback: Error fetching bank settings:", e);
     }
   };
 
@@ -4406,8 +4399,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         }
       }
     } catch (error) {
-      console.error("Error fetching hostels:", error);
-      showToast("Error fetching hostel list.", "error");
+      console.warn("Silent fallback: Error fetching hostels:", error);
     }
   };
 
@@ -4514,8 +4506,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         }
       }
     } catch (error) {
-      console.error("Error fetching students:", error);
-      showToast("Error fetching student profiles list.", "error");
+      console.warn("Silent fallback: Error fetching students:", error);
     } finally {
       setStudentsLoading(false);
     }
@@ -4556,8 +4547,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         setTotalPermissionsCount(0);
       }
     } catch (error) {
-      console.error("Error fetching permissions:", error);
-      showToast("Error fetching gatepass permission requests.", "error");
+      console.warn("Silent fallback: Error fetching permissions:", error);
       setPermissions([]); // Set empty array on error
     }
   };
@@ -4595,9 +4585,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         setLastUpdated(new Date());
       }
     } catch (error: any) {
-      console.error("Error fetching attendance summary:", error.message);
-      showToast("Error fetching attendance summary statistics.", "error");
-      // Fail silently for polling, but log actual error
+      console.warn("Silent fallback: Error fetching attendance summary:", error?.message || error);
     }
   };
 
@@ -4711,8 +4699,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         setAdminNotifications(data.notifications);
       }
     } catch (error: any) {
-      console.error("Error fetching notifications:", error.message);
-      showToast("Error fetching administrator notifications.", "error");
+      console.warn("Silent fallback: Error fetching notifications:", error?.message || error);
     }
   };
 
