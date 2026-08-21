@@ -9823,12 +9823,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             };
 
                             return (
-                              <div key={student.id} className="p-3 sm:p-4 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-300 transition-all shadow-xs">
-                                {/* Top Row on Mobile / Left Column on Desktop */}
-                                <div className="flex items-center justify-between sm:justify-start gap-3 min-w-0">
-                                  <div className="flex items-center gap-3 min-w-0">
+                              <div key={student.id} className="p-3 sm:p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col gap-2 hover:border-slate-300 transition-all shadow-xs">
+                                {/* Row 1: Student Identity (Left) + Leave Details Box (Right) */}
+                                <div className="flex items-center justify-between gap-2 min-w-0">
+                                  {/* Left: Avatar + Name + Reg ID + ERP ID */}
+                                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                     {/* Avatar */}
-                                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-xs sm:text-sm shadow-md overflow-hidden shrink-0 border border-slate-200">
+                                    <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-xs sm:text-sm shadow-md overflow-hidden shrink-0 border border-slate-200">
                                       {student.profilePicture ? (
                                         <img src={student.profilePicture} alt={student.name} className="w-full h-full object-cover" />
                                       ) : (
@@ -9836,9 +9837,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       )}
                                     </div>
 
-                                    {/* Student Identity */}
-                                    <div className="min-w-0">
-                                      <h4 className="font-bold text-slate-800 text-xs sm:text-sm leading-snug whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] sm:max-w-[180px]" title={student.name}>
+                                    {/* Identity Info */}
+                                    <div className="min-w-0 flex-1">
+                                      <h4 className="font-bold text-slate-800 text-xs sm:text-sm leading-tight truncate" title={student.name}>
                                         <span>{student.name}</span>
                                         {showFlashingBlueDot ? (
                                           hasMarkedAttendance ? (
@@ -9852,48 +9853,77 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           )
                                         )}
                                       </h4>
-                                      <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5 whitespace-nowrap">
-                                        Reg ID: {student.registrationId || "N/A"}
+                                      <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5 truncate">
+                                        REG ID: {student.registrationId || "N/A"}
                                       </p>
-                                      <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5 whitespace-nowrap">
+                                      <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5 truncate">
                                         ERP ID: {student.erpInformation || "N/A"}
                                       </p>
-                                      <div className="flex items-center gap-1.5 mt-1.5 flex-nowrap">
-                                        <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider shrink-0 ${
-                                          rStatus === 'in' ? 'bg-green-100 text-green-700' :
-                                          rStatus === 'hleave' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-800'
-                                        }`}>
-                                          {rStatus === 'in' ? '🟢 IN' :
-                                           rStatus === 'hleave' ? '🔵 H-LEAVE' : '🟡 G-PASS'}
-                                        </span>
-
-                                        {/* 🏠 Direct Home-Leave / Mark Returned Action Button */}
-                                        {rStatus === 'in' ? (
-                                          <button
-                                            onClick={() => openHomeLeaveModal(student)}
-                                            className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer shrink-0"
-                                            title="Mark Student on Home-Leave"
-                                          >
-                                            <span>🏠</span> HOME-LEAVE
-                                          </button>
-                                        ) : rStatus === 'hleave' ? (
-                                          <button
-                                            onClick={() => handleUnmarkHomeLeave(student)}
-                                            className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer shrink-0"
-                                            title="Unmark Home-Leave / Mark as Returned"
-                                          >
-                                            <span>🟢</span> UNMARK LEAVE
-                                          </button>
-                                        ) : null}
-                                      </div>
                                     </div>
                                   </div>
 
-                                  {/* Mobile Contact Icons (aligned top-right on mobile) */}
-                                  <div className="flex sm:hidden items-center gap-1 shrink-0">
+                                  {/* Right: Leave Details Box (Matching Screenshot 2) */}
+                                  {isHomeLeave && (
+                                    <div className="shrink-0 px-2.5 py-1.5 sm:px-3 sm:py-2 bg-blue-50/80 border border-blue-200/90 rounded-xl text-left shadow-2xs max-w-[170px] sm:max-w-[240px] md:max-w-[280px]">
+                                      <div className="flex items-center gap-1 text-[9.5px] sm:text-[11px] font-semibold text-slate-800 leading-tight">
+                                        <span className="text-slate-500 font-bold shrink-0">Outing:</span>
+                                        <span className="font-bold text-blue-700 flex items-center gap-1 truncate">
+                                          <span>📅</span>
+                                          <span>{formatLeaveDate(leaveFrom) || "Active"}</span>
+                                        </span>
+                                      </div>
+                                      {leaveTo && (
+                                        <div className="flex items-center gap-1 text-[9.5px] sm:text-[11px] font-semibold text-slate-800 leading-tight mt-0.5">
+                                          <span className="text-slate-500 font-bold shrink-0">Coming:</span>
+                                          <span className="font-bold text-blue-700 truncate">{formatLeaveDate(leaveTo)}</span>
+                                        </div>
+                                      )}
+                                      {leaveReason && (
+                                        <p className="text-[9px] sm:text-[10.5px] text-slate-600 font-medium italic mt-0.5 truncate" title={leaveReason}>
+                                          &ldquo;{leaveReason}&rdquo;
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Row 2: Status & Action Button (Left) + Contact Icons (Right, straight horizontal line) */}
+                                <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100/90">
+                                  {/* Left: Status & Action Button */}
+                                  <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
+                                    <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider shrink-0 ${
+                                      rStatus === 'in' ? 'bg-green-100 text-green-700' :
+                                      rStatus === 'hleave' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-800'
+                                    }`}>
+                                      {rStatus === 'in' ? '🟢 IN' :
+                                       rStatus === 'hleave' ? '🔵 H-LEAVE' : '🟡 G-PASS'}
+                                    </span>
+
+                                    {/* Direct Home-Leave / Mark Returned Action Button */}
+                                    {rStatus === 'in' ? (
+                                      <button
+                                        onClick={() => openHomeLeaveModal(student)}
+                                        className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer shrink-0"
+                                        title="Mark Student on Home-Leave"
+                                      >
+                                        <span>🏠</span> HOME-LEAVE
+                                      </button>
+                                    ) : rStatus === 'hleave' ? (
+                                      <button
+                                        onClick={() => handleUnmarkHomeLeave(student)}
+                                        className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer shrink-0"
+                                        title="Unmark Home-Leave / Mark as Returned"
+                                      >
+                                        <span>🟢</span> UNMARK LEAVE
+                                      </button>
+                                    ) : null}
+                                  </div>
+
+                                  {/* Right: Contact Icons (Smaller, straight horizontal line on the same row) */}
+                                  <div className="flex items-center gap-1 shrink-0 ml-auto">
                                     <a
                                       href={`tel:${student.phoneNumber}`}
-                                      className="p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-xs"
+                                      className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-xs text-[11px] sm:text-xs"
                                       title="Call Student"
                                     >
                                       📞
@@ -9901,7 +9931,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     {student.fatherNumber && (
                                       <a
                                         href={`tel:${student.fatherNumber}`}
-                                        className="p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-xs"
+                                        className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-xs text-[11px] sm:text-xs"
                                         title={`Call Parent: ${student.fatherName || "Father"}`}
                                       >
                                         👨‍👩‍👦
@@ -9911,65 +9941,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       href={`https://wa.me/${student.phoneNumber}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="p-1.5 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-100/50 transition-colors shadow-sm text-xs"
+                                      className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-100/50 transition-colors shadow-xs text-[11px] sm:text-xs"
                                       title="WhatsApp Student"
                                     >
                                       💬
                                     </a>
                                   </div>
-                                </div>
-
-                                {/* Middle Column: Leave Details Box (Matching Screenshot 3 format) */}
-                                {isHomeLeave && (
-                                  <div className="w-full sm:w-auto flex-1 flex flex-col justify-center px-3.5 py-2 bg-blue-50/80 border border-blue-200/90 rounded-xl text-left shadow-2xs sm:mx-2">
-                                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-800">
-                                      <span className="text-slate-500 font-bold text-[10px] uppercase tracking-wider shrink-0 w-14">Outing:</span>
-                                      <span className="font-bold text-blue-700 flex items-center gap-1 truncate">
-                                        <span>📅</span>
-                                        <span>{formatLeaveDate(leaveFrom) || "Home Leave Active"}</span>
-                                      </span>
-                                    </div>
-                                    {leaveTo && (
-                                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-800 mt-0.5">
-                                        <span className="text-slate-500 font-bold text-[10px] uppercase tracking-wider shrink-0 w-14">Coming:</span>
-                                        <span className="font-bold text-blue-700 truncate">{formatLeaveDate(leaveTo)}</span>
-                                      </div>
-                                    )}
-                                    {leaveReason && (
-                                      <p className="text-[10.5px] text-slate-600 font-medium italic mt-1 truncate" title={leaveReason}>
-                                        &ldquo;{leaveReason}&rdquo;
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-
-                                {/* Desktop Contact Icons (Right Column) */}
-                                <div className="hidden sm:flex flex-col items-center gap-1.5 shrink-0 self-center">
-                                  <a
-                                    href={`tel:${student.phoneNumber}`}
-                                    className="p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-xs"
-                                    title="Call Student"
-                                  >
-                                    📞
-                                  </a>
-                                  {student.fatherNumber && (
-                                    <a
-                                      href={`tel:${student.fatherNumber}`}
-                                      className="p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-xs"
-                                      title={`Call Parent: ${student.fatherName || "Father"}`}
-                                    >
-                                      👨‍👩‍👦
-                                    </a>
-                                  )}
-                                  <a
-                                    href={`https://wa.me/${student.phoneNumber}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="p-1.5 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-100/50 transition-colors shadow-sm text-xs"
-                                    title="WhatsApp Student"
-                                  >
-                                    💬
-                                  </a>
                                 </div>
                               </div>
                             );
