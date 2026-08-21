@@ -763,8 +763,8 @@ interface StudentDetails {
 
 // Cache constants
 const CACHE_KEYS = {
-  STUDENTS: 'hosteleaze_students_cache',
-  HOSTELS: 'hosteleaze_hostels_cache',
+  STUDENTS: 'hosteleaze_students_cache_v4',
+  HOSTELS: 'hosteleaze_hostels_cache_v4',
   TIMESTAMP: 'hosteleaze_cache_timestamp'
 };
 const CACHE_DURATION = 1800000; // ⚡ CACHE ENABLED: 30-minute TTL to save bandwidth across tab switches
@@ -9789,15 +9789,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             const studentIdStr = (student.id || student._id)?.toString();
                             const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr) || presentStudentIds.includes(studentIdStr);
 
-                            // Find linked permission from permissions list if available
+                            // Find linked permission from permissions list by ID, registrationId, or name
                             const studentPermission = permissions.find((p: any) => {
                               const pSid = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
-                              return pSid && studentIdStr && pSid.toString() === studentIdStr;
+                              if (pSid && studentIdStr && pSid.toString() === studentIdStr) return true;
+                              if (p.registrationId && student.registrationId && p.registrationId === student.registrationId) return true;
+                              if (p.name && student.name && p.name.trim().toLowerCase() === student.name.trim().toLowerCase()) return true;
+                              return false;
                             });
 
-                            const leaveFrom = studentPermission?.fromDateTime || student.leaveFrom;
+                            const leaveFrom = studentPermission?.fromDateTime || student.leaveFrom || (student.checkOutIstDate ? `${student.checkOutIstDate} ${student.checkOutIstTime || ''}` : null);
                             const leaveTo = studentPermission?.toDateTime || student.leaveTo;
-                            const leaveReason = studentPermission?.reason || student.leaveReason;
+                            const leaveReason = studentPermission?.reason || student.leaveReason || (rStatus === 'hleave' ? "Home Leave" : null);
                             const isHomeLeave = rStatus === 'hleave' || (studentPermission && (studentPermission.status === 'allowed' || studentPermission.status === 'pending'));
 
                             const formatLeaveDate = (dateVal: any) => {
@@ -9820,7 +9823,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             };
 
                             return (
-                              <div key={student.id} className="p-2.5 sm:p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-row items-center justify-between gap-2.5 sm:gap-3 hover:border-slate-200 transition-all">
+                              <div key={student.id} className="p-2.5 sm:p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-row items-center justify-between gap-2 sm:gap-3 hover:border-slate-200 transition-all">
                                 <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                                   {/* Avatar or Profile Image */}
                                   <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-xs sm:text-sm shadow-md overflow-hidden shrink-0 border border-slate-200">
@@ -9879,43 +9882,27 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         </button>
                                       ) : null}
                                     </div>
-
-                                    {/* 📱 Mobile Leave Details Line */}
-                                    {isHomeLeave && (leaveFrom || leaveReason) && (
-                                      <div className="sm:hidden mt-1.5 p-1.5 bg-blue-50/90 border border-blue-200/80 rounded-lg text-left">
-                                        {leaveFrom && (
-                                          <div className="flex items-center gap-1 text-[9px] font-bold text-blue-700 leading-tight">
-                                            <span className="shrink-0">📅</span>
-                                            <span className="truncate">
-                                              {formatLeaveDate(leaveFrom)}
-                                              {leaveTo && ` • to ${formatLeaveDate(leaveTo)}`}
-                                            </span>
-                                          </div>
-                                        )}
-                                        {leaveReason && (
-                                          <p className="text-[8px] text-blue-900 font-medium italic mt-0.5 truncate" title={leaveReason}>
-                                            &ldquo;{leaveReason}&rdquo;
-                                          </p>
-                                        )}
-                                      </div>
-                                    )}
                                   </div>
                                 </div>
 
-                                {/* 💻 Desktop Leave Details Banner (Middle Area) */}
-                                {isHomeLeave && (leaveFrom || leaveReason) && (
-                                  <div className="hidden sm:flex flex-col justify-center px-3 py-1.5 bg-blue-50/95 border border-blue-200 rounded-xl min-w-0 max-w-[220px] md:max-w-[280px] shrink-0 shadow-2xs">
-                                    {leaveFrom && (
-                                      <div className="flex items-center gap-1 text-[10px] font-bold text-blue-700 leading-snug">
-                                        <span className="shrink-0 text-[11px]">📅</span>
-                                        <span className="truncate">
-                                          {formatLeaveDate(leaveFrom)}
-                                          {leaveTo && ` • to ${formatLeaveDate(leaveTo)}`}
-                                        </span>
-                                      </div>
-                                    )}
+                                {/* 📅 Active Leave Details Banner (Marked Area) */}
+                                {isHomeLeave && (
+                                  <div className="flex flex-col justify-center px-2.5 py-1.5 bg-blue-50/95 border border-blue-200/90 rounded-xl min-w-0 max-w-[180px] sm:max-w-[280px] shrink shadow-2xs">
+                                    <div className="flex items-center gap-1 text-[9.5px] sm:text-[10.5px] font-bold text-blue-700 leading-snug">
+                                      <span className="shrink-0">📅</span>
+                                      <span className="truncate">
+                                        {leaveFrom ? (
+                                          <>
+                                            {formatLeaveDate(leaveFrom)}
+                                            {leaveTo && ` • to ${formatLeaveDate(leaveTo)}`}
+                                          </>
+                                        ) : (
+                                          "Home Leave Active"
+                                        )}
+                                      </span>
+                                    </div>
                                     {leaveReason && (
-                                      <p className="text-[10px] text-blue-900 font-medium italic mt-0.5 truncate" title={leaveReason}>
+                                      <p className="text-[9px] sm:text-[10px] text-blue-900 font-medium italic mt-0.5 truncate" title={leaveReason}>
                                         &ldquo;{leaveReason}&rdquo;
                                       </p>
                                     )}

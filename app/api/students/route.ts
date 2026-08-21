@@ -608,6 +608,32 @@ export async function GET(request: NextRequest) {
           s.leaveTo = undefined;
         }
       });
+
+      // 3. Fetch Recent/Active Permissions to enrich student leave information (dates & reasons)
+      try {
+        const permsResult = await db.permissions.list({}, { limit: 500 });
+        const permsList = Array.isArray(permsResult) ? permsResult : (permsResult?.records || permsResult?.permissions || []);
+        const permsMap = new Map<string, any>();
+        permsList.forEach((perm: any) => {
+          const pSid = typeof perm.studentId === 'object' ? (perm.studentId?._id || perm.studentId?.id) : perm.studentId;
+          if (pSid && !permsMap.has(pSid.toString())) {
+            permsMap.set(pSid.toString(), perm);
+          }
+        });
+
+        students.forEach((s: any) => {
+          const sId = (s.id || s._id)?.toString();
+          const perm = permsMap.get(sId);
+          if (perm) {
+            if (!s.leaveFrom || s.leaveFrom === s.checkOutTime) s.leaveFrom = perm.fromDateTime;
+            if (!s.leaveTo) s.leaveTo = perm.toDateTime;
+            if (!s.leaveReason || s.leaveReason === 'Home Leave (Manual Approval)') s.leaveReason = perm.reason;
+            s.permissionStatus = perm.status;
+          }
+        });
+      } catch (permErr) {
+        console.warn("⚠️ Permission enrichment failed in list API:", permErr);
+      }
     } catch (syncError) {
       console.warn("⚠️ Status sync failed in list API:", syncError);
     }
