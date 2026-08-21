@@ -8146,9 +8146,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             Students Present from {selectedAttendanceHostel}
                           </h3>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                            {(showAllPresent ? presentStudentsForSelectedHostel : presentStudentsForSelectedHostel.slice(0, 8)).map((log) => (
+                            {(showAllPresent ? presentStudentsForSelectedHostel : presentStudentsForSelectedHostel.slice(0, 8)).map((log, idx) => (
                               <div
-                                key={log._id}
+                                key={log.id || log._id || (typeof log.studentId === 'object' ? (log.studentId?._id || log.studentId?.id) : log.studentId) || `present-log-${idx}`}
                                 className="bg-white p-2 rounded-lg border border-blue-100 flex items-center gap-2 hover:shadow-sm transition-shadow"
                               >
                                 <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
@@ -9883,7 +9883,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             };
 
                             return (
-                              <div key={student.id} className="p-2.5 sm:p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col gap-2 hover:border-slate-300 transition-all shadow-xs">
+                              <div key={student.id || student._id || student.registrationId || student.name} className="p-2.5 sm:p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col gap-2 hover:border-slate-300 transition-all shadow-xs">
                                 {/* Row 1: Student Identity (Left) + Leave Details Box (Right, Auto-Adjustable) */}
                                 <div className="flex items-start justify-between gap-2 min-w-0 w-full">
                                   {/* Left: Avatar + Name + Reg ID + ERP ID */}
