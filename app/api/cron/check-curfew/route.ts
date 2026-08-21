@@ -10,11 +10,11 @@ export async function GET(request: NextRequest) {
     // 1. Fetch Global Settings
     let settings: any = {};
     try {
-      const platformSetting = await prisma.platformSettings?.findFirst({
-        where: { key: "boss_payment_config" }
+      const platformSetting = await prisma.platformSetting.findUnique({
+        where: { id: "boss_payment_config" }
       }).catch(() => null);
-      if (platformSetting?.value) {
-        settings = typeof platformSetting.value === 'string' ? JSON.parse(platformSetting.value) : platformSetting.value;
+      if (platformSetting?.settings) {
+        settings = typeof platformSetting.settings === 'string' ? JSON.parse(platformSetting.settings) : platformSetting.settings;
       }
     } catch (e) {
       settings = {};
