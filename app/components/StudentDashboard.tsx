@@ -38,6 +38,7 @@ interface StudentProfile {
     hostelName: string;
     roomNumber: string;
     profilePicture?: string;
+    gender?: string;
     studentStatus?: "in" | "out";
     outingType?: string;
     fatherName?: string;
