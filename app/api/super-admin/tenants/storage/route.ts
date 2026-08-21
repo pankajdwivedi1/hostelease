@@ -1,40 +1,34 @@
-export const dynamic = "force-dynamic";
-
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
     try {
         const { tenantId } = await request.json();
         if (!tenantId) return NextResponse.json({ success: false, error: "Missing tenantId" }, { status: 400 });
 
-        const supabase = getSupabaseAdmin();
+        // Calculate student & gatepass count on Railway
+        const [studentCount, gatePassCount] = await Promise.all([
+            prisma.student.count({ where: { tenantId } }),
+            prisma.gatePass.count({ where: { tenantId } })
+        ]);
 
-        // 1. Calculate real bytes
-        const { data: bytes, error: rpcError } = await supabase.rpc('get_tenant_storage_bytes', { tenant_uuid: tenantId });
-        if (rpcError) throw rpcError;
+        const estimatedBytes = (studentCount * 50000) + (gatePassCount * 500);
 
-        // 2. Fetch existing settings to update
-        const { data: settings, error: fetchError } = await supabase
-            .from('admin_settings')
-            .select('university_bank_details')
-            .eq('tenant_id', tenantId)
-            .maybeSingle();
-            
-        if (fetchError && fetchError.code !== 'PGRST116') throw fetchError;
+        const setting = await prisma.adminSettings.findFirst({
+            where: { tenantId }
+        });
 
-        const bankDetails = settings?.university_bank_details || {};
-        bankDetails.lastStorageBytes = bytes || 0;
+        if (setting) {
+            const bankDetails = (setting.universityBankDetails as any) || {};
+            bankDetails.lastStorageBytes = estimatedBytes;
 
-        // 3. Save it back
-        const { error: updateError } = await supabase
-            .from('admin_settings')
-            .update({ university_bank_details: bankDetails })
-            .eq('tenant_id', tenantId);
+            await prisma.adminSettings.update({
+                where: { id: setting.id },
+                data: { universityBankDetails: bankDetails }
+            });
+        }
 
-        if (updateError) throw updateError;
-
-        return NextResponse.json({ success: true, storageBytes: bytes || 0 });
+        return NextResponse.json({ success: true, storageBytes: estimatedBytes });
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }

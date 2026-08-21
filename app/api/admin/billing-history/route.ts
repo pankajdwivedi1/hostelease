@@ -12,33 +12,17 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
         }
 
-        const supabase = getSupabaseAdmin();
         let logs: any[] = [];
 
-        // 1. Fetch global billing ledger from Supabase
+        // 1. Fetch global billing ledger directly via Prisma from Railway
         try {
-            const { data } = await supabase
-                .from('platform_settings')
-                .select('settings')
-                .eq('id', 'super_admin_billing_ledger')
-                .maybeSingle();
-
-            if (data?.settings && Array.isArray(data.settings)) {
-                logs = data.settings;
+            const setting = await prisma.platformSetting.findUnique({
+                where: { id: 'super_admin_billing_ledger' }
+            });
+            if (setting?.settings && Array.isArray(setting.settings)) {
+                logs = setting.settings as any[];
             }
         } catch (e) {}
-
-        // 2. Fallback check via Prisma if empty
-        if (logs.length === 0) {
-            try {
-                const setting = await prisma.platformSetting.findUnique({
-                    where: { id: 'super_admin_billing_ledger' }
-                });
-                if (setting?.settings && Array.isArray(setting.settings)) {
-                    logs = setting.settings as any[];
-                }
-            } catch (e) {}
-        }
 
         // 3. Filter transactions specifically for this tenant
         const tenantLogs = logs.filter((log: any) => 

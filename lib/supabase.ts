@@ -20,8 +20,9 @@ const getSupabaseClient = () => {
 
     return createClient(supabaseUrl, supabaseKey, {
         auth: {
-            persistSession: true,
-            autoRefreshToken: true,
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false
         }
     });
 };

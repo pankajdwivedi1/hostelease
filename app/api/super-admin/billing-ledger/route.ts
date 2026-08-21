@@ -20,29 +20,25 @@ const OGI_SEED_TRANSACTION = {
 
 export async function GET() {
     try {
-        const supabase = getSupabaseAdmin();
-        const { data, error } = await supabase
-            .from('platform_settings')
-            .select('settings')
-            .eq('id', 'super_admin_billing_ledger')
-            .maybeSingle();
+        let logs: any[] = [];
+        try {
+            const setting = await prisma.platformSetting.findUnique({
+                where: { id: 'super_admin_billing_ledger' }
+            });
+            if (setting?.settings && Array.isArray(setting.settings)) {
+                logs = setting.settings as any[];
+            }
+        } catch (e) {}
 
-        if (error) throw error;
-
-        let logs = data?.settings;
-
-        // If no ledger exists, seed it with OGI's payment
-        if (!logs || !Array.isArray(logs)) {
+        if (logs.length === 0) {
             logs = [OGI_SEED_TRANSACTION];
-            
-            const { error: upsertError } = await supabase
-                .from('platform_settings')
-                .upsert({
-                    id: 'super_admin_billing_ledger',
-                    settings: logs,
-                    updated_at: new Date().toISOString()
+            try {
+                await prisma.platformSetting.upsert({
+                    where: { id: 'super_admin_billing_ledger' },
+                    update: { settings: logs as any, updatedAt: new Date() },
+                    create: { id: 'super_admin_billing_ledger', settings: logs as any, updatedAt: new Date() }
                 });
-            if (upsertError) throw upsertError;
+            } catch (e) {}
         }
 
         return NextResponse.json({ success: true, logs });
@@ -54,7 +50,6 @@ export async function GET() {
 export async function POST(request: NextRequest) {
     try {
         const newRecord = await request.json(); // { tenantId, tenantName, amount, utr, date, billingType, billingPeriod, remarks, paymentSource }
-        const supabase = getSupabaseAdmin();
 
         // Validate billingType
         const allowedTypes = ["Verified Payment", "Complimentary", "Deferred Billing (On Credit)"];
@@ -62,16 +57,16 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: "Invalid billing type" }, { status: 400 });
         }
 
-        // Fetch existing from Supabase
-        const { data, error: fetchError } = await supabase
-            .from('platform_settings')
-            .select('settings')
-            .eq('id', 'super_admin_billing_ledger')
-            .maybeSingle();
-
-        if (fetchError) throw fetchError;
-
-        const currentLogs = Array.isArray(data?.settings) ? data.settings : [OGI_SEED_TRANSACTION];
+        // Fetch existing from Prisma (Railway)
+        let currentLogs: any[] = [OGI_SEED_TRANSACTION];
+        try {
+            const setting = await prisma.platformSetting.findUnique({
+                where: { id: 'super_admin_billing_ledger' }
+            });
+            if (setting?.settings && Array.isArray(setting.settings)) {
+                currentLogs = setting.settings as any[];
+            }
+        } catch (e) {}
 
         const updatedRecord = {
             id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
@@ -88,27 +83,12 @@ export async function POST(request: NextRequest) {
 
         const updatedLogs = [updatedRecord, ...currentLogs];
 
-        // 1. Update Supabase
-        const { error: upsertError } = await supabase
-            .from('platform_settings')
-            .upsert({
-                id: 'super_admin_billing_ledger',
-                settings: updatedLogs,
-                updated_at: new Date().toISOString()
-            });
-
-        if (upsertError) throw upsertError;
-
-        // 2. Update Prisma (Railway PostgreSQL)
-        try {
-            await prisma.platformSetting.upsert({
-                where: { id: 'super_admin_billing_ledger' },
-                update: { settings: updatedLogs as any, updatedAt: new Date() },
-                create: { id: 'super_admin_billing_ledger', settings: updatedLogs as any, updatedAt: new Date() }
-            });
-        } catch (e: any) {
-            console.error("Prisma billing ledger update warning:", e?.message);
-        }
+        // Update Prisma (Railway PostgreSQL)
+        await prisma.platformSetting.upsert({
+            where: { id: 'super_admin_billing_ledger' },
+            update: { settings: updatedLogs as any, updatedAt: new Date() },
+            create: { id: 'super_admin_billing_ledger', settings: updatedLogs as any, updatedAt: new Date() }
+        });
 
         return NextResponse.json({ success: true, logs: updatedLogs });
     } catch (error: any) {

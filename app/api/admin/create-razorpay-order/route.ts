@@ -32,41 +32,19 @@ export async function POST(request: NextRequest) {
         let studentCount = 0;
         let settings: any = DEFAULT_SETTINGS;
 
-        if (activeSource === 'PRISMA') {
-            try {
-                const [tenant, countRow, settingsRow] = await Promise.all([
-                    prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
-                    prisma.student.count({ where: { tenantId } }),
-                    prisma.platformSetting.findUnique({ where: { id: 'boss_payment_config' } })
-                ]);
-                if (tenant) tenantName = tenant.name;
-                studentCount = countRow || 0;
-                if (settingsRow?.settings) {
-                    settings = { ...DEFAULT_SETTINGS, ...(settingsRow.settings as any) };
-                }
-            } catch (e: any) {
-                console.warn("Railway Razorpay fetch warn:", e?.message);
+        try {
+            const [tenant, countRow, settingsRow] = await Promise.all([
+                prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
+                prisma.student.count({ where: { tenantId } }),
+                prisma.platformSetting.findUnique({ where: { id: 'boss_payment_config' } })
+            ]);
+            if (tenant) tenantName = tenant.name;
+            studentCount = countRow || 0;
+            if (settingsRow?.settings) {
+                settings = { ...DEFAULT_SETTINGS, ...(settingsRow.settings as any) };
             }
-        } else {
-            try {
-                const supabase = getSupabaseAdmin();
-                const [
-                    { data: tenant },
-                    { count },
-                    { data: settingsData }
-                ] = await Promise.all([
-                    supabase.from('tenants').select('name').eq('id', tenantId).maybeSingle(),
-                    supabase.from('students').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId),
-                    supabase.from('platform_settings').select('settings').eq('id', 'boss_payment_config').maybeSingle()
-                ]);
-                if (tenant) tenantName = tenant.name;
-                studentCount = count || 0;
-                if (settingsData?.settings) {
-                    settings = { ...DEFAULT_SETTINGS, ...(settingsData.settings as any) };
-                }
-            } catch (e: any) {
-                console.warn("Supabase Razorpay fetch warn:", e?.message);
-            }
+        } catch (e: any) {
+            console.warn("Railway Razorpay fetch warn:", e?.message);
         }
 
         if (!settings || !settings.enableRazorpay || !settings.razorpayKeyId || !settings.razorpayKeySecret) {

@@ -28,41 +28,19 @@ export async function POST(request: NextRequest) {
         let tenantName = "University";
         let studentCount = 0;
 
-        if (activeSource === 'PRISMA') {
-            try {
-                const [tenant, countRow, settingsRow] = await Promise.all([
-                    prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
-                    prisma.student.count({ where: { tenantId } }),
-                    prisma.platformSetting.findUnique({ where: { id: 'boss_payment_config' } })
-                ]);
-                if (tenant) tenantName = tenant.name;
-                studentCount = countRow || 0;
-                if (settingsRow?.settings) {
-                    settings = { ...DEFAULT_SETTINGS, ...(settingsRow.settings as any) };
-                }
-            } catch (e: any) {
-                console.warn("Railway Razorpay verify settings warn:", e?.message);
+        try {
+            const [tenant, countRow, settingsRow] = await Promise.all([
+                prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
+                prisma.student.count({ where: { tenantId } }),
+                prisma.platformSetting.findUnique({ where: { id: 'boss_payment_config' } })
+            ]);
+            if (tenant) tenantName = tenant.name;
+            studentCount = countRow || 0;
+            if (settingsRow?.settings) {
+                settings = { ...DEFAULT_SETTINGS, ...(settingsRow.settings as any) };
             }
-        } else {
-            try {
-                const supabase = getSupabaseAdmin();
-                const [
-                    { data: tenant },
-                    { count },
-                    { data: settingsData }
-                ] = await Promise.all([
-                    supabase.from('tenants').select('name').eq('id', tenantId).maybeSingle(),
-                    supabase.from('students').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId),
-                    supabase.from('platform_settings').select('settings').eq('id', 'boss_payment_config').maybeSingle()
-                ]);
-                if (tenant) tenantName = tenant.name;
-                studentCount = count || 0;
-                if (settingsData?.settings) {
-                    settings = { ...DEFAULT_SETTINGS, ...(settingsData.settings as any) };
-                }
-            } catch (e: any) {
-                console.warn("Supabase Razorpay verify settings warn:", e?.message);
-            }
+        } catch (e: any) {
+            console.warn("Railway Razorpay verify settings warn:", e?.message);
         }
 
         if (!settings || !settings.razorpayKeySecret) {
@@ -97,26 +75,14 @@ export async function POST(request: NextRequest) {
         const endDate = new Date();
         endDate.setMonth(endDate.getMonth() + extensionMonths);
 
-        if (activeSource === 'PRISMA') {
-            await prisma.tenant.update({
-                where: { id: tenantId },
-                data: {
-                    subscriptionStatus: 'active',
-                    subscriptionEndDate: endDate,
-                    isActive: true
-                }
-            });
-        } else {
-            const supabase = getSupabaseAdmin();
-            await supabase
-                .from('tenants')
-                .update({
-                    subscription_status: 'active',
-                    subscription_end_date: endDate.toISOString(),
-                    is_active: true
-                })
-                .eq('id', tenantId);
-        }
+        await prisma.tenant.update({
+            where: { id: tenantId },
+            data: {
+                subscriptionStatus: 'active',
+                subscriptionEndDate: endDate,
+                isActive: true
+            }
+        });
 
         return NextResponse.json({ success: true, message: "Subscription activated successfully" });
 

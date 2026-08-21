@@ -73,14 +73,7 @@ export async function POST(request: NextRequest) {
                     data: prismaData
                 });
             } catch (pErr: any) {
-                console.warn("Prisma tenant update notice, falling back to Supabase:", pErr?.message);
-                const supabase = getSupabaseAdmin();
-                const updateData: any = {};
-                if (name) updateData.name = name;
-                if (logo !== undefined) updateData.logo_url = logo;
-                if (primaryColor) updateData.primary_color = primaryColor;
-                if (secondaryColor) updateData.secondary_color = secondaryColor;
-                await supabase.from('tenants').update(updateData).eq('id', tenant._id);
+                console.warn("Prisma tenant update notice:", pErr?.message);
             }
         }
 

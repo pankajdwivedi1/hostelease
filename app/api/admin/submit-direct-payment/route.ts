@@ -60,39 +60,6 @@ export async function POST(request: NextRequest) {
                 newEndDate: newEndDate.toISOString()
             });
 
-        } else {
-            const supabase = getSupabaseAdmin();
-            const { data: tenant, error: tenantError } = await supabase
-                .from('tenants')
-                .select('id, name, subscription_end_date, subscription_status')
-                .eq('id', tenantId)
-                .single();
-
-            if (tenantError || !tenant) {
-                return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 });
-            }
-
-            currentEndDate = tenant.subscription_end_date ? new Date(tenant.subscription_end_date) : new Date();
-            const startDate = (currentEndDate > new Date()) ? currentEndDate : new Date();
-            const newEndDate = new Date(startDate);
-            newEndDate.setMonth(newEndDate.getMonth() + durationMonths);
-
-            await supabase
-                .from('tenants')
-                .update({
-                    subscription_status: 'active',
-                    subscription_end_date: newEndDate.toISOString(),
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', tenantId);
-
-            return NextResponse.json({
-                success: true,
-                message: "Direct payment verified & subscription extended!",
-                newEndDate: newEndDate.toISOString()
-            });
-        }
-
     } catch (error: any) {
         console.error("Submit direct payment error:", error);
         return NextResponse.json({ success: false, error: error.message || "Failed to process direct payment" }, { status: 500 });

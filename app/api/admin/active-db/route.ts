@@ -10,31 +10,18 @@ const supabase = getSupabaseAdmin();
 // GET: Fetch current Active DB Source
 export async function GET() {
     try {
-        // First try reading from adminSettings via Prisma
         const settings = await prisma.adminSettings.findFirst({
             select: { activeDatabaseSource: true }
         });
         
-        if (settings && settings.activeDatabaseSource) {
-            return NextResponse.json({ source: settings.activeDatabaseSource });
-        }
-
-        // Fallback check in Supabase
-        const { data } = await supabase
-            .from('admin_settings')
-            .select('active_database_source')
-            .limit(1)
-            .maybeSingle();
-
-        const source = data?.active_database_source || 'SUPABASE';
+        const source = settings?.activeDatabaseSource || 'RAILWAY';
         return NextResponse.json({ source });
     } catch (err: any) {
-        console.error("GET active-db error:", err?.message);
-        return NextResponse.json({ source: 'SUPABASE' });
+        return NextResponse.json({ source: 'RAILWAY' });
     }
 }
 
-// POST: Toggle Active DB Source between SUPABASE and RAILWAY
+// POST: Toggle Active DB Source
 export async function POST(req: Request) {
     try {
         const body = await req.json();
@@ -51,16 +38,6 @@ export async function POST(req: Request) {
             });
         } catch (e: any) {
             console.error("Failed to update activeDatabaseSource in Prisma:", e?.message);
-        }
-
-        // Also update in Supabase
-        try {
-            await supabase
-                .from('admin_settings')
-                .update({ active_database_source: source })
-                .neq('id', '00000000-0000-0000-0000-000000000000');
-        } catch (e: any) {
-            console.error("Failed to update active_database_source in Supabase:", e?.message);
         }
 
         clearDbSourceCache();

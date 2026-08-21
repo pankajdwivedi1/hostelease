@@ -32,32 +32,15 @@ export async function GET(request: NextRequest) {
 
         let paymentSettings: any = DEFAULT_SETTINGS;
 
-        if (activeSource === 'PRISMA') {
-            try {
-                const row = await prisma.platformSetting.findUnique({
-                    where: { id: 'boss_payment_config' }
-                });
-                if (row?.settings) {
-                    paymentSettings = { ...DEFAULT_SETTINGS, ...(row.settings as any) };
-                }
-            } catch (e: any) {
-                console.warn("Railway subscription-status settings GET error:", e?.message);
+        try {
+            const row = await prisma.platformSetting.findUnique({
+                where: { id: 'boss_payment_config' }
+            });
+            if (row?.settings) {
+                paymentSettings = { ...DEFAULT_SETTINGS, ...(row.settings as any) };
             }
-        } else {
-            try {
-                const supabase = getSupabaseAdmin();
-                const { data } = await supabase
-                    .from('platform_settings')
-                    .select('settings')
-                    .eq('id', 'boss_payment_config')
-                    .maybeSingle();
-
-                if (data?.settings) {
-                    paymentSettings = { ...DEFAULT_SETTINGS, ...(data.settings as any) };
-                }
-            } catch (e: any) {
-                console.warn("Supabase subscription-status settings GET error:", e?.message);
-            }
+        } catch (e: any) {
+            console.warn("Railway subscription-status settings GET error:", e?.message);
         }
 
         // Security: NEVER send the Razorpay Secret Key to the client

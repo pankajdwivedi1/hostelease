@@ -43,32 +43,15 @@ export async function GET(request: NextRequest) {
     try {
         const activeSource = await db.getSource();
         
-        if (activeSource === 'PRISMA') {
-            try {
-                const row = await prisma.platformSetting.findUnique({
-                    where: { id: 'boss_payment_config' }
-                });
-                if (row?.settings) {
-                    return NextResponse.json({ success: true, settings: { ...DEFAULT_SETTINGS, ...(row.settings as any) } });
-                }
-            } catch (e: any) {
-                console.warn("Railway platformSettings GET error, checking default:", e?.message);
+        try {
+            const row = await prisma.platformSetting.findUnique({
+                where: { id: 'boss_payment_config' }
+            });
+            if (row?.settings) {
+                return NextResponse.json({ success: true, settings: { ...DEFAULT_SETTINGS, ...(row.settings as any) } });
             }
-        } else {
-            try {
-                const supabase = getSupabaseAdmin();
-                const { data } = await supabase
-                    .from('platform_settings')
-                    .select('settings')
-                    .eq('id', 'boss_payment_config')
-                    .maybeSingle();
-
-                if (data?.settings) {
-                    return NextResponse.json({ success: true, settings: { ...DEFAULT_SETTINGS, ...(data.settings as any) } });
-                }
-            } catch (e: any) {
-                console.warn("Supabase platformSettings GET error:", e?.message);
-            }
+        } catch (e: any) {
+            console.warn("Railway platformSettings GET error, checking default:", e?.message);
         }
 
         return NextResponse.json({ success: true, settings: DEFAULT_SETTINGS });
@@ -80,34 +63,18 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const settings = await request.json();
-        const activeSource = await db.getSource();
 
-        if (activeSource === 'PRISMA') {
-            await prisma.platformSetting.upsert({
-                where: { id: 'boss_payment_config' },
-                update: {
-                    settings: settings as any,
-                    updatedAt: new Date()
-                },
-                create: {
-                    id: 'boss_payment_config',
-                    settings: settings as any
-                }
-            });
-            return NextResponse.json({ success: true });
-        }
-
-        const supabase = getSupabaseAdmin();
-        const { error } = await supabase
-            .from('platform_settings')
-            .upsert({
+        await prisma.platformSetting.upsert({
+            where: { id: 'boss_payment_config' },
+            update: {
+                settings: settings as any,
+                updatedAt: new Date()
+            },
+            create: {
                 id: 'boss_payment_config',
-                settings: settings,
-                updated_at: new Date().toISOString()
-            });
-
-        if (error) throw error;
-
+                settings: settings as any
+            }
+        });
         return NextResponse.json({ success: true });
     } catch (error: any) {
         console.error("Save platform settings error:", error);

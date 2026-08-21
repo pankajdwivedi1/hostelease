@@ -1,21 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import { prisma } from "@/lib/prisma";
+import db from "@/lib/dbAdapter";
 import { sendPushNotification } from "@/lib/pushNotification";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseAdmin();
-
     // 1. Fetch Global Settings
-    const { data: settingsRecord } = await supabase
-      .from("platform_settings")
-      .select("settings")
-      .eq("id", "boss_payment_config")
-      .single();
-
-    const settings = settingsRecord?.settings || {};
+    let settings: any = {};
+    try {
+      const platformSetting = await prisma.platformSettings?.findFirst({
+        where: { key: "boss_payment_config" }
+      }).catch(() => null);
+      if (platformSetting?.value) {
+        settings = typeof platformSetting.value === 'string' ? JSON.parse(platformSetting.value) : platformSetting.value;
+      }
+    } catch (e) {
+      settings = {};
+    }
 
     // If master push notifications are disabled globally, exit early
     if (settings.globalPushEnabled === false) {
@@ -50,45 +53,35 @@ export async function GET(request: NextRequest) {
       const absoluteOutingCutoff = settings.absoluteOutingCutoff || "20:30";
 
       // Fetch active gate passes (students who scanned OUT but haven't scanned IN)
-      const { data: activePasses } = await supabase
-        .from("gate_passes")
-        .select("*")
-        .eq("status", "out");
+      const { records: activePasses } = await db.gatePasses.list({ status: "out" });
 
       if (activePasses && activePasses.length > 0) {
-        // Fetch permissions linked to these passes
-        const permIds = activePasses.map((p: any) => p.permission_id || p.permissionId).filter(Boolean);
-        const { data: permissionsList } = permIds.length > 0
-          ? await supabase.from("permissions").select("*").in("_id", permIds)
-          : { data: [] };
-
-        const permissionsMap = new Map((permissionsList || []).map((p: any) => [String(p._id), p]));
-
         // Parse absolute cutoff today in IST
         const [cutH, cutM] = absoluteOutingCutoff.split(":").map(Number);
         const absoluteCutoffDate = new Date();
         absoluteCutoffDate.setHours(cutH, cutM, 0, 0);
 
         for (const pass of activePasses) {
-          // Fetch student details
-          const { data: student } = await supabase
-            .from("students")
-            .select("*")
-            .eq("_id", pass.student_id || pass.studentId)
-            .maybeSingle();
+          const studentIdStr = pass.studentId || pass.student_id;
+          if (!studentIdStr) continue;
 
+          // Fetch student details from Railway
+          const student = await db.students.getById(studentIdStr.toString());
           if (!student) continue;
 
-          const permIdKey = pass.permission_id || pass.permissionId;
-          const perm = permIdKey ? permissionsMap.get(String(permIdKey)) : null;
+          const permIdKey = pass.permissionId || pass.permission_id;
+          let perm = null;
+          if (permIdKey) {
+            perm = await db.permissions.getById(permIdKey.toString()).catch(() => null);
+          }
 
           // Get expected return date/time
           let expectedReturn: Date;
-          if ((pass.type === "leave" || pass.type === "Leave") && perm) {
-            expectedReturn = new Date(perm.toDateTime || perm.to_date_time);
+          if ((pass.type === "leave" || pass.type === "HOME-LEAVE" || pass.type === "Leave") && perm) {
+            expectedReturn = new Date(perm.toDateTime || perm.to_date_time || now);
           } else {
-            const outTime = new Date(pass.check_out_time || pass.checkOutTime);
-            const duration = pass.duration_minutes || pass.durationMinutes || 0;
+            const outTime = new Date(pass.checkOutTime || pass.check_out_time || now);
+            const duration = pass.durationMinutes || pass.duration_minutes || 0;
             expectedReturn = new Date(outTime.getTime() + duration * 60 * 1000);
           }
 
@@ -141,35 +134,26 @@ export async function GET(request: NextRequest) {
 
     if (isCurfewTriggerTime || isForced) {
       if (settings.parentCurfewAbsentEnabled !== false) {
-        // Fetch all tenants
-        const { data: tenants } = await supabase
-          .from("tenants")
-          .select("id, name, slug");
+        // Fetch all tenants from Railway
+        const { records: tenants } = await db.tenants.list({});
 
         if (tenants && tenants.length > 0) {
-          // Fetch approved leaves/permissions for today across all tenants
-          const { data: approvedLeaves } = await supabase
-            .from("permissions")
-            .select("student_id, start_date, end_date")
-            .eq("status", "approved");
+          // Fetch approved leaves/permissions across all tenants
+          const { records: approvedLeaves } = await db.permissions.list({ status: "allowed" });
 
           for (const tenant of tenants) {
             // Fetch all students for this tenant
-            const { data: students } = await supabase
-              .from("students")
-              .select("*")
-              .eq("tenant_id", tenant.id);
+            const { records: students } = await db.students.list({ tenantId: tenant.id });
 
             if (!students || students.length === 0) continue;
 
-            // Fetch present attendance for today
-            const { data: attendanceData } = await supabase
-              .from("attendance")
-              .select("student_id")
-              .eq("tenant_id", tenant.id)
-              .eq("date", todayStr);
+            // Fetch present attendance for today from Railway
+            const { records: attendanceData } = await db.attendance.list({
+              tenantId: tenant.id,
+              date: todayStr
+            });
 
-            const presentIds = new Set(attendanceData ? attendanceData.map((a: any) => String(a.student_id)) : []);
+            const presentIds = new Set((attendanceData || []).map((a: any) => String(a.studentId || a.student_id)));
 
             // Filter out absentees
             const absentees = students.filter((student: any) => {
@@ -180,11 +164,11 @@ export async function GET(request: NextRequest) {
 
               // Exclude if on approved leave today
               const isOnLeave = (approvedLeaves || []).some((leave: any) => {
-                if (String(leave.student_id) !== sId) return false;
-                const start = new Date(leave.start_date);
-                const end = new Date(leave.end_date);
-                const currentDate = new Date();
-                return currentDate >= start && currentDate <= end;
+                const leaveStudentId = String(leave.studentId || leave.student_id);
+                if (leaveStudentId !== sId) return false;
+                const start = new Date(leave.fromDateTime || leave.start_date || now);
+                const end = new Date(leave.toDateTime || leave.end_date || now);
+                return now >= start && now <= end;
               });
 
               if (isOnLeave) return false;

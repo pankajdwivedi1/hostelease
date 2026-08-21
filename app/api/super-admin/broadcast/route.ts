@@ -1,34 +1,26 @@
-export const dynamic = "force-dynamic";
-
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const { message, type = 'info' } = body;
 
-        const supabase = getSupabaseAdmin();
+        const settings = await prisma.adminSettings.findMany({
+            select: { id: true, universityBankDetails: true }
+        });
 
-        // We fetch all settings records
-        const { data: settings, error: fetchError } = await supabase
-            .from('admin_settings')
-            .select('_id, university_bank_details');
-
-        if (fetchError) throw fetchError;
-
-        // Update each record with the broadcast message
         const updatePromises = settings.map((setting: any) => {
-            const bankDetails = setting.university_bank_details || {};
+            const bankDetails = (setting.universityBankDetails as any) || {};
             if (message) {
                 bankDetails.broadcast = { message, type, timestamp: new Date().toISOString() };
             } else {
                 delete bankDetails.broadcast;
             }
-            return supabase
-                .from('admin_settings')
-                .update({ university_bank_details: bankDetails })
-                .eq('_id', setting._id);
+            return prisma.adminSettings.update({
+                where: { id: setting.id },
+                data: { universityBankDetails: bankDetails }
+            });
         });
 
         await Promise.all(updatePromises);
