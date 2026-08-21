@@ -266,173 +266,56 @@ export default function StudentScannerPage() {
                 // Ignore decoding errors
             }
         }, 300); // Scan every 300ms for responsiveness
-    };
-
-    const [syncingOffline, setSyncingOffline] = useState(false);
-
-    // Helper: Queue scan offline
-    const queueOfflineScan = useCallback((qrData: string) => {
-        try {
-            const targetAction = currentStatus === "in" ? "checkout" : "checkin";
-            const newStatus = currentStatus === "in" ? "out" : "in";
-
-            const offlineRecord = {
-                id: Math.random().toString(36).substring(2, 9),
-                qrData,
-                firebaseUID,
-                deviceId,
-                action: targetAction,
-                newStatus,
-                timestamp: new Date().toISOString()
-            };
-
-            const existing = JSON.parse(localStorage.getItem("pendingOfflineScans") || "[]");
-            localStorage.setItem("pendingOfflineScans", JSON.stringify([...existing, offlineRecord]));
-
-            // Update status locally instantly for smooth student flow
-            setCurrentStatus(newStatus);
-            localStorage.setItem("studentStatus", newStatus);
-
-            try {
-                const cachedStr = localStorage.getItem("cachedStudentData");
-                if (cachedStr) {
-                    const parsed = JSON.parse(cachedStr);
-                    parsed.studentStatus = newStatus;
-                    localStorage.setItem("cachedStudentData", JSON.stringify(parsed));
-                }
-            } catch (e) {
-                console.error("Failed to update cachedStudentData:", e);
-            }
-
-            setScanResult({
-                success: true,
-                action: targetAction,
-                message: `⚡ Offline Mode: Scan captured successfully and saved locally! It will auto-sync when your internet reconnects.`,
-                studentName: studentName || "Student"
-            });
-        } catch (e) {
-            setScanResult({
-                success: false,
-                error: "Failed to process offline scan data."
-            });
-        }
-    }, [currentStatus, firebaseUID, deviceId, studentName]);
-
-    // Helper: Sync queued scans
-    const syncOfflineScans = useCallback(async () => {
-        const rawQueued = JSON.parse(localStorage.getItem("pendingOfflineScans") || "[]");
-        if (rawQueued.length === 0) return;
-
-        const now = Date.now();
-        // Prune any queued items older than 5 minutes (never replay stale scans days later!)
-        const queued = rawQueued.filter((item: any) => {
-            const itemTime = item.timestamp ? new Date(item.timestamp).getTime() : 0;
-            return itemTime && (now - itemTime < 5 * 60 * 1000);
-        });
-
-        if (queued.length === 0) {
-            localStorage.removeItem("pendingOfflineScans");
-            return;
-        }
-
-        setSyncingOffline(true);
-        const remaining: any[] = [];
-
-        for (const item of queued) {
-            try {
-                const res = await fetch("/api/getpass/scan", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        qrData: item.qrData,
-                        firebaseUID: item.firebaseUID || item.email || item.phoneNumber || item.registrationId,
-                        email: item.email,
-                        phoneNumber: item.phoneNumber,
-                        registrationId: item.registrationId,
-                        deviceId: item.deviceId,
-                        isOfflineSync: true
-                    }),
-                });
-                const data = await res.json();
-                // If the scan failed with client error (expired, already processed, etc.), discard it
-                if (!data.success && res.status >= 400 && res.status < 500) {
-                    console.warn("Discarding expired/invalid offline scan:", data.error);
-                } else if (!data.success) {
-                    remaining.push(item);
-                }
-            } catch (err) {
-                remaining.push(item);
-            }
-        }
-
-        if (remaining.length > 0) {
-            localStorage.setItem("pendingOfflineScans", JSON.stringify(remaining));
-        } else {
-            localStorage.removeItem("pendingOfflineScans");
-        }
-        setSyncingOffline(false);
-
-        if (remaining.length === 0 && firebaseUID) {
-            fetchOutingHistory(firebaseUID);
-        }
-    }, [firebaseUID]);
-
-    // Listen to network changes
+    };    // Permanently wipe any legacy pending offline scans from device storage
     useEffect(() => {
-        window.addEventListener("online", syncOfflineScans);
-        syncOfflineScans();
-        return () => {
-            window.removeEventListener("online", syncOfflineScans);
-        };
-    }, [syncOfflineScans]);
+        localStorage.removeItem("pendingOfflineScans");
+    }, []);
 
     const playAudioFeedback = (action: string) => {
         try {
-            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const osc = ctx.createOscillator();
-            const gainNode = ctx.createGain();
-            
-            osc.connect(gainNode);
-            gainNode.connect(ctx.destination);
-            
+            const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+            if (!AudioContext) return;
+            const ctx = new AudioContext();
+
             if (action === "checkout") {
+                // Dual high-pitch beep for successful checkout
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
                 osc.type = "sine";
-                osc.frequency.setValueAtTime(800, ctx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
-                gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-                osc.start();
-                osc.stop(ctx.currentTime + 0.5);
-                
-                const utterance = new SpeechSynthesisUtterance("Checked Out");
-                utterance.rate = 1.1;
-                utterance.pitch = 1.2;
-                window.speechSynthesis.speak(utterance);
-            } else if (action === "checkin") {
-                osc.type = "sine";
-                osc.frequency.setValueAtTime(1200, ctx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.1);
-                gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-                osc.start();
-                osc.stop(ctx.currentTime + 0.5);
-                
-                const utterance = new SpeechSynthesisUtterance("Checked In");
-                utterance.rate = 1.1;
-                utterance.pitch = 1.2;
-                window.speechSynthesis.speak(utterance);
+                osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+                osc.frequency.setValueAtTime(1174.66, ctx.currentTime + 0.1); // D6
+                gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.25);
+            } else {
+                // Triple harmonic chime for return (checkin)
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.type = "triangle";
+                osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+                osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08); // E5
+                osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.16); // G5
+                gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.35);
             }
         } catch (e) {
             console.error("Audio feedback error:", e);
         }
     };
 
-    // ===================== Handle QR Code Detection =====================
+    // Main QR Code Verification Handler (Live Online Only)
     const handleQRCodeDetected = useCallback(async (qrData: string) => {
         if (processingRef.current) return;
         processingRef.current = true;
 
-        // Verify it's a GATEPASS QR code
+        // Parse and validate it's a GETPASS QR code first
         try {
             const parsed = JSON.parse(qrData);
             if (parsed.app !== "hosteleaze-getpass") {
@@ -452,10 +335,12 @@ export default function StudentScannerPage() {
             navigator.vibrate(200);
         }
 
-        // Fallback instantly if navigator reports offline
+        // Live check: reject if offline immediately
         if (!navigator.onLine) {
-            queueOfflineScan(qrData);
-            playAudioFeedback(currentStatus === "in" ? "checkout" : "checkin");
+            setScanResult({
+                success: false,
+                error: "⚠️ No Internet Connection. Please connect to mobile data or Campus WiFi and scan again, or request the Gatekeeper for Manual Entry."
+            });
             processingRef.current = false;
             setProcessing(false);
             return;
@@ -525,74 +410,106 @@ export default function StudentScannerPage() {
                 });
             }
         } catch (err: any) {
-            // Fetch/network error - fallback queue offline scan
-            queueOfflineScan(qrData);
+            setScanResult({
+                success: false,
+                error: "⚠️ Network request failed. Please check your internet connection and try again, or request the Gatekeeper for Manual Entry."
+            });
         }
 
         processingRef.current = false;
         setProcessing(false);
-    }, [firebaseUID, deviceId, queueOfflineScan]);
+    }, [firebaseUID, deviceId]);
 
 
     // ===================== Cleanup =====================
     useEffect(() => {
         return () => {
             stopCamera();
+            if (animFrameRef.current) {
+                cancelAnimationFrame(animFrameRef.current);
+            }
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
         };
-    }, []);
+    }, [stopCamera]);
 
-    // ===================== Format duration =====================
-    const formatDuration = (minutes: number) => {
-        if (!minutes) return "Just now";
-        const hrs = Math.floor(minutes / 60);
-        const mins = minutes % 60;
-        if (hrs > 0) return `${hrs}h ${mins}m`;
-        return `${mins}min`;
+    const handleRetry = () => {
+        setScanResult(null);
+        setProcessing(false);
+        processingRef.current = false;
+        startCamera();
     };
 
     return (
-        <div style={styles.container}>
-            {/* Header */}
-            <div style={styles.header}>
-                <a href="/" style={styles.backBtn}>←</a>
-                <div style={styles.headerContent}>
-                    <h1 style={styles.headerTitle}>🎫 GATEPASS</h1>
+        <div style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            backgroundColor: "#030712",
+            color: "#f3f4f6",
+            fontFamily: "system-ui, -apple-system, sans-serif",
+            display: "flex",
+            flexDirection: "column",
+            zIndex: 9999,
+            overflow: "hidden"
+        }}>
+            {/* Top Navigation Bar */}
+            <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "16px 20px",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                background: "rgba(10, 15, 30, 0.8)",
+                backdropFilter: "blur(12px)",
+                zIndex: 10
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <button
+                        onClick={() => router.back()}
+                        style={{
+                            background: "rgba(255, 255, 255, 0.08)",
+                            border: "none",
+                            borderRadius: "10px",
+                            padding: "8px 12px",
+                            color: "#fff",
+                            cursor: "pointer",
+                            fontSize: "14px",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px"
+                        }}
+                    >
+                        ← Back
+                    </button>
+                    <div>
+                        <div style={{ fontSize: "16px", fontWeight: "900", letterSpacing: "0.05em", color: "#6ee7b7" }}>
+                            GATEPASS SCANNER
+                        </div>
+                        <div style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.4)", fontWeight: "500" }}>
+                            {studentName || "Student App"}
+                        </div>
+                    </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <div style={{
-                        ...styles.statusBadge,
-                        background: currentStatus === "in"
-                            ? "rgba(0, 255, 136, 0.15)"
-                            : "rgba(255, 107, 107, 0.15)",
-                        color: currentStatus === "in" ? "#00ff88" : "#ff6b6b",
-                        borderColor: currentStatus === "in"
-                            ? "rgba(0, 255, 136, 0.3)"
-                            : "rgba(255, 107, 107, 0.3)",
+                        padding: "4px 10px",
+                        borderRadius: "20px",
+                        fontSize: "11px",
+                        fontWeight: "700",
+                        letterSpacing: "0.05em",
+                        backgroundColor: currentStatus === "in" ? "rgba(16, 185, 129, 0.15)" : "rgba(245, 158, 11, 0.15)",
+                        color: currentStatus === "in" ? "#34d399" : "#fbbf24",
+                        border: `1px solid ${currentStatus === "in" ? "rgba(16, 185, 129, 0.3)" : "rgba(245, 158, 11, 0.3)"}`
                     }}>
                         {currentStatus === "in" ? "🏠 In Campus" : "🚶 Outside"}
                     </div>
                 </div>
             </div>
-
-            {/* Offline sync indicator banner */}
-            {syncingOffline && (
-                <div style={{
-                    background: "rgba(59, 130, 246, 0.2)",
-                    borderBottom: "1px solid rgba(59, 130, 246, 0.4)",
-                    color: "#60a5fa",
-                    padding: "8px 16px",
-                    textAlign: "center",
-                    fontSize: "11px",
-                    fontWeight: "900",
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px"
-                }}>
-                    <span className="animate-spin inline-block">🔄</span>
-                    <span>Syncing offline scans in background...</span>
-                </div>
-            )}
 
 
             {/* ⚠️ PWA Install Warning — shown when opened in browser tab instead of installed app */}

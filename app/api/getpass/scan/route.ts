@@ -35,7 +35,7 @@ function getISTStrings(date: Date) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { qrData, firebaseUID, email, phoneNumber, registrationId, deviceId, isOfflineSync } = body;
+        const { qrData, firebaseUID, email, phoneNumber, registrationId, deviceId } = body;
 
         const effectiveIdentifier = firebaseUID || email || phoneNumber || registrationId;
 
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         const token = parsedQR.t;
         const gateName = parsedQR.g || "Main Gate";
 
-        // Verification logic for Digital Signature
+        // Verification logic for Digital Signature & Live Expiry
         try {
             const [timestampStr, signature] = token.split('.');
             const timestamp = parseInt(timestampStr);
@@ -85,25 +85,15 @@ export async function POST(request: NextRequest) {
                 throw new Error("Invalid signature");
             }
 
-            // 2. Check if token is too old (25 seconds for live scans, max 5 minutes for offline queue)
+            // 2. Strict Live Token Validation (25 seconds limit: 15s rotation + 10s network buffer)
             const nowMs = Date.now();
-            const MAX_OFFLINE_SCAN_AGE_MS = 5 * 60 * 1000; // Max 5 minutes for offline sync
-            const MAX_LIVE_SCAN_AGE_MS = 25 * 1000; // 25 seconds for live scans
+            const MAX_LIVE_SCAN_AGE_MS = 25 * 1000;
 
-            if (isOfflineSync) {
-                if (nowMs - timestamp > MAX_OFFLINE_SCAN_AGE_MS) {
-                    return NextResponse.json(
-                        { error: "Offline scan expired (older than 5 minutes). Please scan fresh QR code at gate.", expired: true },
-                        { status: 410 }
-                    );
-                }
-            } else {
-                if (nowMs - timestamp > MAX_LIVE_SCAN_AGE_MS) {
-                    return NextResponse.json(
-                        { error: "QR code has expired. Please scan the new QR code displayed at the gate.", expired: true },
-                        { status: 410 }
-                    );
-                }
+            if (nowMs - timestamp > MAX_LIVE_SCAN_AGE_MS) {
+                return NextResponse.json(
+                    { error: "QR code has expired. Please scan the live QR code displayed at the gate.", expired: true },
+                    { status: 410 }
+                );
             }
 
             // 3. Prevent Token Replay Attack (Token Deduplication)
