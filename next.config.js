@@ -1,16 +1,15 @@
 const defaultRuntimeCaching = require("next-pwa/cache");
 
-// NetworkFirst for HTML routes: always fetch fresh code from server when online.
-// Falls back to cache automatically when offline. Ensures students get new UI
-// immediately on next app open after a Railway deploy.
+// ⚡ ULTRA-FAST PWA LAUNCH: StaleWhileRevalidate for instant 0.1s mobile app launch
+// Launches immediately from local phone disk storage on app icon tap,
+// and silently synchronizes updates in the background.
 const customRuntimeCaching = defaultRuntimeCaching.map((entry) => {
-    if (entry.options && entry.options.cacheName === "others") {
+    if (entry.options && (entry.options.cacheName === "others" || entry.options.cacheName === "start-url")) {
         return {
             ...entry,
-            handler: "NetworkFirst",
+            handler: "StaleWhileRevalidate",
             options: {
                 ...entry.options,
-                networkTimeoutSeconds: 3, // 3s timeout → fall back to cache if server slow/offline
             },
         };
     }

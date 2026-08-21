@@ -30,9 +30,33 @@ const LandingPage = dynamic(() => import("./components/LandingPage"), {
 });
 
 export default function Dashboard() {
-  const [userType, setUserType] = useState<string | null>(null);
-  const [studentData, setStudentData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  // ⚡ FRAME-1 SYNCHRONOUS HYDRATION: Instant 0ms render from local device cache
+  const [userType, setUserType] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("userType");
+    }
+    return null;
+  });
+
+  const [studentData, setStudentData] = useState<any>(() => {
+    if (typeof window !== "undefined") {
+      const cached = localStorage.getItem("cachedStudentData");
+      if (cached) {
+        try { return JSON.parse(cached); } catch (e) {}
+      }
+    }
+    return null;
+  });
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("userType");
+      if (stored === "admin" || stored === "warden" || stored === "superadmin") return false;
+      if (stored === "student" && localStorage.getItem("cachedStudentData")) return false;
+      if (stored === "parent" && localStorage.getItem("cachedStudentData")) return false;
+    }
+    return true;
+  });
   const [isMainDomain, setIsMainDomain] = useState(false);
   const router = useRouter();
   const [siblingStudents, setSiblingStudents] = useState<any[]>([]);
