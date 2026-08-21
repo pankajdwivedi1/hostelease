@@ -320,8 +320,20 @@ export default function StudentScannerPage() {
 
     // Helper: Sync queued scans
     const syncOfflineScans = useCallback(async () => {
-        const queued = JSON.parse(localStorage.getItem("pendingOfflineScans") || "[]");
-        if (queued.length === 0) return;
+        const rawQueued = JSON.parse(localStorage.getItem("pendingOfflineScans") || "[]");
+        if (rawQueued.length === 0) return;
+
+        const now = Date.now();
+        // Prune any queued items older than 5 minutes (never replay stale scans days later!)
+        const queued = rawQueued.filter((item: any) => {
+            const itemTime = item.timestamp ? new Date(item.timestamp).getTime() : 0;
+            return itemTime && (now - itemTime < 5 * 60 * 1000);
+        });
+
+        if (queued.length === 0) {
+            localStorage.removeItem("pendingOfflineScans");
+            return;
+        }
 
         setSyncingOffline(true);
         const remaining: any[] = [];
@@ -342,7 +354,10 @@ export default function StudentScannerPage() {
                     }),
                 });
                 const data = await res.json();
-                if (!data.success && data.error && !data.error.includes("already")) {
+                // If the scan failed with client error (expired, already processed, etc.), discard it
+                if (!data.success && res.status >= 400 && res.status < 500) {
+                    console.warn("Discarding expired/invalid offline scan:", data.error);
+                } else if (!data.success) {
                     remaining.push(item);
                 }
             } catch (err) {
@@ -350,7 +365,11 @@ export default function StudentScannerPage() {
             }
         }
 
-        localStorage.setItem("pendingOfflineScans", JSON.stringify(remaining));
+        if (remaining.length > 0) {
+            localStorage.setItem("pendingOfflineScans", JSON.stringify(remaining));
+        } else {
+            localStorage.removeItem("pendingOfflineScans");
+        }
         setSyncingOffline(false);
 
         if (remaining.length === 0 && firebaseUID) {

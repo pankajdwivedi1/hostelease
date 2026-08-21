@@ -85,12 +85,38 @@ export async function POST(request: NextRequest) {
                 throw new Error("Invalid signature");
             }
 
-            // 2. Check if token is too old (25 seconds limit: 15s rotation + 10s network buffer)
+            // 2. Check if token is too old (25 seconds for live scans, max 5 minutes for offline queue)
             const nowMs = Date.now();
-            if (!isOfflineSync && (nowMs - timestamp > 25000)) {
+            const MAX_OFFLINE_SCAN_AGE_MS = 5 * 60 * 1000; // Max 5 minutes for offline sync
+            const MAX_LIVE_SCAN_AGE_MS = 25 * 1000; // 25 seconds for live scans
+
+            if (isOfflineSync) {
+                if (nowMs - timestamp > MAX_OFFLINE_SCAN_AGE_MS) {
+                    return NextResponse.json(
+                        { error: "Offline scan expired (older than 5 minutes). Please scan fresh QR code at gate.", expired: true },
+                        { status: 410 }
+                    );
+                }
+            } else {
+                if (nowMs - timestamp > MAX_LIVE_SCAN_AGE_MS) {
+                    return NextResponse.json(
+                        { error: "QR code has expired. Please scan the new QR code displayed at the gate.", expired: true },
+                        { status: 410 }
+                    );
+                }
+            }
+
+            // 3. Prevent Token Replay Attack (Token Deduplication)
+            const tokenAlreadyUsed = await db.gatePasses.findOne({
+                $or: [
+                    { qrTokenUsedOut: token },
+                    { qrTokenUsedIn: token }
+                ]
+            });
+            if (tokenAlreadyUsed) {
                 return NextResponse.json(
-                    { error: "QR code has expired. Please scan the new QR code displayed at the gate." },
-                    { status: 410 }
+                    { error: "This QR code scan has already been processed.", alreadyProcessed: true },
+                    { status: 409 }
                 );
             }
         } catch (err) {
