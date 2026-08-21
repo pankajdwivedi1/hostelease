@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { installToastSystem, showToast } from "@/lib/toast";
 import { Capacitor } from "@capacitor/core";
-import { supabase } from "@/lib/supabase";
 
 /**
  * ============================================================
@@ -44,7 +43,6 @@ export default function AppBootstrap() {
           console.log("App opened via deep link:", event.url);
           try {
             const parsedUrl = new URL(event.url);
-            // OAuth tokens are returned in the hash (e.g., #access_token=...&refresh_token=...)
             const hash = parsedUrl.hash.substring(1);
             const params = new URLSearchParams(hash || parsedUrl.search);
             
@@ -52,20 +50,10 @@ export default function AppBootstrap() {
             const refreshToken = params.get("refresh_token");
             
             if (accessToken && refreshToken) {
-              console.log("Found OAuth tokens, setting native session...");
-              const { error } = await supabase.auth.setSession({
-                access_token: accessToken,
-                refresh_token: refreshToken
-              });
-              
-              if (!error) {
-                showToast("Logged in successfully!", "success");
-                // Force reload or redirect to home dashboard
-                window.location.replace("/");
-              } else {
-                console.error("Error setting native session:", error);
-                showToast("Authentication session setup failed.", "error");
-              }
+              console.log("Found OAuth tokens via deep link, redirecting...");
+              // Firebase handles auth — just redirect to home
+              showToast("Logged in successfully!", "success");
+              window.location.replace("/");
             }
           } catch (err) {
             console.error("Error parsing deep link URL:", err);
