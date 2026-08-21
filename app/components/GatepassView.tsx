@@ -772,7 +772,8 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     studentId: foundStudent._id,
-                    userType: "gatekeeper"
+                    userType: "gatekeeper",
+                    requestType: "GATE-PASS"
                 })
             });
 

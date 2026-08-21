@@ -122,13 +122,13 @@ export async function POST(request: NextRequest) {
 
                 // Determine target outing type:
                 // Only mark as HOME-LEAVE if explicitly requested (e.g. from Visual Rooms Mark Home-Leave)
-                // OR if the student already has an approved HOME-LEAVE permission from Dean/Warden!
+                // OR if the student already has an active approved HOME-LEAVE permission from Dean/Warden!
                 let targetType = requestType;
                 let passReason = reason;
                 let createdPermId: string | undefined;
 
-                if (!targetType || targetType === 'GATE-PASS' || targetType === 'outing') {
-                    // Check if student has an existing approved HOME-LEAVE permission from Dean or Warden
+                if (userType === 'gatekeeper' && (!targetType || targetType === 'GATE-PASS')) {
+                    // Gatekeeper manual checkout: Check if student has a currently valid approved HOME-LEAVE permission
                     const permsRes = await db.permissions.list({
                         studentId: id.toString(),
                         status: "allowed"
@@ -136,8 +136,10 @@ export async function POST(request: NextRequest) {
                     const activePerms = Array.isArray(permsRes) ? permsRes : (permsRes?.records || permsRes?.permissions || []);
                     const approvedHomeLeave = activePerms.find((p: any) => {
                         const rType = String(p.requestType || '').toLowerCase();
-                        return (rType === 'home-leave' || rType === 'leave' || rType === 'hleave') &&
-                               (p.status === 'allowed' || p.wardenStatus === 'approved' || p.deanStatus === 'approved');
+                        const isLeaveType = (rType === 'home-leave' || rType === 'leave' || rType === 'hleave');
+                        const isApproved = (p.status === 'allowed' || p.wardenStatus === 'approved' || p.deanStatus === 'approved') && p.status !== 'completed';
+                        const notExpired = !p.toDateTime || (new Date(p.toDateTime).getTime() >= (now.getTime() - 24 * 60 * 60 * 1000));
+                        return isLeaveType && isApproved && notExpired;
                     });
 
                     if (approvedHomeLeave) {
@@ -233,7 +235,29 @@ export async function POST(request: NextRequest) {
                             qrTokenUsedIn: "MANUAL_BY_" + userType.toUpperCase(),
                             durationMinutes: Math.round(diffMs / 60000)
                         });
+
+                        if (pass.permissionId) {
+                            try {
+                                await db.permissions.update(pass.permissionId, { status: "completed" });
+                            } catch (pErr) {
+                                console.warn("Failed to complete linked permission:", pErr);
+                            }
+                        }
                     }
+                }
+
+                // Complete all remaining active permissions for this student upon return
+                try {
+                    const activePermsRes = await db.permissions.list({ studentId: id.toString(), status: "allowed" });
+                    const activePerms = Array.isArray(activePermsRes) ? activePermsRes : (activePermsRes?.records || activePermsRes?.permissions || []);
+                    for (const p of activePerms) {
+                        const pId = p._id || p.id;
+                        if (pId) {
+                            await db.permissions.update(pId, { status: "completed" });
+                        }
+                    }
+                } catch (pErr) {
+                    console.warn("Failed to complete permissions on return:", pErr);
                 }
 
                 await db.students.update(id.toString(), { studentStatus: "in" });
