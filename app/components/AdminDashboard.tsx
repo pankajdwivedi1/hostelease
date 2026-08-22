@@ -1074,6 +1074,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   // Refs for click-outside detection
   const entryLogsRef = useRef<HTMLDivElement>(null);
   const absenteesRef = useRef<HTMLDivElement>(null);
+  const permissionsContainerRef = useRef<HTMLDivElement>(null);
 
   const [hostelLocations, setHostelLocations] = useState<any[]>([]);
   const [expandedLocations, setExpandedLocations] = useState<Record<number, boolean>>({});
@@ -5119,10 +5120,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       if (showAllAbsentees && absenteesRef.current && !absenteesRef.current.contains(event.target as Node)) {
         setShowAllAbsentees(false);
       }
+
+      // Collapse Permissions if expanded and clicked outside
+      if (isShowingAllPermissions && permissionsContainerRef.current && !permissionsContainerRef.current.contains(event.target as Node)) {
+        setIsShowingAllPermissions(false);
+        setPermissions(prev => prev.slice(0, 5));
+      }
     };
 
-    // Add event listener when either section is expanded
-    if (showAllEntryLogs || showAllAbsentees) {
+    // Add event listener when any section is expanded
+    if (showAllEntryLogs || showAllAbsentees || isShowingAllPermissions) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
@@ -5130,7 +5137,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showAllEntryLogs, showAllAbsentees]);
+  }, [showAllEntryLogs, showAllAbsentees, isShowingAllPermissions]);
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371e3;
@@ -7539,7 +7546,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     </div>
                   </div>
 
-                  <div className="space-y-3">
+                  <div ref={permissionsContainerRef} className="space-y-3">
                     {loading ? (
                       <div className="flex flex-col items-center justify-center py-12 gap-3">
                         <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
@@ -7797,6 +7804,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
                         </svg>
                         Show All Permissions ({totalPermissionsCount})
+                      </button>
+                    </div>
+                  )}
+
+                  {isShowingAllPermissions && totalPermissionsCount > 5 && (
+                    <div className="flex justify-center mt-6 pb-4">
+                      <button
+                        onClick={() => {
+                          setIsShowingAllPermissions(false);
+                          permissionsContainerRef.current?.scrollIntoView({ behavior: 'smooth' });
+                          setPermissions(prev => prev.slice(0, 5));
+                        }}
+                        className="px-6 py-2.5 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs sm:text-sm tracking-wide border border-gray-200 shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                      >
+                        <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
+                        </svg>
+                        Show Less (Top 5)
                       </button>
                     </div>
                   )}
