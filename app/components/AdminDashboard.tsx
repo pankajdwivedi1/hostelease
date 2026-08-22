@@ -4512,13 +4512,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const fetchPermissions = async (statusArg?: string, forceRefresh = false, fetchAll = true, targetHostel?: string) => {
+  const fetchPermissions = async (statusArg?: string, forceRefresh = false, fetchAll = false, targetHostel?: string) => {
     try {
       const status = statusArg || filter;
       const activeHostelFilter = targetHostel !== undefined ? targetHostel : hostelFilter;
       setIsShowingAllPermissions(fetchAll);
       
-      const limitQuery = fetchAll ? '' : '';
+      const limitQuery = fetchAll ? '' : '&limit=5';
       
       const url = new URL(`/api/permissions?light=true&status=${status}${limitQuery}`, window.location.origin);
       
@@ -7788,11 +7788,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
                   
                   {!isShowingAllPermissions && totalPermissionsCount > 5 && (
-                    <div className="flex justify-center mt-6">
+                    <div className="flex justify-center mt-6 pb-4">
                       <button
                         onClick={() => fetchPermissions(filter, true, true)}
-                        className="px-6 py-2.5 rounded-xl bg-blue-50 text-blue-600 font-bold text-sm tracking-wide border border-blue-100 hover:bg-blue-100 transition-colors shadow-sm active:scale-95"
+                        className="px-6 py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-xs sm:text-sm tracking-wide shadow-md shadow-blue-500/25 hover:shadow-lg hover:from-blue-700 hover:to-indigo-700 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
                       >
+                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                        </svg>
                         Show All Permissions ({totalPermissionsCount})
                       </button>
                     </div>
