@@ -495,29 +495,29 @@ export default function StudentScannerPage() {
 
     return (
         <div style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
+            position: "relative",
+            minHeight: "100vh",
             backgroundColor: "#030712",
             color: "#f3f4f6",
             fontFamily: "system-ui, -apple-system, sans-serif",
             display: "flex",
             flexDirection: "column",
-            zIndex: 9999,
-            overflow: "hidden"
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+            paddingBottom: "40px"
         }}>
             {/* Top Navigation Bar */}
             <div style={{
+                position: "sticky",
+                top: 0,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
                 padding: "16px 20px",
                 borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-                background: "rgba(10, 15, 30, 0.8)",
+                background: "rgba(10, 15, 30, 0.9)",
                 backdropFilter: "blur(12px)",
-                zIndex: 10
+                zIndex: 50
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                     <button
@@ -741,88 +741,180 @@ export default function StudentScannerPage() {
             )}
 
             {/* Outing History */}
-            <div style={styles.historySection}>
-                <h3 style={styles.historyTitle}>📋 Your Outing History</h3>
+            <div style={{
+                padding: "24px 16px",
+                maxWidth: "640px",
+                width: "100%",
+                margin: "0 auto",
+            }}>
+                <h3 style={{
+                    fontSize: "13px",
+                    fontWeight: "900",
+                    color: "#9ca3af",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.1em",
+                    marginBottom: "16px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px"
+                }}>
+                    <span>📋</span> Your Outing History
+                </h3>
 
                 {loadingHistory ? (
-                    <p style={styles.loadingText}>Loading...</p>
+                    <div style={{ padding: "30px", textAlign: "center", color: "#6b7280", fontSize: "13px" }}>
+                        Loading Outing History...
+                    </div>
                 ) : outingHistory.length > 0 ? (
-                    <div style={styles.historyList}>
-                        {outingHistory.map((record) => (
-                            <div key={record._id} style={styles.historyCard}>
-                                {/* Card Header: date + live indicator */}
-                                <div style={styles.historyCardHeader}>
-                                    <span style={{
-                                        ...styles.historyStatusDot,
-                                        background: record.status === "out" ? "#ff6b6b" : "#00ff88",
-                                    }} />
-                                    <span style={styles.historyDate}>{record.checkOutISTDate}</span>
-                                    {record.status === "out" && (
-                                        <span style={styles.liveTag}>LIVE</span>
-                                    )}
-                                </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                        {outingHistory.map((record) => {
+                            const isLeave = String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave';
+                            const isOut = record.status === "out";
 
-                                {/* Card Body: OUT time → IN time | [Type + Duration on right] */}
-                                <div style={styles.historyCardBody}>
-                                    {/* Left: OUT time */}
-                                    <div style={styles.historyTimeBlock}>
-                                        <span style={styles.historyLabel}>OUT</span>
-                                        <span style={styles.historyTime}>{record.checkOutISTTime}</span>
-                                    </div>
-
-                                    <span style={styles.historyArrow}>→</span>
-
-                                    {/* Middle: IN time */}
-                                    <div style={styles.historyTimeBlock}>
-                                        <span style={styles.historyLabel}>IN</span>
-                                        <span style={styles.historyTime}>
-                                            {record.checkInISTTime || "---"}
-                                        </span>
-                                    </div>
-
-                                    {/* Right: Type badge stacked above duration */}
-                                    <div style={{
+                            return (
+                                <div
+                                    key={record._id}
+                                    style={{
+                                        backgroundColor: "#ffffff",
+                                        borderRadius: "16px",
+                                        border: "1px solid rgba(229, 231, 235, 0.9)",
+                                        padding: "16px",
+                                        boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
                                         display: "flex",
-                                        flexDirection: "column" as const,
-                                        alignItems: "center",
-                                        gap: "4px",
-                                        marginLeft: "auto",
-                                    }}>
-                                        {/* LEAVE / PASS big badge */}
+                                        flexDirection: "column",
+                                        gap: "12px",
+                                        transition: "transform 0.15s ease",
+                                    }}
+                                >
+                                    {/* Top Row: Type Pill + Status Pill */}
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                         <span style={{
                                             padding: "3px 10px",
-                                            borderRadius: "8px",
-                                            fontSize: "10px",
+                                            borderRadius: "9999px",
+                                            fontSize: "9px",
                                             fontWeight: "900",
-                                            letterSpacing: "0.1em",
-                                            textTransform: "uppercase" as const,
-                                            background: (String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave')
-                                                ? "rgba(245, 158, 11, 0.2)"
-                                                : "rgba(59, 130, 246, 0.2)",
-                                            color: (String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave') ? "#f59e0b" : "#60a5fa",
-                                            border: (String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave')
-                                                ? "1px solid rgba(245,158,11,0.5)"
-                                                : "1px solid rgba(59,130,246,0.5)",
-                                            whiteSpace: "nowrap" as const,
+                                            textTransform: "uppercase",
+                                            letterSpacing: "0.08em",
+                                            backgroundColor: isLeave ? "#dbeafe" : "#f3e8ff",
+                                            color: isLeave ? "#1d4ed8" : "#7e22ce"
                                         }}>
-                                            {(String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave') ? "🏠 LEAVE" : "🎫 PASS"}
+                                            {isLeave ? "🏠 Home Leave" : "🚶 Short Outing"}
                                         </span>
 
-                                        {/* Duration below the badge */}
-                                        <div style={styles.historyDuration}>
-                                            {record.durationMinutes !== undefined
-                                                ? formatDuration(record.durationMinutes)
-                                                : "Ongoing..."}
+                                        <span style={{
+                                            padding: "3px 10px",
+                                            borderRadius: "9999px",
+                                            fontSize: "9px",
+                                            fontWeight: "900",
+                                            textTransform: "uppercase",
+                                            letterSpacing: "0.08em",
+                                            backgroundColor: isOut ? "#ffe4e6" : "#d1fae5",
+                                            color: isOut ? "#be123c" : "#047857",
+                                            border: isOut ? "1px solid #fecdd3" : "1px solid #a7f3d0"
+                                        }}>
+                                            {isOut ? "Still Outside" : "Returned"}
+                                        </span>
+                                    </div>
+
+                                    {/* Middle Grid: CHECK OUT | CHECK IN */}
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                                        <div>
+                                            <p style={{
+                                                fontSize: "9px",
+                                                fontWeight: "800",
+                                                color: "#9ca3af",
+                                                textTransform: "uppercase",
+                                                letterSpacing: "0.08em",
+                                                margin: "0 0 3px 0"
+                                            }}>
+                                                Check Out
+                                            </p>
+                                            <p style={{
+                                                fontSize: "13px",
+                                                fontWeight: "900",
+                                                color: "#1f2937",
+                                                margin: 0,
+                                                lineHeight: "1.3"
+                                            }}>
+                                                {record.checkOutISTTime} <span style={{ color: "#9ca3af", fontWeight: "600", fontSize: "11px" }}>| {record.checkOutISTDate}</span>
+                                            </p>
+                                        </div>
+
+                                        <div>
+                                            <p style={{
+                                                fontSize: "9px",
+                                                fontWeight: "800",
+                                                color: "#9ca3af",
+                                                textTransform: "uppercase",
+                                                letterSpacing: "0.08em",
+                                                margin: "0 0 3px 0"
+                                            }}>
+                                                Check In
+                                            </p>
+                                            {record.status === "in" || record.status === "auto-resolved" ? (
+                                                <p style={{
+                                                    fontSize: "13px",
+                                                    fontWeight: "900",
+                                                    color: "#1f2937",
+                                                    margin: 0,
+                                                    lineHeight: "1.3"
+                                                }}>
+                                                    {record.checkInISTTime || "---"} <span style={{ color: "#9ca3af", fontWeight: "600", fontSize: "11px" }}>| {record.checkInISTDate}</span>
+                                                </p>
+                                            ) : (
+                                                <p style={{
+                                                    fontSize: "11px",
+                                                    fontWeight: "900",
+                                                    color: "#f43f5e",
+                                                    textTransform: "uppercase",
+                                                    letterSpacing: "0.08em",
+                                                    margin: 0
+                                                }}>
+                                                    Outside Campus
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
+
+                                    {/* Bottom Row: TOTAL DURATION */}
+                                    {record.durationMinutes !== undefined && record.durationMinutes !== null && (
+                                        <div style={{
+                                            fontSize: "10px",
+                                            fontWeight: "800",
+                                            color: "#9ca3af",
+                                            textTransform: "uppercase",
+                                            letterSpacing: "0.08em",
+                                            paddingTop: "8px",
+                                            borderTop: "1px solid #f3f4f6"
+                                        }}>
+                                            Total Duration: <span style={{ color: "#374151", fontWeight: "900" }}>{(() => {
+                                                const minutes = record.durationMinutes;
+                                                if (minutes >= 1440) {
+                                                    const days = Math.floor(minutes / 1440);
+                                                    const hrs = Math.floor((minutes % 1440) / 60);
+                                                    const mins = minutes % 60;
+                                                    return `${days}d ${hrs}h ${mins}m`;
+                                                }
+                                                const h = Math.floor(minutes / 60);
+                                                const m = minutes % 60;
+                                                return h > 0 ? `${h}h ${m}m` : `${m}m`;
+                                            })()}</span>
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 ) : (
-                    <div style={styles.noHistory}>
-                        <span style={{ fontSize: "32px" }}>📭</span>
-                        <p>No outings recorded yet</p>
+                    <div style={{
+                        padding: "36px 20px",
+                        textAlign: "center",
+                        backgroundColor: "rgba(255, 255, 255, 0.03)",
+                        borderRadius: "16px",
+                        border: "1px solid rgba(255, 255, 255, 0.08)"
+                    }}>
+                        <span style={{ fontSize: "32px", display: "block", marginBottom: "8px" }}>📭</span>
+                        <p style={{ margin: 0, fontSize: "13px", color: "rgba(255, 255, 255, 0.4)" }}>No outings recorded yet</p>
                     </div>
                 )}
             </div>
