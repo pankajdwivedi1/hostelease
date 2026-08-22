@@ -163,31 +163,6 @@ export async function POST(request: NextRequest) {
                 } else if (targetType === 'HOME-LEAVE' || targetType === 'leave') {
                     targetType = 'HOME-LEAVE';
                     passReason = passReason || 'Home Leave (Manual Approval)';
-
-                    // Create permission record since Dean/Warden explicitly marked Home Leave
-                    const fromDt = body.fromDateTime ? new Date(body.fromDateTime) : initialCheckOutTime;
-                    const toDt = body.toDateTime ? new Date(body.toDateTime) : new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
-
-                    try {
-                        const createdPerm = await db.permissions.create({
-                            studentId: id.toString(),
-                            firebaseUID: student.firebaseUID,
-                            name: student.name,
-                            hostelName: student.hostelName,
-                            roomNumber: student.roomNumber,
-                            registrationId: student.registrationId,
-                            fromDateTime: fromDt,
-                            toDateTime: toDt,
-                            reason: passReason,
-                            status: "allowed",
-                            wardenStatus: "approved",
-                            deanStatus: "approved",
-                            requestType: "HOME-LEAVE"
-                        });
-                        createdPermId = createdPerm?._id || createdPerm?.id;
-                    } catch (permErr) {
-                        console.error("Failed to create permission record on manual toggle:", permErr);
-                    }
                 } else {
                     targetType = 'GATE-PASS';
                     passReason = passReason || 'Gate Pass (Outing)';

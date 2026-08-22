@@ -5298,6 +5298,14 @@ export const db = {
                     whereClause.status = filters.status;
                 }
 
+                // Exclude artificial manual toggle records
+                whereClause.NOT = {
+                    reason: {
+                        contains: 'Manual Management Override',
+                        mode: 'insensitive'
+                    }
+                };
+
                 if (filters.authorizedHostels && filters.authorizedHostels.length > 0) {
                     const hostelVariations = filters.authorizedHostels.flatMap((h: string) => [
                         h,
