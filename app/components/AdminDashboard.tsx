@@ -4512,13 +4512,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const fetchPermissions = async (statusArg?: string, forceRefresh = false, fetchAll = false, targetHostel?: string) => {
+  const fetchPermissions = async (statusArg?: string, forceRefresh = false, fetchAll = true, targetHostel?: string) => {
     try {
       const status = statusArg || filter;
       const activeHostelFilter = targetHostel !== undefined ? targetHostel : hostelFilter;
       setIsShowingAllPermissions(fetchAll);
       
-      const limitQuery = fetchAll ? '' : '&limit=5';
+      const limitQuery = fetchAll ? '' : '';
       
       const url = new URL(`/api/permissions?light=true&status=${status}${limitQuery}`, window.location.origin);
       
