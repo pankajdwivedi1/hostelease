@@ -162,135 +162,10 @@ export default function StudentScannerPage() {
     //   3. React re-renders → <video> is mounted → videoRefCallback fires
     //      with the real DOM node → we attach the stream immediately.
     //   This is the only approach that avoids all timing races.
-    // ─────────────────────────────────────────────────────────────────────────
-
+    const [startingCamera, setStartingCamera] = useState(false);
     const pendingStreamRef = useRef<MediaStream | null>(null);
 
-    // Called by React when <video> mounts (node = element) or unmounts (node = null)
-    const videoRefCallback = useCallback((node: HTMLVideoElement | null) => {
-        (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = node;
-        if (node && pendingStreamRef.current) {
-            const stream = pendingStreamRef.current;
-            pendingStreamRef.current = null;
-            node.srcObject = stream;
-            node.play().catch(e => console.warn("Video play error:", e));
-            setCameraReady(true);
-
-            // Detect zoom capabilities
-            try {
-                const track = stream.getVideoTracks()[0];
-                if (track && track.getCapabilities) {
-                    const caps = track.getCapabilities() as any;
-                    if (caps && caps.zoom) {
-                        setZoomCaps({ min: caps.zoom.min || 1, max: caps.zoom.max || 1, step: caps.zoom.step || 0.1 });
-                        setZoomLevel(caps.zoom.min || 1);
-                    }
-                }
-            } catch (e) { /* zoom not supported */ }
-
-            // Start QR scanning after a tiny delay so the video feed stabilises
-            setTimeout(() => {
-                if ("BarcodeDetector" in window) {
-                    const detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
-                    scanIntervalRef.current = setInterval(async () => {
-                        if (!videoRef.current || processingRef.current) return;
-                        try {
-                            const barcodes = await detector.detect(videoRef.current);
-                            if (barcodes.length > 0 && barcodes[0].rawValue) {
-                                handleQRCodeDetected(barcodes[0].rawValue);
-                            }
-                        } catch { /* ignore */ }
-                    }, 300);
-                } else {
-                    // Canvas fallback (iOS Safari, older browsers)
-                    scanIntervalRef.current = setInterval(() => {
-                        if (!videoRef.current || !canvasRef.current || processingRef.current) return;
-                        const video = videoRef.current;
-                        const canvas = canvasRef.current;
-                        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-                        if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) return;
-                        canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                        try {
-                            const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
-                            if (code && code.data) handleQRCodeDetected(code.data);
-                        } catch { /* ignore */ }
-                    }, 300);
-                }
-            }, 200);
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    // ===================== Start Camera =====================
-    const startCamera = async () => {
-        processingRef.current = false;
-        setError("");
-        setScanResult(null);
-
-        try {
-            let stream: MediaStream;
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-                });
-            } catch {
-                stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            }
-
-            streamRef.current = stream;
-            pendingStreamRef.current = stream;
-            setScanning(true); // React re-renders → <video> mounts → videoRefCallback fires
-        } catch (err: any) {
-            console.error("Camera access error:", err);
-            setError(err?.message || "Camera access denied. Please allow camera permission in your browser settings.");
-        }
-    };
-
-
-    // ===================== Stop Camera =====================
-    const stopCamera = () => {
-        if (streamRef.current) {
-            streamRef.current.getTracks().forEach((track) => track.stop());
-            streamRef.current = null;
-        }
-        if (scanIntervalRef.current) {
-            clearInterval(scanIntervalRef.current);
-            scanIntervalRef.current = null;
-        }
-        setCameraReady(false);
-        setScanning(false);
-        setZoomCaps(null);
-    };
-
-    // ===================== Handle Zoom =====================
-    const handleZoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = parseFloat(e.target.value);
-        setZoomLevel(val);
-
-        if (streamRef.current) {
-            const track = streamRef.current.getVideoTracks()[0];
-            if (track) {
-                try {
-                    track.applyConstraints({
-                        advanced: [{ zoom: val } as any]
-                    });
-                } catch (err) {
-                    console.error("Zoom not supported by this device");
-                }
-            }
-        }
-    };
-
-    // Permanently wipe any legacy pending offline scans from device storage
-    useEffect(() => {
-        localStorage.removeItem("pendingOfflineScans");
-    }, []);
-
-
-
+    // Audio Feedback helper
     const playAudioFeedback = (action: string) => {
         try {
             const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
@@ -298,28 +173,26 @@ export default function StudentScannerPage() {
             const ctx = new AudioContext();
 
             if (action === "checkout") {
-                // Dual high-pitch beep for successful checkout
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
                 osc.connect(gain);
                 gain.connect(ctx.destination);
                 osc.type = "sine";
-                osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
-                osc.frequency.setValueAtTime(1174.66, ctx.currentTime + 0.1); // D6
+                osc.frequency.setValueAtTime(880, ctx.currentTime);
+                osc.frequency.setValueAtTime(1174.66, ctx.currentTime + 0.1);
                 gain.gain.setValueAtTime(0.3, ctx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
                 osc.start(ctx.currentTime);
                 osc.stop(ctx.currentTime + 0.25);
             } else {
-                // Triple harmonic chime for return (checkin)
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
                 osc.connect(gain);
                 gain.connect(ctx.destination);
                 osc.type = "triangle";
-                osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-                osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08); // E5
-                osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.16); // G5
+                osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+                osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08);
+                osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.16);
                 gain.gain.setValueAtTime(0.3, ctx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
                 osc.start(ctx.currentTime);
@@ -330,32 +203,45 @@ export default function StudentScannerPage() {
         }
     };
 
+    // ===================== Stop Camera =====================
+    const stopCamera = useCallback(() => {
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach((track) => track.stop());
+            streamRef.current = null;
+        }
+        if (scanIntervalRef.current) {
+            clearInterval(scanIntervalRef.current);
+            scanIntervalRef.current = null;
+        }
+        setCameraReady(false);
+        setScanning(false);
+        setStartingCamera(false);
+        setZoomCaps(null);
+    }, []);
+
     // Main QR Code Verification Handler (Live Online Only)
     const handleQRCodeDetected = useCallback(async (qrData: string) => {
         if (processingRef.current) return;
         processingRef.current = true;
 
-        // Parse and validate it's a GETPASS QR code first
         try {
             const parsed = JSON.parse(qrData);
             if (parsed.app !== "hosteleaze-getpass") {
                 processingRef.current = false;
-                return; // Not our QR code, keep scanning
+                return;
             }
         } catch {
             processingRef.current = false;
-            return; // Invalid JSON, not our QR code
+            return;
         }
 
         setProcessing(true);
         stopCamera();
 
-        // Vibrate for haptic feedback
         if (navigator.vibrate) {
             navigator.vibrate(200);
         }
 
-        // Live check: reject if offline immediately
         if (!navigator.onLine) {
             setScanResult({
                 success: false,
@@ -420,7 +306,6 @@ export default function StudentScannerPage() {
                     console.error("Failed to update cachedStudentData:", e);
                 }
 
-                // Refresh history
                 fetchOutingHistory(firebaseUID);
             } else {
                 setScanResult({
@@ -438,7 +323,144 @@ export default function StudentScannerPage() {
 
         processingRef.current = false;
         setProcessing(false);
-    }, [firebaseUID, deviceId]);
+    }, [firebaseUID, deviceId, stopCamera]);
+
+    // ─── Start QR scanning on video stream ───
+    const startQRScanning = useCallback(() => {
+        if (scanIntervalRef.current) {
+            clearInterval(scanIntervalRef.current);
+            scanIntervalRef.current = null;
+        }
+
+        if ("BarcodeDetector" in window) {
+            const detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
+            scanIntervalRef.current = setInterval(async () => {
+                if (!videoRef.current || processingRef.current) return;
+                try {
+                    const barcodes = await detector.detect(videoRef.current);
+                    if (barcodes.length > 0 && barcodes[0].rawValue) {
+                        handleQRCodeDetected(barcodes[0].rawValue);
+                    }
+                } catch { /* ignore */ }
+            }, 250);
+        } else {
+            scanIntervalRef.current = setInterval(() => {
+                if (!videoRef.current || !canvasRef.current || processingRef.current) return;
+                const video = videoRef.current;
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext("2d", { willReadFrequently: true });
+                if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                try {
+                    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+                    if (code && code.data) handleQRCodeDetected(code.data);
+                } catch { /* ignore */ }
+            }, 250);
+        }
+    }, [handleQRCodeDetected]);
+
+    // Attach stream helper
+    const attachStream = useCallback((videoEl: HTMLVideoElement, stream: MediaStream) => {
+        videoEl.srcObject = stream;
+        videoEl.play().catch(e => console.warn("Video play warning:", e));
+        setCameraReady(true);
+
+        try {
+            const track = stream.getVideoTracks()[0];
+            if (track && track.getCapabilities) {
+                const caps = track.getCapabilities() as any;
+                if (caps && caps.zoom) {
+                    setZoomCaps({ min: caps.zoom.min || 1, max: caps.zoom.max || 1, step: caps.zoom.step || 0.1 });
+                    setZoomLevel(caps.zoom.min || 1);
+                }
+            }
+        } catch (e) { /* zoom check fallback */ }
+
+        setTimeout(() => {
+            startQRScanning();
+        }, 200);
+    }, [startQRScanning]);
+
+    // Called by React when <video> mounts or unmounts
+    const videoRefCallback = useCallback((node: HTMLVideoElement | null) => {
+        (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = node;
+        if (node && pendingStreamRef.current) {
+            const stream = pendingStreamRef.current;
+            pendingStreamRef.current = null;
+            attachStream(node, stream);
+        }
+    }, [attachStream]);
+
+    // ===================== Start Camera =====================
+    const startCamera = async () => {
+        if (startingCamera) return;
+        setStartingCamera(true);
+        processingRef.current = false;
+        setError("");
+        setScanResult(null);
+        setScanning(true);
+
+        try {
+            if (typeof navigator === "undefined" || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error("Camera is not supported on this browser or connection is not secure (requires HTTPS or localhost).");
+            }
+
+            let stream: MediaStream;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+                });
+            } catch {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            }
+
+            streamRef.current = stream;
+
+            if (videoRef.current) {
+                attachStream(videoRef.current, stream);
+            } else {
+                pendingStreamRef.current = stream;
+            }
+        } catch (err: any) {
+            console.error("Camera access error:", err);
+            const msg = (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError")
+                ? "Camera permission was denied. Please allow camera access in your browser site settings and try again."
+                : (err?.message || "Could not open camera. Please check your camera permissions.");
+            setError(msg);
+            alert(msg);
+            setScanning(false);
+            setCameraReady(false);
+        } finally {
+            setStartingCamera(false);
+        }
+    };
+
+    // ===================== Handle Zoom =====================
+    const handleZoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = parseFloat(e.target.value);
+        setZoomLevel(val);
+
+        if (streamRef.current) {
+            const track = streamRef.current.getVideoTracks()[0];
+            if (track) {
+                try {
+                    track.applyConstraints({
+                        advanced: [{ zoom: val } as any]
+                    });
+                } catch (err) {
+                    console.error("Zoom not supported by this device");
+                }
+            }
+        }
+    };
+
+    // Permanently wipe any legacy pending offline scans from device storage
+    useEffect(() => {
+        localStorage.removeItem("pendingOfflineScans");
+    }, []);
 
 
     // ===================== Cleanup =====================
@@ -641,11 +663,18 @@ export default function StudentScannerPage() {
                                     background: currentStatus === "in"
                                         ? "linear-gradient(135deg, #ff6b6b, #ee5a24)"
                                         : "linear-gradient(135deg, #00ff88, #00cc6a)",
+                                    opacity: startingCamera ? 0.75 : 1,
+                                    cursor: startingCamera ? "wait" : "pointer",
                                 }}
-                                disabled={!firebaseUID && !studentName}
+                                disabled={startingCamera || (!firebaseUID && !studentName)}
                             >
-                                {currentStatus === "in" ? "🚶 Scan to Check OUT" : "🏠 Scan to Check IN"}
+                                {startingCamera
+                                    ? "⏳ Starting Camera..."
+                                    : currentStatus === "in"
+                                        ? "🚶 Scan to Check OUT"
+                                        : "🏠 Scan to Check IN"}
                             </button>
+
                             {!firebaseUID && !studentName && (
                                 <p style={styles.loginWarning}>
                                     ⚠️ Please login to the app first

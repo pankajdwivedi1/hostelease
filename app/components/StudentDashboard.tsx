@@ -629,7 +629,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const fetchSystemSettings = async () => {
         try {
             const res = await fetch(`/api/admin/settings${getTenantParam()}`);
-            if (!res.ok) throw new Error(`API error: ${res.status}`);
+            if (!res.ok) return;
             const data = await res.json();
             if (data.success) {
                 setFormBuilderConfig(data.formBuilderConfig || []);
@@ -642,7 +642,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 if (data.enforceMandatoryPush !== undefined) setEnforceMandatoryPush(data.enforceMandatoryPush === true);
             }
         } catch (e) {
-            console.error("Error fetching system settings:", e);
+            console.warn("Silent fallback: Error fetching system settings:", e);
         }
     };
 
