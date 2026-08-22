@@ -411,7 +411,11 @@ export async function POST(request: NextRequest) {
             });
 
             // Update student status to "out"
-            await db.students.update(student._id.toString(), { studentStatus: "out" });
+            try {
+                await db.students.update((student._id || student.id || student.firebaseUID).toString(), { studentStatus: "out" });
+            } catch (statusErr) {
+                console.warn("⚠️ Student status update to 'out' failed (non-critical):", statusErr);
+            }
 
             // 🔥 Send MSG91 Gatepass Alert (Fire & Forget)
             const parentPhone = student.fatherNumber || student.motherNumber || student.localGuardianPhoneNumber;
@@ -454,7 +458,11 @@ export async function POST(request: NextRequest) {
 
             if (!openPasses || openPasses.length === 0) {
                 // No open pass found but status is "out" - fix status
-                await db.students.update(student._id.toString(), { studentStatus: "in" });
+                try {
+                    await db.students.update((student._id || student.id || student.firebaseUID).toString(), { studentStatus: "in" });
+                } catch (statusErr) {
+                    console.warn("⚠️ Student status update to 'in' failed (non-critical):", statusErr);
+                }
 
                 return NextResponse.json({
                     success: true,
@@ -497,7 +505,11 @@ export async function POST(request: NextRequest) {
             }
 
             // Update student status to "in"
-            await db.students.update(student._id.toString(), { studentStatus: "in" });
+            try {
+                await db.students.update((student._id || student.id || student.firebaseUID).toString(), { studentStatus: "in" });
+            } catch (statusErr) {
+                console.warn("⚠️ Student status update to 'in' failed (non-critical):", statusErr);
+            }
 
             // 🔥 Send MSG91 Gatepass Alert (Fire & Forget)
             const parentPhone = student.fatherNumber || student.motherNumber || student.localGuardianPhoneNumber;
