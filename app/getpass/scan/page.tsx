@@ -815,89 +815,57 @@ export default function StudentScannerPage() {
                                         </span>
                                     </div>
 
-                                    {/* Middle Grid: CHECK OUT | CHECK IN */}
-                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                                        <div>
-                                            <p style={{
-                                                fontSize: "8px",
-                                                fontWeight: "700",
-                                                color: "#9ca3af",
-                                                textTransform: "uppercase",
-                                                letterSpacing: "0.05em",
-                                                margin: "0 0 2px 0"
-                                            }}>
-                                                Check Out
-                                            </p>
-                                            <p style={{
-                                                fontSize: "11px",
-                                                fontWeight: "800",
-                                                color: "#1f2937",
-                                                margin: 0,
-                                                lineHeight: "1.2"
-                                            }}>
-                                                {record.checkOutISTTime} <span style={{ color: "#9ca3af", fontWeight: "500", fontSize: "9.5px" }}>| {record.checkOutISTDate}</span>
-                                            </p>
+                                    {/* Middle Rows: Full horizontal row matching Screenshot 2 */}
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", paddingTop: "4px" }}>
+                                        <div style={{ display: "flex", alignItems: "center", fontSize: "11px", fontWeight: "800", color: "#111827" }}>
+                                            <span style={{ width: "85px", textTransform: "uppercase", letterSpacing: "-0.02em", flexShrink: 0 }}>CHECK OUT</span>
+                                            <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
+                                            <span style={{ textAlign: "center", flex: 1, fontVariantNumeric: "tabular-nums" }}>{record.checkOutISTTime}</span>
+                                            <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
+                                            <span style={{ textAlign: "right", flex: 1, fontVariantNumeric: "tabular-nums" }}>{record.checkOutISTDate}</span>
                                         </div>
 
-                                        <div>
-                                            <p style={{
-                                                fontSize: "8px",
-                                                fontWeight: "700",
-                                                color: "#9ca3af",
-                                                textTransform: "uppercase",
-                                                letterSpacing: "0.05em",
-                                                margin: "0 0 2px 0"
-                                            }}>
-                                                Check In
-                                            </p>
+                                        <div style={{ display: "flex", alignItems: "center", fontSize: "11px", fontWeight: "800", color: "#111827" }}>
+                                            <span style={{ width: "85px", textTransform: "uppercase", letterSpacing: "-0.02em", flexShrink: 0 }}>CHECK IN</span>
+                                            <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
                                             {record.status === "in" || record.status === "auto-resolved" ? (
-                                                <p style={{
-                                                    fontSize: "11px",
-                                                    fontWeight: "800",
-                                                    color: "#1f2937",
-                                                    margin: 0,
-                                                    lineHeight: "1.2"
-                                                }}>
-                                                    {record.checkInISTTime || "---"} <span style={{ color: "#9ca3af", fontWeight: "500", fontSize: "9.5px" }}>| {record.checkInISTDate}</span>
-                                                </p>
+                                                <>
+                                                    <span style={{ textAlign: "center", flex: 1, fontVariantNumeric: "tabular-nums" }}>{record.checkInISTTime || "---"}</span>
+                                                    <span style={{ color: "#d1d5db", fontWeight: "normal", padding: "0 8px", flexShrink: 0 }}>|</span>
+                                                    <span style={{ textAlign: "right", flex: 1, fontVariantNumeric: "tabular-nums" }}>{record.checkInISTDate}</span>
+                                                </>
                                             ) : (
-                                                <p style={{
-                                                    fontSize: "10px",
-                                                    fontWeight: "800",
-                                                    color: "#f43f5e",
-                                                    textTransform: "uppercase",
-                                                    letterSpacing: "0.05em",
-                                                    margin: 0
-                                                }}>
+                                                <span style={{ flex: 1, textAlign: "center", color: "#f43f5e", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.05em", fontSize: "10px" }}>
                                                     Outside Campus
-                                                </p>
+                                                </span>
                                             )}
                                         </div>
                                     </div>
 
-                                    {/* Bottom Row: TOTAL DURATION */}
+                                    {/* Bottom Row: Centered TOTAL DURATION */}
                                     {record.durationMinutes !== undefined && record.durationMinutes !== null && (
                                         <div style={{
-                                            fontSize: "9px",
-                                            fontWeight: "700",
-                                            color: "#9ca3af",
+                                            fontSize: "10.5px",
+                                            fontWeight: "800",
+                                            color: "#111827",
                                             textTransform: "uppercase",
                                             letterSpacing: "0.05em",
                                             paddingTop: "6px",
-                                            borderTop: "1px solid #f3f4f6"
+                                            borderTop: "1px solid #f3f4f6",
+                                            textAlign: "center"
                                         }}>
-                                            Total Duration: <span style={{ color: "#374151", fontWeight: "800" }}>{(() => {
+                                            TOTAL DURATION: {(() => {
                                                 const minutes = record.durationMinutes;
                                                 if (minutes >= 1440) {
                                                     const days = Math.floor(minutes / 1440);
                                                     const hrs = Math.floor((minutes % 1440) / 60);
                                                     const mins = minutes % 60;
-                                                    return `${days}d ${hrs}h ${mins}m`;
+                                                    return `${days}D ${hrs}H ${mins}M`;
                                                 }
                                                 const h = Math.floor(minutes / 60);
-                                                const m = minutes % 60;
-                                                return h > 0 ? `${h}h ${m}m` : `${m}m`;
-                                            })()}</span>
+                                                const mins = minutes % 60;
+                                                return h > 0 ? `${h}H ${mins}M` : `${mins}M`;
+                                            })()}
                                         </div>
                                     )}
                                 </div>

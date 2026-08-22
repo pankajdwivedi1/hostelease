@@ -4286,50 +4286,64 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                 ) : (
                                                                                     <>
                                                                                         {dayPasses.map((pass: any) => (
-                                                                                            <div key={pass._id} className="bg-white rounded-xl border border-gray-200/60 p-4 shadow-sm space-y-3">
-                                                                                        <div className="flex justify-between items-center">
-                                                                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${pass.type === 'leave' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
-                                                                                                {pass.type === 'leave' ? '🏠 Home Leave' : '🚶 Short Outing'}
-                                                                                            </span>
-                                                                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${pass.status === 'out' ? 'bg-rose-100 text-rose-700 border border-rose-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>
-                                                                                                {pass.status === 'out' ? 'Still Outside' : 'Returned'}
-                                                                                            </span>
-                                                                                        </div>
-                                                                                        <div className="grid grid-cols-2 gap-4 text-xs">
-                                                                                            <div>
-                                                                                                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Check Out</p>
-                                                                                                <p className="font-extrabold text-gray-800">{pass.checkOutISTTime} | <span className="text-gray-400">{pass.checkOutISTDate}</span></p>
-                                                                                            </div>
-                                                                                            <div>
-                                                                                                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Check In</p>
-                                                                                                {pass.status === 'in' || pass.status === 'auto-resolved' ? (
-                                                                                                    <p className="font-extrabold text-gray-800">{pass.checkInISTTime} | <span className="text-gray-400">{pass.checkInISTDate}</span></p>
-                                                                                                ) : (
-                                                                                                    <p className="font-extrabold text-rose-500 uppercase tracking-widest text-[10px] animate-pulse">Outside Campus</p>
+                                                                                            <div key={pass._id} className="bg-white rounded-xl border border-gray-200/60 p-3.5 shadow-sm space-y-2.5">
+                                                                                                <div className="flex justify-between items-center">
+                                                                                                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${pass.type === 'leave' ? 'bg-purple-100 text-purple-700' : 'bg-purple-100 text-purple-700'}`}>
+                                                                                                        {pass.type === 'leave' ? '🏠 Home Leave' : '🚶 Short Outing'}
+                                                                                                    </span>
+                                                                                                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${pass.status === 'out' ? 'bg-rose-100 text-rose-700 border border-rose-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>
+                                                                                                        {pass.status === 'out' ? 'Still Outside' : 'Returned'}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                                
+                                                                                                {/* Row 1 & 2: Full horizontal row matching Screenshot 2 */}
+                                                                                                <div className="space-y-1.5 text-xs pt-1">
+                                                                                                    <div className="flex items-center text-gray-900 font-extrabold text-[11px] md:text-xs">
+                                                                                                        <span className="w-[85px] uppercase tracking-tight shrink-0">CHECK OUT</span>
+                                                                                                        <span className="text-gray-300 font-normal px-2 shrink-0">|</span>
+                                                                                                        <span className="text-center flex-1 tabular-nums">{pass.checkOutISTTime}</span>
+                                                                                                        <span className="text-gray-300 font-normal px-2 shrink-0">|</span>
+                                                                                                        <span className="text-right flex-1 tabular-nums">{pass.checkOutISTDate}</span>
+                                                                                                    </div>
+                                                                                                    <div className="flex items-center text-gray-900 font-extrabold text-[11px] md:text-xs">
+                                                                                                        <span className="w-[85px] uppercase tracking-tight shrink-0">CHECK IN</span>
+                                                                                                        <span className="text-gray-300 font-normal px-2 shrink-0">|</span>
+                                                                                                        {pass.status === 'in' || pass.status === 'auto-resolved' ? (
+                                                                                                            <>
+                                                                                                                <span className="text-center flex-1 tabular-nums">{pass.checkInISTTime}</span>
+                                                                                                                <span className="text-gray-300 font-normal px-2 shrink-0">|</span>
+                                                                                                                <span className="text-right flex-1 tabular-nums">{pass.checkInISTDate}</span>
+                                                                                                            </>
+                                                                                                        ) : (
+                                                                                                            <span className="flex-1 text-center text-rose-500 font-extrabold uppercase tracking-widest text-[10px] animate-pulse">
+                                                                                                                Outside Campus
+                                                                                                            </span>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                </div>
+
+                                                                                                {/* Row 3: Centered Total Duration */}
+                                                                                                {pass.durationMinutes !== undefined && pass.durationMinutes !== null && (
+                                                                                                    <div className="text-center text-[10.5px] md:text-[11px] text-gray-900 font-extrabold uppercase tracking-wider pt-1.5 border-t border-gray-100">
+                                                                                                        TOTAL DURATION: {(() => {
+                                                                                                            const minutes = pass.durationMinutes;
+                                                                                                            if (minutes >= 1440) {
+                                                                                                                const days = Math.floor(minutes / 1440);
+                                                                                                                const hrs = Math.floor((minutes % 1440) / 60);
+                                                                                                                const mins = minutes % 60;
+                                                                                                                return `${days}D ${hrs}H ${mins}M`;
+                                                                                                            }
+                                                                                                            const h = Math.floor(minutes / 60);
+                                                                                                            const mins = minutes % 60;
+                                                                                                            return h > 0 ? `${h}H ${mins}M` : `${mins}M`;
+                                                                                                        })()}
+                                                                                                    </div>
                                                                                                 )}
                                                                                             </div>
-                                                                                        </div>
-                                                                                        {pass.durationMinutes && (
-                                                                                            <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider pt-2 border-t border-gray-100">
-                                                                                                Total Duration: <span className="text-gray-700 font-black">{(() => {
-                                                                                                    const minutes = pass.durationMinutes;
-                                                                                                    if (minutes >= 1440) {
-                                                                                                        const days = Math.floor(minutes / 1440);
-                                                                                                        const hrs = Math.floor((minutes % 1440) / 60);
-                                                                                                        const mins = minutes % 60;
-                                                                                                        return `${days}d ${hrs}h ${mins}m`;
-                                                                                                    }
-                                                                                                    const h = Math.floor(minutes / 60);
-                                                                                                    const m = minutes % 60;
-                                                                                                    return h > 0 ? `${h}h ${m}m` : `${m}m`;
-                                                                                                })()}</span>
-                                                                                            </div>
-                                                                                        )}
-                                                                                    </div>
-                                                                                ))}
-                                                                                </>
-                                                                            )}
-                                                                        </div>
+                                                                                        ))}
+                                                                                    </>
+                                                                                )}
+                                                                            </div>
                                                                         );
                                                                     })()}
                                                                 </div>
