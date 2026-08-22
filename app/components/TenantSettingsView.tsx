@@ -153,12 +153,7 @@ export default function TenantSettingsView({ onRenew, generateInvoicePDF }: Tena
         : null;
 
     return (
-        <div className="space-y-4 sm:space-y-6 max-w-4xl px-1 sm:px-0">
-            <div className="mb-3 sm:mb-8">
-                <h2 className="text-base sm:text-3xl font-bold text-slate-900 mb-0.5 sm:mb-2 tracking-tight">Profile Settings</h2>
-                <p className="text-[9px] sm:text-sm text-slate-600">Manage your university registration, subscription plan, and contact details.</p>
-            </div>
-
+        <div className="space-y-4 sm:space-y-6 max-w-4xl px-1 sm:px-0 pt-1">
             <div className="bg-transparent sm:bg-white sm:rounded-3xl p-0 sm:p-6 md:p-8 sm:shadow-sm sm:border sm:border-slate-100">
                 <div className="space-y-4 sm:space-y-6">
                     {/* View Only Section */}
