@@ -13,7 +13,6 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
-import { writeAdminAuditLog } from "@/lib/auditLog";
 
 const CONSECUTIVE_ABSENT_THRESHOLD = 3; // Alert after 3 consecutive absences
 
@@ -130,20 +129,6 @@ export async function GET(request: NextRequest) {
                     parentPhone: student.fatherNumber || student.motherNumber || "",
                     missingDates: missingDates.slice(0, consecutiveAbsent),
                 });
-
-                // Write audit log for anomaly detection
-                writeAdminAuditLog({
-                    action: "ATTENDANCE_ANOMALY_DETECTED",
-                    entityType: "student",
-                    entityId: student._id.toString(),
-                    entityName: student.name || "Unknown",
-                    details: {
-                        consecutiveAbsentDays: consecutiveAbsent,
-                        missingDates: missingDates.slice(0, consecutiveAbsent),
-                        parentPhone: student.fatherNumber || student.motherNumber || "",
-                    },
-                    performedBy: "system",
-                }).catch(console.error);
             }
         }
 
