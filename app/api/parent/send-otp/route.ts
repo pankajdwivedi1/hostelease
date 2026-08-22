@@ -25,8 +25,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "No active college tenant context found" }, { status: 400 });
     }
 
-    const supabase = getSupabaseAdmin();
-
     // Normalize target phone number with country code (defaults 10-digit numbers to 91 for India)
     const normalizePhoneWithCountry = (num: string) => {
       if (!num) return "";
