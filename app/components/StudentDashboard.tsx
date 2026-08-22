@@ -4143,7 +4143,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                         <button
                                                                             key={idx}
                                                                             onClick={() => setSelectedCalendarDay(cell.date)}
-                                                                            className={`aspect-square flex flex-col items-center justify-center rounded-none text-xs transition-all relative ${colorClasses} ${isSelected ? 'ring-4 ring-blue-600 ring-offset-2 scale-105 z-10' : 'hover:scale-[1.03] active:scale-[0.97]'}`}
+                                                                            className={`aspect-square flex flex-col items-center justify-center rounded-none text-xs transition-all relative ${colorClasses} ${isSelected ? 'ring-2 ring-blue-500 z-10' : 'hover:scale-[1.03] active:scale-[0.97]'}`}
                                                                         >
                                                                             {/* Date in the top right corner */}
                                                                             <span className="absolute top-1.5 right-1.5 text-[9px] font-black leading-none">{cell.date.getDate()}</span>
