@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import connectDB from "@/lib/mongodb";
 import HostelLog from "@/models/HostelLog";
