@@ -95,20 +95,6 @@ export async function POST(request: NextRequest) {
                     { status: 410 }
                 );
             }
-
-            // 3. Prevent Token Replay Attack (Token Deduplication)
-            const tokenAlreadyUsed = await db.gatePasses.findOne({
-                $or: [
-                    { qrTokenUsedOut: token },
-                    { qrTokenUsedIn: token }
-                ]
-            });
-            if (tokenAlreadyUsed) {
-                return NextResponse.json(
-                    { error: "This QR code scan has already been processed.", alreadyProcessed: true },
-                    { status: 409 }
-                );
-            }
         } catch (err) {
             return NextResponse.json(
                 { error: "This is an invalid or tempered QR code." },
