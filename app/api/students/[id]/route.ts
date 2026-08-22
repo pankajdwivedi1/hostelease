@@ -158,19 +158,20 @@ export async function PATCH(
       }
     }
 
-    // ✅ NEW: Upload base64 profile picture to Supabase storage to save database egress/bandwidth
+    // ✅ NEW: Save base64 profile picture to Railway local disk storage
     if (body.profilePicture && body.profilePicture.startsWith("data:image/")) {
       try {
         const student = await db.students.getById(studentId);
         const firebaseUID = student?.firebaseUID || studentId;
         const tenantId = student?.tenantId || "default";
         
-        const { uploadProfilePictureToSupabase } = await import("@/lib/supabaseServer");
-        const publicUrl = await uploadProfilePictureToSupabase(body.profilePicture, tenantId, firebaseUID);
+        const { saveFileToRailway } = await import("@/lib/fileStorage");
+        const filename = `${firebaseUID}_${Date.now()}`;
+        const publicUrl = await saveFileToRailway(body.profilePicture, `profile-pictures/${tenantId}`, filename);
         body.profilePicture = publicUrl;
-        console.log(`[Storage] Successfully uploaded updated profile picture to Supabase bucket. URL: ${publicUrl}`);
+        console.log(`[Storage] Successfully saved updated profile picture to Railway storage: ${publicUrl}`);
       } catch (err: any) {
-        console.error("❌ Failed to upload profile picture to storage, saving as base64 fallback:", err.message);
+        console.error("❌ Failed to save profile picture to Railway storage, saving as base64 fallback:", err.message);
       }
     }
 
