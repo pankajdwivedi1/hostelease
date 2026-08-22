@@ -8711,7 +8711,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <FieldEnforcementComponent hostels={hostels.map(h => h.name)} />
                     )}
                     {settingsTab === "profile" && (
-                      <TenantSettingsView />
+                      <TenantSettingsView onRenew={() => setShowRenewalModal(true)} generateInvoicePDF={generateInvoicePDF} />
                     )}
                   </div>
               </div>
@@ -14140,7 +14140,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   { id: "system", label: "System", icon: "⚙️" },
                   { id: "audit", label: "Audit", icon: "🔍" },
                   ...(title !== "Campus Dashboard" ? [
-                    { id: "subscription", label: "Billing", icon: "💳" },
                     { id: "superadmin", label: "Super Admin", icon: "⚡" }
                   ] : [])
                 ].map((tab) => (
@@ -15810,103 +15809,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                 {activeSettingsTab === "superadmin" && (
                   <DeveloperTools hostels={hostels} developerPassword={developerPassword} students={students} refreshStudents={fetchStudents} />
-                )}
-
-                {activeSettingsTab === "subscription" && (
-                  <div className="space-y-6">
-                    <div className="bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl flex items-start gap-4 mb-4">
-                      <span className="text-xl sm:text-2xl">💳</span>
-                      <div className="flex-1">
-                        <p className="text-xs sm:text-sm text-blue-800 font-bold uppercase tracking-tight">Subscription Plan</p>
-                        <p className="text-[10px] sm:text-xs text-blue-600 font-medium mt-1">
-                          View details about your current college license plan and download invoice proofs of past payments.
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Subscription status card */}
-                    {subscriptionStatus && (
-                      <div className="grid grid-cols-3 gap-2 sm:gap-4">
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-5 rounded-xl sm:rounded-2xl min-w-0">
-                          <p className="text-[8px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-0.5 sm:mb-1 truncate">Plan Status</p>
-                          <div className="flex items-center gap-1.5 sm:gap-2">
-                            <span className={`w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 rounded-full shrink-0 ${subscriptionStatus.isExpired ? 'bg-red-500' : 'bg-green-500'}`}></span>
-                            <p className="text-xs sm:text-lg font-black text-slate-800 uppercase truncate">
-                              {subscriptionStatus.status || "Active"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-5 rounded-xl sm:rounded-2xl min-w-0">
-                          <p className="text-[8px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-0.5 sm:mb-1 truncate">Days Remaining</p>
-                          <p className="text-xs sm:text-lg font-black text-slate-800 truncate">
-                            {subscriptionStatus.daysRemaining !== null ? `${subscriptionStatus.daysRemaining} Days` : "Lifetime / N/A"}
-                          </p>
-                        </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-5 rounded-xl sm:rounded-2xl min-w-0">
-                          <p className="text-[8px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-0.5 sm:mb-1 truncate">Expires On</p>
-                          <p className="text-xs sm:text-lg font-black text-slate-800 truncate">
-                            {subscriptionStatus.endDate ? new Date(subscriptionStatus.endDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "Lifetime / N/A"}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    <button
-                      onClick={() => setShowRenewalModal(true)}
-                      className="w-full py-3.5 sm:py-4 px-3 sm:px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest rounded-2xl shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-1.5 active:scale-98"
-                    >
-                      <span className="whitespace-nowrap">⚡ Renew / Extend Subscription Plan</span>
-                    </button>
-
-                    {/* Ledger Logs Table */}
-                    <div className="space-y-3 pt-4">
-                      <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest px-1">Payment History & Invoices</h3>
-                      {loadingBillingHistory ? (
-                        <div className="flex items-center justify-center p-8 text-slate-400 text-xs">
-                          <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin mr-2" />
-                          Fetching logs...
-                        </div>
-                      ) : billingHistory.length === 0 ? (
-                        <div className="text-center py-8 bg-slate-50 border border-slate-100 rounded-2xl text-slate-400 text-xs font-bold uppercase">
-                          No transactions found
-                        </div>
-                      ) : (
-                        <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs border-collapse">
-                              <thead>
-                                <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-black uppercase tracking-wider text-[8px] sm:text-[10px]">
-                                  <th className="py-2.5 px-1.5 sm:py-3.5 sm:px-5">Date</th>
-                                  <th className="py-2.5 px-1.5 sm:py-3.5 sm:px-5">Period</th>
-                                  <th className="py-2.5 px-1.5 sm:py-3.5 sm:px-5">Reference ID</th>
-                                  <th className="py-2.5 px-1.5 sm:py-3.5 sm:px-5">Amount</th>
-                                  <th className="py-2.5 px-1.5 sm:py-3.5 sm:px-5 text-right">Invoice</th>
-                                </tr>
-                              </thead>
-                              <tbody className="font-bold text-slate-700 text-[9px] sm:text-xs">
-                                {billingHistory.map((tx: any) => (
-                                  <tr key={tx.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                                    <td className="py-2.5 px-1.5 sm:py-3.5 sm:px-5 whitespace-nowrap">{new Date(tx.date).toLocaleDateString("en-IN")}</td>
-                                    <td className="py-2.5 px-1.5 sm:py-3.5 sm:px-5 whitespace-nowrap">{tx.billingPeriod || "1 Year"}</td>
-                                    <td className="py-2.5 px-1.5 sm:py-3.5 sm:px-5 font-mono select-all text-slate-500 text-[8px] sm:text-xs break-all sm:break-normal">{tx.utr || "N/A"}</td>
-                                    <td className="py-2.5 px-1.5 sm:py-3.5 sm:px-5 text-emerald-600 whitespace-nowrap">₹{tx.amount?.toLocaleString("en-IN") || 0}</td>
-                                    <td className="py-2.5 px-1.5 sm:py-3.5 sm:px-5 text-right">
-                                      <button
-                                        onClick={() => generateInvoicePDF(tx, subscriptionStatus?.name)}
-                                        className="px-1.5 py-1 sm:px-3.5 sm:py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-md sm:rounded-lg transition-all text-[8px] sm:text-[10px] uppercase tracking-wider active:scale-95 shadow-md shadow-blue-500/10 whitespace-nowrap"
-                                      >
-                                        📥 <span className="hidden sm:inline">Invoice</span><span className="sm:hidden">PDF</span>
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
                 )}
 
 
