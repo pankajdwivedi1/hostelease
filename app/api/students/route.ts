@@ -272,8 +272,13 @@ export async function POST(request: NextRequest) {
 
     // 📝 LOG ACTIVITY
     try {
-      const operator = request.headers.get("x-admin-email") || "Admin";
-      const actionType = existingStudent ? 'UPDATE' : 'ADD';
+      const adminEmail = request.headers.get("x-admin-email");
+      const wardenUsername = request.headers.get("x-warden-username");
+      const isOnboarding = body.isOnboarding === true || body.source === 'onboarding' || (!adminEmail && !wardenUsername);
+      
+      const operator = isOnboarding ? "Self (Onboarding)" : (adminEmail || wardenUsername || "Admin");
+      const actionType = isOnboarding ? 'ONBOARD' : (existingStudent ? 'UPDATE' : 'ADD');
+
       await writeHostelActivityLog({
         hostelName: student.hostelName || hostelName,
         actionType,

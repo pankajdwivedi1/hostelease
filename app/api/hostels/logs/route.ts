@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         WHERE (
           (details->>'isHostelActivity' = 'true' AND UPPER(TRIM(COALESCE(details->>'hostelName', ''))) = ${targetHostel})
           OR
-          (action IN ('STUDENT_CREATED', 'STUDENT_DELETED', 'STUDENT_EDITED') AND UPPER(TRIM(COALESCE(details->>'hostelName', ''))) = ${targetHostel})
+          (action IN ('STUDENT_CREATED', 'STUDENT_DELETED', 'STUDENT_EDITED', 'STUDENT_ONBOARDED') AND UPPER(TRIM(COALESCE(details->>'hostelName', ''))) = ${targetHostel})
         )
         ORDER BY created_at DESC
         LIMIT 200
@@ -35,9 +35,15 @@ export async function GET(request: NextRequest) {
 
       logs = (dbLogs || []).map((item: any) => {
         const details = typeof item.details === 'object' && item.details !== null ? item.details : {};
-        let actionType: 'ADD' | 'DELETE' | 'UPDATE' = 'UPDATE';
-        if (item.action === 'STUDENT_CREATED') actionType = 'ADD';
-        else if (item.action === 'STUDENT_DELETED') actionType = 'DELETE';
+        const op = details.operator || item.performed_by || item.performedBy || "Admin";
+        let actionType: 'ADD' | 'DELETE' | 'UPDATE' | 'ONBOARD' = 'UPDATE';
+        if (item.action === 'STUDENT_ONBOARDED' || details.actionType === 'ONBOARD' || String(op).toLowerCase().includes('onboard')) {
+          actionType = 'ONBOARD';
+        } else if (item.action === 'STUDENT_CREATED') {
+          actionType = 'ADD';
+        } else if (item.action === 'STUDENT_DELETED') {
+          actionType = 'DELETE';
+        }
 
         return {
           id: item.id || item._id,
@@ -45,7 +51,7 @@ export async function GET(request: NextRequest) {
           actionType,
           studentName: details.studentName || item.entity_name || item.entityName || "Unknown Student",
           erpId: details.erpId || "N/A",
-          operator: details.operator || item.performed_by || item.performedBy || "Admin",
+          operator: op,
           createdAt: item.created_at || item.createdAt || new Date().toISOString()
         };
       });

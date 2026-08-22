@@ -70,7 +70,7 @@ export async function writeHostelActivityLog({
   operator
 }: {
   hostelName: string;
-  actionType: 'ADD' | 'DELETE' | 'UPDATE';
+  actionType: 'ADD' | 'DELETE' | 'UPDATE' | 'ONBOARD';
   studentName: string;
   erpId: string;
   operator: string;
@@ -79,12 +79,13 @@ export async function writeHostelActivityLog({
     const { db } = await import("@/lib/dbAdapter");
     const source = await db.getSource();
 
-    const action = actionType === 'ADD' ? 'STUDENT_CREATED' : actionType === 'DELETE' ? 'STUDENT_DELETED' : 'STUDENT_EDITED';
+    const action = actionType === 'ONBOARD' ? 'STUDENT_ONBOARDED' : actionType === 'ADD' ? 'STUDENT_CREATED' : actionType === 'DELETE' ? 'STUDENT_DELETED' : 'STUDENT_EDITED';
     const details = {
       hostelName,
       studentName,
       erpId,
       operator,
+      actionType,
       timestamp: new Date().toISOString(),
       isHostelActivity: true
     };

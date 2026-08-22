@@ -635,6 +635,7 @@ export default function OnboardingPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          isOnboarding: true,
           firebaseUID: resolvedFirebaseUID,
           supabase_id: user?.source === 'supabase' ? user.uid : undefined,
           name: resolvedName,

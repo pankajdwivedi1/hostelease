@@ -6,7 +6,7 @@ import { showConfirm, showPrompt, showToast } from "@/lib/toast";
 interface HostelLogItem {
   id: string;
   hostelName: string;
-  actionType: 'ADD' | 'DELETE' | 'UPDATE';
+  actionType: 'ADD' | 'DELETE' | 'UPDATE' | 'ONBOARD';
   studentName: string;
   erpId: string;
   operator: string;
@@ -205,8 +205,9 @@ function HostelLogsModal({ hostelName, onClose }: { hostelName: string; onClose:
           ) : (
             <div className="space-y-3">
               {logs.map((log) => {
-                const emoji = log.actionType === 'ADD' ? '🟢' : log.actionType === 'DELETE' ? '🔴' : '🟡';
-                const actionText = log.actionType === 'ADD' ? 'ADDED' : log.actionType === 'DELETE' ? 'DELETED' : 'UPDATED';
+                const isSelfOnboard = log.actionType === 'ONBOARD' || log.operator?.toLowerCase().includes('onboard') || log.operator?.toLowerCase() === 'student' || log.operator?.toLowerCase().includes('self');
+                const emoji = isSelfOnboard ? '🟢' : log.actionType === 'ADD' ? '🟢' : log.actionType === 'DELETE' ? '🔴' : '🟡';
+                const actionText = isSelfOnboard ? 'ONBOARDED' : log.actionType === 'ADD' ? 'ADDED' : log.actionType === 'DELETE' ? 'DELETED' : 'UPDATED';
                 const isSelected = selectedLogIds.has(log.id);
 
                 return (
@@ -234,12 +235,16 @@ function HostelLogsModal({ hostelName, onClose }: { hostelName: string; onClose:
                     {/* Text */}
                     <div className="flex-1 text-left">
                       <p className="text-xs font-semibold text-slate-700 leading-relaxed">
-                        <span className="font-extrabold text-slate-900 uppercase tracking-wide">{actionText}: </span>
+                        <span className={`font-extrabold uppercase tracking-wide ${isSelfOnboard ? 'text-emerald-700' : 'text-slate-900'}`}>{actionText}: </span>
                         <span>"{log.studentName.toUpperCase()}" </span>
                         {log.erpId && log.erpId !== 'N/A' && (
                           <span className="text-[10px] font-black text-slate-500">({log.erpId}) </span>
                         )}
-                        <span>by <span className="font-black text-slate-800">{log.operator}</span></span>
+                        {isSelfOnboard ? (
+                          <span className="text-emerald-700 font-bold">student registered themselves by onboarding</span>
+                        ) : (
+                          <span>by <span className="font-black text-slate-800">{log.operator}</span></span>
+                        )}
                       </p>
                       <p className="text-[10px] text-slate-400 font-semibold mt-1">
                         ⏱️ {formatTime(log.createdAt)}
