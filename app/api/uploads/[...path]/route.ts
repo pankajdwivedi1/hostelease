@@ -16,9 +16,23 @@ export async function GET(
 
         // Prevent directory traversal attacks
         const safeRelativePath = path.normalize(path.join(...pathSegments)).replace(/^(\.\.[\/\\])+/, '');
-        const filePath = path.join(process.cwd(), 'public', 'uploads', safeRelativePath);
+        
+        // Check multiple possible base paths (standard dev/prod, Next.js standalone, Docker)
+        const candidatePaths = [
+            path.join(process.cwd(), 'public', 'uploads', safeRelativePath),
+            path.join(process.cwd(), 'uploads', safeRelativePath),
+            path.join(process.cwd(), '.next', 'standalone', 'public', 'uploads', safeRelativePath),
+        ];
 
-        if (!fs.existsSync(filePath)) {
+        let filePath = '';
+        for (const p of candidatePaths) {
+            if (fs.existsSync(p)) {
+                filePath = p;
+                break;
+            }
+        }
+
+        if (!filePath) {
             return new NextResponse('File not found', { status: 404 });
         }
 
