@@ -10,7 +10,7 @@ const customRuntimeCaching = defaultRuntimeCaching.map((entry) => {
             handler: "NetworkFirst",
             options: {
                 ...entry.options,
-                networkTimeoutSeconds: 3, // 3s timeout → fall back to cache if server slow/offline
+                networkTimeoutSeconds: 15, // 15s timeout → avoids prematurely aborting heavy chunks on local WiFi/hotspots
             },
         };
     }
@@ -38,6 +38,15 @@ const nextConfig = {
         optimizePackageImports: ['firebase', 'firebase-admin', 'mongoose'],
     },
     reactStrictMode: true,
+    webpack: (config, { isServer }) => {
+        if (!isServer) {
+            config.output = {
+                ...config.output,
+                chunkLoadTimeout: 300000, // 5 minutes timeout for async chunks (avoids ChunkLoadError on slow WiFi/hotspot dev)
+            };
+        }
+        return config;
+    },
 };
 
 module.exports = withPWA(nextConfig);

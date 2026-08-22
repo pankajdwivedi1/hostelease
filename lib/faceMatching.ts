@@ -10,10 +10,35 @@ let liteModelsLoaded = false;
 let proModelsLoaded = false;
 let loadingPromise: Promise<boolean> | null = null;
 
+/**
+ * Safely import face-api library with retries (essential for slow WiFi / hotspot latency in Next.js dev mode)
+ */
+async function importFaceApiWithRetry(maxRetries = 3, initialDelay = 1000): Promise<any> {
+    let lastError: any = null;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const fa = await import('@vladmandic/face-api');
+            return fa;
+        } catch (err: any) {
+            lastError = err;
+            console.warn(`⚠️ [Face-API] Dynamic import attempt ${attempt}/${maxRetries} failed:`, err?.message || err);
+            if (attempt < maxRetries) {
+                await new Promise((resolve) => setTimeout(resolve, initialDelay * attempt));
+            }
+        }
+    }
+    throw lastError;
+}
+
 export async function getFaceApi() {
     if (!faceapi) {
         if (typeof window === 'undefined') return null;
-        faceapi = await import('@vladmandic/face-api');
+        try {
+            faceapi = await importFaceApiWithRetry(3, 1200);
+        } catch (err) {
+            console.error('❌ [Face-API] Failed to load face-api package chunk:', err);
+            return null;
+        }
     }
     return faceapi;
 }
@@ -21,7 +46,7 @@ export async function getFaceApi() {
 /**
  * Load face-api.js models with industrial-grade locking
  */
-export async function loadFaceApiModels(accurate: boolean = false) {
+export async function loadFaceApiModels(accurate: boolean = false): Promise<boolean> {
     // 1. Check if already loaded
     if (accurate && proModelsLoaded) return true;
     if (!accurate && liteModelsLoaded) return true;
@@ -37,10 +62,12 @@ export async function loadFaceApiModels(accurate: boolean = false) {
     loadingPromise = (async () => {
         try {
             const fa = await getFaceApi();
-            if (!fa) return false;
+            if (!fa) {
+                console.warn('⚠️ [Face-API] Cannot load models: face-api module is not available.');
+                return false;
+            }
 
             const MODEL_URL = '/models';
-            const promises = [];
 
             // Always ensure basic models are there
             if (!liteModelsLoaded) {

@@ -537,12 +537,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     useEffect(() => {
         if (studentProfile) {
-            // Preload face-api models when student dashboard is ready
-            faceMatching.loadFaceApiModels(true).then(success => {
+            const hasVector = Array.isArray(studentProfile.faceDescriptor) && studentProfile.faceDescriptor.length > 0;
+            // Preload face-api models (Lite if vector exists, Pro only if background calculation is needed)
+            faceMatching.loadFaceApiModels(!hasVector).then(success => {
                 if (success) {
                     console.log('Face matching models ready');
                     // ⚡ SILENT BACKGROUND PRE-CALCULATOR: If face vector is missing, extract it in background now!
-                    const hasVector = Array.isArray(studentProfile.faceDescriptor) && studentProfile.faceDescriptor.length > 0;
                     if (!hasVector && studentProfile.profilePicture) {
                         console.log('⚡ Silently pre-calculating student face vector for instant scanning...');
                         faceMatching.loadImage(studentProfile.profilePicture).then(img => {
@@ -564,6 +564,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         }).catch(() => {});
                     }
                 }
+            }).catch(err => {
+                console.warn('⚠️ Face matching models pre-load deferred:', err);
             });
         }
     }, [studentProfile?.profilePicture, studentProfile?.firebaseUID]);
