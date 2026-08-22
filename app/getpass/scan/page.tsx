@@ -742,31 +742,31 @@ export default function StudentScannerPage() {
 
             {/* Outing History */}
             <div style={{
-                padding: "24px 16px",
-                maxWidth: "640px",
+                padding: "16px 14px 40px",
+                maxWidth: "540px",
                 width: "100%",
                 margin: "0 auto",
             }}>
                 <h3 style={{
-                    fontSize: "13px",
-                    fontWeight: "900",
+                    fontSize: "11px",
+                    fontWeight: "800",
                     color: "#9ca3af",
                     textTransform: "uppercase",
-                    letterSpacing: "0.1em",
-                    marginBottom: "16px",
+                    letterSpacing: "0.08em",
+                    marginBottom: "12px",
                     display: "flex",
                     alignItems: "center",
-                    gap: "8px"
+                    gap: "6px"
                 }}>
                     <span>📋</span> Your Outing History
                 </h3>
 
                 {loadingHistory ? (
-                    <div style={{ padding: "30px", textAlign: "center", color: "#6b7280", fontSize: "13px" }}>
+                    <div style={{ padding: "20px", textAlign: "center", color: "#6b7280", fontSize: "11px" }}>
                         Loading Outing History...
                     </div>
                 ) : outingHistory.length > 0 ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                         {outingHistory.map((record) => {
                             const isLeave = String(record.type || '').toLowerCase().includes('leave') || String(record.type || '').toLowerCase() === 'hleave';
                             const isOut = record.status === "out";
@@ -776,25 +776,24 @@ export default function StudentScannerPage() {
                                     key={record._id}
                                     style={{
                                         backgroundColor: "#ffffff",
-                                        borderRadius: "16px",
+                                        borderRadius: "12px",
                                         border: "1px solid rgba(229, 231, 235, 0.9)",
-                                        padding: "16px",
-                                        boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
+                                        padding: "12px 14px",
+                                        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
                                         display: "flex",
                                         flexDirection: "column",
-                                        gap: "12px",
-                                        transition: "transform 0.15s ease",
+                                        gap: "8px",
                                     }}
                                 >
                                     {/* Top Row: Type Pill + Status Pill */}
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                         <span style={{
-                                            padding: "3px 10px",
+                                            padding: "2px 7px",
                                             borderRadius: "9999px",
-                                            fontSize: "9px",
-                                            fontWeight: "900",
+                                            fontSize: "8.5px",
+                                            fontWeight: "800",
                                             textTransform: "uppercase",
-                                            letterSpacing: "0.08em",
+                                            letterSpacing: "0.05em",
                                             backgroundColor: isLeave ? "#dbeafe" : "#f3e8ff",
                                             color: isLeave ? "#1d4ed8" : "#7e22ce"
                                         }}>
@@ -802,12 +801,12 @@ export default function StudentScannerPage() {
                                         </span>
 
                                         <span style={{
-                                            padding: "3px 10px",
+                                            padding: "2px 7px",
                                             borderRadius: "9999px",
-                                            fontSize: "9px",
-                                            fontWeight: "900",
+                                            fontSize: "8.5px",
+                                            fontWeight: "800",
                                             textTransform: "uppercase",
-                                            letterSpacing: "0.08em",
+                                            letterSpacing: "0.05em",
                                             backgroundColor: isOut ? "#ffe4e6" : "#d1fae5",
                                             color: isOut ? "#be123c" : "#047857",
                                             border: isOut ? "1px solid #fecdd3" : "1px solid #a7f3d0"
@@ -817,57 +816,57 @@ export default function StudentScannerPage() {
                                     </div>
 
                                     {/* Middle Grid: CHECK OUT | CHECK IN */}
-                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                                         <div>
                                             <p style={{
-                                                fontSize: "9px",
-                                                fontWeight: "800",
+                                                fontSize: "8px",
+                                                fontWeight: "700",
                                                 color: "#9ca3af",
                                                 textTransform: "uppercase",
-                                                letterSpacing: "0.08em",
-                                                margin: "0 0 3px 0"
+                                                letterSpacing: "0.05em",
+                                                margin: "0 0 2px 0"
                                             }}>
                                                 Check Out
                                             </p>
                                             <p style={{
-                                                fontSize: "13px",
-                                                fontWeight: "900",
+                                                fontSize: "11px",
+                                                fontWeight: "800",
                                                 color: "#1f2937",
                                                 margin: 0,
-                                                lineHeight: "1.3"
+                                                lineHeight: "1.2"
                                             }}>
-                                                {record.checkOutISTTime} <span style={{ color: "#9ca3af", fontWeight: "600", fontSize: "11px" }}>| {record.checkOutISTDate}</span>
+                                                {record.checkOutISTTime} <span style={{ color: "#9ca3af", fontWeight: "500", fontSize: "9.5px" }}>| {record.checkOutISTDate}</span>
                                             </p>
                                         </div>
 
                                         <div>
                                             <p style={{
-                                                fontSize: "9px",
-                                                fontWeight: "800",
+                                                fontSize: "8px",
+                                                fontWeight: "700",
                                                 color: "#9ca3af",
                                                 textTransform: "uppercase",
-                                                letterSpacing: "0.08em",
-                                                margin: "0 0 3px 0"
+                                                letterSpacing: "0.05em",
+                                                margin: "0 0 2px 0"
                                             }}>
                                                 Check In
                                             </p>
                                             {record.status === "in" || record.status === "auto-resolved" ? (
                                                 <p style={{
-                                                    fontSize: "13px",
-                                                    fontWeight: "900",
+                                                    fontSize: "11px",
+                                                    fontWeight: "800",
                                                     color: "#1f2937",
                                                     margin: 0,
-                                                    lineHeight: "1.3"
+                                                    lineHeight: "1.2"
                                                 }}>
-                                                    {record.checkInISTTime || "---"} <span style={{ color: "#9ca3af", fontWeight: "600", fontSize: "11px" }}>| {record.checkInISTDate}</span>
+                                                    {record.checkInISTTime || "---"} <span style={{ color: "#9ca3af", fontWeight: "500", fontSize: "9.5px" }}>| {record.checkInISTDate}</span>
                                                 </p>
                                             ) : (
                                                 <p style={{
-                                                    fontSize: "11px",
-                                                    fontWeight: "900",
+                                                    fontSize: "10px",
+                                                    fontWeight: "800",
                                                     color: "#f43f5e",
                                                     textTransform: "uppercase",
-                                                    letterSpacing: "0.08em",
+                                                    letterSpacing: "0.05em",
                                                     margin: 0
                                                 }}>
                                                     Outside Campus
@@ -879,15 +878,15 @@ export default function StudentScannerPage() {
                                     {/* Bottom Row: TOTAL DURATION */}
                                     {record.durationMinutes !== undefined && record.durationMinutes !== null && (
                                         <div style={{
-                                            fontSize: "10px",
-                                            fontWeight: "800",
+                                            fontSize: "9px",
+                                            fontWeight: "700",
                                             color: "#9ca3af",
                                             textTransform: "uppercase",
-                                            letterSpacing: "0.08em",
-                                            paddingTop: "8px",
+                                            letterSpacing: "0.05em",
+                                            paddingTop: "6px",
                                             borderTop: "1px solid #f3f4f6"
                                         }}>
-                                            Total Duration: <span style={{ color: "#374151", fontWeight: "900" }}>{(() => {
+                                            Total Duration: <span style={{ color: "#374151", fontWeight: "800" }}>{(() => {
                                                 const minutes = record.durationMinutes;
                                                 if (minutes >= 1440) {
                                                     const days = Math.floor(minutes / 1440);
@@ -907,14 +906,14 @@ export default function StudentScannerPage() {
                     </div>
                 ) : (
                     <div style={{
-                        padding: "36px 20px",
+                        padding: "24px 16px",
                         textAlign: "center",
                         backgroundColor: "rgba(255, 255, 255, 0.03)",
-                        borderRadius: "16px",
+                        borderRadius: "12px",
                         border: "1px solid rgba(255, 255, 255, 0.08)"
                     }}>
-                        <span style={{ fontSize: "32px", display: "block", marginBottom: "8px" }}>📭</span>
-                        <p style={{ margin: 0, fontSize: "13px", color: "rgba(255, 255, 255, 0.4)" }}>No outings recorded yet</p>
+                        <span style={{ fontSize: "24px", display: "block", marginBottom: "6px" }}>📭</span>
+                        <p style={{ margin: 0, fontSize: "11px", color: "rgba(255, 255, 255, 0.4)" }}>No outings recorded yet</p>
                     </div>
                 )}
             </div>
