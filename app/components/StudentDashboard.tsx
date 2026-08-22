@@ -296,12 +296,15 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     ];
 
     const fetchGatePassHistory = async (isFullHistory = false) => {
-        const studentId = studentProfile?._id;
-        if (!studentId) return;
+        const studentId = studentProfile?._id || (studentProfile as any)?.id;
+        const firebaseUID = studentProfile?.firebaseUID || (studentProfile as any)?.firebaseUid;
+        if (!studentId && !firebaseUID) return;
+
+        const cacheKey = `cached_gatepasses_${studentId || firebaseUID}`;
 
         // ⚡ INSTANT 0ms LOAD FROM LOCAL CACHE
         try {
-            const cachedPassesStr = localStorage.getItem(`cached_gatepasses_${studentId}`);
+            const cachedPassesStr = localStorage.getItem(cacheKey);
             if (cachedPassesStr && gatePasses.length === 0) {
                 const cachedPasses = JSON.parse(cachedPassesStr);
                 if (Array.isArray(cachedPasses) && cachedPasses.length > 0) {
@@ -315,20 +318,21 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
         setLoadingGatePasses(true);
         try {
-            const limit = isFullHistory ? 1000 : 5;
-            const res = await fetch(`/api/getpass/history?studentId=${studentId}&limit=${limit}&populate=false${getTenantParam(false)}`);
+            const limit = 1000;
+            const queryParams = new URLSearchParams();
+            if (studentId) queryParams.set("studentId", String(studentId));
+            if (firebaseUID) queryParams.set("firebaseUID", String(firebaseUID));
+            queryParams.set("limit", String(limit));
+            queryParams.set("populate", "false");
+
+            const res = await fetch(`/api/getpass/history?${queryParams.toString()}${getTenantParam(false)}`);
             if (res.ok) {
                 const data = await res.json();
-                if (data.success && data.records) {
-                    setGatePasses(prev => {
-                        if (!isFullHistory && prev.length > limit) {
-                            return prev;
-                        }
-                        return data.records;
-                    });
+                if (data.success && Array.isArray(data.records)) {
+                    setGatePasses(data.records);
                     // ⚡ SAVE TO LOCAL STORAGE FOR OFFLINE / INSTANT 0ms RE-LOAD
                     try {
-                        localStorage.setItem(`cached_gatepasses_${studentId}`, JSON.stringify(data.records));
+                        localStorage.setItem(cacheKey, JSON.stringify(data.records));
                     } catch (e) {}
                 }
             }
@@ -343,10 +347,87 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     useEffect(() => {
         if (showPermissionsHistory) {
             fetchGatePassHistory(true);
-        } else if (studentProfile?._id) {
+        } else if (studentProfile?._id || (studentProfile as any)?.id || studentProfile?.firebaseUID) {
             fetchGatePassHistory(false);
         }
-    }, [showPermissionsHistory, studentProfile?._id]);
+    }, [showPermissionsHistory, studentProfile?._id, (studentProfile as any)?.id, studentProfile?.firebaseUID]);
+
+    const parseGatePassTime = (timeVal: any, dateVal?: any): Date | null => {
+        if (!timeVal && !dateVal) return null;
+        if (timeVal) {
+            const parsed = new Date(timeVal);
+            if (!isNaN(parsed.getTime())) return parsed;
+        }
+        if (dateVal) {
+            const dateStr = String(dateVal).trim();
+            const dateParts = dateStr.split(/[-/]/);
+            if (dateParts.length === 3) {
+                let day = parseInt(dateParts[0]);
+                let month = parseInt(dateParts[1]) - 1;
+                let year = parseInt(dateParts[2]);
+                if (dateParts[0].length === 4) {
+                    year = parseInt(dateParts[0]);
+                    month = parseInt(dateParts[1]) - 1;
+                    day = parseInt(dateParts[2]);
+                }
+                const timeStr = String(timeVal || '00:00:00');
+                const timeParts = timeStr.split(':');
+                const hour = timeParts[0] ? parseInt(timeParts[0]) : 0;
+                const minute = timeParts[1] ? parseInt(timeParts[1]) : 0;
+                const second = timeParts[2] ? parseInt(timeParts[2]) : 0;
+                const parsed = new Date(year, month, day, hour, minute, second);
+                if (!isNaN(parsed.getTime())) return parsed;
+            }
+        }
+        return null;
+    };
+
+    const doesPassMatchDate = (pass: any, date: Date): boolean => {
+        if (!pass || !date) return false;
+
+        const dayStart = new Date(date);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(date);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        // 1. Check formatted date strings match (DD-MM-YYYY, YYYY-MM-DD, DD/MM/YYYY)
+        const d = String(date.getDate()).padStart(2, '0');
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const y = String(date.getFullYear());
+        const ddmmyyyy = `${d}-${m}-${y}`;
+        const yyyymmdd = `${y}-${m}-${d}`;
+        const slashDdmmyyyy = `${d}/${m}/${y}`;
+
+        if (pass.checkOutISTDate && (
+            pass.checkOutISTDate === ddmmyyyy || 
+            pass.checkOutISTDate === yyyymmdd || 
+            pass.checkOutISTDate === slashDdmmyyyy
+        )) {
+            return true;
+        }
+
+        if (pass.checkInISTDate && (
+            pass.checkInISTDate === ddmmyyyy || 
+            pass.checkInISTDate === yyyymmdd || 
+            pass.checkInISTDate === slashDdmmyyyy
+        )) {
+            return true;
+        }
+
+        // 2. Timestamp overlap match
+        const outTime = parseGatePassTime(pass.checkOutTime, pass.checkOutISTDate);
+        const inTime = pass.checkInTime 
+            ? parseGatePassTime(pass.checkInTime, pass.checkInISTDate) 
+            : (pass.status === 'out' ? new Date() : outTime);
+
+        if (outTime && inTime) {
+            return outTime <= dayEnd && inTime >= dayStart;
+        } else if (outTime) {
+            return outTime <= dayEnd && outTime >= dayStart;
+        }
+
+        return false;
+    };
 
     const getDayOutingStatus = (date: Date) => {
         const dayStart = new Date(date);
@@ -360,14 +441,15 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         let hasOverlappingPass = false;
 
         for (const pass of gatePasses) {
-            const outTime = new Date(pass.checkOutTime);
-            const inTime = pass.checkInTime ? new Date(pass.checkInTime) : new Date();
-
-            const overlaps = outTime <= dayEnd && inTime >= dayStart;
-            
-            if (overlaps) {
+            const matches = doesPassMatchDate(pass, date);
+            if (matches) {
                 hasOverlappingPass = true;
-                if (outTime <= dayStart && inTime >= dayEnd) {
+                const outTime = parseGatePassTime(pass.checkOutTime, pass.checkOutISTDate);
+                const inTime = pass.checkInTime 
+                    ? parseGatePassTime(pass.checkInTime, pass.checkInISTDate) 
+                    : new Date();
+
+                if (outTime && inTime && outTime <= dayStart && inTime >= dayEnd) {
                     isWholeDayOut = true;
                 } else {
                     isPartialOut = true;
@@ -381,17 +463,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     };
 
     const getOverlappingGatePasses = (date: Date) => {
-        const dayStart = new Date(date);
-        dayStart.setHours(0, 0, 0, 0);
-        
-        const dayEnd = new Date(date);
-        dayEnd.setHours(23, 59, 59, 999);
-
-        return gatePasses.filter(pass => {
-            const outTime = new Date(pass.checkOutTime);
-            const inTime = pass.checkInTime ? new Date(pass.checkInTime) : new Date();
-            return outTime <= dayEnd && inTime >= dayStart;
-        });
+        return gatePasses.filter(pass => doesPassMatchDate(pass, date));
     };
 
     const getDaysInMonth = (date: Date) => {
