@@ -20,40 +20,35 @@ export async function GET(request: NextRequest) {
     let logs: any[] = [];
 
     if (source === 'PRISMA') {
-      const dbLogs = await (prisma as any).adminAuditLog.findMany({
-        where: {
-          entityType: "student",
-          action: { in: ["STUDENT_CREATED", "STUDENT_DELETED", "STUDENT_EDITED"] }
-        },
-        orderBy: { createdAt: "desc" },
-        take: 200
+      const targetHostel = hostelName.toUpperCase().trim();
+      const dbLogs: any[] = await prisma.$queryRaw`
+        SELECT id, action, entity_name, details, performed_by, created_at
+        FROM "admin_audit_logs"
+        WHERE (
+          (details->>'isHostelActivity' = 'true' AND UPPER(TRIM(COALESCE(details->>'hostelName', ''))) = ${targetHostel})
+          OR
+          (action IN ('STUDENT_CREATED', 'STUDENT_DELETED', 'STUDENT_EDITED') AND UPPER(TRIM(COALESCE(details->>'hostelName', ''))) = ${targetHostel})
+        )
+        ORDER BY created_at DESC
+        LIMIT 200
+      `;
+
+      logs = (dbLogs || []).map((item: any) => {
+        const details = typeof item.details === 'object' && item.details !== null ? item.details : {};
+        let actionType: 'ADD' | 'DELETE' | 'UPDATE' = 'UPDATE';
+        if (item.action === 'STUDENT_CREATED') actionType = 'ADD';
+        else if (item.action === 'STUDENT_DELETED') actionType = 'DELETE';
+
+        return {
+          id: item.id || item._id,
+          hostelName: details.hostelName || hostelName,
+          actionType,
+          studentName: details.studentName || item.entity_name || item.entityName || "Unknown Student",
+          erpId: details.erpId || "N/A",
+          operator: details.operator || item.performed_by || item.performedBy || "Admin",
+          createdAt: item.created_at || item.createdAt || new Date().toISOString()
+        };
       });
-
-      const targetHostel = hostelName.toLowerCase().trim();
-      logs = (dbLogs || [])
-        .filter((item: any) => {
-          const details = typeof item.details === 'object' ? (item.details || {}) : {};
-          if (!details.isHostelActivity) return false;
-          if (!details.hostelName) return false;
-          const itemHostel = String(details.hostelName || "").toLowerCase().trim();
-          return itemHostel === targetHostel;
-        })
-        .map((item: any) => {
-          const details = typeof item.details === 'object' ? (item.details || {}) : {};
-          let actionType: 'ADD' | 'DELETE' | 'UPDATE' = 'UPDATE';
-          if (item.action === 'STUDENT_CREATED') actionType = 'ADD';
-          else if (item.action === 'STUDENT_DELETED') actionType = 'DELETE';
-
-          return {
-            id: item.id || item._id,
-            hostelName: details.hostelName || hostelName,
-            actionType,
-            studentName: details.studentName || item.entityName || "Unknown Student",
-            erpId: details.erpId || "N/A",
-            operator: details.operator || item.performedBy || "Admin",
-            createdAt: item.createdAt || new Date().toISOString()
-          };
-        });
     } else if (source === 'SUPABASE') {
       const supabase = getSupabaseAdmin();
       if (supabase) {
