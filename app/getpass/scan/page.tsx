@@ -1,8 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import jsQR from "jsqr";
 import { getInstallationId, isPWAInstalled } from "@/lib/installationId";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 // ============================================================
 // GATEPASS STUDENT SCANNER — QR Code Scanner for Students
@@ -39,12 +42,7 @@ interface OutingRecord {
 }
 
 export default function StudentScannerPage() {
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const streamRef = useRef<MediaStream | null>(null);
-    const scanIntervalRef = useRef<any>(null);
-    const processingRef = useRef(false);
-
+    const router = useRouter();
     const [scanning, setScanning] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
     const [scanResult, setScanResult] = useState<ScanResult | null>(null);
@@ -62,44 +60,50 @@ export default function StudentScannerPage() {
     const [zoomLevel, setZoomLevel] = useState(1);
     const [zoomCaps, setZoomCaps] = useState<{ min: number; max: number; step: number } | null>(null);
 
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const streamRef = useRef<MediaStream | null>(null);
+    const scanIntervalRef = useRef<any>(null);
+    const processingRef = useRef(false);
+
     // ===================== Get student info + Installation ID =====================
     useEffect(() => {
         const init = async () => {
             try {
                 // 1. Get student info from localStorage
-                let storedUID = localStorage.getItem("firebaseUID") || localStorage.getItem("getpass_uid") || "";
+                let storedUID = localStorage.getItem("firebaseUID") || localStorage.getItem("getpass_uid") || localStorage.getItem("userUid") || "";
                 let storedName = localStorage.getItem("studentName") || "";
                 let storedStatus = localStorage.getItem("studentStatus") as "in" | "out" | null;
 
                 // Fallback to cachedStudentData if missing
-                if (!storedUID || !storedName || !storedStatus) {
-                    try {
-                        const cachedStr = localStorage.getItem("cachedStudentData");
-                        if (cachedStr) {
-                            const parsed = JSON.parse(cachedStr);
-                            if (!storedUID) storedUID = parsed.firebaseUID || parsed.supabaseId || parsed._id || "";
-                            if (!storedName) storedName = parsed.name || "";
-                            if (!storedStatus && parsed.studentStatus) storedStatus = parsed.studentStatus as "in" | "out";
-                        }
-                    } catch (e) {
-                        console.error("Failed to parse cachedStudentData", e);
+                try {
+                    const cachedStr = localStorage.getItem("cachedStudentData");
+                    if (cachedStr) {
+                        const parsed = JSON.parse(cachedStr);
+                        if (!storedUID) storedUID = parsed.firebaseUID || parsed.supabaseId || parsed._id || parsed.id || "";
+                        if (!storedName) storedName = parsed.name || "";
+                        if (!storedStatus && parsed.studentStatus) storedStatus = parsed.studentStatus as "in" | "out";
                     }
+                } catch (e) {
+                    console.error("Failed to parse cachedStudentData", e);
+                }
+
+                if (auth.currentUser?.uid && !storedUID) {
+                    storedUID = auth.currentUser.uid;
                 }
                 
                 const finalStatus = storedStatus || "in";
 
-                setFirebaseUID(storedUID);
-                setStudentName(storedName);
-                setCurrentStatus(finalStatus);
-
                 if (storedUID) {
+                    setFirebaseUID(storedUID);
                     fetchOutingHistory(storedUID);
                 }
+                if (storedName) setStudentName(storedName);
+                setCurrentStatus(finalStatus);
 
                 // 2. Get or generate the persistent PWA Installation ID
                 const installId = await getInstallationId();
                 setDeviceId(installId);
-                // Also keep it in localStorage as a fast-access cache
                 localStorage.setItem("deviceId", installId);
 
                 // 3. Check if running as installed PWA
@@ -110,16 +114,40 @@ export default function StudentScannerPage() {
             }
         };
         init();
+
+        let unsubAuth: (() => void) | null = null;
+        try {
+            unsubAuth = onAuthStateChanged(
+                auth,
+                (user) => {
+                    if (user) {
+                        setFirebaseUID(user.uid);
+                        localStorage.setItem("firebaseUID", user.uid);
+                        fetchOutingHistory(user.uid);
+                    }
+                },
+                (error) => {
+                    console.warn("Silent fallback: Firebase auth sync skipped:", error?.message || error);
+                }
+            );
+        } catch (e) {
+            console.warn("Silent fallback: onAuthStateChanged error:", e);
+        }
+
+        return () => {
+            if (unsubAuth) unsubAuth();
+        };
     }, []);
 
     // ===================== Fetch outing history =====================
     const fetchOutingHistory = async (uid: string) => {
+        if (!uid) return;
         setLoadingHistory(true);
         try {
             const res = await fetch(`/api/getpass/history?firebaseUID=${uid}&limit=10&t=${Date.now()}`);
             const data = await res.json();
             if (data.success) {
-                setOutingHistory(data.records);
+                setOutingHistory(data.records || []);
             }
         } catch (err) {
             console.error("Failed to fetch history:", err);
@@ -127,50 +155,100 @@ export default function StudentScannerPage() {
         setLoadingHistory(false);
     };
 
+    // ─── Camera / QR Scanning ────────────────────────────────────────────────
+    // Strategy: use a <video> ref-callback.
+    //   1. startCamera() gets the MediaStream first (async).
+    //   2. Stores stream in pendingStreamRef, then calls setScanning(true).
+    //   3. React re-renders → <video> is mounted → videoRefCallback fires
+    //      with the real DOM node → we attach the stream immediately.
+    //   This is the only approach that avoids all timing races.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const pendingStreamRef = useRef<MediaStream | null>(null);
+
+    // Called by React when <video> mounts (node = element) or unmounts (node = null)
+    const videoRefCallback = useCallback((node: HTMLVideoElement | null) => {
+        (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = node;
+        if (node && pendingStreamRef.current) {
+            const stream = pendingStreamRef.current;
+            pendingStreamRef.current = null;
+            node.srcObject = stream;
+            node.play().catch(e => console.warn("Video play error:", e));
+            setCameraReady(true);
+
+            // Detect zoom capabilities
+            try {
+                const track = stream.getVideoTracks()[0];
+                if (track && track.getCapabilities) {
+                    const caps = track.getCapabilities() as any;
+                    if (caps && caps.zoom) {
+                        setZoomCaps({ min: caps.zoom.min || 1, max: caps.zoom.max || 1, step: caps.zoom.step || 0.1 });
+                        setZoomLevel(caps.zoom.min || 1);
+                    }
+                }
+            } catch (e) { /* zoom not supported */ }
+
+            // Start QR scanning after a tiny delay so the video feed stabilises
+            setTimeout(() => {
+                if ("BarcodeDetector" in window) {
+                    const detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
+                    scanIntervalRef.current = setInterval(async () => {
+                        if (!videoRef.current || processingRef.current) return;
+                        try {
+                            const barcodes = await detector.detect(videoRef.current);
+                            if (barcodes.length > 0 && barcodes[0].rawValue) {
+                                handleQRCodeDetected(barcodes[0].rawValue);
+                            }
+                        } catch { /* ignore */ }
+                    }, 300);
+                } else {
+                    // Canvas fallback (iOS Safari, older browsers)
+                    scanIntervalRef.current = setInterval(() => {
+                        if (!videoRef.current || !canvasRef.current || processingRef.current) return;
+                        const video = videoRef.current;
+                        const canvas = canvasRef.current;
+                        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+                        if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        try {
+                            const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+                            if (code && code.data) handleQRCodeDetected(code.data);
+                        } catch { /* ignore */ }
+                    }, 300);
+                }
+            }, 200);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     // ===================== Start Camera =====================
     const startCamera = async () => {
         processingRef.current = false;
         setError("");
         setScanResult(null);
-        setScanning(true);
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: "environment", // Use back camera
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                },
-            });
+            let stream: MediaStream;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+                });
+            } catch {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            }
 
             streamRef.current = stream;
-
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-                videoRef.current.play();
-                setCameraReady(true);
-
-                // Detect zoom capabilities
-                const track = stream.getVideoTracks()[0];
-                const capabilities = track.getCapabilities() as any;
-
-                if (capabilities.zoom) {
-                    setZoomCaps({
-                        min: capabilities.zoom.min || 1,
-                        max: capabilities.zoom.max || 1,
-                        step: capabilities.zoom.step || 0.1
-                    });
-                    setZoomLevel(capabilities.zoom.min || 1);
-                }
-
-                // Start scanning for QR codes
-                startQRScanning();
-            }
+            pendingStreamRef.current = stream;
+            setScanning(true); // React re-renders → <video> mounts → videoRefCallback fires
         } catch (err: any) {
-            setError("Camera access denied. Please allow camera permission.");
-            setScanning(false);
+            console.error("Camera access error:", err);
+            setError(err?.message || "Camera access denied. Please allow camera permission in your browser settings.");
         }
     };
+
 
     // ===================== Stop Camera =====================
     const stopCamera = () => {
@@ -206,70 +284,12 @@ export default function StudentScannerPage() {
         }
     };
 
-    // ===================== QR Code Scanning (using BarcodeDetector API) =====================
-    const startQRScanning = () => {
-        // Check if BarcodeDetector is available (modern browsers)
-        if ("BarcodeDetector" in window) {
-            const detector = new (window as any).BarcodeDetector({
-                formats: ["qr_code"],
-            });
-
-            scanIntervalRef.current = setInterval(async () => {
-                if (!videoRef.current || processingRef.current) return;
-
-                try {
-                    const barcodes = await detector.detect(videoRef.current);
-                    if (barcodes.length > 0) {
-                        const qrData = barcodes[0].rawValue;
-                        if (qrData) {
-                            handleQRCodeDetected(qrData);
-                        }
-                    }
-                } catch (err) {
-                    // Ignore detection errors
-                }
-            }, 300); // Scan every 300ms
-        } else {
-            // Fallback: Use canvas-based detection for older browsers
-            scanWithCanvas();
-        }
-    };
-
-    // ===================== Canvas-based fallback scanning (Essential for iOS) =====================
-    const scanWithCanvas = () => {
-        scanIntervalRef.current = setInterval(() => {
-            if (!videoRef.current || !canvasRef.current || processingRef.current) return;
-
-            const video = videoRef.current;
-            const canvas = canvasRef.current;
-            const ctx = canvas.getContext("2d", { willReadFrequently: true });
-
-            if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) return;
-
-            // Use a smaller canvas for performance if needed, but 1:1 is accurate
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-            // ⚡ CORE FIX: Use jsQR for decoding on iOS/Safari
-            try {
-                const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                    inversionAttempts: "dontInvert",
-                });
-
-                if (code && code.data) {
-                    handleQRCodeDetected(code.data);
-                }
-            } catch (err) {
-                // Ignore decoding errors
-            }
-        }, 300); // Scan every 300ms for responsiveness
-    };    // Permanently wipe any legacy pending offline scans from device storage
+    // Permanently wipe any legacy pending offline scans from device storage
     useEffect(() => {
         localStorage.removeItem("pendingOfflineScans");
     }, []);
+
+
 
     const playAudioFeedback = (action: string) => {
         try {
@@ -425,14 +445,24 @@ export default function StudentScannerPage() {
     useEffect(() => {
         return () => {
             stopCamera();
-            if (animFrameRef.current) {
-                cancelAnimationFrame(animFrameRef.current);
-            }
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
+            if (scanIntervalRef.current) {
+                clearInterval(scanIntervalRef.current);
             }
         };
     }, [stopCamera]);
+
+    const formatDuration = (minutes: number | null | undefined) => {
+        if (!minutes || minutes <= 0) return "---";
+        if (minutes >= 1440) {
+            const days = Math.floor(minutes / 1440);
+            const hrs = Math.floor((minutes % 1440) / 60);
+            const mins = minutes % 60;
+            return `${days}d ${hrs}h ${mins}m`;
+        }
+        const h = Math.floor(minutes / 60);
+        const m = minutes % 60;
+        return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    };
 
     const handleRetry = () => {
         setScanResult(null);
@@ -542,7 +572,7 @@ export default function StudentScannerPage() {
                     {scanning ? (
                         <div style={styles.cameraContainer}>
                             <video
-                                ref={videoRef}
+                                ref={videoRefCallback}
                                 style={styles.video}
                                 playsInline
                                 muted
@@ -612,11 +642,11 @@ export default function StudentScannerPage() {
                                         ? "linear-gradient(135deg, #ff6b6b, #ee5a24)"
                                         : "linear-gradient(135deg, #00ff88, #00cc6a)",
                                 }}
-                                disabled={!firebaseUID}
+                                disabled={!firebaseUID && !studentName}
                             >
                                 {currentStatus === "in" ? "🚶 Scan to Check OUT" : "🏠 Scan to Check IN"}
                             </button>
-                            {!firebaseUID && (
+                            {!firebaseUID && !studentName && (
                                 <p style={styles.loginWarning}>
                                     ⚠️ Please login to the app first
                                 </p>
