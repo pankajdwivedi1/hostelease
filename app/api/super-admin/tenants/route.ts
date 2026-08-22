@@ -111,7 +111,8 @@ export async function GET(request: NextRequest) {
                 contactPhone: bankDetails.contactPhone || null,
                 totalHostelars: bankDetails.totalHostelars || null,
                 features: bankDetails.features || { smsEnabled: true, biometricEnabled: true, advancedAnalytics: false },
-                storageBytes: bankDetails.lastStorageBytes || null
+                storageBytes: bankDetails.lastStorageBytes || null,
+                storageQuotaMb: bankDetails.storageQuotaMb || 100
             };
         }));
 
@@ -140,7 +141,8 @@ export async function GET(request: NextRequest) {
                 contactPhone: stats?.contactPhone || null,
                 totalHostelars: stats?.totalHostelars || null,
                 features: stats?.features,
-                storageBytes: stats?.storageBytes || 0
+                storageBytes: stats?.storageBytes || 0,
+                storageQuotaMb: stats?.storageQuotaMb || 100
             };
         }) || [];
 
@@ -248,7 +250,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
     try {
         const body = await request.json();
-        const { id, is_active, subscriptionStatus, subscriptionEndDate, createdAt, contactName, contactPhone, totalHostelars, features } = body;
+        const { id, is_active, subscriptionStatus, subscriptionEndDate, createdAt, contactName, contactPhone, totalHostelars, features, storageQuotaMb } = body;
 
         if (!id) return NextResponse.json({ success: false, error: "Tenant ID is required" }, { status: 400 });
 
@@ -299,7 +301,7 @@ export async function PATCH(request: NextRequest) {
         }
 
         // Update admin_settings in both Supabase and Railway
-        const hasContactUpdates = contactName !== undefined || contactPhone !== undefined || totalHostelars !== undefined || features !== undefined;
+        const hasContactUpdates = contactName !== undefined || contactPhone !== undefined || totalHostelars !== undefined || features !== undefined || storageQuotaMb !== undefined;
         let bankDetails: any = {};
 
         if (subscriptionStatus || subscriptionEndDate || hasContactUpdates) {
@@ -322,6 +324,7 @@ export async function PATCH(request: NextRequest) {
                 if (contactPhone !== undefined) bankDetails.contactPhone = contactPhone;
                 if (totalHostelars !== undefined) bankDetails.totalHostelars = totalHostelars;
                 if (features !== undefined) bankDetails.features = features;
+                if (storageQuotaMb !== undefined) bankDetails.storageQuotaMb = Number(storageQuotaMb) || 100;
             }
 
             if (settings) {
@@ -364,7 +367,8 @@ export async function PATCH(request: NextRequest) {
             contactName: bankDetails.contactName || contactName,
             contactPhone: bankDetails.contactPhone || contactPhone,
             totalHostelars: bankDetails.totalHostelars || totalHostelars,
-            features: bankDetails.features || features
+            features: bankDetails.features || features,
+            storageQuotaMb: bankDetails.storageQuotaMb || Number(storageQuotaMb) || 100
         };
 
         return NextResponse.json({ success: true, tenant: formattedTenant });

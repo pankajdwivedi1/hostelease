@@ -51,6 +51,7 @@ interface Tenant {
         advancedAnalytics?: boolean;
     };
     storageBytes?: number;
+    storageQuotaMb?: number;
     contactName?: string;
     contactPhone?: string;
     isDeleted?: boolean;
@@ -996,7 +997,8 @@ export default function SuperAdminDashboard() {
                     contactName: editingTenant.contactName,
                     contactPhone: editingTenant.contactPhone,
                     totalHostelars: editingTenant.totalHostelars,
-                    features: editingTenant.features
+                    features: editingTenant.features,
+                    storageQuotaMb: editingTenant.storageQuotaMb || 100
                 })
             });
             const data = await res.json();
@@ -1699,24 +1701,29 @@ export default function SuperAdminDashboard() {
                                             </div>
 
                                             {/* Storage Quota Progress Bar */}
-                                            {tenant.storageBytes !== null && tenant.storageBytes !== undefined && (
-                                                <div className="px-1 space-y-1">
-                                                    <div className="flex justify-between items-center text-[7px] font-black uppercase text-slate-400 tracking-wider">
-                                                        <span>Storage Quota</span>
-                                                        <span>{((tenant.storageBytes / (100 * 1024 * 1024)) * 100).toFixed(1)}% of 100MB</span>
+                                            {tenant.storageBytes !== null && tenant.storageBytes !== undefined && (() => {
+                                                const quotaMb = tenant.storageQuotaMb || 100;
+                                                const quotaBytes = quotaMb * 1024 * 1024;
+                                                const percent = ((tenant.storageBytes / quotaBytes) * 100);
+                                                return (
+                                                    <div className="px-1 space-y-1">
+                                                        <div className="flex justify-between items-center text-[7px] font-black uppercase text-slate-400 tracking-wider">
+                                                            <span>Storage Quota</span>
+                                                            <span>{percent.toFixed(1)}% of {quotaMb}MB</span>
+                                                        </div>
+                                                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
+                                                            <div 
+                                                                className={`h-full rounded-full transition-all duration-500 ${
+                                                                    (tenant.storageBytes / quotaBytes) > 0.8 ? 'bg-red-500 animate-pulse' :
+                                                                    (tenant.storageBytes / quotaBytes) > 0.5 ? 'bg-amber-500' :
+                                                                    'bg-blue-500'
+                                                                }`}
+                                                                style={{ width: `${Math.min(100, percent)}%` }}
+                                                            ></div>
+                                                        </div>
                                                     </div>
-                                                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
-                                                        <div 
-                                                            className={`h-full rounded-full transition-all duration-500 ${
-                                                                (tenant.storageBytes / (100 * 1024 * 1024)) > 0.8 ? 'bg-red-500 animate-pulse' :
-                                                                (tenant.storageBytes / (100 * 1024 * 1024)) > 0.5 ? 'bg-amber-500' :
-                                                                'bg-blue-500'
-                                                            }`}
-                                                            style={{ width: `${Math.min(100, (tenant.storageBytes / (100 * 1024 * 1024)) * 100)}%` }}
-                                                        ></div>
-                                                    </div>
-                                                </div>
-                                            )}
+                                                );
+                                            })()}
 
                                             <div className="flex gap-2">
                                                 {viewMode === 'active' ? (
@@ -2203,16 +2210,32 @@ export default function SuperAdminDashboard() {
                                 </div>
                             </div>
 
-                            <div className="space-y-1.5">
-                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-0.5">Total Hostelars</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    value={editingTenant?.totalHostelars || ""}
-                                    onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, totalHostelars: Number(e.target.value) || 0 })}
-                                    placeholder="e.g. 500"
-                                    className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs placeholder:text-gray-300"
-                                />
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-0.5">Total Hostelars</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={editingTenant?.totalHostelars || ""}
+                                        onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, totalHostelars: Number(e.target.value) || 0 })}
+                                        placeholder="e.g. 500"
+                                        className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs placeholder:text-gray-300"
+                                    />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-0.5 flex items-center justify-between">
+                                        <span>Storage Quota (MB)</span>
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="10"
+                                        value={editingTenant?.storageQuotaMb || 100}
+                                        onChange={(e) => editingTenant && setEditingTenant({ ...editingTenant, storageQuotaMb: Number(e.target.value) || 100 })}
+                                        placeholder="100"
+                                        className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-700 text-xs placeholder:text-gray-300"
+                                    />
+                                </div>
                             </div>
 
                             <div className="flex gap-3 pt-3 border-t border-slate-100 shrink-0">
