@@ -8942,13 +8942,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           <button
                                             onClick={async () => {
                                               const ipVal = await showPrompt(`Edit whitelisted IP for ${hostel.name}:`, hostelIpEntry.ip);
-                                              if (ipVal !== null) {
+                                              if (ipVal !== null && ipVal.trim()) {
                                                 const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
-                                                const updated = wl.map((w: any) =>
-                                                  w === hostelIpEntry ? { ...w, ip: ipVal.trim() } : w
-                                                );
+                                                const existingIdx = wl.findIndex((w: any) => matchHostelEntry(w, hostel.name, false));
+                                                let updated;
+                                                if (existingIdx >= 0) {
+                                                  updated = wl.map((w: any, idx: number) =>
+                                                    idx === existingIdx ? { ...w, ip: ipVal.trim(), hostelName: hostel.name, name: `${hostel.name} IP (Manual)` } : w
+                                                  );
+                                                } else {
+                                                  updated = [...wl, { name: `${hostel.name} IP (Manual)`, hostelName: hostel.name, ip: ipVal.trim(), bssids: [] }];
+                                                }
                                                 setWifiWhitelist(updated);
                                                 await handleUpdateSettings({ wifiWhitelist: updated });
+                                                await fetchSystemSettings();
                                                 showToast(`IP updated for ${hostel.name}`, "success");
                                               }
                                             }}
@@ -8961,7 +8968,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                               if (await showConfirm(`Are you sure you want to remove the whitelisted IP for ${hostel.name}?`)) {
                                                 const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
                                                 const updated = wl.map((w: any) => {
-                                                  if (w === hostelIpEntry) {
+                                                  if (matchHostelEntry(w, hostel.name, false)) {
                                                     return { ...w, ip: undefined };
                                                   }
                                                   return w;
@@ -8969,6 +8976,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                 
                                                 setWifiWhitelist(updated);
                                                 await handleUpdateSettings({ wifiWhitelist: updated });
+                                                await fetchSystemSettings();
                                                 showToast(`IP removed for ${hostel.name}`, "success");
                                               }
                                             }}
@@ -8981,23 +8989,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <button
                                           onClick={async () => {
                                             const ipVal = await showPrompt(`Enter whitelisted IP address for ${hostel.name} (e.g. 152.58.56.104):`, "");
-                                            if (ipVal) {
+                                            if (ipVal && ipVal.trim()) {
                                               const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
-                                              const existingIdx = wl.findIndex((w: any) =>
-                                                w && typeof w === 'object' && (
-                                                  (w.hostelName && w.hostelName.toLowerCase() === hostel.name.toLowerCase()) ||
-                                                  (w.name && w.name.toLowerCase().includes(hostel.name.toLowerCase()))
-                                                )
-                                              );
+                                              const existingIdx = wl.findIndex((w: any) => matchHostelEntry(w, hostel.name, false));
                                               let updated;
                                               if (existingIdx >= 0) {
-                                                updated = [...wl];
-                                                updated[existingIdx] = { ...updated[existingIdx], ip: ipVal.trim(), name: `${hostel.name} IP (Manual)` };
+                                                updated = wl.map((w: any, idx: number) =>
+                                                  idx === existingIdx ? { ...w, ip: ipVal.trim(), hostelName: hostel.name, name: `${hostel.name} IP (Manual)` } : w
+                                                );
                                               } else {
                                                 updated = [...wl, { name: `${hostel.name} IP (Manual)`, hostelName: hostel.name, ip: ipVal.trim(), bssids: [] }];
                                               }
                                               setWifiWhitelist(updated);
                                               await handleUpdateSettings({ wifiWhitelist: updated });
+                                              await fetchSystemSettings();
                                               showToast(`IP configured for ${hostel.name}`, "success");
                                             }
                                           }}
