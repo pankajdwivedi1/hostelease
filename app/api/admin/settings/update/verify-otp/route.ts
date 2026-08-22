@@ -39,40 +39,21 @@ export async function POST(request: Request) {
         // 3. Clear cache
         otpCache.delete(cacheKey);
 
-        // 4. Update the Database
-        const { data: existingSettings } = await db.supabase
-            .from('admin_settings')
-            .select('id, _id, university_bank_details')
-            .eq('tenant_id', tenantId)
-            .maybeSingle();
+        // 4. Update the Database via dbAdapter (Railway PostgreSQL)
+        const existingSettings = await db.settings.get();
 
-        const bankDetails = (existingSettings?.university_bank_details && typeof existingSettings.university_bank_details === 'object') 
-            ? { ...existingSettings.university_bank_details } 
-            : {};
+        const bankDetails = ((existingSettings?.universityBankDetails || existingSettings?.university_bank_details) || {}) as any;
+        const updatedBankDetails = (bankDetails && typeof bankDetails === 'object') ? { ...bankDetails } : {};
         
         // Update fields
-        if (contactName !== undefined && contactName !== null) bankDetails.contactName = String(contactName).trim();
-        if (contactPhone !== undefined && contactPhone !== null) bankDetails.contactPhone = String(contactPhone).trim();
-        if (totalHostelars !== undefined && totalHostelars !== null) bankDetails.totalHostelars = String(totalHostelars).trim();
+        if (contactName !== undefined && contactName !== null) updatedBankDetails.contactName = String(contactName).trim();
+        if (contactPhone !== undefined && contactPhone !== null) updatedBankDetails.contactPhone = String(contactPhone).trim();
+        if (totalHostelars !== undefined && totalHostelars !== null) updatedBankDetails.totalHostelars = String(totalHostelars).trim();
 
-        const updatePayload: any = {
-            tenant_id: tenantId,
-            university_bank_details: bankDetails,
-            ...(leaveApprovalMethod ? { leave_approval_method: leaveApprovalMethod } : {})
-        };
-
-        if (existingSettings) {
-            const { error } = await db.supabase
-                .from('admin_settings')
-                .update(updatePayload)
-                .eq('tenant_id', tenantId);
-            if (error) throw error;
-        } else {
-            const { error } = await db.supabase
-                .from('admin_settings')
-                .insert([updatePayload]);
-            if (error) throw error;
-        }
+        await db.settings.update({
+            universityBankDetails: updatedBankDetails,
+            ...(leaveApprovalMethod ? { leaveApprovalMethod } : {})
+        });
 
         return NextResponse.json({
             success: true,

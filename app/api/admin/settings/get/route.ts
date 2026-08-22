@@ -2,41 +2,39 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(request: Request) {
     try {
         const tenantId = await db.getTenantIdOrThrow();
 
-        // 1. Fetch tenant basic info
-        const { data: tenant, error: tenantError } = await db.supabase
-            .from('tenants')
-            .select('admin_email, subscription_status, subscription_end_date, created_at, slug')
-            .eq('id', tenantId)
-            .single();
+        // 1. Fetch tenant basic info from Railway PostgreSQL
+        let tenant: any = null;
+        try {
+            tenant = await prisma.tenant.findUnique({
+                where: { id: tenantId }
+            });
+        } catch (e) {
+            console.error("Tenant lookup error in settings/get:", e);
+        }
 
-        if (tenantError) throw tenantError;
+        // 2. Fetch admin settings (contact info) via dbAdapter
+        const settings = await db.settings.get();
 
-        // 2. Fetch admin settings (contact info)
-        const { data: settings, error: settingsError } = await db.supabase
-            .from('admin_settings')
-            .select('university_bank_details, leave_approval_method')
-            .eq('tenant_id', tenantId)
-            .maybeSingle();
-
-        const bankDetails = settings?.university_bank_details || {};
+        const bankDetails = ((settings?.universityBankDetails || settings?.university_bank_details) || {}) as any;
 
         return NextResponse.json({
             success: true,
             settings: {
-                adminEmail: tenant?.admin_email,
-                subscriptionStatus: tenant?.subscription_status,
-                subscriptionEndDate: tenant?.subscription_end_date,
-                subscriptionStartDate: tenant?.created_at,
-                slug: tenant?.slug,
+                adminEmail: tenant?.adminEmail || tenant?.admin_email || '',
+                subscriptionStatus: tenant?.subscriptionStatus || tenant?.subscription_status || 'active',
+                subscriptionEndDate: tenant?.subscriptionEndDate || tenant?.subscription_end_date || null,
+                subscriptionStartDate: tenant?.createdAt || tenant?.created_at || null,
+                slug: tenant?.slug || '',
                 contactName: bankDetails.contactName || '',
                 contactPhone: bankDetails.contactPhone || '',
                 totalHostelars: bankDetails.totalHostelars || '',
-                leaveApprovalMethod: settings?.leave_approval_method || 'app'
+                leaveApprovalMethod: settings?.leaveApprovalMethod || settings?.leave_approval_method || 'app'
             }
         });
     } catch (error: any) {

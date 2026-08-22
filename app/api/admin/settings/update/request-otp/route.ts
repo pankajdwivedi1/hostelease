@@ -18,16 +18,11 @@ export async function POST(request: Request) {
         }
 
         // Fetch current settings to get the existing contactPhone
-        const { data: settings } = await db.supabase
-            .from('admin_settings')
-            .select('university_bank_details')
-            .eq('tenant_id', tenantId)
-            .maybeSingle();
-
-        const bankDetails = settings?.university_bank_details || {};
+        const settings = await db.settings.get();
+        const bankDetails = ((settings?.universityBankDetails || settings?.university_bank_details) || {}) as any;
         const existingPhone = bankDetails.contactPhone;
 
-        const targetPhone = existingPhone || newPhone;
+        const targetPhone = newPhone || existingPhone;
 
         if (!targetPhone) {
             return NextResponse.json({ 
