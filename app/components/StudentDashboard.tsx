@@ -959,9 +959,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             if (currentStudentId) {
                 // 1. Conditional Profile Sync (Zero-KB if unchanged on server)
-                const queryParam = user?.source === 'supabase'
-                    ? `supabaseId=${user.uid}${user.email ? `&email=${encodeURIComponent(user.email)}` : ''}`
-                    : (user?.uid ? `firebaseUID=${user.uid}${user.email ? `&email=${encodeURIComponent(user.email)}` : ''}` : `studentId=${encodeURIComponent(currentStudentId)}`);
+                const fbUid = studentProfile?.firebaseUID || (studentProfile as any)?.firebaseUid;
+                const email = studentProfile?.email;
+                const queryParam = fbUid 
+                    ? `firebaseUID=${encodeURIComponent(fbUid)}${email ? `&email=${encodeURIComponent(email)}` : ''}`
+                    : `studentId=${encodeURIComponent(currentStudentId)}${email ? `&email=${encodeURIComponent(email)}` : ''}`;
                 const cachedUpdatedAt = studentProfile?.updatedAt || "";
                 const versionCheckParam = cachedUpdatedAt ? `&versionCheck=true&updatedAt=${encodeURIComponent(cachedUpdatedAt)}` : "";
 
@@ -1021,7 +1023,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 setTimeout(() => setIsRefreshing(false), 300);
             }
         }
-    }, [studentProfile, user, fetchStudentNotifications, fetchStudentHistoryData]);
+    }, [studentProfile, fetchStudentNotifications, fetchStudentHistoryData]);
 
     // ⚡ Touch Gesture Handlers for Mobile Pull-to-Refresh
     const handleTouchStart = (e: React.TouchEvent) => {
