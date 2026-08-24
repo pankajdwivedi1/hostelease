@@ -142,16 +142,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const touchStartRef = useRef<number | null>(null);
     const touchEndRef = useRef<number | null>(null);
 
-    const handleTouchStart = (e: React.TouchEvent) => {
+    const handleCalendarTouchStart = (e: React.TouchEvent) => {
         touchStartRef.current = e.targetTouches[0].clientX;
         touchEndRef.current = null;
     };
 
-    const handleTouchMove = (e: React.TouchEvent) => {
+    const handleCalendarTouchMove = (e: React.TouchEvent) => {
         touchEndRef.current = e.targetTouches[0].clientX;
     };
 
-    const handleTouchEnd = () => {
+    const handleCalendarTouchEnd = () => {
         if (touchStartRef.current === null || touchEndRef.current === null) return;
         const distance = touchStartRef.current - touchEndRef.current;
         const minSwipeDistance = 50;
@@ -288,6 +288,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [studentHomeLeaves, setStudentHomeLeaves] = useState<any[]>([]);
     const [studentGatePasses, setStudentGatePasses] = useState<any[]>([]);
     const [isLoadingStudentHistory, setIsLoadingStudentHistory] = useState<boolean>(false);
+
+    // ⚡ Mobile Pull-to-Refresh & Server Auto-Sync States
+    const [pullDistance, setPullDistance] = useState<number>(0);
+    const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+    const touchStartYRef = useRef<number>(0);
+    const isPullingRef = useRef<boolean>(false);
 
     // Helper to get tenant from URL
     const getTenantParam = (includeQuestionMark = true) => {
@@ -911,6 +917,147 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
     };
 
+    const fetchStudentNotifications = useCallback(async () => {
+        if (!studentProfile?._id) return;
+        try {
+            const res = await fetch(`/api/student/notifications?studentId=${encodeURIComponent(studentProfile._id)}&hostelName=${encodeURIComponent(studentProfile.hostelName || '')}${getTenantParam(false)}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.success && Array.isArray(data.notifications)) {
+                const currentDismissed = JSON.parse(localStorage.getItem("dismissed_notifs") || "[]");
+                const showCounts = JSON.parse(localStorage.getItem("notif_show_counts") || "{}");
+
+                const active = data.notifications.filter((n: any) => {
+                    if (currentDismissed.includes(n._id)) return false;
+                    const ackList = n.acknowledgedBy || [];
+                    const isAcked = ackList.some((ack: any) => ack.studentId === studentProfile._id);
+                    if (isAcked) return false;
+                    const count = showCounts[n._id] || 0;
+                    if (count >= 2) return false;
+                    return true;
+                });
+
+                setNotifications(active);
+                try {
+                    localStorage.setItem(`cached_notifs_${studentProfile._id}`, JSON.stringify(active));
+                } catch (e) {}
+            }
+        } catch (e) {
+            console.warn("Silent notification fetch error:", e);
+        }
+    }, [studentProfile?._id, studentProfile?.hostelName]);
+
+    // ⚡ Master Full Sync (Manual Pull or Auto App Resume)
+    const syncFullDashboard = useCallback(async (isManualPull = false) => {
+        if (isManualPull) setIsRefreshing(true);
+        try {
+            const currentStudentId = studentProfile?._id || (studentProfile as any)?.id;
+            const syncPromises: Promise<any>[] = [
+                fetchSystemSettings(),
+                fetchStudentNotifications()
+            ];
+
+            if (currentStudentId) {
+                // 1. Conditional Profile Sync (Zero-KB if unchanged on server)
+                const queryParam = user?.source === 'supabase'
+                    ? `supabaseId=${user.uid}${user.email ? `&email=${encodeURIComponent(user.email)}` : ''}`
+                    : (user?.uid ? `firebaseUID=${user.uid}${user.email ? `&email=${encodeURIComponent(user.email)}` : ''}` : `studentId=${encodeURIComponent(currentStudentId)}`);
+                const cachedUpdatedAt = studentProfile?.updatedAt || "";
+                const versionCheckParam = cachedUpdatedAt ? `&versionCheck=true&updatedAt=${encodeURIComponent(cachedUpdatedAt)}` : "";
+
+                syncPromises.push(
+                    fetch(`/api/students?${queryParam}${versionCheckParam}${getTenantParam(false)}`, { cache: 'no-store' })
+                        .then(r => r.json())
+                        .then(fullData => {
+                            if (fullData.notModified) {
+                                if (fullData.studentStatus) {
+                                    setStudentProfile(prev => prev ? ({ ...prev, studentStatus: fullData.studentStatus, outingType: fullData.outingType }) : prev);
+                                }
+                                return;
+                            }
+                            if (fullData.student) {
+                                const fullStudentData = {
+                                    ...fullData.student,
+                                    studentStatus: fullData.student.studentStatus || "in",
+                                    outingType: fullData.student.outingType
+                                };
+                                setStudentProfile(fullStudentData);
+                                localStorage.setItem("cachedStudentData", JSON.stringify(fullStudentData));
+                            }
+                        })
+                        .catch(err => console.warn("Background profile sync error:", err))
+                );
+
+                // 2. Permissions Sync
+                syncPromises.push(
+                    fetch(`/api/permissions?studentId=${encodeURIComponent(currentStudentId)}&light=true${getTenantParam(false)}`)
+                        .then(r => r.json())
+                        .then(permData => {
+                            if (permData.permissions && Array.isArray(permData.permissions)) {
+                                setPermissions(permData.permissions);
+                            }
+                        })
+                        .catch(err => console.warn("Background permission sync error:", err))
+                );
+
+                // 3. History Sync
+                if (fetchStudentHistoryData) {
+                    syncPromises.push(fetchStudentHistoryData());
+                }
+            }
+
+            await Promise.allSettled(syncPromises);
+
+            if (isManualPull) {
+                if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                    navigator.vibrate(10);
+                }
+                showToast("Synced latest updates ✔️", "info", { duration: 2000 });
+            }
+        } catch (err) {
+            console.error("Dashboard sync error:", err);
+        } finally {
+            if (isManualPull) {
+                setTimeout(() => setIsRefreshing(false), 300);
+            }
+        }
+    }, [studentProfile, user, fetchStudentNotifications, fetchStudentHistoryData]);
+
+    // ⚡ Touch Gesture Handlers for Mobile Pull-to-Refresh
+    const handleTouchStart = (e: React.TouchEvent) => {
+        if (typeof window !== 'undefined' && window.scrollY <= 5 && !isRefreshing) {
+            touchStartYRef.current = e.touches[0].clientY;
+            isPullingRef.current = true;
+        } else {
+            isPullingRef.current = false;
+        }
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (!isPullingRef.current || isRefreshing) return;
+        const currentY = e.touches[0].clientY;
+        const diff = currentY - touchStartYRef.current;
+
+        if (diff > 0 && typeof window !== 'undefined' && window.scrollY <= 5) {
+            const distance = Math.min(diff * 0.45, 85);
+            setPullDistance(distance);
+        } else {
+            setPullDistance(0);
+        }
+    };
+
+    const handleTouchEnd = () => {
+        if (!isPullingRef.current) return;
+        isPullingRef.current = false;
+
+        if (pullDistance >= 50 && !isRefreshing) {
+            setPullDistance(0);
+            syncFullDashboard(true);
+        } else {
+            setPullDistance(0);
+        }
+    };
+
     useEffect(() => {
         fetchSystemSettings();
     }, []);
@@ -1355,25 +1502,29 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             // Run initial sync on mount
             syncStatusFromLocalStorage();
 
-            // Refetch/sync when student returns to app tab or comes back from scanner
+            // Refetch/sync automatically when student opens the app or returns to tab
             const handleVisibilityChange = () => {
                 if (document.visibilityState === 'visible') {
                     syncStatusFromLocalStorage();
-                    fetchStudentNotifications();
+                    syncFullDashboard(false);
                 }
             };
 
-            window.addEventListener('focus', syncStatusFromLocalStorage);
-            window.addEventListener('pageshow', syncStatusFromLocalStorage);
+            const handleWindowFocus = () => {
+                syncStatusFromLocalStorage();
+                syncFullDashboard(false);
+            };
+
+            window.addEventListener('focus', handleWindowFocus);
+            window.addEventListener('pageshow', handleWindowFocus);
             window.addEventListener('storage', syncStatusFromLocalStorage);
             document.addEventListener('visibilitychange', handleVisibilityChange);
 
             return () => {
                 clearTimeout(initialNotifTimer);
-                // Note: Supabase realtime channel removed — using polling-based updates
                 document.removeEventListener('visibilitychange', handleVisibilityChange);
-                window.removeEventListener('focus', syncStatusFromLocalStorage);
-                window.removeEventListener('pageshow', syncStatusFromLocalStorage);
+                window.removeEventListener('focus', handleWindowFocus);
+                window.removeEventListener('pageshow', handleWindowFocus);
                 window.removeEventListener('storage', syncStatusFromLocalStorage);
             };
         }
@@ -3048,7 +3199,36 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         : (bankSettings?.isPaymentEnabled ? "lg:grid-cols-5" : "lg:grid-cols-4");
 
     return (
-        <div className="min-h-screen bg-white">
+        <div 
+            className="min-h-screen bg-white relative"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+        >
+            {/* 🔄 Smooth Mobile Pull-to-Refresh Floating Indicator */}
+            <div
+                className="fixed top-3 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 flex items-center justify-center"
+                style={{
+                    opacity: isRefreshing ? 1 : Math.min(pullDistance / 45, 1),
+                    transform: `translateX(-50%) translateY(${isRefreshing ? 14 : Math.max(0, pullDistance - 15)}px) scale(${isRefreshing ? 1 : Math.min(pullDistance / 45, 1)})`,
+                }}
+            >
+                <div className="bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-lg border border-gray-200/90 flex items-center gap-2 text-xs font-bold text-gray-700">
+                    <svg
+                        className={`w-3.5 h-3.5 text-blue-600 ${isRefreshing ? 'animate-spin' : ''}`}
+                        style={{ transform: !isRefreshing ? `rotate(${pullDistance * 4}deg)` : undefined }}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                    >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span className="text-[10px] font-extrabold tracking-tight uppercase text-gray-700">
+                        {isRefreshing ? 'Updating from server...' : pullDistance >= 50 ? 'Release to refresh' : 'Pull down to refresh'}
+                    </span>
+                </div>
+            </div>
+
             <main className="w-full max-w-4xl mx-auto">
                 <div className="p-4 md:p-6 space-y-4 md:space-y-6">
                     {!showProfile ? (
@@ -4246,9 +4426,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                             {activeHistoryTab === 'calendar' || isParentView ? (
                                                 <div 
                                                     className="flex-1 flex flex-col"
-                                                    onTouchStart={handleTouchStart}
-                                                    onTouchMove={handleTouchMove}
-                                                    onTouchEnd={handleTouchEnd}
+                                                    onTouchStart={handleCalendarTouchStart}
+                                                    onTouchMove={handleCalendarTouchMove}
+                                                    onTouchEnd={handleCalendarTouchEnd}
                                                 >
                                                     {/* Calendar Navigation */}
                                                     <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
