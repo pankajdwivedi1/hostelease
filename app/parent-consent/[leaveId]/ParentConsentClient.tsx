@@ -479,17 +479,36 @@ export default function ParentConsentClient({
                 const endpoint = `/api/parent-consent/upload${query}`;
                 xhr.open("POST", endpoint, true);
 
+                let processingInterval: NodeJS.Timeout | null = null;
+
                 xhr.upload.onprogress = (event) => {
                     if (event.lengthComputable) {
-                        const percent = Math.round((event.loaded / event.total) * 100);
-                        setUploadProgress(Math.min(percent, 98));
+                        // Stage 1 (0% to 75%): Real network bytes transferred from mobile to server
+                        const uploadRatio = event.loaded / event.total;
+                        const realProgress = Math.round(uploadRatio * 75);
+                        setUploadProgress(realProgress);
+
+                        // When all bytes leave mobile socket, start smooth cloud processing progression (75% -> 95%)
+                        if (uploadRatio >= 1.0 && !processingInterval) {
+                            let currentProc = 75;
+                            processingInterval = setInterval(() => {
+                                currentProc += 3;
+                                if (currentProc >= 95) {
+                                    if (processingInterval) clearInterval(processingInterval);
+                                    setUploadProgress(95);
+                                } else {
+                                    setUploadProgress(currentProc);
+                                }
+                            }, 200);
+                        }
                     }
                 };
 
                 xhr.onload = () => {
+                    if (processingInterval) clearInterval(processingInterval);
                     if (xhr.status >= 200 && xhr.status < 300) {
                         setUploadProgress(100);
-                        resolve();
+                        setTimeout(() => resolve(), 300);
                     } else {
                         let errMsg = "Upload failed";
                         try {
@@ -503,8 +522,14 @@ export default function ParentConsentClient({
                     }
                 };
 
-                xhr.onerror = () => reject(new Error("नेटवर्क त्रुटि। कृपया इंटरनेट कनेक्शन जांचें। (Network error. Please check your internet connection.)"));
-                xhr.ontimeout = () => reject(new Error("अपलोड टाइमआउट। कृपया पुनः प्रयास करें। (Upload timed out. Please retry.)"));
+                xhr.onerror = () => {
+                    if (processingInterval) clearInterval(processingInterval);
+                    reject(new Error("नेटवर्क त्रुटि। कृपया इंटरनेट कनेक्शन जांचें। (Network error. Please check your internet connection.)"));
+                };
+                xhr.ontimeout = () => {
+                    if (processingInterval) clearInterval(processingInterval);
+                    reject(new Error("अपलोड टाइमआउट। कृपया पुनः प्रयास करें। (Upload timed out. Please retry.)"));
+                };
 
                 xhr.send(formData);
             });
@@ -768,24 +793,32 @@ export default function ParentConsentClient({
                                 {/* Uploading State */}
                                 {recordingState === "uploading" && (
                                     <div className="text-center py-6 px-4 text-indigo-300 space-y-3.5 w-full">
-                                        <div className="relative w-12 h-12 mx-auto flex items-center justify-center">
-                                            <div className="w-12 h-12 border-3 border-indigo-500/30 border-t-indigo-400 rounded-full animate-spin" />
-                                            <span className="absolute text-[11px] font-black font-mono text-white">
+                                        <div className="relative w-14 h-14 mx-auto flex items-center justify-center">
+                                            <div className="w-14 h-14 border-3 border-indigo-500/30 border-t-indigo-400 rounded-full animate-spin" />
+                                            <span className="absolute text-xs font-black font-mono text-white">
                                                 {uploadProgress}%
                                             </span>
                                         </div>
                                         <div className="space-y-1.5 w-full max-w-[240px] mx-auto">
                                             <p className="text-[10px] font-black uppercase tracking-wider text-slate-200">
-                                                Uploading Video Consent...
+                                                {uploadProgress < 75 
+                                                    ? "Uploading Video Consent..." 
+                                                    : uploadProgress < 100 
+                                                        ? "Verifying & Saving Video..." 
+                                                        : "Upload Completed!"}
                                             </p>
                                             <div className="w-full bg-slate-950/80 h-2.5 rounded-full overflow-hidden p-0.5 border border-slate-800 shadow-inner">
                                                 <div 
-                                                    className="bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 h-full rounded-full transition-all duration-150 shadow-sm"
+                                                    className="bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 h-full rounded-full transition-all duration-200 shadow-sm"
                                                     style={{ width: `${Math.max(4, uploadProgress)}%` }}
                                                 />
                                             </div>
                                             <p className="text-[9px] font-mono font-bold text-slate-400">
-                                                {uploadProgress < 100 ? `Fast Uploading... ${uploadProgress}%` : "Finishing Verification..."}
+                                                {uploadProgress < 75
+                                                    ? `Transferring data... ${uploadProgress}%`
+                                                    : uploadProgress < 100
+                                                        ? `Cloud Storage sync... ${uploadProgress}%`
+                                                        : "Verified & Accepted 100%"}
                                             </p>
                                         </div>
                                     </div>
