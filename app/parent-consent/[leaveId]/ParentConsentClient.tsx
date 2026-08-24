@@ -475,7 +475,9 @@ export default function ParentConsentClient({
 
             await new Promise<void>((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
-                xhr.open("POST", "/api/parent-consent/upload", true);
+                const query = typeof window !== "undefined" ? window.location.search : "";
+                const endpoint = `/api/parent-consent/upload${query}`;
+                xhr.open("POST", endpoint, true);
 
                 xhr.upload.onprogress = (event) => {
                     if (event.lengthComputable) {

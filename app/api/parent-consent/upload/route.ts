@@ -80,11 +80,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const permission = await db.permissions.getById(leaveId, { populate: true });
+    let permission: any = null;
+    try {
+      permission = await db.permissions.getById(leaveId, { populate: true });
+    } catch (e) {
+      console.warn("Could not get permission with populate:", e);
+      try {
+        permission = await db.permissions.getById(leaveId);
+      } catch (e2) {
+        console.error("Could not get permission by ID:", e2);
+      }
+    }
+
     let studentSlug = "";
     let student: any = null;
     if (permission) {
-      student = typeof permission.studentId === "object" ? permission.studentId : null;
+      if (typeof permission.studentId === "object" && permission.studentId !== null) {
+        student = permission.studentId;
+      } else if (permission.studentId) {
+        try {
+          student = await db.students.getById(permission.studentId);
+        } catch (e) {}
+      }
+
       if (student) {
         const cleanName = student.name
           ? student.name.trim().replace(/\s+/g, "_")
@@ -131,10 +149,14 @@ export async function POST(request: NextRequest) {
       console.log(`[Google Drive] Uploaded consent video: ${consentUrl}`);
     }
 
-    await db.permissions.update(leaveId, {
-      parentConsentUrl: consentUrl,
-      parentStatus: "approved",
-    });
+    try {
+      await db.permissions.update(leaveId, {
+        parentConsentUrl: consentUrl,
+        parentStatus: "approved",
+      });
+    } catch (updateErr) {
+      console.error("Failed to update permission with db.permissions.update:", updateErr);
+    }
 
     // Send push notifications (Fire & Forget)
     try {
