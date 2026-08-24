@@ -105,6 +105,7 @@ export default function ParentConsentClient({
     // 🎙️ Live Decibel & Voice Verification States
     const [liveAudioLevel, setLiveAudioLevel] = useState<number>(0);
     const [isVoiceVerified, setIsVoiceVerified] = useState<boolean>(false);
+    const [uploadProgress, setUploadProgress] = useState<number>(0);
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const audioAnimFrameRef = useRef<number | null>(null);
@@ -306,15 +307,23 @@ export default function ParentConsentClient({
 
         try {
             let mediaRecorder: MediaRecorder;
+            const recorderOptions: MediaRecorderOptions = {
+                videoBitsPerSecond: 800000, // 800 kbps: Super fast ~1.8 MB file size for instant 5-10s upload!
+                audioBitsPerSecond: 64000,  // 64 kbps: Crisp clear voice
+            };
+            if (selectedMimeType) {
+                recorderOptions.mimeType = selectedMimeType;
+            }
+
             try {
-                if (selectedMimeType) {
-                    mediaRecorder = new MediaRecorder(currentStream, { mimeType: selectedMimeType });
-                } else {
+                mediaRecorder = new MediaRecorder(currentStream, recorderOptions);
+            } catch (optErr) {
+                console.warn("MediaRecorder options fallback...", optErr);
+                try {
+                    mediaRecorder = new MediaRecorder(currentStream, selectedMimeType ? { mimeType: selectedMimeType } : undefined);
+                } catch (fallbackErr) {
                     mediaRecorder = new MediaRecorder(currentStream);
                 }
-            } catch (optErr) {
-                console.warn("MediaRecorder initialization fallback to default constructor...", optErr);
-                mediaRecorder = new MediaRecorder(currentStream);
             }
 
             mediaRecorder.ondataavailable = (e) => {
@@ -444,11 +453,12 @@ export default function ParentConsentClient({
         await startCamera();
     };
 
-    // Upload video file to server
+    // Upload video file to server with live percentage progress tracking
     const handleUpload = async () => {
         if (chunksRef.current.length === 0) return;
 
         setRecordingState("uploading");
+        setUploadProgress(0);
         setErrorMessage("");
 
         try {
@@ -461,29 +471,41 @@ export default function ParentConsentClient({
             formData.append("leaveId", leaveId);
             formData.append("video", videoFile);
 
-            console.log("Uploading file of size:", (videoBlob.size / 1024 / 1024).toFixed(2), "MB");
+            console.log("Uploading optimized video size:", (videoBlob.size / 1024 / 1024).toFixed(2), "MB");
 
-            const response = await fetch("/api/parent-consent/upload", {
-                method: "POST",
-                body: formData
+            await new Promise<void>((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open("POST", "/api/parent-consent/upload", true);
+
+                xhr.upload.onprogress = (event) => {
+                    if (event.lengthComputable) {
+                        const percent = Math.round((event.loaded / event.total) * 100);
+                        setUploadProgress(Math.min(percent, 98));
+                    }
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        setUploadProgress(100);
+                        resolve();
+                    } else {
+                        let errMsg = "Upload failed";
+                        try {
+                            const res = JSON.parse(xhr.responseText);
+                            errMsg = res.error || errMsg;
+                        } catch (e) {}
+                        if (xhr.status === 413) {
+                            errMsg = "वीडियो का आकार बहुत बड़ा है। कृपया छोटा वीडियो रिकॉर्ड करें। (Video is too large to upload.)";
+                        }
+                        reject(new Error(errMsg));
+                    }
+                };
+
+                xhr.onerror = () => reject(new Error("नेटवर्क त्रुटि। कृपया इंटरनेट कनेक्शन जांचें। (Network error. Please check your internet connection.)"));
+                xhr.ontimeout = () => reject(new Error("अपलोड टाइमआउट। कृपया पुनः प्रयास करें। (Upload timed out. Please retry.)"));
+
+                xhr.send(formData);
             });
-
-            let data: any = {};
-            const contentType = response.headers.get("content-type");
-            if (contentType && contentType.includes("application/json")) {
-                try {
-                    data = await response.json();
-                } catch (jsonErr) {
-                    console.error("JSON parsing failed:", jsonErr);
-                }
-            }
-
-            if (!response.ok) {
-                if (response.status === 413) {
-                    throw new Error("वीडियो का आकार बहुत बड़ा है। कृपया छोटा वीडियो रिकॉर्ड करें। (Video is too large to upload. Please record a shorter video.)");
-                }
-                throw new Error(data.error || "Failed to upload video to Google Drive");
-            }
 
             setRecordingState("success");
         } catch (err: any) {
@@ -743,9 +765,27 @@ export default function ParentConsentClient({
 
                                 {/* Uploading State */}
                                 {recordingState === "uploading" && (
-                                    <div className="text-center p-6 text-indigo-300 space-y-2">
-                                        <div className="w-6 h-6 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mx-auto" />
-                                        <p className="text-[10px] font-black uppercase tracking-wider">Uploading Video Consent...</p>
+                                    <div className="text-center py-6 px-4 text-indigo-300 space-y-3.5 w-full">
+                                        <div className="relative w-12 h-12 mx-auto flex items-center justify-center">
+                                            <div className="w-12 h-12 border-3 border-indigo-500/30 border-t-indigo-400 rounded-full animate-spin" />
+                                            <span className="absolute text-[11px] font-black font-mono text-white">
+                                                {uploadProgress}%
+                                            </span>
+                                        </div>
+                                        <div className="space-y-1.5 w-full max-w-[240px] mx-auto">
+                                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-200">
+                                                Uploading Video Consent...
+                                            </p>
+                                            <div className="w-full bg-slate-950/80 h-2.5 rounded-full overflow-hidden p-0.5 border border-slate-800 shadow-inner">
+                                                <div 
+                                                    className="bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 h-full rounded-full transition-all duration-150 shadow-sm"
+                                                    style={{ width: `${Math.max(4, uploadProgress)}%` }}
+                                                />
+                                            </div>
+                                            <p className="text-[9px] font-mono font-bold text-slate-400">
+                                                {uploadProgress < 100 ? `Fast Uploading... ${uploadProgress}%` : "Finishing Verification..."}
+                                            </p>
+                                        </div>
                                     </div>
                                 )}
                             </div>
