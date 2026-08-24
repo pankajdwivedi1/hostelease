@@ -656,6 +656,8 @@ interface SimplePermission {
   status: "pending" | "allowed" | "rejected";
   wardenStatus: "pending" | "allowed" | "rejected";
   deanStatus: "pending" | "allowed" | "rejected";
+  parentStatus?: "pending" | "allowed" | "rejected" | "no_response";
+  parentConsentUrl?: string | null;
   createdAt?: string | Date;
 }
 
@@ -931,6 +933,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       const permQuery = new URLSearchParams();
       if (studentId) permQuery.set("studentId", String(studentId));
+      if (firebaseUID) permQuery.set("firebaseUID", firebaseUID);
+      if (regId) permQuery.set("registrationId", regId);
       permQuery.set("limit", "200");
 
       const [gpRes, permRes] = await Promise.allSettled([
@@ -938,17 +942,53 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         fetch(`/api/permissions?${permQuery.toString()}`).then(r => r.json()),
       ]);
 
-      const gpRecords: any[] = (gpRes.status === "fulfilled" && Array.isArray(gpRes.value?.records)) ? gpRes.value.records : [];
-      const permRecords: any[] = (permRes.status === "fulfilled" && Array.isArray(permRes.value?.records)) ? permRes.value.records : [];
+      const gpRecords: any[] = (gpRes.status === "fulfilled" && Array.isArray(gpRes.value?.records)) 
+        ? gpRes.value.records 
+        : ((gpRes.status === "fulfilled" && Array.isArray(gpRes.value?.getpasses)) ? gpRes.value.getpasses : []);
+      const permData = permRes.status === "fulfilled" 
+        ? (permRes.value?.permissions || permRes.value?.records || []) 
+        : [];
+      const permRecords: any[] = Array.isArray(permData) ? permData : [];
+
+      // Also harvest live matching permissions from the main dashboard permissions state
+      const dashboardMatchingPerms = permissions.filter((p: any) => {
+        const pSid = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
+        const sId = student.id || (student as any)._id;
+        if (pSid && sId && pSid.toString() === sId.toString()) return true;
+        if (p.firebaseUID && student.firebaseUID && p.firebaseUID === student.firebaseUID) return true;
+        if (p.studentId?.firebaseUID && student.firebaseUID && p.studentId.firebaseUID === student.firebaseUID) return true;
+        if (p.registrationId && student.registrationId && p.registrationId.toUpperCase() === student.registrationId.toUpperCase()) return true;
+        if (p.studentId?.registrationId && student.registrationId && p.studentId.registrationId.toUpperCase() === student.registrationId.toUpperCase()) return true;
+        if (p.name && student.name && p.name.trim().toLowerCase() === student.name.trim().toLowerCase()) return true;
+        if (p.studentId?.name && student.name && p.studentId.name.trim().toLowerCase() === student.name.trim().toLowerCase()) return true;
+        return false;
+      });
 
       // 1. ALL OFFICIAL PERMISSION RECORDS (Tab 1)
       const initialPerms = Array.isArray(student.permissions) ? student.permissions : [];
-      const combinedAllPerms = [...permRecords, ...initialPerms];
+      const combinedAllPerms = [...dashboardMatchingPerms, ...permRecords, ...initialPerms];
       const uniquePermsMap = new Map();
       combinedAllPerms.forEach((p: any) => {
         const pId = p.id || p._id;
-        if (pId && !uniquePermsMap.has(pId)) {
-          uniquePermsMap.set(pId, p);
+        if (pId) {
+          const consentVideo = p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl || p.parent_consent_url;
+          if (!uniquePermsMap.has(pId)) {
+            uniquePermsMap.set(pId, {
+              ...p,
+              parentConsentUrl: consentVideo || p.parentConsentUrl
+            });
+          } else {
+            const existing = uniquePermsMap.get(pId);
+            uniquePermsMap.set(pId, {
+              ...existing,
+              ...p,
+              parentConsentUrl: consentVideo || existing.parentConsentUrl || p.parentConsentUrl,
+              parentStatus: p.parentStatus || existing.parentStatus,
+              wardenStatus: p.wardenStatus || existing.wardenStatus,
+              deanStatus: p.deanStatus || existing.deanStatus,
+              status: p.status || existing.status
+            });
+          }
         }
       });
       const sortedPermsList = Array.from(uniquePermsMap.values()).sort((a, b) => {
@@ -958,7 +998,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       });
 
       // 2. HOME-LEAVE RECORDS (Tab 2)
-      const homeLeavePerms = permRecords.filter((p: any) => {
+      const homeLeavePerms = sortedPermsList.filter((p: any) => {
         const rType = String(p.requestType || '').toLowerCase();
         return rType === 'leave' || rType === 'home-leave' || rType === 'home' || rType === 'home_leave';
       }).map((p: any) => ({
@@ -971,7 +1011,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         wardenStatus: p.wardenStatus,
         deanStatus: p.deanStatus,
         parentStatus: p.parentStatus,
-        parentConsentUrl: p.parentConsentUrl,
+        parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl,
         createdAt: p.createdAt,
         type: 'leave',
         requestType: p.requestType || 'leave'
@@ -1008,7 +1048,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       });
 
       // 3. GATE-PASS RECORDS (Tab 3)
-      const outingPerms = permRecords.filter((p: any) => {
+      const outingPerms = sortedPermsList.filter((p: any) => {
         const rType = String(p.requestType || '').toLowerCase();
         return rType === 'outing' || rType === 'gatepass' || rType === 'gate-pass';
       }).map((p: any) => ({
@@ -1020,7 +1060,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         status: p.status,
         wardenStatus: p.wardenStatus,
         deanStatus: p.deanStatus,
-        parentConsentUrl: p.parentConsentUrl,
+        parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl,
         createdAt: p.createdAt,
         type: 'outing',
         requestType: p.requestType || 'outing'
@@ -6451,20 +6491,30 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
 
     if (student) {
+      const sId = student.id || (student as any)._id;
       const studentPermissions = permissions.filter((p) => {
-        if (!p.studentId) return false;
-        return typeof p.studentId === "object" ? p.studentId._id === studentId : p.studentId === studentId;
+        const pSid = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
+        if (pSid && sId && pSid.toString() === sId.toString()) return true;
+        if (p.firebaseUID && student.firebaseUID && p.firebaseUID === student.firebaseUID) return true;
+        if (p.studentId?.firebaseUID && student.firebaseUID && p.studentId.firebaseUID === student.firebaseUID) return true;
+        if (p.registrationId && student.registrationId && p.registrationId.toUpperCase() === student.registrationId.toUpperCase()) return true;
+        if (p.studentId?.registrationId && student.registrationId && p.studentId.registrationId.toUpperCase() === student.registrationId.toUpperCase()) return true;
+        if (p.name && student.name && p.name.trim().toLowerCase() === student.name.trim().toLowerCase()) return true;
+        if (p.studentId?.name && student.name && p.studentId.name.trim().toLowerCase() === student.name.trim().toLowerCase()) return true;
+        return false;
       });
       setSelectedStudent({
         ...student,
         permissions: studentPermissions.map((p): SimplePermission => ({
-          id: p._id,
+          id: p._id || p.id,
           fromDateTime: p.fromDateTime,
           toDateTime: p.toDateTime,
           reason: p.reason,
           status: p.status,
           wardenStatus: p.wardenStatus,
           deanStatus: p.deanStatus,
+          parentStatus: p.parentStatus,
+          parentConsentUrl: p.parentConsentUrl || (p as any).consentVideoUrl || (p as any).videoUrl || (p as any).parentVideoUrl || null,
         })),
       });
     }
@@ -7853,36 +7903,29 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                               </span>
                                             )}
                                           </div>
-                                          <div className="flex flex-col items-center gap-1 relative group">
+                                          <div className="flex flex-col items-center gap-1 relative">
                                             <div className="flex items-center gap-1 md:gap-2.5 bg-white p-0.5 md:p-1 rounded-md border border-gray-100">
                                               <button
                                                 onClick={async () => {
                                                   if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
-                                                  if (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden') return showToast("Waiting for parent approval.", "error");
                                                   if (userType === "warden" && await showConfirm("Are you sure you want to approve this permission?")) handleStatusChange(permission._id, "allowed");
                                                 }}
-                                                disabled={userType !== "warden" || permission.deanStatus !== "pending" || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')}
-                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                                disabled={userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired}
+                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                               >
                                                 <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                               </button>
                                               <button
                                                 onClick={() => {
                                                   if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
-                                                  if (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden') return showToast("Waiting for parent approval.", "error");
                                                   if (userType === "warden") handleStatusChange(permission._id, "rejected");
                                                 }}
-                                                disabled={userType !== "warden" || permission.deanStatus !== "pending" || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')}
-                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired || (leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden')) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                                disabled={userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired}
+                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                               >
                                                 <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                               </button>
                                             </div>
-                                            {(leaveApprovalMethod === 'app' && permission.parentStatus !== 'allowed' && userType === 'warden') && (
-                                                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-                                                  Waiting for Parent
-                                                </div>
-                                            )}
                                           </div>
                                         </div>
 
@@ -12204,14 +12247,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
 
                                   <div className="flex items-center gap-1.5 shrink-0">
-                                    {permission.parentConsentUrl && (
+                                    {(permission.parentConsentUrl || (permission as any).consentVideoUrl || (permission as any).videoUrl || (permission as any).parentVideoUrl) && (
                                       <button
-                                        onMouseEnter={() => prefetchVideo(permission.parentConsentUrl!)}
+                                        onMouseEnter={() => prefetchVideo((permission.parentConsentUrl || (permission as any).consentVideoUrl || (permission as any).videoUrl || (permission as any).parentVideoUrl)!)}
                                         onClick={(e) => {
                                           e.preventDefault();
+                                          const videoSrc = (permission.parentConsentUrl || (permission as any).consentVideoUrl || (permission as any).videoUrl || (permission as any).parentVideoUrl)!;
                                           setActiveConsentVideoUrl(
                                             resolveConsentVideoSrc(
-                                              permission.parentConsentUrl!,
+                                              videoSrc,
                                               prefetchedVideoUrls
                                             )
                                           );
@@ -12224,16 +12268,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     )}
 
                                     {isAllowed ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200 uppercase tracking-wider">
-                                        ACCEPTED
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
+                                        Approved
                                       </div>
                                     ) : isRejected ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200 uppercase tracking-wider">
-                                        REJECTED
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
+                                        Rejected
                                       </div>
                                     ) : (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200 uppercase tracking-wider">
-                                        PENDING
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                        Pending
                                       </div>
                                     )}
                                   </div>
@@ -12242,26 +12286,53 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 <p className="text-xs text-slate-800 leading-relaxed font-medium bg-slate-50/60 p-2 rounded-lg border border-slate-100">
                                   {permission.reason || "No reason specified"}
                                 </p>
+                                <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex flex-wrap items-center gap-1.5 text-[9.5px] sm:text-[10px] text-slate-600 font-bold">
+                                  {/* 1. Parent Consent Badge (Before Warden) */}
+                                  {(permission.parentConsentUrl || (permission as any).consentVideoUrl || (permission as any).videoUrl || (permission as any).parentVideoUrl) ? (
+                                    <button
+                                      type="button"
+                                      onMouseEnter={() => prefetchVideo((permission.parentConsentUrl || (permission as any).consentVideoUrl || (permission as any).videoUrl || (permission as any).parentVideoUrl)!)}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        const videoSrc = (permission.parentConsentUrl || (permission as any).consentVideoUrl || (permission as any).videoUrl || (permission as any).parentVideoUrl)!;
+                                        setActiveConsentVideoUrl(
+                                          resolveConsentVideoSrc(
+                                            videoSrc,
+                                            prefetchedVideoUrls
+                                          )
+                                        );
+                                      }}
+                                      className="px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-all inline-flex items-center gap-1 cursor-pointer text-[9.5px] sm:text-[10px] font-bold"
+                                      title="Click to play Parent Consent Video"
+                                    >
+                                      Parent: <strong className="text-green-700 font-extrabold">Agree</strong>
+                                      <span className="text-green-600 text-[10.5px]">🎥</span>
+                                    </button>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
+                                      Parent: <strong className={`font-extrabold ${permission.parentStatus === 'allowed' ? 'text-green-600' : permission.parentStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
+                                        {(permission.parentStatus === 'allowed' ? 'Agree' : permission.parentStatus === 'rejected' ? 'Rejected' : 'Pending')}
+                                      </strong>
+                                      <span className="text-red-500 text-[10.5px]" title="Parent consent video not uploaded">
+                                        🎥
+                                      </span>
+                                    </span>
+                                  )}
 
-                                {(permission.wardenStatus || permission.deanStatus || permission.parentStatus) && (
-                                  <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex flex-wrap gap-1.5 text-[9px] text-slate-500 font-semibold">
-                                    {permission.wardenStatus && (
-                                      <span className="px-1.5 py-0.5 rounded bg-slate-100">
-                                        Warden: <strong className={permission.wardenStatus === 'allowed' ? 'text-green-600' : permission.wardenStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}>{permission.wardenStatus.toUpperCase()}</strong>
-                                      </span>
-                                    )}
-                                    {permission.deanStatus && (
-                                      <span className="px-1.5 py-0.5 rounded bg-slate-100">
-                                        Dean: <strong className={permission.deanStatus === 'allowed' ? 'text-green-600' : permission.deanStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}>{permission.deanStatus.toUpperCase()}</strong>
-                                      </span>
-                                    )}
-                                    {permission.parentStatus && (
-                                      <span className="px-1.5 py-0.5 rounded bg-slate-100">
-                                        Parent: <strong className={permission.parentStatus === 'allowed' ? 'text-green-600' : permission.parentStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}>{permission.parentStatus.toUpperCase()}</strong>
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
+                                  {/* 2. Warden Badge */}
+                                  <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
+                                    Warden: <strong className={`font-extrabold ${(permission.wardenStatus === 'allowed' || permission.wardenStatus === 'approved') ? 'text-green-600' : permission.wardenStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
+                                      {(permission.wardenStatus === 'allowed' || permission.wardenStatus === 'approved' ? 'Approved' : permission.wardenStatus === 'rejected' ? 'Rejected' : 'Pending')}
+                                    </strong>
+                                  </span>
+
+                                  {/* 3. Dean Badge */}
+                                  <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
+                                    Dean: <strong className={`font-extrabold ${(permission.deanStatus === 'allowed' || permission.deanStatus === 'approved') ? 'text-green-600' : permission.deanStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
+                                      {(permission.deanStatus === 'allowed' || permission.deanStatus === 'approved' ? 'Allowed' : permission.deanStatus === 'rejected' ? 'Rejected' : 'Pending')}
+                                    </strong>
+                                  </span>
+                                </div>
                               </div>
                             );
                           })
@@ -12353,24 +12424,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     )}
 
                                     {isCurrentlyOut ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-300 uppercase tracking-wider flex items-center gap-1 animate-pulse">
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse">
                                         <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
                                         Currently At Home
                                       </div>
                                     ) : isAllowed ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200 uppercase tracking-wider">
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
                                         Approved
                                       </div>
                                     ) : isRejected ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200 uppercase tracking-wider">
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
                                         Rejected
                                       </div>
                                     ) : isPending ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200 uppercase tracking-wider">
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200">
                                         Pending
                                       </div>
                                     ) : (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-700 border border-slate-200 uppercase tracking-wider">
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-700 border border-slate-200">
                                         Completed
                                       </div>
                                     )}
@@ -12380,7 +12451,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 {/* 3-Column Time & Duration Grid */}
                                 <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 rounded-lg border border-slate-100 text-[11px] mb-2">
                                   <div>
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">LEAVE FROM</p>
+                                    <p className="text-[9px] font-bold text-slate-400">Leave From</p>
                                     <p className="font-extrabold text-slate-800 mt-0.5 leading-tight">
                                       {formattedOutDate}
                                     </p>
@@ -12392,19 +12463,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
 
                                   <div>
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">RETURN (IN)</p>
+                                    <p className="text-[9px] font-bold text-slate-400">Return (In)</p>
                                     <p className={`font-extrabold mt-0.5 leading-tight ${isCurrentlyOut ? 'text-amber-700 italic' : 'text-slate-800'}`}>
                                       {formattedInDate}
                                     </p>
-                                    {formattedInTime && (
-                                      <p className="text-[10px] font-semibold text-slate-500">
-                                        {formattedInTime}
-                                      </p>
-                                    )}
                                   </div>
 
                                   <div>
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DURATION</p>
+                                    <p className="text-[9px] font-bold text-slate-400">Duration</p>
                                     <p className="font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 text-[10px] sm:text-[11px]">
                                       {leaveDuration}
                                     </p>
@@ -12423,23 +12489,53 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 </div>
 
                                 {/* Approvals Footer (if official permission) */}
-                                {(item.wardenStatus || item.deanStatus || item.parentStatus) && (
-                                  <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex flex-wrap gap-1.5 text-[9px] text-slate-500 font-semibold">
-                                    {item.wardenStatus && (
-                                      <span className="px-1.5 py-0.5 rounded bg-slate-100">
-                                        Warden: <strong className={item.wardenStatus === 'allowed' ? 'text-green-600' : item.wardenStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}>{item.wardenStatus.toUpperCase()}</strong>
+                                {(item.wardenStatus || item.deanStatus || item.parentStatus || item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl || true) && (
+                                  <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex flex-wrap items-center gap-1.5 text-[9.5px] sm:text-[10px] text-slate-600 font-bold">
+                                    {/* 1. Parent Consent Badge (Before Warden) */}
+                                    {(item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl) ? (
+                                      <button
+                                        type="button"
+                                        onMouseEnter={() => prefetchVideo((item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl)!)}
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          const videoSrc = (item.parentConsentUrl || (item as any).consentVideoUrl || (item as any).videoUrl || (item as any).parentVideoUrl)!;
+                                          setActiveConsentVideoUrl(
+                                            resolveConsentVideoSrc(
+                                              videoSrc,
+                                              prefetchedVideoUrls
+                                            )
+                                          );
+                                        }}
+                                        className="px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-all inline-flex items-center gap-1 cursor-pointer text-[9.5px] sm:text-[10px] font-bold"
+                                        title="Click to play Parent Consent Video"
+                                      >
+                                        Parent: <strong className="text-green-700 font-extrabold">Agree</strong>
+                                        <span className="text-green-600 text-[10.5px]">🎥</span>
+                                      </button>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
+                                        Parent: <strong className={`font-extrabold ${item.parentStatus === 'allowed' ? 'text-green-600' : item.parentStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
+                                          {(item.parentStatus === 'allowed' ? 'Agree' : item.parentStatus === 'rejected' ? 'Rejected' : 'Pending')}
+                                        </strong>
+                                        <span className="text-red-500 text-[10.5px]" title="Parent consent video not uploaded">
+                                          🎥
+                                        </span>
                                       </span>
                                     )}
-                                    {item.deanStatus && (
-                                      <span className="px-1.5 py-0.5 rounded bg-slate-100">
-                                        Dean: <strong className={item.deanStatus === 'allowed' ? 'text-green-600' : item.deanStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}>{item.deanStatus.toUpperCase()}</strong>
-                                      </span>
-                                    )}
-                                    {item.parentStatus && (
-                                      <span className="px-1.5 py-0.5 rounded bg-slate-100">
-                                        Parent: <strong className={item.parentStatus === 'allowed' ? 'text-green-600' : item.parentStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}>{item.parentStatus.toUpperCase()}</strong>
-                                      </span>
-                                    )}
+
+                                    {/* 2. Warden Badge */}
+                                    <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
+                                      Warden: <strong className={`font-extrabold ${(item.wardenStatus === 'allowed' || item.wardenStatus === 'approved') ? 'text-green-600' : item.wardenStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
+                                        {(item.wardenStatus === 'allowed' || item.wardenStatus === 'approved' ? 'Approved' : item.wardenStatus === 'rejected' ? 'Rejected' : 'Pending')}
+                                      </strong>
+                                    </span>
+
+                                    {/* 3. Dean Badge */}
+                                    <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200/60">
+                                      Dean: <strong className={item.deanStatus === 'allowed' ? 'text-green-600' : item.deanStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}>
+                                        {(item.deanStatus || 'PENDING').toUpperCase()}
+                                      </strong>
+                                    </span>
                                   </div>
                                 )}
                               </div>
@@ -12502,10 +12598,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 {/* Header: Gate Name, Date Badge & Status */}
                                 <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
                                   <div className="flex items-center flex-wrap gap-1.5">
-                                    <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                                    <span className={`text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-md border ${
                                       isCurrentlyOut ? 'bg-rose-100/80 text-rose-800 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                     }`}>
-                                      🚪 {pass.gateName || 'MAIN GATE'}
+                                      🚪 {pass.gateName ? pass.gateName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Main Gate'}
                                     </span>
                                     {/* Prominent Date Display */}
                                     <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
@@ -12516,13 +12612,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   {/* Status Badge - Matching rounded-md corner style */}
                                   <div className="flex items-center gap-1.5 shrink-0">
                                     {isCurrentlyOut ? (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-100 text-rose-700 border border-rose-200 uppercase tracking-wider flex items-center gap-1 animate-pulse">
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 animate-pulse">
                                         <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
                                         Currently Out
                                       </div>
                                     ) : (
-                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
-                                        ✓ RETURNED (IN)
+                                      <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                        ✓ Returned (In)
                                       </div>
                                     )}
                                   </div>
@@ -12531,7 +12627,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 {/* 3-Column Time & Duration Grid: CHECK OUT | CHECK IN | DURATION */}
                                 <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 sm:p-2.5 rounded-lg border border-slate-100 text-[11px] mb-2">
                                   <div>
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">CHECK OUT</p>
+                                    <p className="text-[9px] font-bold text-slate-400">Check Out</p>
                                     <p className="font-extrabold text-slate-800 mt-0.5 text-xs sm:text-[13px] leading-tight">
                                       {formattedOutTime}
                                     </p>
@@ -12541,7 +12637,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
 
                                   <div>
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">CHECK IN</p>
+                                    <p className="text-[9px] font-bold text-slate-400">Check In</p>
                                     <p className={`font-extrabold mt-0.5 text-xs sm:text-[13px] leading-tight ${isCurrentlyOut ? 'text-rose-600 italic font-bold' : 'text-slate-800'}`}>
                                       {formattedInTime}
                                     </p>
@@ -12551,7 +12647,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   </div>
 
                                   <div>
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DURATION</p>
+                                    <p className="text-[9px] font-bold text-slate-400">Duration</p>
                                     <p className="font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 text-[10px] sm:text-xs">
                                       ⏱️ {durationDisplay}
                                     </p>

@@ -282,12 +282,204 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [enforcementFormData, setEnforcementFormData] = useState<Record<string, string>>({});
     const [savingEnforcementFields, setSavingEnforcementFields] = useState(false);
     
+    // ⚡ Student Profile History State (Permissions, Home-Leave & Gate-Pass)
+    const [studentHistoryTab, setStudentHistoryTab] = useState<"permissions" | "home_leave" | "gate_pass">("permissions");
+    const [studentPermissionsList, setStudentPermissionsList] = useState<any[]>([]);
+    const [studentHomeLeaves, setStudentHomeLeaves] = useState<any[]>([]);
+    const [studentGatePasses, setStudentGatePasses] = useState<any[]>([]);
+    const [isLoadingStudentHistory, setIsLoadingStudentHistory] = useState<boolean>(false);
+
     // Helper to get tenant from URL
     const getTenantParam = (includeQuestionMark = true) => {
         const tenant = searchParams.get('tenant');
         if (!tenant) return "";
         return includeQuestionMark ? `?tenant=${tenant}` : `&tenant=${tenant}`;
     };
+
+    const fetchStudentHistoryData = useCallback(async () => {
+        if (!studentProfile) return;
+        const studentId = studentProfile._id || (studentProfile as any).id;
+        const firebaseUID = studentProfile.firebaseUID || (studentProfile as any).firebaseUid;
+        const regId = studentProfile.registrationId;
+
+        // Only display skeleton loader if no records are in memory yet
+        setStudentPermissionsList(prev => {
+            if (prev.length === 0) {
+                setStudentHomeLeaves(hlPrev => {
+                    if (hlPrev.length === 0) setIsLoadingStudentHistory(true);
+                    return hlPrev;
+                });
+            }
+            return prev;
+        });
+
+        try {
+            const gpQuery = new URLSearchParams();
+            if (studentId) gpQuery.set("studentId", String(studentId));
+            if (firebaseUID) gpQuery.set("firebaseUID", firebaseUID);
+            if (regId) gpQuery.set("registrationId", regId);
+            gpQuery.set("limit", "200");
+            gpQuery.set("populate", "true");
+
+            const permQuery = new URLSearchParams();
+            if (studentId) permQuery.set("studentId", String(studentId));
+            if (firebaseUID) permQuery.set("firebaseUID", firebaseUID);
+            if (regId) permQuery.set("registrationId", regId);
+            permQuery.set("limit", "200");
+
+            const [gpRes, permRes] = await Promise.allSettled([
+                fetch(`/api/getpass/history?${gpQuery.toString()}${getTenantParam(false)}`).then(r => r.json()),
+                fetch(`/api/permissions?${permQuery.toString()}${getTenantParam(false)}`).then(r => r.json()),
+            ]);
+
+            const gpRecords: any[] = (gpRes.status === "fulfilled" && Array.isArray(gpRes.value?.records)) 
+                ? gpRes.value.records 
+                : ((gpRes.status === "fulfilled" && Array.isArray(gpRes.value?.getpasses)) ? gpRes.value.getpasses : []);
+            const permData = permRes.status === "fulfilled" 
+                ? (permRes.value?.permissions || permRes.value?.records || []) 
+                : [];
+            const permRecords: any[] = Array.isArray(permData) ? permData : [];
+
+            // 1. ALL OFFICIAL PERMISSION RECORDS (Tab 1)
+            const initialPerms = Array.isArray(permissions) ? permissions : [];
+            const combinedAllPerms = [...permRecords, ...initialPerms];
+            const uniquePermsMap = new Map();
+            combinedAllPerms.forEach((p: any) => {
+                const pId = p.id || p._id;
+                if (pId) {
+                    const consentVideo = p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl || p.parent_consent_url;
+                    if (!uniquePermsMap.has(pId)) {
+                        uniquePermsMap.set(pId, {
+                            ...p,
+                            parentConsentUrl: consentVideo || p.parentConsentUrl
+                        });
+                    } else {
+                        const existing = uniquePermsMap.get(pId);
+                        uniquePermsMap.set(pId, {
+                            ...existing,
+                            ...p,
+                            parentConsentUrl: consentVideo || existing.parentConsentUrl || p.parentConsentUrl,
+                            parentStatus: p.parentStatus || existing.parentStatus,
+                            wardenStatus: p.wardenStatus || existing.wardenStatus,
+                            deanStatus: p.deanStatus || existing.deanStatus,
+                            status: p.status || existing.status
+                        });
+                    }
+                }
+            });
+            const sortedPermsList = Array.from(uniquePermsMap.values()).sort((a, b) => {
+                const dateA = new Date(a.fromDateTime || a.createdAt || 0).getTime();
+                const dateB = new Date(b.fromDateTime || b.createdAt || 0).getTime();
+                return dateB - dateA;
+            });
+            setStudentPermissionsList(sortedPermsList);
+
+            // 2. HOME-LEAVE RECORDS (Tab 2)
+            const homeLeavePerms = sortedPermsList.filter((p: any) => {
+                const rType = String(p.requestType || '').toLowerCase();
+                return rType === 'leave' || rType === 'home-leave' || rType === 'home' || rType === 'home_leave';
+            }).map((p: any) => ({
+                source: 'permission' as const,
+                id: p.id || p._id,
+                fromDateTime: p.fromDateTime,
+                toDateTime: p.toDateTime,
+                reason: p.reason || 'Home Leave',
+                status: p.status,
+                wardenStatus: p.wardenStatus,
+                deanStatus: p.deanStatus,
+                parentStatus: p.parentStatus,
+                parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl,
+                createdAt: p.createdAt,
+                type: 'leave',
+                requestType: p.requestType || 'leave'
+            }));
+
+            const homeLeavePasses = gpRecords.filter((gp: any) => {
+                const pType = String(gp.type || '').toLowerCase();
+                return pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave';
+            }).map((gp: any) => ({
+                source: 'gate_pass' as const,
+                id: gp.id || gp._id,
+                fromDateTime: gp.checkOutTime || gp.createdAt,
+                toDateTime: gp.checkInTime || gp.expectedReturnDate,
+                checkOutIstDate: gp.checkOutIstDate,
+                checkOutIstTime: gp.checkOutIstTime,
+                checkInIstDate: gp.checkInIstDate,
+                checkInIstTime: gp.checkInIstTime,
+                checkOutTime: gp.checkOutTime,
+                checkInTime: gp.checkInTime,
+                reason: gp.reason || 'Home Leave Movement',
+                destination: gp.destination,
+                status: gp.status,
+                gateName: gp.gateName || 'Main Gate',
+                durationMinutes: gp.durationMinutes,
+                parentConsentUrl: gp.parentConsentUrl,
+                createdAt: gp.createdAt,
+                type: 'leave'
+            }));
+
+            const combinedHomeLeaves = [...homeLeavePerms, ...homeLeavePasses].sort((a, b) => {
+                const dateA = new Date(a.fromDateTime || a.createdAt || 0).getTime();
+                const dateB = new Date(b.fromDateTime || b.createdAt || 0).getTime();
+                return dateB - dateA;
+            });
+            setStudentHomeLeaves(combinedHomeLeaves);
+
+            // 3. GATE-PASS RECORDS (Tab 3)
+            const outingPerms = sortedPermsList.filter((p: any) => {
+                const rType = String(p.requestType || '').toLowerCase();
+                return rType === 'outing' || rType === 'gatepass' || rType === 'gate-pass';
+            }).map((p: any) => ({
+                source: 'permission' as const,
+                id: p.id || p._id,
+                fromDateTime: p.fromDateTime,
+                toDateTime: p.toDateTime,
+                reason: p.reason || 'Day Outing Permission',
+                status: p.status,
+                wardenStatus: p.wardenStatus,
+                deanStatus: p.deanStatus,
+                parentConsentUrl: p.parentConsentUrl || p.consentVideoUrl || p.videoUrl || p.parentVideoUrl,
+                createdAt: p.createdAt,
+                type: 'outing',
+                requestType: p.requestType || 'outing'
+            }));
+
+            const outingPasses = gpRecords.filter((gp: any) => {
+                const pType = String(gp.type || '').toLowerCase();
+                return !(pType === 'leave' || pType === 'home-leave' || pType === 'home' || pType === 'hleave' || pType === 'home_leave');
+            }).map((gp: any) => ({
+                source: 'gate_pass' as const,
+                id: gp.id || gp._id,
+                fromDateTime: gp.checkOutTime || gp.createdAt,
+                toDateTime: gp.checkInTime,
+                checkOutIstDate: gp.checkOutIstDate,
+                checkOutIstTime: gp.checkOutIstTime,
+                checkInIstDate: gp.checkInIstDate,
+                checkInIstTime: gp.checkInIstTime,
+                checkOutTime: gp.checkOutTime,
+                checkInTime: gp.checkInTime,
+                reason: gp.reason || 'Campus Outing',
+                destination: gp.destination,
+                status: gp.status,
+                gateName: gp.gateName || 'Main Gate',
+                durationMinutes: gp.durationMinutes,
+                qrTokenUsedOut: gp.qrTokenUsedOut,
+                createdAt: gp.createdAt,
+                type: 'outing'
+            }));
+
+            const combinedGatePasses = [...outingPasses, ...outingPerms].sort((a, b) => {
+                const dateA = new Date(a.checkOutTime || a.fromDateTime || a.createdAt || 0).getTime();
+                const dateB = new Date(b.checkOutTime || b.fromDateTime || b.createdAt || 0).getTime();
+                return dateB - dateA;
+            });
+            setStudentGatePasses(combinedGatePasses);
+        } catch (err) {
+            console.error("Error fetching student history data:", err);
+        } finally {
+            setIsLoadingStudentHistory(false);
+        }
+    }, [studentProfile, permissions]);
 
     // Outing Calendar Helpers and Fetch Logic
     const monthNames = [
@@ -345,12 +537,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     };
 
     useEffect(() => {
-        if (showPermissionsHistory) {
-            fetchGatePassHistory(true);
-        } else if (studentProfile?._id || (studentProfile as any)?.id || studentProfile?.firebaseUID) {
-            fetchGatePassHistory(false);
+        if (studentProfile?._id || (studentProfile as any)?.id || studentProfile?.firebaseUID) {
+            fetchGatePassHistory(Boolean(showPermissionsHistory));
+            fetchStudentHistoryData();
         }
-    }, [showPermissionsHistory, studentProfile?._id, (studentProfile as any)?.id, studentProfile?.firebaseUID]);
+    }, [showPermissionsHistory, studentProfile?._id, (studentProfile as any)?.id, studentProfile?.firebaseUID, fetchStudentHistoryData]);
 
     const parseGatePassTime = (timeVal: any, dateVal?: any): Date | null => {
         if (!timeVal && !dateVal) return null;
@@ -725,10 +916,24 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     }, []);
 
     const latestPermission = useMemo(() => {
-        if (permissions.length === 0) return null;
-        // Sort by date (assuming _id also correlates or fromDateTime)
-        return [...permissions].sort((a, b) =>
-            new Date(b.fromDateTime).getTime() - new Date(a.fromDateTime).getTime()
+        if (!permissions || permissions.length === 0) return null;
+        const now = Date.now();
+        // 1. First priority: Any non-cancelled pending or active/allowed permission whose return date has not passed yet
+        const activePerm = [...permissions].find(p => {
+            if (p.status === 'cancelled') return false;
+            const toTime = new Date(p.toDateTime || p.fromDateTime || 0).getTime();
+            const isPending = p.status === 'pending' || p.wardenStatus === 'pending' || p.deanStatus === 'pending';
+            const isOngoingOrUpcoming = (p.status === 'allowed' || p.status === 'approved' || p.status === 'accepted') && toTime >= now;
+            return isPending || isOngoingOrUpcoming;
+        });
+        if (activePerm) return activePerm;
+
+        // 2. Otherwise, check if there's any non-cancelled latest permission
+        const validPerms = [...permissions].filter(p => p.status !== 'cancelled');
+        if (validPerms.length === 0) return null;
+
+        return validPerms.sort((a, b) =>
+            new Date(b.createdAt || b.fromDateTime || 0).getTime() - new Date(a.createdAt || a.fromDateTime || 0).getTime()
         )[0];
     }, [permissions]);
 
@@ -1747,6 +1952,40 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             alert(error.message || "Failed to create permission request");
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const [isCancellingLeave, setIsCancellingLeave] = useState(false);
+
+    const handleCancelLeave = async (permissionId: string) => {
+        if (!permissionId) return;
+        const confirmed = await showConfirm("Are you sure you want to cancel this leave application?\n\nThis will revoke your active leave pass and unlock new requests.");
+        if (!confirmed) return;
+
+        setIsCancellingLeave(true);
+        try {
+            const res = await fetch(`/api/permissions${getTenantParam()}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    permissionId,
+                    status: 'cancelled',
+                    cancellationReason: 'Cancelled by student before leaving campus'
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast("Leave request cancelled successfully.", "success");
+                setPermissions(prev => prev.map(p => (p._id === permissionId || p.id === permissionId) ? { ...p, status: 'cancelled' } : p));
+                if (fetchStudentHistoryData) fetchStudentHistoryData();
+            } else {
+                showToast(data.error || "Failed to cancel leave request.", "error");
+            }
+        } catch (e: any) {
+            console.error("Error cancelling leave:", e);
+            showToast("Error cancelling leave request.", "error");
+        } finally {
+            setIsCancellingLeave(false);
         }
     };
 
@@ -3008,6 +3247,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                                 {isParentView && (
                                     <button
+                                        onMouseEnter={() => fetchStudentHistoryData()}
+                                        onTouchStart={() => fetchStudentHistoryData()}
                                         onClick={() => setShowPermissionsHistory(true)}
                                         className="h-12 bg-white px-2.5 sm:px-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between gap-1 overflow-hidden min-w-0 hover:bg-gray-50 transition-all cursor-pointer text-left"
                                     >
@@ -3219,6 +3460,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             {!isParentView && (
                                 <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-6">
                                     <button
+                                        onMouseEnter={() => fetchStudentHistoryData()}
+                                        onTouchStart={() => fetchStudentHistoryData()}
                                         onClick={() => setShowPermissionsHistory(true)}
                                         className="w-full h-12 rounded-xl bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-100 border-2 border-teal-200 text-teal-950 font-black text-[9.5px] md:text-[11px] uppercase tracking-widest hover:border-teal-400 transition-all flex items-center justify-center gap-1.5 shadow-sm"
                                     >
@@ -3259,7 +3502,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                         ? 'bg-emerald-500 animate-pulse shadow-sm shadow-emerald-500/50'
                                                         : 'bg-red-500 animate-pulse shadow-sm shadow-red-500/50'
                                                 }`} />
-                                                <span className={`text-[8px] sm:text-[9.5px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full ${
+                                                <span className={`text-[8px] sm:text-[9.5px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md ${
                                                     isOnCampusWifi
                                                         ? 'bg-emerald-200/80 text-emerald-950 border border-emerald-300'
                                                         : 'bg-red-100 text-red-700 border border-red-200'
@@ -3365,27 +3608,53 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             {/* Latest Permission Status Card */}
                             {latestPermission && (
                                 (() => {
-                                    // ⚡ LOGIC: Visible only for 24 hours after both warden and dean have responded (finalized)
-                                    const isFinalized = latestPermission.wardenStatus !== 'pending' && latestPermission.deanStatus !== 'pending';
-                                    if (isFinalized) {
-                                        const lastUpdated = new Date(latestPermission.updatedAt || latestPermission.createdAt || Date.now()).getTime();
-                                        const hoursPassed = (Date.now() - lastUpdated) / (1000 * 60 * 60);
+                                    // ⚡ If cancelled, disappear immediately from dashboard
+                                    if (latestPermission.status === 'cancelled') return null;
+
+                                    const toTime = new Date(latestPermission.toDateTime || latestPermission.fromDateTime || 0).getTime();
+                                    const isPending = latestPermission.status === 'pending' || latestPermission.wardenStatus === 'pending' || latestPermission.deanStatus === 'pending';
+                                    const isOngoingOrUpcoming = toTime >= Date.now();
+
+                                    // ⚡ User Requirement: Always visible while pending or ongoing/upcoming until the leave completed date/time.
+                                    // Once completed (past return date) or rejected, it stays visible for up to 24 hours after completion.
+                                    if (!isPending && !isOngoingOrUpcoming) {
+                                        const completedTime = toTime > 0 ? toTime : new Date(latestPermission.updatedAt || latestPermission.createdAt || Date.now()).getTime();
+                                        const hoursPassed = (Date.now() - completedTime) / (1000 * 60 * 60);
                                         if (hoursPassed > 24) return null;
                                     }
 
                                     return (
                                         <div className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm mb-4 animate-in fade-in slide-in-from-bottom-2 duration-500 font-outfit">
-                                            <div className="flex items-center justify-between mb-2 border-b border-gray-100 pb-1.5">
-                                                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Active Request Status</h3>
-                                                <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${latestPermission.status === 'allowed' ? 'bg-green-100 text-green-700' : latestPermission.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                                    {latestPermission.status}
+                                            <div className="flex items-center justify-between mb-2 border-b border-gray-100 pb-1.5 gap-2">
+                                                <h3 className="text-[9px] sm:text-[9.5px] font-bold text-gray-400 uppercase tracking-wider">Active Request Status</h3>
+                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                    {/* ↩️ Option A: Cancel Leave Button (Visible when student is in campus and request is pending or allowed) */}
+                                                    {!isParentView && studentProfile?.studentStatus !== 'out' && (latestPermission.status === 'pending' || latestPermission.status === 'allowed' || latestPermission.status === 'approved' || latestPermission.status === 'accepted') && (
+                                                        <button
+                                                            type="button"
+                                                            disabled={isCancellingLeave}
+                                                            onClick={() => handleCancelLeave(latestPermission._id || latestPermission.id)}
+                                                            className="px-2 py-0.5 rounded-md text-[9px] sm:text-[9.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 hover:border-rose-300 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                                            title="Cancel / Revoke this leave request"
+                                                        >
+                                                            <span className="text-[10px]">↩️</span> {isCancellingLeave ? 'Cancelling...' : 'Cancel Leave'}
+                                                        </button>
+                                                    )}
+                                                    <div className={`px-2 py-0.5 rounded-md text-[9px] sm:text-[9.5px] font-black uppercase tracking-wider ${
+                                                        latestPermission.status === 'allowed' ? 'bg-green-100 text-green-700 border border-green-200' :
+                                                        latestPermission.status === 'rejected' ? 'bg-red-100 text-red-700 border border-red-200' :
+                                                        latestPermission.status === 'cancelled' ? 'bg-slate-100 text-slate-600 border border-slate-200' :
+                                                        'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                                                    }`}>
+                                                        {latestPermission.status === 'cancelled' ? 'Cancelled' : latestPermission.status}
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-stretch">
                                                 {/* Left Side: Student Info & Approvals */}
                                                 <div className="w-full md:w-[45%] lg:w-[40%] shrink-0 flex flex-row md:flex-col gap-2">
                                                     <div className="flex flex-col gap-2 w-full md:w-full">
-                                                        <p className="text-[9px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest leading-none">Schedule Details</p>
+                                                        <p className="text-[9px] sm:text-[9.5px] font-bold text-gray-400 uppercase tracking-wider leading-none">Schedule Details</p>
                                                         <div className="flex flex-col gap-1.5 bg-gray-50/80 p-2 md:p-2.5 rounded-lg border border-gray-100">
                                                             <div className="flex items-center gap-1.5 md:gap-2">
                                                                 <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
@@ -3570,7 +3839,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                                                 {/* Right Side: Reason Message */}
                                                 <div className="flex-1 min-w-0 flex flex-col justify-between gap-2">
-                                                    <div className="bg-gray-50/50 p-2 md:p-4 rounded-xl border border-gray-100 h-full flex items-center justify-center">
+                                                    <div className="bg-gray-50/50 p-2 md:p-4 rounded-lg border border-gray-100 h-full flex items-center justify-center">
                                                         <p className="text-[8.5px] md:text-xs text-gray-600 font-medium leading-relaxed italic text-justify">
                                                             "{latestPermission.reason}"
                                                         </p>
@@ -3589,7 +3858,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 const phone = studentProfile.parentPhone ? (studentProfile.parentPhone.startsWith('91') ? studentProfile.parentPhone : '91' + studentProfile.parentPhone) : '';
                                                                 window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}`, "_blank");
                                                             }}
-                                                            className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-[9px] md:text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 border border-emerald-500/20"
+                                                            className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black text-[9px] md:text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 border border-emerald-500/20"
                                                         >
                                                             <span>💬</span> Share WhatsApp Video Consent
                                                         </button>
@@ -3605,7 +3874,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                                 <div className="bg-gray-50/50 px-3.5 sm:px-6 py-3 sm:py-4 border-b border-gray-100 flex items-center justify-between">
                                     <h2 className="text-[11px] sm:text-[12px] font-bold text-gray-800 uppercase tracking-wider">Student Profile Details</h2>
-                                    <span className="text-[9.5px] sm:text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">Official Record</span>
+                                    <span className="text-[9.5px] sm:text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md font-bold border border-blue-200">Official Record</span>
                                 </div>
 
                                 <div className="p-3 sm:p-6">
@@ -4354,205 +4623,546 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     )}
                                                 </div>
                                             ) : (
-                                                <div className="p-4 space-y-3">
-                                                    {permissions.length === 0 ? (
-                                                        <div className="text-center py-10 text-gray-500">
-                                                            <p>No permission requests found.</p>
-                                                        </div>
-                                                    ) : (
-                                                        permissions.map((permission) => (
-                                                            <div
-                                                                key={permission._id}
-                                                                className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm mb-4 font-outfit hover:shadow-md transition-all duration-300"
-                                                            >
-                                                                <div className="flex items-center justify-end mb-2 border-b border-gray-100 pb-1.5">
-                                                                    <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${permission.status === 'allowed' ? 'bg-green-100 text-green-700' : permission.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                                                        {permission.status}
-                                                                    </div>
-                                                                </div>
+                                                <div className="flex-1 flex flex-col min-h-0 bg-slate-50/50">
+                                                    {/* 3 Sub-Tabs Segmented Bar */}
+                                                    <div className="p-2.5 sm:p-3 bg-slate-100/70 border-b border-slate-200/80 flex gap-1.5 sm:gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setStudentHistoryTab("permissions")}
+                                                            className={`flex-1 py-1.5 sm:py-2 px-1.5 sm:px-2 rounded-lg text-[10px] sm:text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
+                                                                studentHistoryTab === "permissions"
+                                                                    ? "bg-white text-blue-700 shadow-xs border border-blue-100"
+                                                                    : "text-slate-500 hover:text-slate-800 hover:bg-white/60"
+                                                            }`}
+                                                        >
+                                                            <span className="shrink-0 text-xs sm:text-sm">📋</span>
+                                                            <span className="whitespace-nowrap tracking-normal">PERMISSION</span>
+                                                            <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-full font-black shrink-0 ${
+                                                                studentHistoryTab === "permissions" ? "bg-blue-100 text-blue-800" : "bg-slate-200 text-slate-600"
+                                                            }`}>
+                                                                {studentPermissionsList.length}
+                                                            </span>
+                                                        </button>
 
-                                                                <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-stretch">
-                                                                    {/* Left Side: Student Info & Approvals */}
-                                                                    <div className="w-full md:w-[45%] lg:w-[40%] shrink-0 flex flex-row md:flex-col gap-2">
-                                                                        <div className="flex flex-col gap-2 w-1/2 md:w-full">
-                                                                            <p className="text-[10px] md:text-[11px] font-black text-gray-400 uppercase tracking-widest leading-none">Schedule Details</p>
-                                                                            <div className="flex flex-col gap-1.5 bg-gray-50/80 p-2 md:p-2.5 rounded-lg border border-gray-100">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <div className="w-5 h-5 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
-                                                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                                                                                    </div>
-                                                                                    <div>
-                                                                                        <p className="text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5">Campus Out Time</p>
-                                                                                        <p className="text-[11px] font-bold text-gray-900 leading-none whitespace-nowrap">{permission.fromDateTime ? new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) : "N/A"}</p>
-                                                                                    </div>
-                                                                                </div>
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <div className="w-5 h-5 rounded-md bg-green-100 text-green-600 flex items-center justify-center shrink-0">
-                                                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-                                                                                    </div>
-                                                                                    <div>
-                                                                                        <p className="text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5">Campus In Time</p>
-                                                                                        <p className="text-[11px] font-bold text-gray-900 leading-none whitespace-nowrap">{permission.toDateTime ? new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) : "N/A"}</p>
-                                                                                    </div>
-                                                                                </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setStudentHistoryTab("home_leave")}
+                                                            className={`flex-1 py-1.5 sm:py-2 px-1 xs:px-1.5 sm:px-2 rounded-lg text-[9.5px] xs:text-[10px] sm:text-xs font-black transition-all flex items-center justify-center gap-0.5 xs:gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
+                                                                studentHistoryTab === "home_leave"
+                                                                    ? "bg-white text-amber-700 shadow-xs border border-amber-100"
+                                                                    : "text-slate-500 hover:text-slate-800 hover:bg-white/60"
+                                                            }`}
+                                                        >
+                                                            <span className="shrink-0 text-[11px] sm:text-sm">🏠</span>
+                                                            <span className="whitespace-nowrap tracking-tight">HOME-LEAVE</span>
+                                                            <span className={`text-[8.5px] sm:text-[9px] px-1 py-0.2 rounded-full font-black shrink-0 ${
+                                                                studentHistoryTab === "home_leave" ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-600"
+                                                            }`}>
+                                                                {studentHomeLeaves.length}
+                                                            </span>
+                                                        </button>
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setStudentHistoryTab("gate_pass")}
+                                                            className={`flex-1 py-1.5 sm:py-2 px-1 xs:px-1.5 sm:px-2 rounded-lg text-[9.5px] xs:text-[10px] sm:text-xs font-black transition-all flex items-center justify-center gap-0.5 xs:gap-1 cursor-pointer whitespace-nowrap overflow-hidden ${
+                                                                studentHistoryTab === "gate_pass"
+                                                                    ? "bg-white text-indigo-700 shadow-xs border border-indigo-100"
+                                                                    : "text-slate-500 hover:text-slate-800 hover:bg-white/60"
+                                                            }`}
+                                                        >
+                                                            <span className="shrink-0 text-[11px] sm:text-sm">🎫</span>
+                                                            <span className="whitespace-nowrap tracking-tight">GATE-PASS</span>
+                                                            <span className={`text-[8.5px] sm:text-[9px] px-1 py-0.2 rounded-full font-black shrink-0 ${
+                                                                studentHistoryTab === "gate_pass" ? "bg-indigo-100 text-indigo-800" : "bg-slate-200 text-slate-600"
+                                                            }`}>
+                                                                {studentGatePasses.length}
+                                                            </span>
+                                                        </button>
+                                                    </div>
+
+                                                    <div className="p-3 sm:p-4 space-y-3 overflow-y-auto flex-1">
+                                                        {isLoadingStudentHistory && studentPermissionsList.length === 0 && studentHomeLeaves.length === 0 && studentGatePasses.length === 0 ? (
+                                                            <div className="space-y-3 py-2">
+                                                                <div className="animate-pulse flex flex-col gap-2 p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                                                                    <div className="h-3.5 bg-slate-200 rounded w-1/3"></div>
+                                                                    <div className="h-3 bg-slate-200 rounded w-2/3"></div>
+                                                                    <div className="h-7 bg-slate-100 rounded w-full mt-1"></div>
+                                                                </div>
+                                                                <div className="animate-pulse flex flex-col gap-2 p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                                                                    <div className="h-3.5 bg-slate-200 rounded w-1/4"></div>
+                                                                    <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                                                                    <div className="h-7 bg-slate-100 rounded w-full mt-1"></div>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                {/* TAB 1: PERMISSION HISTORY */}
+                                                                {studentHistoryTab === "permissions" && (
+                                                                    <div className="space-y-3">
+                                                                        {studentPermissionsList.length === 0 ? (
+                                                                            <div className="p-6 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl">
+                                                                                <span className="text-2xl block mb-1.5">📋</span>
+                                                                                <p className="text-xs font-bold text-slate-700">No Permission records found</p>
+                                                                                <p className="text-[11px] text-slate-400 mt-0.5">You have not submitted any permissions yet.</p>
                                                                             </div>
-                                                                        </div>
-                                                                        
-                                                                        {/* Permissions Block */}
-                                                                        <div className="w-1/2 md:w-full mt-auto">
-                                                                            <div className="flex flex-col gap-0.5 md:gap-1 border border-gray-100 rounded-md p-1 md:p-2 bg-gray-50/50 w-full">
-                                                                                
-                                                                                <div className="flex items-center justify-between w-full">
-                                                                                    <div className="flex items-center gap-0.5 md:gap-1.5">
-                                                                                        <span className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Parent</span>
-                                                                                        {permission.parentStatus === "rejected" && (
-                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
-                                                                                                Rejected
-                                                                                            </span>
-                                                                                        )}
-                                                                                        {permission.parentStatus === "allowed" && (
-                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
-                                                                                                AGREE
-                                                                                            </span>
-                                                                                        )}
-                                                                                        {(!permission.parentStatus || permission.parentStatus === "no_response" || permission.parentStatus === "pending") && (
-                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
-                                                                                                Pending
-                                                                                            </span>
-                                                                                        )}
-                                                                                        {permission.parentConsentUrl && (
-                                                                                            <button
-                                                                                                onMouseEnter={() => prefetchVideo(permission.parentConsentUrl!)}
-                                                                                                onClick={(e) => {
-                                                                                                    e.preventDefault();
-                                                                                                    setActiveConsentVideoUrl(
-                                                                                                        resolveConsentVideoSrc(
-                                                                                                            permission.parentConsentUrl!,
-                                                                                                            prefetchedVideoUrls
-                                                                                                        )
-                                                                                                    );
-                                                                                                }}
-                                                                                                className="text-[6px] md:text-[8px] font-black text-green-600 bg-green-50 border border-green-200 px-1 py-0.5 rounded uppercase tracking-wider hover:bg-green-100 transition-all flex items-center gap-0.5 cursor-pointer ml-1"
-                                                                                                title="Play Consent Video"
-                                                                                            >
-                                                                                                🎥 Play
-                                                                                            </button>
-                                                                                        )}
-                                                                                    </div>
-                                                                                    <div className="flex items-center gap-1.5 relative">
-                                                                                        <div className="flex items-center gap-1 md:gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
-                                                                                            {isParentView && permission.status === 'pending' ? (
-                                                                                                <>
+                                                                        ) : (
+                                                                            studentPermissionsList.map((permission, idx) => {
+                                                                                const isAllowed = permission.status === "allowed" || permission.status === "accepted" || permission.status === "approved";
+                                                                                const isRejected = permission.status === "rejected";
+                                                                                const isPending = permission.status === "pending";
+
+                                                                                const fromFormatted = permission.fromDateTime
+                                                                                    ? new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })
+                                                                                    : "N/A";
+                                                                                const toFormatted = permission.toDateTime
+                                                                                    ? new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })
+                                                                                    : "N/A";
+
+                                                                                const consentVideo = permission.parentConsentUrl || permission.consentVideoUrl || permission.videoUrl || permission.parentVideoUrl;
+
+                                                                                return (
+                                                                                    <div
+                                                                                        key={permission.id || permission._id || idx}
+                                                                                        className="rounded-xl p-3 sm:p-3.5 border border-slate-200/80 bg-white hover:border-slate-300 transition-all shadow-2xs"
+                                                                                    >
+                                                                                        <div className="flex justify-between items-start mb-2 gap-2">
+                                                                                            <div className="space-y-0.5">
+                                                                                                <p className="text-xs sm:text-[13px] font-black text-[#2D5A9E] leading-tight">
+                                                                                                    {fromFormatted}
+                                                                                                </p>
+                                                                                                <p className="text-xs sm:text-[13px] font-black text-[#2D5A9E] leading-tight">
+                                                                                                    To {toFormatted}
+                                                                                                </p>
+                                                                                            </div>
+
+                                                                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                                                                {consentVideo && (
+                                                                                                    <button
+                                                                                                        onMouseEnter={() => prefetchVideo(consentVideo)}
+                                                                                                        onClick={(e) => {
+                                                                                                            e.preventDefault();
+                                                                                                            setActiveConsentVideoUrl(
+                                                                                                                resolveConsentVideoSrc(
+                                                                                                                    consentVideo,
+                                                                                                                    prefetchedVideoUrls
+                                                                                                                )
+                                                                                                            );
+                                                                                                        }}
+                                                                                                        className="text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md hover:bg-indigo-100 transition-all flex items-center gap-1 cursor-pointer"
+                                                                                                        title="Play Parent Consent Video"
+                                                                                                    >
+                                                                                                        🎥 Parent Video
+                                                                                                    </button>
+                                                                                                )}
+
+                                                                                                {isAllowed ? (
+                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
+                                                                                                        Approved
+                                                                                                    </div>
+                                                                                                ) : isRejected ? (
+                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
+                                                                                                        Rejected
+                                                                                                    </div>
+                                                                                                ) : (
+                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                                                                                        Pending
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+
+                                                                                        <p className="text-xs text-slate-800 leading-relaxed font-medium bg-slate-50/60 p-2 rounded-lg border border-slate-100">
+                                                                                            {permission.reason || "No reason specified"}
+                                                                                        </p>
+
+                                                                                        <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1.5 text-[9.5px] sm:text-[10px] text-slate-600 font-bold">
+                                                                                            <div className="flex flex-wrap gap-1.5 items-center">
+                                                                                                {/* 1. Parent Consent Badge (Before Warden) */}
+                                                                                                {consentVideo ? (
+                                                                                                    <button
+                                                                                                        type="button"
+                                                                                                        onMouseEnter={() => prefetchVideo(consentVideo)}
+                                                                                                        onClick={(e) => {
+                                                                                                            e.preventDefault();
+                                                                                                            setActiveConsentVideoUrl(
+                                                                                                                resolveConsentVideoSrc(
+                                                                                                                    consentVideo,
+                                                                                                                    prefetchedVideoUrls
+                                                                                                                )
+                                                                                                            );
+                                                                                                        }}
+                                                                                                        className="px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-all inline-flex items-center gap-1 cursor-pointer text-[9.5px] sm:text-[10px] font-bold"
+                                                                                                        title="Click to play Parent Consent Video"
+                                                                                                    >
+                                                                                                        Parent: <strong className="text-green-700 font-extrabold">Agree</strong>
+                                                                                                        <span className="text-green-600 text-[10.5px]">🎥</span>
+                                                                                                    </button>
+                                                                                                ) : (
+                                                                                                    <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
+                                                                                                        Parent: <strong className={`font-extrabold ${permission.parentStatus === 'allowed' ? 'text-green-600' : permission.parentStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
+                                                                                                            {(permission.parentStatus === 'allowed' ? 'Agree' : permission.parentStatus === 'rejected' ? 'Rejected' : 'Pending')}
+                                                                                                        </strong>
+                                                                                                        <span className="text-red-500 text-[10.5px]" title="Parent consent video not uploaded">
+                                                                                                            🎥
+                                                                                                        </span>
+                                                                                                    </span>
+                                                                                                )}
+
+                                                                                                {/* 2. Warden Badge */}
+                                                                                                <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
+                                                                                                    Warden: <strong className={`font-extrabold ${(permission.wardenStatus === 'allowed' || permission.wardenStatus === 'approved') ? 'text-green-600' : permission.wardenStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
+                                                                                                        {(permission.wardenStatus === 'allowed' || permission.wardenStatus === 'approved' ? 'Approved' : permission.wardenStatus === 'rejected' ? 'Rejected' : 'Pending')}
+                                                                                                    </strong>
+                                                                                                </span>
+
+                                                                                                {/* 3. Dean Badge */}
+                                                                                                <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
+                                                                                                    Dean: <strong className={`font-extrabold ${(permission.deanStatus === 'allowed' || permission.deanStatus === 'approved') ? 'text-green-600' : permission.deanStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
+                                                                                                        {(permission.deanStatus === 'allowed' || permission.deanStatus === 'approved' ? 'Allowed' : permission.deanStatus === 'rejected' ? 'Rejected' : 'Pending')}
+                                                                                                    </strong>
+                                                                                                </span>
+                                                                                            </div>
+
+                                                                                            {/* Parent Quick Action in Parent View */}
+                                                                                            {isParentView && permission.status === 'pending' && (
+                                                                                                <div className="flex items-center gap-1 bg-white p-0.5 rounded-md border border-gray-100">
                                                                                                     <button
                                                                                                         onClick={() => handleParentApproval(permission._id, "allowed")}
                                                                                                         disabled={isUpdatingParentStatus}
-                                                                                                        className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} cursor-pointer disabled:opacity-50`}
+                                                                                                        className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all ${permission.parentStatus === "allowed" ? "bg-green-600 text-white" : "bg-green-50 text-green-700 border border-green-200 hover:bg-green-100"} cursor-pointer disabled:opacity-50`}
                                                                                                     >
-                                                                                                        <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                                                        Approve
                                                                                                     </button>
                                                                                                     <button
                                                                                                         onClick={() => handleParentApproval(permission._id, "rejected")}
                                                                                                         disabled={isUpdatingParentStatus}
-                                                                                                        className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} cursor-pointer disabled:opacity-50`}
+                                                                                                        className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all ${permission.parentStatus === "rejected" ? "bg-red-600 text-white" : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"} cursor-pointer disabled:opacity-50`}
                                                                                                     >
-                                                                                                        <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                                                        Reject
                                                                                                     </button>
-                                                                                                </>
-                                                                                            ) : (
-                                                                                                <>
-                                                                                                    <div className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                                                        <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                                                                                    </div>
-                                                                                                    <div className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                                                        <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                                                                                    </div>
-                                                                                                </>
+                                                                                                </div>
                                                                                             )}
                                                                                         </div>
                                                                                     </div>
-                                                                                </div>
+                                                                                );
+                                                                            })
+                                                                        )}
+                                                                    </div>
+                                                                )}
 
-                                                                                <div className="flex items-center justify-between w-full">
-                                                                                    <div className="flex items-center gap-0.5 md:gap-1.5">
-                                                                                        <span className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Warden</span>
-                                                                                        {permission.wardenStatus === "rejected" && (
-                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
-                                                                                                Rejected
-                                                                                            </span>
-                                                                                        )}
-                                                                                        {permission.wardenStatus === "allowed" && (
-                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
-                                                                                                Accepted
-                                                                                            </span>
-                                                                                        )}
-                                                                                        {permission.wardenStatus === "pending" && (
-                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
-                                                                                                Pending
-                                                                                            </span>
-                                                                                        )}
-                                                                                    </div>
-                                                                                    <div className="flex items-center gap-1.5 relative">
-                                                                                        <div className="flex items-center gap-1 md:gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
-                                                                                            <div className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                                                <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                                                                            </div>
-                                                                                            <div className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                                                <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                </div>
-
-                                                                                <div className="flex items-center justify-between w-full">
-                                                                                    <div className="flex items-center gap-0.5 md:gap-1.5">
-                                                                                        <span className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Dean</span>
-                                                                                        {permission.deanStatus === "rejected" && (
-                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
-                                                                                                Rejected
-                                                                                            </span>
-                                                                                        )}
-                                                                                        {permission.deanStatus === "allowed" && (
-                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
-                                                                                                Accepted
-                                                                                            </span>
-                                                                                        )}
-                                                                                        {permission.deanStatus === "pending" && (
-                                                                                            <span className="text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 md:px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
-                                                                                                Pending
-                                                                                            </span>
-                                                                                        )}
-                                                                                    </div>
-                                                                                    <div className="flex items-center gap-1.5 relative">
-                                                                                        <div className="flex items-center gap-1 md:gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
-                                                                                            <div className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.deanStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm scale-110" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                                                <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                                                                            </div>
-                                                                                            <div className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
-                                                                                                <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                </div>
-
+                                                                {/* TAB 2: HOME-LEAVE HISTORY */}
+                                                                {studentHistoryTab === "home_leave" && (
+                                                                    <div className="space-y-3">
+                                                                        {studentHomeLeaves.length === 0 ? (
+                                                                            <div className="p-6 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl">
+                                                                                <span className="text-2xl block mb-1.5">🏠</span>
+                                                                                <p className="text-xs font-bold text-slate-700">No Home-Leave records found</p>
+                                                                                <p className="text-[11px] text-slate-400 mt-0.5">You have not requested or taken any home leaves yet.</p>
                                                                             </div>
-                                                                        </div>
-                                                                    </div>
+                                                                        ) : (
+                                                                            studentHomeLeaves.map((item, idx) => {
+                                                                                const isGatePassOuting = item.source === 'gate_pass';
+                                                                                const isCurrentlyOut = item.status === 'out';
+                                                                                const isAllowed = item.status === 'allowed';
+                                                                                const isRejected = item.status === 'rejected';
+                                                                                const isPending = item.status === 'pending';
 
-                                                                    {/* Vertical Separator */}
-                                                                    <div className="hidden md:block w-[1px] md:w-[2px] bg-blue-100/50 my-1 rounded-full"></div>
+                                                                                const fromRawDate = item.checkOutTime || item.fromDateTime || item.createdAt;
+                                                                                const toRawDate = item.checkInTime || item.toDateTime;
+                                                                                
+                                                                                const formattedOutDate = item.checkOutIstDate || (fromRawDate ? new Date(fromRawDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" }) : "N/A");
+                                                                                const formattedOutTime = item.checkOutIstTime || (fromRawDate ? new Date(fromRawDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "");
+                                                                                
+                                                                                const formattedInDate = item.checkInIstDate || (toRawDate ? new Date(toRawDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" }) : (isCurrentlyOut ? "Pending Return" : "Completed"));
+                                                                                const formattedInTime = item.checkInIstTime || (toRawDate ? new Date(toRawDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "");
 
-                                                                    {/* Right Side: Reason Message */}
-                                                                    <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                                                        <div className="bg-gray-50/50 p-2 md:p-4 rounded-xl border border-gray-100 h-full flex items-center justify-center">
-                                                                            <p className="text-[8.5px] md:text-xs text-gray-600 font-medium leading-relaxed italic text-justify">
-                                                                                "{permission.reason}"
-                                                                            </p>
-                                                                        </div>
+                                                                                let leaveDuration = "—";
+                                                                                if (fromRawDate && toRawDate) {
+                                                                                    const diffMs = new Date(toRawDate).getTime() - new Date(fromRawDate).getTime();
+                                                                                    if (diffMs > 0) {
+                                                                                        const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                                                                                        const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                                                                                        leaveDuration = days > 0 ? `${days}d ${hours > 0 ? `${hours}h` : ''}` : `${hours} hrs`;
+                                                                                    }
+                                                                                } else if (isCurrentlyOut && fromRawDate) {
+                                                                                    const diffMs = Date.now() - new Date(fromRawDate).getTime();
+                                                                                    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                                                                                    leaveDuration = days > 0 ? `${days}d (Out)` : `Active Out`;
+                                                                                }
+
+                                                                                const itemConsentVideo = item.parentConsentUrl || item.consentVideoUrl || item.videoUrl || item.parentVideoUrl;
+
+                                                                                return (
+                                                                                    <div
+                                                                                        key={item.id || idx}
+                                                                                        className={`rounded-xl p-3 sm:p-3.5 border transition-all shadow-2xs ${
+                                                                                            isCurrentlyOut
+                                                                                                ? 'bg-amber-50/50 border-amber-200/80'
+                                                                                                : 'bg-white border-slate-200/80 hover:border-slate-300'
+                                                                                        }`}
+                                                                                    >
+                                                                                        <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
+                                                                                            <div className="flex items-center flex-wrap gap-1.5">
+                                                                                                <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60">
+                                                                                                    {isGatePassOuting ? '🚪 Gate Leave Log' : '📝 Official Leave Pass'}
+                                                                                                </span>
+                                                                                                <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
+                                                                                                    📅 {formattedOutDate}
+                                                                                                </span>
+                                                                                            </div>
+
+                                                                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                                                                {itemConsentVideo && (
+                                                                                                    <button
+                                                                                                        onMouseEnter={() => prefetchVideo(itemConsentVideo)}
+                                                                                                        onClick={(e) => {
+                                                                                                            e.preventDefault();
+                                                                                                            setActiveConsentVideoUrl(
+                                                                                                                resolveConsentVideoSrc(
+                                                                                                                    itemConsentVideo,
+                                                                                                                    prefetchedVideoUrls
+                                                                                                                )
+                                                                                                            );
+                                                                                                        }}
+                                                                                                        className="text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md hover:bg-indigo-100 transition-all flex items-center gap-1 cursor-pointer"
+                                                                                                        title="Play Parent Consent Video"
+                                                                                                    >
+                                                                                                        🎥 Parent Video
+                                                                                                    </button>
+                                                                                                )}
+
+                                                                                                {isCurrentlyOut ? (
+                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse">
+                                                                                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                                                                                                        Currently At Home
+                                                                                                    </div>
+                                                                                                ) : isAllowed ? (
+                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-green-100 text-green-700 border border-green-200">
+                                                                                                        Approved
+                                                                                                    </div>
+                                                                                                ) : isRejected ? (
+                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
+                                                                                                        Rejected
+                                                                                                    </div>
+                                                                                                ) : isPending ? (
+                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                                                                                        Pending
+                                                                                                    </div>
+                                                                                                ) : (
+                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-700 border border-slate-200">
+                                                                                                        Completed
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+
+                                                                                        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 rounded-lg border border-slate-100 text-[11px] mb-2">
+                                                                                            <div>
+                                                                                                <p className="text-[9px] font-bold text-slate-400">Leave From</p>
+                                                                                                <p className="font-extrabold text-slate-800 mt-0.5 leading-tight">
+                                                                                                    {formattedOutDate}
+                                                                                                </p>
+                                                                                                {formattedOutTime && (
+                                                                                                    <p className="text-[10px] font-semibold text-blue-700">
+                                                                                                        {formattedOutTime}
+                                                                                                    </p>
+                                                                                                )}
+                                                                                            </div>
+
+                                                                                            <div>
+                                                                                                <p className="text-[9px] font-bold text-slate-400">Return (In)</p>
+                                                                                                <p className={`font-extrabold mt-0.5 leading-tight ${isCurrentlyOut ? 'text-amber-700 italic' : 'text-slate-800'}`}>
+                                                                                                    {formattedInDate}
+                                                                                                </p>
+                                                                                            </div>
+
+                                                                                            <div>
+                                                                                                <p className="text-[9px] font-bold text-slate-400">Duration</p>
+                                                                                                <p className="font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 text-[10px] sm:text-[11px]">
+                                                                                                    {leaveDuration}
+                                                                                                </p>
+                                                                                            </div>
+                                                                                        </div>
+
+                                                                                        <div className="text-[11px] text-slate-700 bg-slate-50/50 p-2 rounded-lg border border-slate-100/80">
+                                                                                            <span className="font-bold text-slate-900">Reason: </span>
+                                                                                            <span>{item.reason || "Home Leave"}</span>
+                                                                                            {item.destination && (
+                                                                                                <span className="block mt-0.5 text-[10px] text-slate-500 font-medium">
+                                                                                                    📍 Destination: {item.destination}
+                                                                                                </span>
+                                                                                            )}
+                                                                                        </div>
+
+                                                                                        <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex flex-wrap items-center gap-1.5 text-[9.5px] sm:text-[10px] text-slate-600 font-bold">
+                                                                                            {/* 1. Parent Consent Badge */}
+                                                                                            {itemConsentVideo ? (
+                                                                                                <button
+                                                                                                    type="button"
+                                                                                                    onMouseEnter={() => prefetchVideo(itemConsentVideo)}
+                                                                                                    onClick={(e) => {
+                                                                                                        e.preventDefault();
+                                                                                                        setActiveConsentVideoUrl(
+                                                                                                            resolveConsentVideoSrc(
+                                                                                                                itemConsentVideo,
+                                                                                                                prefetchedVideoUrls
+                                                                                                            )
+                                                                                                        );
+                                                                                                    }}
+                                                                                                    className="px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-all inline-flex items-center gap-1 cursor-pointer text-[9.5px] sm:text-[10px] font-bold"
+                                                                                                    title="Click to play Parent Consent Video"
+                                                                                                >
+                                                                                                    Parent: <strong className="text-green-700 font-extrabold">Agree</strong>
+                                                                                                    <span className="text-green-600 text-[10.5px]">🎥</span>
+                                                                                                </button>
+                                                                                            ) : (
+                                                                                                <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
+                                                                                                    Parent: <strong className={`font-extrabold ${item.parentStatus === 'allowed' ? 'text-green-600' : item.parentStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
+                                                                                                        {(item.parentStatus === 'allowed' ? 'Agree' : item.parentStatus === 'rejected' ? 'Rejected' : 'Pending')}
+                                                                                                    </strong>
+                                                                                                    <span className="text-red-500 text-[10.5px]" title="Parent consent video not uploaded">
+                                                                                                        🎥
+                                                                                                    </span>
+                                                                                                </span>
+                                                                                            )}
+
+                                                                                            {/* 2. Warden Badge */}
+                                                                                            <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
+                                                                                                Warden: <strong className={`font-extrabold ${(item.wardenStatus === 'allowed' || item.wardenStatus === 'approved') ? 'text-green-600' : item.wardenStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
+                                                                                                    {(item.wardenStatus === 'allowed' || item.wardenStatus === 'approved' ? 'Approved' : item.wardenStatus === 'rejected' ? 'Rejected' : 'Pending')}
+                                                                                                </strong>
+                                                                                            </span>
+
+                                                                                            {/* 3. Dean Badge */}
+                                                                                            <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/70 inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-slate-600">
+                                                                                                Dean: <strong className={`font-extrabold ${(item.deanStatus === 'allowed' || item.deanStatus === 'approved') ? 'text-green-600' : item.deanStatus === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>
+                                                                                                    {(item.deanStatus === 'allowed' || item.deanStatus === 'approved' ? 'Allowed' : item.deanStatus === 'rejected' ? 'Rejected' : 'Pending')}
+                                                                                                </strong>
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                );
+                                                                            })
+                                                                        )}
                                                                     </div>
-                                                                </div>
-                                                            </div>
-                                                        ))
-                                                    )}
+                                                                )}
+
+                                                                {/* TAB 3: GATE-PASS HISTORY */}
+                                                                {studentHistoryTab === "gate_pass" && (
+                                                                    <div className="space-y-3">
+                                                                        {studentGatePasses.length === 0 ? (
+                                                                            <div className="p-6 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl">
+                                                                                <span className="text-2xl block mb-1.5">🎫</span>
+                                                                                <p className="text-xs font-bold text-slate-700">No Gate-Pass history found</p>
+                                                                                <p className="text-[11px] text-slate-400 mt-0.5">You have not recorded any campus outings or gate passes yet.</p>
+                                                                            </div>
+                                                                        ) : (
+                                                                            studentGatePasses.map((pass, idx) => {
+                                                                                const isCurrentlyOut = pass.status === 'out';
+                                                                                
+                                                                                const rawOutDate = pass.checkOutTime || pass.fromDateTime || pass.createdAt;
+                                                                                const rawInDate = pass.checkInTime || pass.toDateTime;
+
+                                                                                const formattedDate = pass.checkOutIstDate || (rawOutDate ? new Date(rawOutDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" }) : "N/A");
+                                                                                const formattedOutTime = pass.checkOutIstTime || (rawOutDate ? new Date(rawOutDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "N/A");
+                                                                                const formattedInTime = isCurrentlyOut ? "Not Returned" : (pass.checkInIstTime || (rawInDate ? new Date(rawInDate).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : "Completed"));
+
+                                                                                let durationDisplay = "—";
+                                                                                if (pass.durationMinutes && pass.durationMinutes > 0) {
+                                                                                    const hrs = Math.floor(pass.durationMinutes / 60);
+                                                                                    const mins = pass.durationMinutes % 60;
+                                                                                    durationDisplay = hrs > 0 ? `${hrs}h ${mins > 0 ? `${mins}m` : ''}` : `${mins} mins`;
+                                                                                } else if (rawOutDate) {
+                                                                                    const outMs = new Date(rawOutDate).getTime();
+                                                                                    const inMs = rawInDate ? new Date(rawInDate).getTime() : (isCurrentlyOut ? Date.now() : 0);
+                                                                                    if (inMs > outMs) {
+                                                                                        const totalMins = Math.floor((inMs - outMs) / (1000 * 60));
+                                                                                        const hrs = Math.floor(totalMins / 60);
+                                                                                        const mins = totalMins % 60;
+                                                                                        durationDisplay = hrs > 0 ? `${hrs}h ${mins > 0 ? `${mins}m` : ''}` : `${totalMins} mins`;
+                                                                                    }
+                                                                                }
+                                                                                if (isCurrentlyOut && durationDisplay === "—") {
+                                                                                    durationDisplay = "Active Now";
+                                                                                }
+
+                                                                                return (
+                                                                                    <div
+                                                                                        key={pass.id || idx}
+                                                                                        className={`rounded-xl p-3 sm:p-3.5 border transition-all shadow-2xs ${
+                                                                                            isCurrentlyOut
+                                                                                                ? 'bg-rose-50/50 border-rose-200/90 shadow-rose-100/50'
+                                                                                                : 'bg-white border-slate-200/80 hover:border-slate-300'
+                                                                                        }`}
+                                                                                    >
+                                                                                        <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
+                                                                                            <div className="flex items-center flex-wrap gap-1.5">
+                                                                                                <span className={`text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-md border ${
+                                                                                                    isCurrentlyOut ? 'bg-rose-100/80 text-rose-800 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                                                                }`}>
+                                                                                                    🚪 {pass.gateName ? pass.gateName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Main Gate'}
+                                                                                                </span>
+                                                                                                <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
+                                                                                                    📅 {formattedDate}
+                                                                                                </span>
+                                                                                            </div>
+
+                                                                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                                                                {isCurrentlyOut ? (
+                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 animate-pulse">
+                                                                                                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                                                                                                        Currently Out
+                                                                                                    </div>
+                                                                                                ) : (
+                                                                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                                                                        ✓ Returned (In)
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+
+                                                                                        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-slate-50/80 p-2 sm:p-2.5 rounded-lg border border-slate-100 text-[11px] mb-2">
+                                                                                            <div>
+                                                                                                <p className="text-[9px] font-bold text-slate-400">Check Out</p>
+                                                                                                <p className="font-extrabold text-slate-800 mt-0.5 text-xs sm:text-[13px] leading-tight">
+                                                                                                    {formattedOutTime}
+                                                                                                </p>
+                                                                                                <p className="text-[9px] text-slate-400 font-medium">
+                                                                                                    {formattedDate}
+                                                                                                </p>
+                                                                                            </div>
+
+                                                                                            <div>
+                                                                                                <p className="text-[9px] font-bold text-slate-400">Check In</p>
+                                                                                                <p className={`font-extrabold mt-0.5 text-xs sm:text-[13px] leading-tight ${isCurrentlyOut ? 'text-rose-600 italic font-bold' : 'text-slate-800'}`}>
+                                                                                                    {formattedInTime}
+                                                                                                </p>
+                                                                                                <p className="text-[9px] text-slate-400 font-medium">
+                                                                                                    {isCurrentlyOut ? "Pending Return" : formattedDate}
+                                                                                                </p>
+                                                                                            </div>
+
+                                                                                            <div>
+                                                                                                <p className="text-[9px] font-bold text-slate-400">Duration</p>
+                                                                                                <p className="font-black text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mt-0.5 text-[10px] sm:text-xs">
+                                                                                                    ⏱️ {durationDisplay}
+                                                                                                </p>
+                                                                                            </div>
+                                                                                        </div>
+
+                                                                                        <p className="text-[11px] text-slate-600 font-medium">
+                                                                                            <span className="font-bold text-slate-800">Purpose: </span>{pass.reason || "Campus Outing"}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                );
+                                                                            })
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>

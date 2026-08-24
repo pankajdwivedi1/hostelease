@@ -109,6 +109,8 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const studentId = searchParams.get("studentId");
+    const firebaseUID = searchParams.get("firebaseUID") || searchParams.get("firebaseUid");
+    const registrationId = searchParams.get("registrationId");
     const status = searchParams.get("status");
     const hostelName = searchParams.get("hostelName");
     const authorizedHostelsStr = searchParams.get("authorizedHostels");
@@ -116,6 +118,12 @@ export async function GET(request: NextRequest) {
     const filters: any = {};
     if (studentId) {
       filters.studentId = studentId;
+    }
+    if (firebaseUID) {
+      filters.firebaseUID = firebaseUID;
+    }
+    if (registrationId) {
+      filters.registrationId = registrationId;
     }
     if (status && status !== "all") {
       filters.status = status;
@@ -147,6 +155,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ 
       permissions: realPermissions, 
+      records: realPermissions,
       total: typeof total === 'number' && total > 0 ? total : realPermissions.length, 
       success: true 
     }, { status: 200 });
@@ -194,7 +203,10 @@ export async function PATCH(request: NextRequest) {
     const finalWardenStatus = wardenStatus || currentPermission.wardenStatus;
     const finalDeanStatus = deanStatus || currentPermission.deanStatus;
 
-    if (finalDeanStatus === "allowed" || (finalWardenStatus === "allowed" && finalDeanStatus === "allowed")) {
+    if (status === "cancelled") {
+      update.status = "cancelled";
+      update.cancellationReason = body.cancellationReason || "Cancelled by student before leaving campus";
+    } else if (finalDeanStatus === "allowed" || (finalWardenStatus === "allowed" && finalDeanStatus === "allowed")) {
       update.status = "allowed";
     } else if (finalWardenStatus === "rejected" || finalDeanStatus === "rejected") {
       update.status = "rejected";
