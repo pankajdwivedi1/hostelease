@@ -44,6 +44,8 @@ export async function POST(request: NextRequest) {
     // Send Web Push Notification to Warden (Fire & Forget)
     try {
       import("@/lib/pushNotification").then(({ sendPushNotification }) => {
+        const studentPhoto = (student as any)?.profilePicture || (student as any)?.photoUrl || (student as any)?.photo || (student as any)?.image;
+
         // If there's a warden for the student's hostel, notify them
         if (student.hostelName) {
           // Fetch warden account username for this hostel
@@ -55,7 +57,9 @@ export async function POST(request: NextRequest) {
                 sendPushNotification(wardenId, "warden", "wardenNewLeaveRequest", {
                   title: "New Leave Application",
                   body: `${student.name} applied for ${requestType || "outing"}: "${reason}".`,
-                  url: "/"
+                  url: "/",
+                  icon: studentPhoto || "/icons/icon-192x192.png",
+                  image: studentPhoto || undefined
                 }).catch(err => console.error("Warden new leave push failed:", err));
               }
             }).catch(err => console.error("Hostel lookup for push failed:", err));
@@ -65,7 +69,9 @@ export async function POST(request: NextRequest) {
         sendPushNotification("admin", "dean", "deanLeaveRequest", {
           title: "New Leave Application",
           body: `${student.name} applied for ${requestType || "outing"}: "${reason}".`,
-          url: "/"
+          url: "/",
+          icon: studentPhoto || "/icons/icon-192x192.png",
+          image: studentPhoto || undefined
         }).catch(err => console.error("Dean new leave push failed:", err));
       });
     } catch (e) {
@@ -228,14 +234,17 @@ export async function PATCH(request: NextRequest) {
         const studentObj = (populatedPermission as any).student;
         if (studentObj) {
           const studentId = studentObj.id || studentObj._id;
-          const statusText = update.status === "allowed" ? "APPROVED" : update.status === "rejected" ? "REJECTED" : "UPDATED";
+          const statusText = update.status === "allowed" ? "APPROVED" : update.status === "rejected" ? "REJECTED" : update.status === "cancelled" ? "CANCELLED" : "UPDATED";
           const requestTypeLabel = populatedPermission.requestType === "leave" ? "Leave" : "Outing";
+          const studentPhoto = studentObj.profilePicture || studentObj.photoUrl || studentObj.photo || studentObj.image;
 
           // 1. Notify Student
           sendPushNotification(studentId.toString(), "student", "studentLeaveStatus", {
             title: `Gatepass Request ${statusText}`,
             body: `Your gatepass request for ${requestTypeLabel} has been ${statusText.toLowerCase()} by admin.`,
-            url: "/"
+            url: "/",
+            icon: studentPhoto || "/icons/icon-192x192.png",
+            image: studentPhoto || undefined
           }).catch(err => console.error("Student decision push failed:", err));
 
           // 2. Notify Parent if Approved
@@ -244,7 +253,9 @@ export async function PATCH(request: NextRequest) {
             sendPushNotification(parentUserId, "parent", "parentLeaveApproval", {
               title: "Leave Approval Notification",
               body: `Your ward ${studentObj.name}'s leave request has been APPROVED by the campus warden.`,
-              url: "/"
+              url: "/",
+              icon: studentPhoto || "/icons/icon-192x192.png",
+              image: studentPhoto || undefined
             }).catch(err => console.error("Parent decision push failed:", err));
           }
         }

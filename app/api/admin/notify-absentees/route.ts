@@ -44,13 +44,16 @@ export async function POST(request: NextRequest) {
       if (!parentPhone) return;
 
       const parentUserId = student.fatherNumber || (student._id.toString() + "_parent");
+      const studentPhoto = (student as any)?.profilePicture || (student as any)?.photoUrl || (student as any)?.photo || (student as any)?.image;
       
       const res = await sendPushNotification(parentUserId, "parent", "parentNightAbsent", {
         title: customMessage ? "⚠️ Urgent Parent Alert" : "Night Attendance Alert",
         body: customMessage 
           ? customMessage.replace("{name}", student.name) 
           : `Your ward ${student.name} has NOT marked night curfew attendance for today ${date || 'today'}.`,
-        url: "/"
+        url: "/",
+        icon: studentPhoto || "/icons/icon-192x192.png",
+        image: studentPhoto || undefined
       });
 
       if (res.success) {

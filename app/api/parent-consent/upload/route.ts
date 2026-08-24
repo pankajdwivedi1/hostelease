@@ -141,22 +141,25 @@ export async function POST(request: NextRequest) {
       import("@/lib/pushNotification").then(async ({ sendPushNotification }) => {
         if (student) {
           const studentIdStr = student.id || student._id || "";
+          const studentPhoto = (student as any)?.profilePicture || (student as any)?.photoUrl || (student as any)?.photo || (student as any)?.image;
           
           // 1. Notify Warden if hostelName is set
           if (student.hostelName) {
-            const { data: hostelData } = await db.supabase
-              .from("hostels")
-              .select("warden_username")
-              .eq("name", student.hostelName)
-              .maybeSingle();
-
-            const wardenId = hostelData?.warden_username;
-            if (wardenId) {
-              sendPushNotification(wardenId, "warden", "parentConsentVideoUploaded", {
-                title: "Parent Consent Video Uploaded",
-                body: `${student.name}'s parent uploaded a leave consent video.`,
-                url: "/"
-              }).catch(err => console.error("Warden parent consent video upload push failed:", err));
+            try {
+              const hostels = await db.hostels.getAll();
+              const matchedHostel = (hostels || []).find((h: any) => h.name === student.hostelName);
+              const wardenId = matchedHostel?.wardenUsername;
+              if (wardenId) {
+                sendPushNotification(wardenId, "warden", "parentConsentVideoUploaded", {
+                  title: "Parent Consent Video Uploaded",
+                  body: `${student.name}'s parent uploaded a leave consent video.`,
+                  url: "/",
+                  icon: studentPhoto || "/icons/icon-192x192.png",
+                  image: studentPhoto || undefined
+                }).catch(err => console.error("Warden parent consent video upload push failed:", err));
+              }
+            } catch (err) {
+              console.error("Hostel lookup for warden consent push failed:", err);
             }
           }
 
@@ -164,14 +167,18 @@ export async function POST(request: NextRequest) {
           sendPushNotification("admin", "dean", "parentConsentVideoUploaded", {
             title: "Parent Consent Video Uploaded",
             body: `Consent video uploaded for student ${student.name}.`,
-            url: "/"
+            url: "/",
+            icon: studentPhoto || "/icons/icon-192x192.png",
+            image: studentPhoto || undefined
           }).catch(err => console.error("Dean parent consent video upload push failed:", err));
 
           // 3. Notify Student
           sendPushNotification(studentIdStr.toString(), "student", "parentConsentVideoUploaded", {
             title: "Parent Consent Video Received",
             body: "Your parent has successfully uploaded the leave consent video.",
-            url: "/"
+            url: "/",
+            icon: studentPhoto || "/icons/icon-192x192.png",
+            image: studentPhoto || undefined
           }).catch(err => console.error("Student parent consent video upload push failed:", err));
         }
       });

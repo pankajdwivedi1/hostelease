@@ -6,6 +6,7 @@ self.addEventListener('push', function (event) {
         body: data.body || "",
         icon: data.icon || "/icons/icon-192x192.png",
         badge: data.badge || "/icons/icon-72x72.png",
+        image: data.image || undefined,
         data: {
           url: data.url || "/"
         }

@@ -428,10 +428,13 @@ export async function POST(request: NextRequest) {
                 // Send Web Push Notification to Parent (Fire & Forget)
                 import("@/lib/pushNotification").then(({ sendPushNotification }) => {
                     const parentUserId = student.fatherNumber || (student._id.toString() + "_parent");
+                    const studentPhoto = (student as any)?.profilePicture || (student as any)?.photoUrl || (student as any)?.photo || (student as any)?.image;
                     sendPushNotification(parentUserId, "parent", "parentScanInOut", {
                         title: "Gate Out-Pass Alert",
                         body: `Your ward ${student.name} has checked OUT from campus at ${istTime} via ${gateName}.`,
-                        url: "/"
+                        url: "/",
+                        icon: studentPhoto || "/icons/icon-192x192.png",
+                        image: studentPhoto || undefined
                     }).catch(err => console.error("Web Push to parent failed:", err));
                 }).catch(e => console.error("Failed to load pushNotification helper:", e));
             }
@@ -522,10 +525,13 @@ export async function POST(request: NextRequest) {
                 // Send Web Push Notification to Parent (Fire & Forget)
                 import("@/lib/pushNotification").then(({ sendPushNotification }) => {
                     const parentUserId = student.fatherNumber || (student._id.toString() + "_parent");
+                    const studentPhoto = (student as any)?.profilePicture || (student as any)?.photoUrl || (student as any)?.photo || (student as any)?.image;
                     sendPushNotification(parentUserId, "parent", "parentScanInOut", {
                         title: "Gate Check-In Alert",
                         body: `Your ward ${student.name} has checked IN to campus at ${istTime} via ${lastUpdatedPass?.gateName || "Main Gate"}.`,
-                        url: "/"
+                        url: "/",
+                        icon: studentPhoto || "/icons/icon-192x192.png",
+                        image: studentPhoto || undefined
                     }).catch(err => console.error("Web Push to parent failed:", err));
                 }).catch(e => console.error("Failed to load pushNotification helper:", e));
             }

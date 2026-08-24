@@ -22,6 +22,7 @@ export interface PushPayload {
   url?: string;
   icon?: string;
   badge?: string;
+  image?: string;
 }
 
 /**
@@ -121,7 +122,8 @@ export async function sendPushNotification(
             body: payload.body,
             url: payload.url || "/",
             icon: payload.icon || "/icons/icon-192x192.png",
-            badge: payload.badge || "/icons/icon-72x72.png"
+            badge: payload.badge || "/icons/icon-72x72.png",
+            image: payload.image || undefined
           })
         );
       } catch (err: any) {
