@@ -14,12 +14,16 @@ const CONSENT_MIME_TYPES = [
 
 function pickConsentMimeType(): { mimeType: string; fileExt: string } {
     if (typeof MediaRecorder !== "undefined") {
-        // Test formats in order of mobile compatibility
+        // Test formats in order of guaranteed voice & video universal decoding:
+        // 1. WebM with Opus (100% native on Android Chrome, Firefox, Desktop)
+        // 2. MP4 with H.264 + AAC audio (100% native on iOS Safari / macOS)
         const types = [
-            { mime: "video/mp4", ext: "mp4" },
-            { mime: "video/mp4;codecs=avc1,mp4a.40.2", ext: "mp4" },
             { mime: "video/webm;codecs=vp8,opus", ext: "webm" },
+            { mime: "video/webm;codecs=vp9,opus", ext: "webm" },
             { mime: "video/webm", ext: "webm" },
+            { mime: "video/mp4;codecs=avc1.42E01E,mp4a.40.2", ext: "mp4" },
+            { mime: "video/mp4;codecs=avc1,mp4a.40.2", ext: "mp4" },
+            { mime: "video/mp4", ext: "mp4" },
         ];
         for (const t of types) {
             if (MediaRecorder.isTypeSupported(t.mime)) {
@@ -42,6 +46,7 @@ function getCameraConstraints(isMobile: boolean): MediaStreamConstraints {
     const audioConstraints = {
         echoCancellation: true,
         autoGainControl: true,
+        noiseSuppression: true,
     };
 
     if (isMobile) {
@@ -97,6 +102,15 @@ export default function ParentConsentClient({
     const [previewAspectRatio, setPreviewAspectRatio] = useState<number | null>(null);
     const [reviewAspectRatio, setReviewAspectRatio] = useState<number | null>(null);
 
+    // 🎙️ Live Decibel & Voice Verification States
+    const [liveAudioLevel, setLiveAudioLevel] = useState<number>(0);
+    const [isVoiceVerified, setIsVoiceVerified] = useState<boolean>(false);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const analyserRef = useRef<AnalyserNode | null>(null);
+    const audioAnimFrameRef = useRef<number | null>(null);
+    const maxAudioLevelRef = useRef<number>(0);
+    const voiceFramesCountRef = useRef<number>(0);
+
     // Register parent for Web Push notifications on mount
     useEffect(() => {
         const initParentPush = async () => {
@@ -118,7 +132,7 @@ export default function ParentConsentClient({
     const chunksRef = useRef<Blob[]>([]);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Clean up streams on unmount
+    // Clean up streams & audio context on unmount
     useEffect(() => {
         setIsMobile(isMobileDevice());
         return () => {
@@ -127,6 +141,12 @@ export default function ParentConsentClient({
             }
             if (timerRef.current) {
                 clearInterval(timerRef.current);
+            }
+            if (audioAnimFrameRef.current) {
+                cancelAnimationFrame(audioAnimFrameRef.current);
+            }
+            if (audioContextRef.current) {
+                audioContextRef.current.close().catch(() => {});
             }
         };
     }, [stream]);
@@ -217,7 +237,7 @@ export default function ParentConsentClient({
         // Camera will be set up when user taps button
     }, []);
 
-    // Start video recording with guaranteed audio
+    // Start video recording with guaranteed audio & live decibel analysis
     const startRecording = async (activeStream?: MediaStream) => {
         let currentStream = activeStream || stream;
         if (!currentStream) return;
@@ -235,6 +255,54 @@ export default function ParentConsentClient({
 
         chunksRef.current = [];
         const { mimeType: selectedMimeType } = pickConsentMimeType();
+
+        // 🎙️ Initialize real-time Web Audio Decibel Analyzer
+        try {
+            if (typeof window !== "undefined") {
+                const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                if (AudioContextClass) {
+                    const audioCtx = new AudioContextClass();
+                    if (audioCtx.state === "suspended") {
+                        await audioCtx.resume();
+                    }
+                    const analyser = audioCtx.createAnalyser();
+                    analyser.fftSize = 256;
+                    analyser.smoothingTimeConstant = 0.3;
+                    const source = audioCtx.createMediaStreamSource(currentStream);
+                    source.connect(analyser);
+
+                    audioContextRef.current = audioCtx;
+                    analyserRef.current = analyser;
+                    maxAudioLevelRef.current = 0;
+                    voiceFramesCountRef.current = 0;
+                    setIsVoiceVerified(false);
+
+                    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                    const checkAudioLevel = () => {
+                        if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+                            analyser.getByteFrequencyData(dataArray);
+                            let sum = 0;
+                            for (let i = 0; i < dataArray.length; i++) {
+                                sum += dataArray[i];
+                            }
+                            const avg = sum / dataArray.length; // 0 to 255
+                            const normalizedLevel = Math.min(avg / 60, 1.0); // 0.0 to 1.0
+                            setLiveAudioLevel(normalizedLevel);
+
+                            if (normalizedLevel > 0.06) {
+                                voiceFramesCountRef.current += 1;
+                            }
+                            maxAudioLevelRef.current = Math.max(maxAudioLevelRef.current, normalizedLevel);
+
+                            audioAnimFrameRef.current = requestAnimationFrame(checkAudioLevel);
+                        }
+                    };
+                    audioAnimFrameRef.current = requestAnimationFrame(checkAudioLevel);
+                }
+            }
+        } catch (audioMeterErr) {
+            console.warn("Audio meter initialization error:", audioMeterErr);
+        }
 
         try {
             let mediaRecorder: MediaRecorder;
@@ -256,7 +324,37 @@ export default function ParentConsentClient({
             };
 
             mediaRecorder.onstop = () => {
-                const actualType = mediaRecorder.mimeType || selectedMimeType || "video/mp4";
+                // Stop audio monitoring
+                if (audioAnimFrameRef.current) {
+                    cancelAnimationFrame(audioAnimFrameRef.current);
+                    audioAnimFrameRef.current = null;
+                }
+                if (audioContextRef.current) {
+                    audioContextRef.current.close().catch(() => {});
+                    audioContextRef.current = null;
+                }
+                setLiveAudioLevel(0);
+
+                // 🎙️ Voice energy validation
+                const peakVoice = maxAudioLevelRef.current;
+                const framesWithVoice = voiceFramesCountRef.current;
+                console.log(`🎙️ [Voice Analysis] Peak: ${peakVoice.toFixed(2)}, Audible frames: ${framesWithVoice}`);
+
+                // If voice was completely silent / muted (under threshold)
+                if (peakVoice < 0.05 || framesWithVoice < 4) {
+                    console.warn("⚠️ Silent recording detected. Rejecting silent consent video.");
+                    setErrorMessage("⚠️ कोई आवाज़ दर्ज नहीं हुई! (No voice detected!) कृपया अपने फ़ोन के माइक्रोफ़ोन के पास साफ़ और स्पष्ट आवाज़ में बोलें और पुनः रिकॉर्ड करें। (Please speak loudly and clearly near your phone microphone and record again.)");
+                    setRecordingState("idle");
+                    setIsVoiceVerified(false);
+                    chunksRef.current = [];
+                    handleRetry();
+                    return;
+                }
+
+                setIsVoiceVerified(true);
+                setErrorMessage("");
+
+                const actualType = mediaRecorder.mimeType || selectedMimeType || "video/webm";
                 const blob = new Blob(chunksRef.current, { type: actualType });
                 const url = URL.createObjectURL(blob);
                 setVideoUrl(url);
@@ -300,6 +398,15 @@ export default function ParentConsentClient({
 
     // Stop active camera stream
     const stopCamera = () => {
+        if (audioAnimFrameRef.current) {
+            cancelAnimationFrame(audioAnimFrameRef.current);
+            audioAnimFrameRef.current = null;
+        }
+        if (audioContextRef.current) {
+            audioContextRef.current.close().catch(() => {});
+            audioContextRef.current = null;
+        }
+        setLiveAudioLevel(0);
         if (stream) {
             stream.getTracks().forEach(track => track.stop());
             setStream(null);
@@ -321,6 +428,16 @@ export default function ParentConsentClient({
 
     // Retry recording
     const handleRetry = async () => {
+        if (audioAnimFrameRef.current) {
+            cancelAnimationFrame(audioAnimFrameRef.current);
+            audioAnimFrameRef.current = null;
+        }
+        if (audioContextRef.current) {
+            audioContextRef.current.close().catch(() => {});
+            audioContextRef.current = null;
+        }
+        setLiveAudioLevel(0);
+        setIsVoiceVerified(false);
         setVideoUrl(null);
         setReviewAspectRatio(null);
         setPreviewAspectRatio(null);
@@ -503,6 +620,28 @@ export default function ParentConsentClient({
                                             )}
                                         </div>
 
+                                        {/* 🎙️ Real-time Voice Decibel Meter */}
+                                        {recordingState === "recording" && (
+                                            <div className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-inner">
+                                                <span className="text-[10px] font-bold text-slate-300 flex items-center gap-1 shrink-0">
+                                                    🎙️ Mic Level:
+                                                </span>
+                                                <div className="flex-1 bg-slate-800 h-2 rounded-full overflow-hidden flex items-center p-0.5">
+                                                    <div 
+                                                        className={`h-full rounded-full transition-all duration-75 ${
+                                                            liveAudioLevel > 0.08 ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50' : 'bg-amber-500/60'
+                                                        }`}
+                                                        style={{ width: `${Math.max(5, liveAudioLevel * 100)}%` }}
+                                                    />
+                                                </div>
+                                                <span className={`text-[9px] font-black uppercase shrink-0 ${
+                                                    liveAudioLevel > 0.08 ? 'text-emerald-400' : 'text-amber-400'
+                                                }`}>
+                                                    {liveAudioLevel > 0.08 ? 'Speaking 🔊' : 'Speak up 🔇'}
+                                                </span>
+                                            </div>
+                                        )}
+
                                         {/* Action buttons directly beneath video preview */}
                                         <div className="flex items-center justify-center gap-2 w-full">
                                             {recordingState === "idle" && (
@@ -557,6 +696,15 @@ export default function ParentConsentClient({
                                                 className="w-full h-full object-cover"
                                             />
                                         </div>
+
+                                        {/* 🎙️ Voice Verified Indicator Badge */}
+                                        {isVoiceVerified && (
+                                            <div className="w-full bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-2.5 py-1.5 flex items-center justify-center gap-1.5 text-emerald-400 text-[10px] font-bold shadow-sm">
+                                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                                <span>✅ आवाज़ सत्यापित (Voice & Sound Recorded)</span>
+                                            </div>
+                                        )}
+
                                         <div className="flex items-center justify-center gap-2 w-full">
                                             <button
                                                 type="button"
