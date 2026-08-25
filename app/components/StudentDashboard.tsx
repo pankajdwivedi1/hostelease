@@ -3319,35 +3319,81 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 </button>
                             </div>
 
+                            {/* Overdue Student Alert Banner */}
+                            {(() => {
+                                if (studentProfile?.studentStatus !== 'out') return null;
+                                const leaveTo = latestPermission?.toDateTime || studentProfile?.leaveTo;
+                                if (!leaveTo) return null;
+                                const toDate = new Date(leaveTo);
+                                const isOverdue = !isNaN(toDate.getTime()) && Date.now() > toDate.getTime();
+                                if (!isOverdue) return null;
+                                return (
+                                    <div className="mb-2.5 p-2.5 sm:p-3 bg-red-50 border-2 border-red-300 rounded-2xl flex items-center gap-2.5 shadow-sm animate-pulse">
+                                        <span className="text-xl sm:text-2xl shrink-0">⚠️</span>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-[10px] sm:text-xs font-black text-red-800 uppercase tracking-tight">Approved Leave Expired</p>
+                                            <p className="text-[8.5px] sm:text-[9.5px] text-red-700 font-bold leading-tight mt-0.5">
+                                                Your approved leave expired on {toDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}. Please check in at the gate or report to your warden.
+                                            </p>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
                             {/* Quick Info Grid */}
                             <div className={`grid grid-cols-2 ${gridColsClass} gap-2 sm:gap-3 mb-2`} style={{ fontFamily: 'var(--font-lora), Cambria' }}>
                                 <div className={`h-12 px-2.5 sm:px-3 rounded-xl border-2 shadow-sm flex flex-col justify-center overflow-hidden min-w-0 ${
                                     studentProfile.studentStatus === 'out'
-                                        ? String(studentProfile.outingType || '').toLowerCase().includes('leave')
-                                            ? 'bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-blue-200'
-                                            : 'bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 border-amber-200'
+                                        ? (() => {
+                                            const leaveTo = latestPermission?.toDateTime || studentProfile?.leaveTo;
+                                            const toDate = leaveTo ? new Date(leaveTo) : null;
+                                            const isOverdue = toDate && !isNaN(toDate.getTime()) && Date.now() > toDate.getTime();
+                                            if (isOverdue) return 'bg-gradient-to-br from-red-50 via-rose-50 to-red-100 border-red-300 ring-2 ring-red-200';
+                                            return String(studentProfile.outingType || '').toLowerCase().includes('leave')
+                                                ? 'bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-blue-200'
+                                                : 'bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 border-amber-200';
+                                          })()
                                         : 'bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100 border-emerald-200'
                                 }`}>
                                     <span className={`block text-[7.5px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${
                                         studentProfile.studentStatus === 'out'
-                                            ? String(studentProfile.outingType || '').toLowerCase().includes('leave')
-                                                ? 'text-blue-800'
-                                                : 'text-amber-800'
+                                            ? (() => {
+                                                const leaveTo = latestPermission?.toDateTime || studentProfile?.leaveTo;
+                                                const toDate = leaveTo ? new Date(leaveTo) : null;
+                                                const isOverdue = toDate && !isNaN(toDate.getTime()) && Date.now() > toDate.getTime();
+                                                if (isOverdue) return 'text-red-800';
+                                                return String(studentProfile.outingType || '').toLowerCase().includes('leave')
+                                                    ? 'text-blue-800'
+                                                    : 'text-amber-800';
+                                              })()
                                             : 'text-emerald-800'
                                     }`}>Current Status</span>
                                     <div className="flex items-center gap-1.5 min-w-0">
                                         {studentProfile.studentStatus === 'out' ? (
-                                            String(studentProfile.outingType || '').toLowerCase().includes('leave') ? (
-                                                <>
-                                                    <div className="w-2.5 h-2.5 rounded-full shrink-0 bg-blue-500 ring-2 ring-blue-200 animate-pulse" />
-                                                    <p className="text-[9.5px] md:text-[11px] font-black text-blue-950 uppercase tracking-tight truncate">🏠 HOME-LEAVE</p>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <div className="w-2.5 h-2.5 rounded-full shrink-0 bg-amber-500 ring-2 ring-amber-200 animate-pulse" />
-                                                    <p className="text-[9.5px] md:text-[11px] font-black text-amber-950 uppercase tracking-tight truncate">🚪 GATE-PASS</p>
-                                                </>
-                                            )
+                                            (() => {
+                                                const leaveTo = latestPermission?.toDateTime || studentProfile?.leaveTo;
+                                                const toDate = leaveTo ? new Date(leaveTo) : null;
+                                                const isOverdue = toDate && !isNaN(toDate.getTime()) && Date.now() > toDate.getTime();
+                                                if (isOverdue) {
+                                                    return (
+                                                        <>
+                                                            <div className="w-2.5 h-2.5 rounded-full shrink-0 bg-red-500 ring-2 ring-red-300 animate-pulse" />
+                                                            <p className="text-[9.5px] md:text-[11px] font-black text-red-950 uppercase tracking-tight truncate">🚨 LATE / OVERDUE</p>
+                                                        </>
+                                                    );
+                                                }
+                                                return String(studentProfile.outingType || '').toLowerCase().includes('leave') ? (
+                                                    <>
+                                                        <div className="w-2.5 h-2.5 rounded-full shrink-0 bg-blue-500 ring-2 ring-blue-200 animate-pulse" />
+                                                        <p className="text-[9.5px] md:text-[11px] font-black text-blue-950 uppercase tracking-tight truncate">🏠 HOME-LEAVE</p>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <div className="w-2.5 h-2.5 rounded-full shrink-0 bg-amber-500 ring-2 ring-amber-200 animate-pulse" />
+                                                        <p className="text-[9.5px] md:text-[11px] font-black text-amber-950 uppercase tracking-tight truncate">🚪 GATE-PASS</p>
+                                                    </>
+                                                );
+                                            })()
                                         ) : (
                                             <>
                                                 <div className="w-2.5 h-2.5 rounded-full shrink-0 bg-emerald-500 ring-2 ring-emerald-200" />

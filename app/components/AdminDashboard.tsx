@@ -6757,6 +6757,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   // 2. Roommate Status Helper
   const getRoommateStatus = (student: StudentDetails) => {
     if (student.studentStatus === 'out') {
+      const sIdStr = (student.id || student._id)?.toString();
+      const perm = permissions.find((p: any) => {
+        const pSid = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
+        if (pSid && sIdStr && pSid.toString() === sIdStr) return true;
+        if (p.registrationId && student.registrationId && p.registrationId === student.registrationId) return true;
+        if (p.name && student.name && p.name.trim().toLowerCase() === student.name.trim().toLowerCase()) return true;
+        return false;
+      });
+
+      const leaveTo = perm?.toDateTime || student.leaveTo;
+      if (leaveTo) {
+        const toDate = new Date(leaveTo);
+        if (!isNaN(toDate.getTime()) && Date.now() > toDate.getTime()) {
+          return 'overdue';
+        }
+      }
+
       const oType = String(student.outingType || '').toLowerCase().trim();
       if (oType === 'leave' || oType === 'home-leave' || oType === 'hleave') {
         return 'hleave';
@@ -6771,6 +6788,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   // 3. Room Card Style Resolver
   const getRoomStatusClass = (roommates: StudentDetails[]) => {
     const statuses = roommates.map(getRoommateStatus);
+    if (statuses.includes('overdue')) return { bg: 'bg-red-50/60 border-red-250 hover:bg-red-100/50', border: 'border-red-400', text: 'text-red-700', badge: 'bg-red-600 text-white', color: '#ef4444' };
     if (statuses.includes('hleave')) return { bg: 'bg-blue-50 border-blue-250 hover:bg-blue-100/50', border: 'border-blue-400', text: 'text-blue-700', badge: 'bg-blue-600 text-white', color: '#2563eb' };
     if (statuses.includes('gpass')) return { bg: 'bg-yellow-50/50 border-yellow-250 hover:bg-yellow-100/50', border: 'border-yellow-400', text: 'text-yellow-800', badge: 'bg-yellow-500 text-white', color: '#eab308' };
     return { bg: 'bg-emerald-50 border-emerald-250 hover:bg-emerald-100/50', border: 'border-emerald-400', text: 'text-emerald-700', badge: 'bg-emerald-600 text-white', color: '#10b981' };
@@ -10015,13 +10033,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       {roommates.length > 0 ? (
                                         roommates.map((r, i) => {
                                           const rStatus = getRoommateStatus(r);
-                                          const segColor = rStatus === 'in' ? '#10b981' : rStatus === 'hleave' ? '#2563eb' : '#eab308';
+                                          const isOverdue = rStatus === 'overdue';
+                                          const segColor = rStatus === 'in' ? '#10b981' : rStatus === 'hleave' ? '#2563eb' : isOverdue ? '#ef4444' : '#eab308';
                                           return (
                                             <div
                                               key={r.id || i}
-                                              className="flex-1 h-full border-r border-white/40 last:border-r-0"
+                                              className={`flex-1 h-full border-r border-white/40 last:border-r-0 ${isOverdue ? 'animate-pulse bg-red-500 ring-1 ring-red-400' : ''}`}
                                               style={{ backgroundColor: segColor }}
-                                              title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'HOME-LEAVE' : 'GATE-PASS'}`}
+                                              title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'HOME-LEAVE' : isOverdue ? '🚨 OVERDUE (NOT RETURNED)' : 'GATE-PASS'}`}
                                             />
                                           );
                                         })
@@ -10044,6 +10063,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     <div className="flex-1 pl-1.5 md:pl-2.5 flex flex-wrap items-center gap-0.5 md:gap-1 min-w-0">
                                       {roommates.map((r, i) => {
                                         const rStatus = getRoommateStatus(r);
+                                        const isOverdue = rStatus === 'overdue';
                                         const studentIdStr = r.id || r._id;
                                         const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr?.toString()) || presentStudentIds.includes(studentIdStr?.toString());
                                         return (
@@ -10051,9 +10071,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             <div
                                               className={`w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full flex items-center justify-center border border-white text-[5px] md:text-[7px] font-black text-white shrink-0 ${
                                                 rStatus === 'in' ? 'bg-green-500' :
-                                                rStatus === 'hleave' ? 'bg-blue-500' : 'bg-yellow-500'
+                                                rStatus === 'hleave' ? 'bg-blue-500' :
+                                                isOverdue ? 'bg-red-500 animate-pulse ring-1 ring-red-300' : 'bg-yellow-500'
                                               }`}
-                                              title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'HOME-LEAVE' : 'GATE-PASS'}`}
+                                              title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'HOME-LEAVE' : isOverdue ? '🚨 OVERDUE (NOT RETURNED)' : 'GATE-PASS'}`}
                                             >
                                               {r.name.slice(0, 1).toUpperCase()}
                                             </div>
@@ -10114,9 +10135,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           <p className="text-[11px] sm:text-xs text-slate-500 font-bold mt-0.5 sm:mt-1">Occupancy Details & Roommate Contact Cards</p>
                         </div>
 
+                        {/* Overdue Room Alert Banner */}
+                        {selectedRoomStudents.some(s => getRoommateStatus(s) === 'overdue') && (
+                          <div className="mb-3 p-2.5 sm:p-3 bg-red-50 border-2 border-red-200 rounded-2xl flex items-center gap-2.5 animate-pulse shadow-xs">
+                            <span className="text-xl sm:text-2xl shrink-0">🚨</span>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[11px] sm:text-xs font-black text-red-700 uppercase tracking-tight">Overdue Student Alert</p>
+                              <p className="text-[9px] sm:text-[10px] text-red-600 font-bold">1 or more students in this room have not returned on their scheduled date.</p>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="space-y-3 max-h-[80vh] sm:max-h-none overflow-y-auto pr-0.5 no-scrollbar">
                           {selectedRoomStudents.map(student => {
                             const rStatus = getRoommateStatus(student);
+                            const isOverdue = rStatus === 'overdue';
                             const studentIdStr = (student.id || student._id)?.toString();
                             const hasMarkedAttendance = presentStudentIdsToday.has(studentIdStr) || presentStudentIds.includes(studentIdStr);
 
@@ -10131,8 +10164,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                             const leaveFrom = studentPermission?.fromDateTime || student.leaveFrom || (student.checkOutIstDate ? `${student.checkOutIstDate} ${student.checkOutIstTime || ''}` : null);
                             const leaveTo = studentPermission?.toDateTime || student.leaveTo;
-                            const leaveReason = studentPermission?.reason || student.leaveReason || (rStatus === 'hleave' ? "Home Leave" : null);
-                            const isHomeLeave = rStatus === 'hleave';
+                            const leaveReason = studentPermission?.reason || student.leaveReason || (rStatus === 'hleave' || isOverdue ? "Home Leave" : null);
+                            const isHomeLeave = rStatus === 'hleave' || isOverdue;
 
                             const formatLeaveDate = (dateVal: any) => {
                               if (!dateVal) return "";
@@ -10154,7 +10187,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             };
 
                             return (
-                              <div key={student.id || student._id || student.registrationId || student.name} className="p-2.5 sm:p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col gap-2 hover:border-slate-300 transition-all shadow-xs">
+                              <div key={student.id || student._id || student.registrationId || student.name} className={`p-2.5 sm:p-3.5 rounded-2xl border flex flex-col gap-2 transition-all shadow-xs ${
+                                isOverdue ? 'bg-red-50/70 border-red-200 hover:border-red-300' : 'bg-slate-50 border-slate-200/80 hover:border-slate-300'
+                              }`}>
                                 {/* Row 1: Student Identity (Left) + Leave Details Box (Right, Auto-Adjustable) */}
                                 <div className="flex items-start justify-between gap-2 min-w-0 w-full">
                                   {/* Left: Avatar + Name + Reg ID + ERP ID */}
@@ -10162,7 +10197,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     {/* Avatar */}
                                     <div 
                                       onClick={() => handleProfileClick((student._id || student.id)?.toString())}
-                                      className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-[11px] sm:text-xs shadow-sm overflow-hidden shrink-0 border border-slate-200 cursor-pointer hover:opacity-85 transition-opacity"
+                                      className={`w-9 h-9 sm:w-11 sm:h-11 rounded-xl text-white flex items-center justify-center font-black text-[11px] sm:text-xs shadow-sm overflow-hidden shrink-0 border border-slate-200 cursor-pointer hover:opacity-85 transition-opacity ${
+                                        isOverdue ? 'bg-gradient-to-br from-red-500 to-rose-600 ring-2 ring-red-300 animate-pulse' : 'bg-gradient-to-br from-blue-500 to-indigo-600'
+                                      }`}
                                       title={`Click to view ${student.name}'s details`}
                                     >
                                       {student.profilePicture ? (
@@ -10203,18 +10240,26 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                                   {/* Right: Leave Details Box (Auto-adjustable / expands smoothly to fill gap) */}
                                   {isHomeLeave && (
-                                    <div className="flex-1 min-w-0 px-2 py-1 sm:px-3 sm:py-1.5 bg-blue-50/90 border border-blue-200/90 rounded-xl text-left shadow-2xs">
+                                    <div className={`flex-1 min-w-0 px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl text-left shadow-2xs ${
+                                      isOverdue 
+                                        ? 'bg-red-50/95 border border-red-300 ring-1 ring-red-200' 
+                                        : 'bg-blue-50/90 border border-blue-200/90'
+                                    }`}>
                                       <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold text-slate-800 leading-tight">
                                         <span className="text-slate-500 font-bold shrink-0 text-[7.5px] sm:text-[9px]">Leave:</span>
-                                        <span className="font-bold text-blue-700 flex items-center gap-0.5 truncate">
+                                        <span className={`font-bold flex items-center gap-0.5 truncate ${isOverdue ? 'text-red-700' : 'text-blue-700'}`}>
                                           <span className="text-[9px]">📅</span>
                                           <span>{formatLeaveDate(leaveFrom) || "Active"}</span>
                                         </span>
                                       </div>
                                       {leaveTo && (
-                                        <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold text-slate-800 leading-tight mt-0.5">
-                                          <span className="text-slate-500 font-bold shrink-0 text-[7.5px] sm:text-[9px]">Return:</span>
-                                          <span className="font-bold text-blue-700 truncate">{formatLeaveDate(leaveTo)}</span>
+                                        <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold leading-tight mt-0.5">
+                                          <span className={`${isOverdue ? 'text-red-600 font-black' : 'text-slate-500 font-bold'} shrink-0 text-[7.5px] sm:text-[9px]`}>
+                                            {isOverdue ? '🚨 Overdue:' : 'Return:'}
+                                          </span>
+                                          <span className={`font-black truncate ${isOverdue ? 'text-red-700 underline' : 'text-blue-700'}`}>
+                                            {formatLeaveDate(leaveTo)}
+                                          </span>
                                         </div>
                                       )}
                                       {leaveReason && (
@@ -10232,10 +10277,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
                                     <span className={`px-2 py-0.5 rounded-full text-[7.5px] sm:text-[8px] font-black uppercase tracking-wider shrink-0 ${
                                       rStatus === 'in' ? 'bg-green-100 text-green-700' :
-                                      rStatus === 'hleave' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-800'
+                                      rStatus === 'hleave' ? 'bg-blue-100 text-blue-700' :
+                                      isOverdue ? 'bg-red-100 text-red-700 ring-1 ring-red-300 animate-pulse' :
+                                      'bg-yellow-100 text-yellow-800'
                                     }`}>
                                       {rStatus === 'in' ? '🟢 IN' :
-                                       rStatus === 'hleave' ? '🔵 H-LEAVE' : '🟡 G-PASS'}
+                                       rStatus === 'hleave' ? '🔵 H-LEAVE' :
+                                       isOverdue ? '🚨 OVERDUE' : '🟡 G-PASS'}
                                     </span>
 
                                     {/* Direct Home-Leave / Mark Returned / Convert Outing Action Button */}
@@ -10247,13 +10295,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       >
                                         <span>🏠</span> HOME-LEAVE
                                       </button>
-                                    ) : rStatus === 'hleave' ? (
+                                    ) : rStatus === 'hleave' || isOverdue ? (
                                       <button
                                         onClick={() => handleUnmarkHomeLeave(student)}
-                                        className="px-2 py-0.5 rounded-full text-[7.5px] sm:text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer shrink-0"
+                                        className={`px-2 py-0.5 rounded-full text-[7.5px] sm:text-[8px] font-black uppercase tracking-wider transition-all flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer shrink-0 ${
+                                          isOverdue
+                                            ? 'bg-red-600 text-white hover:bg-red-700 border border-red-700'
+                                            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                                        }`}
                                         title="Unmark Home-Leave / Mark as Returned"
                                       >
-                                        <span>🟢</span> UNMARK LEAVE
+                                        <span>{isOverdue ? '✅' : '🟢'}</span> {isOverdue ? 'CHECK-IN' : 'UNMARK LEAVE'}
                                       </button>
                                     ) : (
                                       <button
