@@ -870,6 +870,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     useParentConsentVideoPrefetch(consentVideoUrls);
 
   const [isShowingAllPermissions, setIsShowingAllPermissions] = useState(false);
+  const [isLoadingAllPermissions, setIsLoadingAllPermissions] = useState(false);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
   const [totalPermissionsCount, setTotalPermissionsCount] = useState(0);
   const [students, setStudents] = useState<StudentDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -4912,10 +4914,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const fetchPermissions = async (statusArg?: string, forceRefresh = false, fetchAll = false, targetHostel?: string) => {
+    if (fetchAll) {
+      setIsLoadingAllPermissions(true);
+    } else {
+      setIsPermissionsLoading(true);
+    }
     try {
       const status = statusArg || filter;
       const activeHostelFilter = targetHostel !== undefined ? targetHostel : hostelFilter;
-      setIsShowingAllPermissions(fetchAll);
       
       const limitQuery = fetchAll ? '' : '&limit=5';
       
@@ -4940,14 +4946,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         const list = Array.isArray(data.permissions) ? data.permissions : [];
         setPermissions(list);
         setTotalPermissionsCount(data.total || list.length);
+        setIsShowingAllPermissions(fetchAll);
       } else if (!response.ok) {
         console.warn(`Permissions API returned status ${response.status}`);
         setPermissions([]);
         setTotalPermissionsCount(0);
+        setIsShowingAllPermissions(false);
       }
     } catch (error) {
       console.warn("Silent fallback: Error fetching permissions:", error);
       setPermissions([]); // Set empty array on error
+    } finally {
+      setIsPermissionsLoading(false);
+      if (fetchAll) {
+        setIsLoadingAllPermissions(false);
+      }
     }
   };
 
@@ -5425,60 +5438,126 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   }, []);
 
-  // ⚡ Supabase Realtime subscription for Students table
-  // Keeps the dashboard student statuses updated instantly without full refetches!
+  // ⚡ UNIVERSAL NATIVE REAL-TIME EVENT STREAM (Works with MongoDB, Prisma, Supabase, Postgres)
+  // Automatically pushes live gatepass scan events (IN / OUT) to Warden & Dean dashboards instantly!
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const channel = supabase
-      .channel('dashboard-students-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE', // We only care about status updates, locks, edits
-          schema: 'public',
-          table: 'students'
-        },
-        (payload: any) => {
-          console.log("⚡ Student Realtime Update:", payload.new);
-          const raw = payload.new;
-          if (!raw) return;
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: any = null;
 
-          const updatedId = raw._id || raw.id;
-          
-          setStudents(prev => {
-            const nextStudents = prev.map(s => {
-              if (s.id === updatedId) {
+    const connectSSE = () => {
+      try {
+        eventSource = new EventSource("/api/admin/events");
+
+        eventSource.addEventListener("gate_status", (event: MessageEvent) => {
+          try {
+            const data = JSON.parse(event.data);
+            console.log("⚡ [LIVE_GATE_EVENT] Received live scan:", data);
+
+            if (!data || !data.studentId) return;
+
+            const targetStudentId = String(data.studentId);
+            const newStatus: "in" | "out" = data.studentStatus || (data.action === "checkin" ? "in" : "out");
+
+            setStudents(prev => {
+              const updated = prev.map(s => {
+                const sId = (s.id || s._id)?.toString();
+                if (sId === targetStudentId) {
+                  return {
+                    ...s,
+                    studentStatus: newStatus,
+                    outingType: newStatus === "in" ? undefined : (data.outingType || s.outingType || "outing"),
+                    leaveFrom: newStatus === "in" ? undefined : s.leaveFrom,
+                    leaveTo: newStatus === "in" ? undefined : s.leaveTo,
+                    leaveReason: newStatus === "in" ? undefined : s.leaveReason,
+                    checkOutIstDate: newStatus === "in" ? undefined : s.checkOutIstDate,
+                    checkOutIstTime: newStatus === "in" ? undefined : s.checkOutIstTime,
+                  };
+                }
+                return s;
+              });
+
+              try {
+                localStorage.setItem(CACHE_KEYS.STUDENTS, JSON.stringify(updated));
+              } catch (e) {}
+
+              return updated;
+            });
+
+            // Also update selectedRoomStudents if a room modal is currently open
+            setSelectedRoomStudents(prev => prev.map(s => {
+              const sId = (s.id || s._id)?.toString();
+              if (sId === targetStudentId) {
                 return {
                   ...s,
-                  name: raw.name !== undefined ? raw.name : s.name,
-                  email: raw.email !== undefined ? raw.email : s.email,
-                  phoneNumber: raw.phone_number !== undefined ? raw.phone_number : (raw.phoneNumber !== undefined ? raw.phoneNumber : s.phoneNumber),
-                  hostelName: raw.hostel_name !== undefined ? raw.hostel_name : (raw.hostelName !== undefined ? raw.hostelName : s.hostelName),
-                  roomNumber: raw.room_number !== undefined ? raw.room_number : (raw.roomNumber !== undefined ? raw.roomNumber : s.roomNumber),
-                  floorNumber: raw.floor_number !== undefined ? raw.floor_number : (raw.floorNumber !== undefined ? raw.floorNumber : s.floorNumber),
-                  studentStatus: raw.student_status !== undefined ? raw.student_status : (raw.studentStatus !== undefined ? raw.studentStatus : s.studentStatus),
-                  isProfileLocked: raw.is_profile_locked !== undefined ? raw.is_profile_locked : (raw.isProfileLocked !== undefined ? raw.isProfileLocked : s.isProfileLocked),
-                  deviceResetCount: raw.device_reset_count !== undefined ? raw.device_reset_count : (raw.deviceResetCount !== undefined ? raw.deviceResetCount : s.deviceResetCount)
+                  studentStatus: newStatus,
+                  outingType: newStatus === "in" ? undefined : (data.outingType || s.outingType || "outing"),
+                  leaveFrom: newStatus === "in" ? undefined : s.leaveFrom,
+                  leaveTo: newStatus === "in" ? undefined : s.leaveTo,
+                  leaveReason: newStatus === "in" ? undefined : s.leaveReason,
                 };
               }
               return s;
+            }));
+
+            // If the selected student profile is currently open in modal
+            setSelectedStudent(prev => {
+              if (prev && (prev.id?.toString() === targetStudentId || (prev as any)._id?.toString() === targetStudentId)) {
+                return {
+                  ...prev,
+                  studentStatus: newStatus,
+                  outingType: newStatus === "in" ? undefined : (data.outingType || prev.outingType || "outing")
+                };
+              }
+              return prev;
             });
 
-            try {
-              localStorage.setItem(CACHE_KEYS.STUDENTS, JSON.stringify(nextStudents));
-            } catch (e) {
-              console.warn("Failed to update student cache on realtime update", e);
-            }
+            // Refresh attendance summary/counts in the background silently
+            fetchAttendanceSummary();
+          } catch (err) {
+            console.warn("⚠️ Failed to parse SSE gate status event:", err);
+          }
+        });
 
-            return nextStudents;
-          });
-        }
-      )
-      .subscribe();
+        eventSource.onerror = () => {
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+          // Reconnect after 5 seconds if connection drops
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(connectSSE, 5000);
+        };
+      } catch (err) {
+        console.warn("⚠️ EventSource setup failed:", err);
+      }
+    };
+
+    connectSSE();
+
+    // ⚡ RESILIENT AUTO-SYNC: When the Warden unlocks their phone or switches back to this tab,
+    // silently re-sync to ensure zero stale data is ever shown.
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === "visible") {
+        console.log("🔄 [Auto-Sync] Dashboard tab visible — refreshing live status...");
+        fetchStudents(true);
+        fetchAttendanceSummary();
+      }
+    };
+
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    window.addEventListener("pageshow", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
 
     return () => {
-      supabase.removeChannel(channel);
+      if (eventSource) {
+        eventSource.close();
+      }
+      clearTimeout(reconnectTimeout);
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      window.removeEventListener("pageshow", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
     };
   }, []);
 
@@ -7973,13 +8052,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
 
                   <div ref={permissionsContainerRef} className="space-y-3">
-                    {loading ? (
-                      <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    {loading || isPermissionsLoading ? (
+                      <div className="flex flex-col items-center justify-center py-12 gap-3 bg-white/40 rounded-2xl border border-gray-100 shadow-sm animate-pulse">
                         <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
-                        <p className="text-secondary text-sm">Loading permissions...</p>
+                        <p className="text-blue-600 font-bold text-sm">Loading permissions... Please wait</p>
                       </div>
                     ) : filteredPermissions.length === 0 ? (
-                      <p className="text-secondary">No permissions found</p>
+                      <p className="text-secondary text-center py-8">No permissions found</p>
                     ) : (
                       filteredPermissions.map((permission) => {
                         const student = typeof permission.studentId === "object" ? permission.studentId : null;
@@ -8033,13 +8112,41 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <span className="hidden md:inline">•</span>
                                         <span className="whitespace-nowrap">to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
                                       </div>
-                                      <button
-                                        onClick={() => openEditLeaveModal(permission)}
-                                        className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[9px] md:text-[10px] font-bold shadow-2xs w-fit cursor-pointer"
-                                        title="Edit Leave Dates / Extend Return Date"
-                                      >
-                                        <span>✏️</span> Edit Leave
-                                      </button>
+                                      {/* Action & Duration Row */}
+                                      {(() => {
+                                        const fromMs = permission.fromDateTime ? new Date(permission.fromDateTime).getTime() : 0;
+                                        const toMs = permission.toDateTime ? new Date(permission.toDateTime).getTime() : 0;
+                                        let durationStr = "";
+                                        if (fromMs && toMs && toMs > fromMs) {
+                                          const diffMs = toMs - fromMs;
+                                          const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
+                                          const days = Math.floor(totalHours / 24);
+                                          const hours = totalHours % 24;
+                                          if (days > 0 && hours > 0) durationStr = `${days}d ${hours}h`;
+                                          else if (days > 0) durationStr = `${days}d`;
+                                          else if (hours > 0) durationStr = `${hours}h`;
+                                          else durationStr = `${Math.round(diffMs / 60000)}m`;
+                                        }
+
+                                        return (
+                                          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                                            <button
+                                              onClick={() => openEditLeaveModal(permission)}
+                                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[9px] md:text-[10px] font-bold shadow-2xs w-fit cursor-pointer leading-tight"
+                                              title="Edit Leave Dates / Extend Return Date"
+                                            >
+                                              <span>✏️</span> Edit Leave
+                                            </button>
+
+                                            {durationStr && (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50/90 text-blue-800 border border-blue-200 text-[9px] md:text-[10px] font-bold shadow-2xs leading-tight">
+                                                <span className="text-slate-500 font-semibold">Duration:</span>
+                                                <span className="font-extrabold text-blue-700">{durationStr}</span>
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
                                     </div>
                                   </div>
                                   
@@ -8220,21 +8327,43 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     )}
                   </div>
                   
-                  {!isShowingAllPermissions && totalPermissionsCount > 5 && (
-                    <div className="flex justify-center mt-6 pb-4">
+                  {(!isShowingAllPermissions || isLoadingAllPermissions) && totalPermissionsCount > 5 && (
+                    <div className="flex flex-col items-center justify-center mt-6 pb-4 gap-3">
+                      {isLoadingAllPermissions && (
+                        <div className="flex items-center gap-2.5 px-5 py-2.5 rounded-2xl bg-blue-50 border border-blue-200 text-blue-800 font-bold text-xs sm:text-sm shadow-sm animate-pulse">
+                          <svg className="animate-spin h-5 w-5 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span>Loading all {totalPermissionsCount} permissions... Please wait</span>
+                        </div>
+                      )}
                       <button
+                        disabled={isLoadingAllPermissions}
                         onClick={() => fetchPermissions(filter, true, true)}
-                        className="px-6 py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-xs sm:text-sm tracking-wide shadow-md shadow-blue-500/25 hover:shadow-lg hover:from-blue-700 hover:to-indigo-700 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                        className="px-6 py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-xs sm:text-sm tracking-wide shadow-md shadow-blue-500/25 hover:shadow-lg hover:from-blue-700 hover:to-indigo-700 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-wait"
                       >
-                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-                        </svg>
-                        Show All Permissions ({totalPermissionsCount})
+                        {isLoadingAllPermissions ? (
+                          <>
+                            <svg className="animate-spin -ml-0.5 mr-1.5 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Loading All ({totalPermissionsCount})...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                            </svg>
+                            <span>Show All Permissions ({totalPermissionsCount})</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   )}
 
-                  {isShowingAllPermissions && totalPermissionsCount > 5 && (
+                  {isShowingAllPermissions && !isLoadingAllPermissions && totalPermissionsCount > 5 && (
                     <div className="flex justify-center mt-6 pb-4">
                       <button
                         onClick={() => {
@@ -12596,6 +12725,40 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     <p className="text-xs sm:text-[13px] font-black text-[#2D5A9E] leading-tight">
                                       To {toFormatted}
                                     </p>
+                                    {(() => {
+                                      const fromMs = permission.fromDateTime ? new Date(permission.fromDateTime).getTime() : 0;
+                                      const toMs = permission.toDateTime ? new Date(permission.toDateTime).getTime() : 0;
+                                      let durationStr = "";
+                                      if (fromMs && toMs && toMs > fromMs) {
+                                        const diffMs = toMs - fromMs;
+                                        const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
+                                        const days = Math.floor(totalHours / 24);
+                                        const hours = totalHours % 24;
+                                        if (days > 0 && hours > 0) durationStr = `${days}d ${hours}h`;
+                                        else if (days > 0) durationStr = `${days}d`;
+                                        else if (hours > 0) durationStr = `${hours}h`;
+                                        else durationStr = `${Math.round(diffMs / 60000)}m`;
+                                      }
+
+                                      return (
+                                        <div className="pt-1 flex items-center gap-1.5 flex-wrap">
+                                          <button
+                                            onClick={() => openEditLeaveModal(permission)}
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[9px] font-bold shadow-2xs w-fit cursor-pointer leading-tight"
+                                            title="Edit Leave Dates / Extend Return Date"
+                                          >
+                                            <span>✏️</span> Edit Leave
+                                          </button>
+
+                                          {durationStr && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50/90 text-blue-800 border border-blue-200 text-[9px] font-bold shadow-2xs leading-tight">
+                                              <span className="text-slate-500 font-semibold">Duration:</span>
+                                              <span className="font-extrabold text-blue-700">{durationStr}</span>
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
 
                                   <div className="flex items-center gap-1.5 shrink-0">

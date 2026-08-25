@@ -104,6 +104,28 @@ const formatPermDate = (item: any, isOut: boolean) => {
     }
 };
 
+const getPermDurationStr = (item: any) => {
+    if (!item) return "";
+    const outRaw = item.fromDateTime || item.from_date_time || (item.outDate ? `${item.outDate} ${item.outTime || ''}` : item.createdAt);
+    const inRaw = item.toDateTime || item.to_date_time || (item.inDate ? `${item.inDate} ${item.inTime || ''}` : null);
+    if (!outRaw || !inRaw) return "";
+    try {
+        const fromMs = new Date(outRaw).getTime();
+        const toMs = new Date(inRaw).getTime();
+        const diffMs = toMs - fromMs;
+        if (isNaN(diffMs) || diffMs <= 0) return "";
+        const totalHours = Math.round(diffMs / (1000 * 60 * 60));
+        const days = Math.floor(totalHours / 24);
+        const hours = totalHours % 24;
+        if (days > 0 && hours > 0) return `${days}d ${hours}h`;
+        if (days > 0) return `${days}d`;
+        if (hours > 0) return `${hours}h`;
+        return `${Math.round(diffMs / 60000)}m`;
+    } catch {
+        return "";
+    }
+};
+
 export default function StudentDashboard({ initialData, isParentView = false, hasMultipleSiblings = false }: { initialData?: any; isParentView?: boolean; hasMultipleSiblings?: boolean }) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -1086,6 +1108,20 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         )[0];
     }, [permissions]);
 
+    const hasActiveLeave = useMemo(() => {
+        if (!permissions || permissions.length === 0) return false;
+        const now = Date.now();
+        return permissions.some(p => {
+            if (p.status === 'cancelled' || p.status === 'rejected' || p.wardenStatus === 'rejected' || p.deanStatus === 'rejected') {
+                return false;
+            }
+            const isPending = p.status === 'pending' || p.wardenStatus === 'pending' || p.deanStatus === 'pending';
+            const toTime = new Date(p.toDateTime || p.fromDateTime || 0).getTime();
+            const isOngoingOrUpcoming = (p.status === 'allowed' || p.status === 'approved' || p.status === 'accepted') && toTime >= now;
+            return isPending || isOngoingOrUpcoming;
+        });
+    }, [permissions]);
+
     // Payment System State
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
@@ -2066,6 +2102,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const handleRequestPermission = async () => {
         if (!fromDateTime || !toDateTime || !reason || !studentProfile) return;
 
+        if (hasActiveLeave) {
+            showToast("You already have an active leave request pending or approved. Please use 'Edit Leave' or 'Cancel Leave' below.", "error");
+            setShowRequestForm(false);
+            return;
+        }
+
         try {
             setSubmitting(true);
             const response = await fetch("/api/permissions", {
@@ -2100,9 +2142,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             setToDateTime("");
             setReason("");
             setShowRequestForm(false);
+            showToast("Leave request submitted successfully!", "success");
+            if (fetchStudentHistoryData) fetchStudentHistoryData();
         } catch (error: any) {
             console.error("Error creating permission:", error);
-            alert(error.message || "Failed to create permission request");
+            showToast(error.message || "Failed to create permission request", "error");
         } finally {
             setSubmitting(false);
         }
@@ -3736,6 +3780,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     {studentProfile?.studentStatus !== "out" && (
                                         <button
                                             onClick={() => {
+                                                if (hasActiveLeave) {
+                                                    showToast("⚠️ You already have an active leave request. Use 'Edit Leave' or 'Cancel Leave' on your card below.", "info");
+                                                    return;
+                                                }
                                                 if (!isAtHostel && !isParentView) {
                                                     setHighlightLocation(true);
                                                     // Scroll to top to show the location card
@@ -3746,20 +3794,39 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 setRequestType("leave");
                                                 setShowRequestForm(true);
                                             }}
-                                            className={`w-full h-12 rounded-xl font-black border-2 transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left shadow-sm ${isAtHostel || isParentView
-                                                ? "bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100 border-amber-300 text-amber-950 hover:border-amber-400"
-                                                : "bg-gradient-to-r from-slate-50 via-gray-100 to-slate-50 border-slate-300 text-slate-800 hover:border-slate-400"
+                                            className={`w-full h-12 rounded-xl font-black border-2 transition-all flex flex-row items-center justify-start gap-2.5 group px-3 text-left shadow-sm ${
+                                                hasActiveLeave
+                                                    ? "bg-gradient-to-r from-slate-50 via-gray-50 to-slate-100 border-slate-200 text-slate-500 cursor-pointer"
+                                                    : (isAtHostel || isParentView)
+                                                        ? "bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100 border-amber-300 text-amber-950 hover:border-amber-400"
+                                                        : "bg-gradient-to-r from-slate-50 via-gray-100 to-slate-50 border-slate-300 text-slate-800 hover:border-slate-400"
                                                 }`}
                                         >
-                                            <div className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center transition-all ${(isAtHostel || isParentView) ? "bg-amber-200/60 text-amber-800 group-hover:scale-110" : "bg-slate-200/80 text-slate-700"}`}>
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                                                </svg>
+                                            <div className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center transition-all ${
+                                                hasActiveLeave
+                                                    ? "bg-slate-200/80 text-slate-600"
+                                                    : (isAtHostel || isParentView)
+                                                        ? "bg-amber-200/60 text-amber-800 group-hover:scale-110"
+                                                        : "bg-slate-200/80 text-slate-700"
+                                            }`}>
+                                                {hasActiveLeave ? (
+                                                    <span className="text-sm">⏳</span>
+                                                ) : (
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                                    </svg>
+                                                )}
                                             </div>
                                             <div className="flex flex-col overflow-hidden min-w-0">
-                                                <span className={`block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${(isAtHostel || isParentView) ? "text-amber-800" : "text-slate-600"}`}>Leave Request</span>
-                                                <span className={`text-[10px] md:text-xs font-black uppercase tracking-tight block truncate ${(isAtHostel || isParentView) ? "text-amber-950" : "text-slate-800"}`}>
-                                                    {(isAtHostel || isParentView) ? "Go to Home" : "Locked"}
+                                                <span className={`block text-[8px] font-black uppercase tracking-[0.2em] leading-none mb-1 truncate ${
+                                                    hasActiveLeave ? "text-slate-500" : (isAtHostel || isParentView) ? "text-amber-800" : "text-slate-600"
+                                                }`}>
+                                                    {hasActiveLeave ? "Active Leave" : "Leave Request"}
+                                                </span>
+                                                <span className={`text-[10px] md:text-xs font-black uppercase tracking-tight block truncate ${
+                                                    hasActiveLeave ? "text-slate-700 font-bold" : (isAtHostel || isParentView) ? "text-amber-950" : "text-slate-800"
+                                                }`}>
+                                                    {hasActiveLeave ? "Pending / In Progress" : (isAtHostel || isParentView) ? "Go to Home" : "Locked"}
                                                 </span>
                                             </div>
                                         </button>
@@ -3980,33 +4047,45 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                             </div>
                                             <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-stretch">
                                                 {/* Left Side: Student Info & Approvals */}
-                                                <div className="w-full md:w-[45%] lg:w-[40%] shrink-0 flex flex-row md:flex-col gap-2">
-                                                    <div className="flex flex-col gap-2 w-full md:w-full">
-                                                        <p className="text-[9px] sm:text-[9.5px] font-bold text-gray-400 uppercase tracking-wider leading-none">Schedule Details</p>
-                                                        <div className="flex flex-col gap-1.5 bg-gray-50/80 p-2 md:p-2.5 rounded-lg border border-gray-100">
-                                                            <div className="flex items-center gap-1.5 md:gap-2">
-                                                                <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
-                                                                    <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                                                                </div>
-                                                                <div className="min-w-0">
-                                                                    <p className="text-[7.5px] md:text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5 truncate">Campus Out</p>
-                                                                    <p className="text-[9px] md:text-[11px] font-bold text-gray-900 leading-none truncate">{formatPermDate(latestPermission, true)}</p>
-                                                                </div>
+                                                <div className="w-full md:w-auto shrink-0 flex flex-row md:flex-col items-center md:items-start justify-between md:justify-start gap-2">
+                                                    <div className="flex flex-col gap-1.5 bg-gray-50/80 p-2 md:p-2.5 rounded-lg border border-gray-100 w-fit shrink-0">
+                                                        <div className="flex items-center gap-1.5 md:gap-2">
+                                                            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                                                                <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
                                                             </div>
-                                                            <div className="flex items-center gap-1.5 md:gap-2">
-                                                                <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-green-100 text-green-600 flex items-center justify-center shrink-0">
-                                                                    <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-                                                                </div>
-                                                                <div className="min-w-0">
-                                                                    <p className="text-[7.5px] md:text-[9px] font-bold text-gray-500 uppercase tracking-tight leading-none mb-0.5 truncate">Campus In</p>
-                                                                    <p className="text-[9px] md:text-[11px] font-bold text-gray-900 leading-none truncate">{formatPermDate(latestPermission, false)}</p>
-                                                                </div>
+                                                            <div className="min-w-0 flex items-baseline gap-1 text-[8.5px] sm:text-[9.5px] md:text-[11px] leading-tight">
+                                                                <span className="font-bold text-gray-500 uppercase tracking-tight whitespace-nowrap">CAMPUS OUT:</span>
+                                                                <span className="font-extrabold text-gray-900 whitespace-nowrap">{formatPermDate(latestPermission, true)}</span>
                                                             </div>
                                                         </div>
+                                                        <div className="flex items-center gap-1.5 md:gap-2">
+                                                            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-green-100 text-green-600 flex items-center justify-center shrink-0">
+                                                                <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+                                                            </div>
+                                                            <div className="min-w-0 flex items-baseline gap-1 text-[8.5px] sm:text-[9.5px] md:text-[11px] leading-tight">
+                                                                <span className="font-bold text-gray-500 uppercase tracking-tight whitespace-nowrap">CAMPUS IN:</span>
+                                                                <span className="font-extrabold text-gray-900 whitespace-nowrap">{formatPermDate(latestPermission, false)}</span>
+                                                            </div>
+                                                        </div>
+                                                        {(() => {
+                                                            const durationStr = getPermDurationStr(latestPermission);
+                                                            if (!durationStr) return null;
+                                                            return (
+                                                                <div className="flex items-center gap-1.5 md:gap-2">
+                                                                    <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                                                                        <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                                    </div>
+                                                                    <div className="min-w-0 flex items-baseline gap-1 text-[8.5px] sm:text-[9.5px] md:text-[11px] leading-tight">
+                                                                        <span className="font-bold text-gray-500 uppercase tracking-tight whitespace-nowrap">DURATION:</span>
+                                                                        <span className="font-black text-blue-700 whitespace-nowrap">{durationStr}</span>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </div>
                                                     
                                                     {/* Permissions Block */}
-                                                    <div className="w-1/2 md:w-full">
+                                                    <div className="w-fit min-w-[125px] md:w-full shrink-0">
                                                         <div className="flex flex-col items-start gap-0.5 border border-gray-100 rounded-md p-1 md:p-1.5 bg-gray-50/50 w-full h-full">
                                                             <div className="flex items-center justify-between w-full mt-1">
                                                                 <div className="flex items-center gap-0.5 md:gap-1.5">
@@ -5062,6 +5141,16 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                                                 <p className="text-xs sm:text-[13px] font-black text-[#2D5A9E] leading-tight">
                                                                                                     To {toFormatted}
                                                                                                 </p>
+                                                                                                {(() => {
+                                                                                                    const dur = getPermDurationStr(permission);
+                                                                                                    if (!dur) return null;
+                                                                                                    return (
+                                                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/80 text-[8.5px] font-bold mt-0.5">
+                                                                                                            <span className="text-slate-500 font-semibold">Duration:</span>
+                                                                                                            <span className="font-extrabold text-blue-700">{dur}</span>
+                                                                                                        </span>
+                                                                                                    );
+                                                                                                })()}
                                                                                             </div>
 
                                                                                             <div className="flex items-center gap-1.5 shrink-0">

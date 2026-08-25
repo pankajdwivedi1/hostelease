@@ -608,25 +608,29 @@ export async function GET(request: NextRequest) {
       const activeOutingMap = new Map<string, any>();
       openPasses.forEach((p: any) => {
         const sId = typeof p.studentId === 'object' ? (p.studentId?._id || p.studentId?.id) : p.studentId;
-        if (!sId) return;
         const pType = String(p.type || '').toLowerCase();
         const normalizedType = (pType === 'leave' || pType === 'home-leave' || pType === 'hleave') ? 'leave' : 'outing';
-        activeOutingMap.set(sId.toString(), {
+        const passDetails = {
           outingType: normalizedType,
           reason: p.reason || p.destination || null,
           fromDateTime: p.fromDateTime || (p.checkOutIstDate ? `${p.checkOutIstDate} ${p.checkOutIstTime || ''}` : p.checkOutTime),
           toDateTime: p.toDateTime || p.expectedReturnDate || p.expectedReturnIstDate || null,
           checkOutIstDate: p.checkOutIstDate,
           checkOutIstTime: p.checkOutIstTime,
-        });
+        };
+        if (sId) activeOutingMap.set(sId.toString(), passDetails);
+        if (p.firebaseUID) activeOutingMap.set(String(p.firebaseUID), passDetails);
+        if (p.registrationId) activeOutingMap.set(String(p.registrationId), passDetails);
       });
 
       students.forEach((s: any) => {
         const sId = (s.id || s._id)?.toString();
-        const passInfo = activeOutingMap.get(sId);
+        const passInfo = (sId ? activeOutingMap.get(sId) : null) ||
+                         (s.firebaseUID ? activeOutingMap.get(String(s.firebaseUID)) : null) ||
+                         (s.registrationId ? activeOutingMap.get(String(s.registrationId)) : null);
 
         // ⚡ DATA CONSISTENCY FIX:
-        // Priority 1: If Gatepass says OUT, stay OUT (Matches Terminal Count: 70)
+        // Priority 1: If Gatepass says OUT, stay OUT
         if (passInfo) {
           s.studentStatus = "out";
           s.outingType = passInfo.outingType;

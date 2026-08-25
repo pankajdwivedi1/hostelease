@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import crypto from 'crypto';
+import { broadcastGateEvent } from "@/lib/eventEmitter";
 
 /**
  * Helper: Get IST time and date strings
@@ -187,6 +188,18 @@ export async function POST(request: NextRequest) {
                 });
 
                 await db.students.update(id.toString(), { studentStatus: "out" });
+                
+                // ⚡ REAL-TIME BROADCAST: Notify all connected Warden/Dean dashboards immediately
+                broadcastGateEvent({
+                    studentId: id.toString(),
+                    studentStatus: "out",
+                    outingType: (targetType === 'HOME-LEAVE' || targetType === 'leave') ? 'leave' : 'outing',
+                    action: "manual_out",
+                    studentName: student.name,
+                    hostelName: student.hostelName,
+                    roomNumber: student.roomNumber
+                });
+
                 await writeAdminAuditLog({
                     action: "MANUAL_STATUS_OVERRIDE_OUT",
                     entityType: "student",
@@ -249,6 +262,17 @@ export async function POST(request: NextRequest) {
                 }
 
                 await db.students.update(id.toString(), { studentStatus: "in" });
+
+                // ⚡ REAL-TIME BROADCAST: Notify all connected Warden/Dean dashboards immediately
+                broadcastGateEvent({
+                    studentId: id.toString(),
+                    studentStatus: "in",
+                    action: "manual_in",
+                    studentName: student.name,
+                    hostelName: student.hostelName,
+                    roomNumber: student.roomNumber
+                });
+
                 await writeAdminAuditLog({
                     action: "MANUAL_STATUS_OVERRIDE_IN",
                     entityType: "student",

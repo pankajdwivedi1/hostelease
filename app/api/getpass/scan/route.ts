@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, supabase } from "@/lib/dbAdapter";
 import { sendMSG91_GatepassAlert } from "@/lib/msg91";
 import { validators } from "@/lib/validation";
+import { broadcastGateEvent } from "@/lib/eventEmitter";
 
 /**
  * Helper: Get IST time and date strings
@@ -411,11 +412,23 @@ export async function POST(request: NextRequest) {
             });
 
             // Update student status to "out"
+            const studentDbId = (student._id || student.id || student.firebaseUID).toString();
             try {
-                await db.students.update((student._id || student.id || student.firebaseUID).toString(), { studentStatus: "out" });
+                await db.students.update(studentDbId, { studentStatus: "out" });
             } catch (statusErr) {
                 console.warn("⚠️ Student status update to 'out' failed (non-critical):", statusErr);
             }
+
+            // ⚡ REAL-TIME BROADCAST: Notify all connected Warden/Dean dashboards immediately
+            broadcastGateEvent({
+                studentId: (student._id || student.id).toString(),
+                studentStatus: "out",
+                outingType: activeLeave ? "leave" : "outing",
+                action: "checkout",
+                studentName: student.name,
+                hostelName: student.hostelName,
+                roomNumber: student.roomNumber
+            });
 
             // 🔥 Send MSG91 Gatepass Alert (Fire & Forget)
             const parentPhone = student.fatherNumber || student.motherNumber || student.localGuardianPhoneNumber;
@@ -461,11 +474,22 @@ export async function POST(request: NextRequest) {
 
             if (!openPasses || openPasses.length === 0) {
                 // No open pass found but status is "out" - fix status
+                const studentDbId = (student._id || student.id || student.firebaseUID).toString();
                 try {
-                    await db.students.update((student._id || student.id || student.firebaseUID).toString(), { studentStatus: "in" });
+                    await db.students.update(studentDbId, { studentStatus: "in" });
                 } catch (statusErr) {
                     console.warn("⚠️ Student status update to 'in' failed (non-critical):", statusErr);
                 }
+
+                // ⚡ REAL-TIME BROADCAST: Notify all connected Warden/Dean dashboards immediately
+                broadcastGateEvent({
+                    studentId: (student._id || student.id).toString(),
+                    studentStatus: "in",
+                    action: "checkin",
+                    studentName: student.name,
+                    hostelName: student.hostelName,
+                    roomNumber: student.roomNumber
+                });
 
                 return NextResponse.json({
                     success: true,
@@ -508,11 +532,22 @@ export async function POST(request: NextRequest) {
             }
 
             // Update student status to "in"
+            const studentDbId = (student._id || student.id || student.firebaseUID).toString();
             try {
-                await db.students.update((student._id || student.id || student.firebaseUID).toString(), { studentStatus: "in" });
+                await db.students.update(studentDbId, { studentStatus: "in" });
             } catch (statusErr) {
                 console.warn("⚠️ Student status update to 'in' failed (non-critical):", statusErr);
             }
+
+            // ⚡ REAL-TIME BROADCAST: Notify all connected Warden/Dean dashboards immediately
+            broadcastGateEvent({
+                studentId: (student._id || student.id).toString(),
+                studentStatus: "in",
+                action: "checkin",
+                studentName: student.name,
+                hostelName: student.hostelName,
+                roomNumber: student.roomNumber
+            });
 
             // 🔥 Send MSG91 Gatepass Alert (Fire & Forget)
             const parentPhone = student.fatherNumber || student.motherNumber || student.localGuardianPhoneNumber;

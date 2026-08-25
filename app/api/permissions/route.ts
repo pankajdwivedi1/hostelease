@@ -32,6 +32,71 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
+    // 🔒 1. Prevent new leave if student is already marked OUT
+    if (student.studentStatus === "out") {
+      return NextResponse.json(
+        { error: "You are currently marked OUT of campus. You cannot apply for a new leave until you return and mark IN." },
+        { status: 400 }
+      );
+    }
+
+    // 🔒 2. Check if student already has a pending or active unexpired leave/permission
+    const { records: existingPermissions } = await db.permissions.list({
+      studentId: studentId.toString(),
+      status: "all",
+    }, { limit: 50 });
+
+    const now = Date.now();
+    const reqFrom = fromDate.getTime();
+    const reqTo = toDate.getTime();
+
+    const conflictingPermission = (existingPermissions || []).find((p: any) => {
+      // Ignore cancelled or rejected permissions
+      if (
+        p.status === "cancelled" ||
+        p.status === "rejected" ||
+        p.wardenStatus === "rejected" ||
+        p.deanStatus === "rejected"
+      ) {
+        return false;
+      }
+
+      // Existing Pending Request (awaiting authority decisions)
+      const isPending =
+        p.status === "pending" ||
+        p.wardenStatus === "pending" ||
+        p.deanStatus === "pending";
+      if (isPending) return true;
+
+      // Existing Approved Request that is still ongoing/upcoming or overlaps with requested dates
+      const isApproved = p.status === "allowed" || p.status === "approved";
+      if (isApproved) {
+        const existFrom = new Date(p.fromDateTime).getTime();
+        const existTo = new Date(p.toDateTime).getTime();
+        const isUpcomingOrOngoing = existTo >= now;
+        const isDateOverlap = reqFrom <= existTo && reqTo >= existFrom;
+        return isUpcomingOrOngoing || isDateOverlap;
+      }
+
+      return false;
+    });
+
+    if (conflictingPermission) {
+      const isPending =
+        conflictingPermission.status === "pending" ||
+        conflictingPermission.wardenStatus === "pending" ||
+        conflictingPermission.deanStatus === "pending";
+
+      const errorMessage = isPending
+        ? "You already have a leave request pending approval. Please wait for authority approval, or edit/cancel your existing request."
+        : "You already have an active approved leave for this period. Please contact your warden to make changes.";
+
+      return NextResponse.json(
+        { error: errorMessage },
+        { status: 400 }
+      );
+    }
+
     const permission = await db.permissions.create({
       studentId,
       fromDateTime: new Date(fromDateTime),
