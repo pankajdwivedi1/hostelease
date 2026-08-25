@@ -3287,6 +3287,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
     setIsSubmittingEditLeave(true);
     try {
+      const effectiveUserType = (typeof window !== "undefined" ? localStorage.getItem("userType") : null) || userType || "warden";
       if (editLeaveModalData.permissionId) {
         const res = await fetch("/api/permissions", {
           method: "PATCH",
@@ -3296,7 +3297,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             fromDateTime: editLeaveModalData.fromDateTime,
             toDateTime: editLeaveModalData.toDateTime,
             reason: editLeaveModalData.reason,
-            userType: userType || "warden",
+            userType: effectiveUserType,
           }),
         });
         const data = await res.json();
@@ -3319,8 +3320,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               reason: editLeaveModalData.reason,
               fromDateTime: editLeaveModalData.fromDateTime,
               toDateTime: editLeaveModalData.toDateTime,
-              userType: userType || "warden",
-              operator: userType || "Warden",
+              userType: effectiveUserType,
+              operator: effectiveUserType === "dean" || effectiveUserType === "admin" ? "Admin" : "Warden",
             }),
           });
         } catch (e) {
@@ -8032,15 +8033,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <span className="hidden md:inline">•</span>
                                         <span className="whitespace-nowrap">to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
                                       </div>
-                                      {(userType === "warden" || userType === "dean" || userType === "admin") && (
-                                        <button
-                                          onClick={() => openEditLeaveModal(permission)}
-                                          className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[8.5px] md:text-[9.5px] font-bold shadow-2xs w-fit cursor-pointer"
-                                          title="Edit Leave Dates / Extend Return Date"
-                                        >
-                                          <span>✏️</span> Edit Leave
-                                        </button>
-                                      )}
+                                      <button
+                                        onClick={() => openEditLeaveModal(permission)}
+                                        className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[9px] md:text-[10px] font-bold shadow-2xs w-fit cursor-pointer"
+                                        title="Edit Leave Dates / Extend Return Date"
+                                      >
+                                        <span>✏️</span> Edit Leave
+                                      </button>
                                     </div>
                                   </div>
                                   
@@ -10429,15 +10428,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             <span>{formatLeaveDate(leaveFrom) || "Active"}</span>
                                           </span>
                                         </div>
-                                        {(userType === "warden" || userType === "dean" || userType === "admin") && (
-                                          <button
-                                            onClick={() => openEditLeaveModalForStudent(student, studentPermission)}
-                                            className="px-1.5 py-0.5 bg-white/90 border border-blue-300 text-blue-700 rounded-md text-[7px] sm:text-[8px] font-black uppercase hover:bg-blue-50 transition-colors shadow-2xs cursor-pointer shrink-0"
-                                            title="Edit Leave / Extend Return Date"
-                                          >
-                                            ✏️ Edit Leave
-                                          </button>
-                                        )}
+                                        <button
+                                          onClick={() => openEditLeaveModalForStudent(student, studentPermission)}
+                                          className="px-2 py-0.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400 rounded-md text-[7.5px] sm:text-[8.5px] font-black uppercase transition-all shadow-2xs cursor-pointer shrink-0 ml-auto"
+                                          title="Edit Leave / Extend Return Date"
+                                        >
+                                          ✏️ Edit Leave
+                                        </button>
                                       </div>
                                       {leaveTo && (
                                         <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold leading-tight mt-0.5">
