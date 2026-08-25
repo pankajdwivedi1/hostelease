@@ -177,7 +177,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { permissionId, permissionIds, action, isHidden, status, wardenStatus, deanStatus, parentStatus } = body;
+    const { permissionId, permissionIds, action, isHidden, status, wardenStatus, deanStatus, parentStatus, fromDateTime, toDateTime, reason, role, userType } = body;
 
     // Handle Bulk Hide / Unhide Action
     if (action === 'bulkHide' || action === 'bulkUnhide' || (permissionIds && Array.isArray(permissionIds) && action === 'hide')) {
@@ -205,6 +205,58 @@ export async function PATCH(request: NextRequest) {
     if (deanStatus) update.deanStatus = deanStatus;
     if (parentStatus) update.parentStatus = parentStatus;
 
+    // Handle Edit Leave Dates & Reason
+    if (fromDateTime !== undefined || toDateTime !== undefined || reason !== undefined) {
+      const isStudent = role === "student" || userType === "student";
+      const isAlreadyApproved =
+        currentPermission.status === "allowed" ||
+        currentPermission.wardenStatus === "allowed" ||
+        currentPermission.deanStatus === "allowed";
+
+      if (isStudent && isAlreadyApproved) {
+        return NextResponse.json(
+          {
+            error:
+              "Unable to edit: Leave has already been approved by authorities. Please contact your warden to extend dates.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (fromDateTime) update.fromDateTime = new Date(fromDateTime);
+      if (toDateTime) update.toDateTime = new Date(toDateTime);
+      if (reason) update.reason = reason;
+
+      const checkFrom = update.fromDateTime || currentPermission.fromDateTime;
+      const checkTo = update.toDateTime || currentPermission.toDateTime;
+      if (checkFrom && checkTo && new Date(checkTo) <= new Date(checkFrom)) {
+        return NextResponse.json(
+          { error: "Return date and time must be after departure date and time" },
+          { status: 400 }
+        );
+      }
+
+      // Also update linked student record's leaveTo/leaveFrom/leaveReason if student is out
+      try {
+        const studentId =
+          typeof currentPermission.studentId === "object"
+            ? currentPermission.studentId?._id || currentPermission.studentId?.id
+            : currentPermission.studentId;
+        if (studentId) {
+          const studentDoc = await db.students.getById(studentId.toString());
+          if (studentDoc && studentDoc.studentStatus === "out") {
+            const studentUpdates: any = {};
+            if (toDateTime) studentUpdates.leaveTo = toDateTime;
+            if (fromDateTime) studentUpdates.leaveFrom = fromDateTime;
+            if (reason) studentUpdates.leaveReason = reason;
+            await db.students.update(studentId.toString(), studentUpdates);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to sync student leave dates on edit:", err);
+      }
+    }
+
     // Logic for final status
     const finalWardenStatus = wardenStatus || currentPermission.wardenStatus;
     const finalDeanStatus = deanStatus || currentPermission.deanStatus;
@@ -212,12 +264,14 @@ export async function PATCH(request: NextRequest) {
     if (status === "cancelled") {
       update.status = "cancelled";
       update.cancellationReason = body.cancellationReason || "Cancelled by student before leaving campus";
-    } else if (finalDeanStatus === "allowed" || (finalWardenStatus === "allowed" && finalDeanStatus === "allowed")) {
-      update.status = "allowed";
-    } else if (finalWardenStatus === "rejected" || finalDeanStatus === "rejected") {
-      update.status = "rejected";
-    } else {
-      update.status = "pending";
+    } else if (status) {
+      if (finalDeanStatus === "allowed" || (finalWardenStatus === "allowed" && finalDeanStatus === "allowed")) {
+        update.status = "allowed";
+      } else if (finalWardenStatus === "rejected" || finalDeanStatus === "rejected") {
+        update.status = "rejected";
+      } else {
+        update.status = "pending";
+      }
     }
 
     await db.permissions.update(permissionId, update);

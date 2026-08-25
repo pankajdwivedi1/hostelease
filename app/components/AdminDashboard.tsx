@@ -1396,6 +1396,16 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [homeLeaveToDate, setHomeLeaveToDate] = useState("");
   const [homeLeaveReason, setHomeLeaveReason] = useState("Home Leave (Manual Approval)");
   const [isSubmittingHomeLeave, setIsSubmittingHomeLeave] = useState(false);
+  const [editLeaveModalData, setEditLeaveModalData] = useState<{
+    permissionId?: string;
+    studentId?: string;
+    studentName: string;
+    registrationId?: string;
+    fromDateTime: string;
+    toDateTime: string;
+    reason: string;
+  } | null>(null);
+  const [isSubmittingEditLeave, setIsSubmittingEditLeave] = useState(false);
   const [isWardenCameraOpen, setIsWardenCameraOpen] = useState(false);
   const wardenVideoRef = useRef<HTMLVideoElement>(null);
   const [duplicateWarnings, setDuplicateWarnings] = useState<Record<string, string>>({});
@@ -3215,6 +3225,163 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     } catch (e: any) {
       console.error("Unmark home leave error:", e);
       showToast("Error: " + (e.message || "Failed to submit"), "error");
+    }
+  };
+
+  const openEditLeaveModal = (permission: any) => {
+    const student = typeof permission.studentId === "object" ? permission.studentId : null;
+    const formatForInput = (dVal: any) => {
+      if (!dVal) return "";
+      const d = new Date(dVal);
+      if (isNaN(d.getTime())) return "";
+      const tzOffset = d.getTimezoneOffset() * 60000;
+      return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+    };
+
+    setEditLeaveModalData({
+      permissionId: permission._id || permission.id,
+      studentId: student?._id || student?.id || permission.studentId,
+      studentName: student?.name || permission.name || "Student",
+      registrationId: student?.registrationId || permission.registrationId || "",
+      fromDateTime: formatForInput(permission.fromDateTime),
+      toDateTime: formatForInput(permission.toDateTime),
+      reason: permission.reason || "",
+    });
+  };
+
+  const openEditLeaveModalForStudent = (student: any, existingPermission?: any) => {
+    const formatForInput = (dVal: any) => {
+      if (!dVal) return "";
+      const d = new Date(dVal);
+      if (isNaN(d.getTime())) return "";
+      const tzOffset = d.getTimezoneOffset() * 60000;
+      return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+    };
+
+    const now = new Date();
+    const tzOffset = now.getTimezoneOffset() * 60000;
+    const defaultFrom = new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
+    const defaultTo = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000 - tzOffset).toISOString().slice(0, 16);
+
+    setEditLeaveModalData({
+      permissionId: existingPermission?._id || existingPermission?.id,
+      studentId: (student._id || student.id)?.toString(),
+      studentName: student.name || "Student",
+      registrationId: student.registrationId || "",
+      fromDateTime: formatForInput(existingPermission?.fromDateTime || student.leaveFrom) || defaultFrom,
+      toDateTime: formatForInput(existingPermission?.toDateTime || student.leaveTo) || defaultTo,
+      reason: existingPermission?.reason || student.leaveReason || "Home Leave",
+    });
+  };
+
+  const handleSaveEditedLeave = async () => {
+    if (!editLeaveModalData) return;
+    if (!editLeaveModalData.fromDateTime || !editLeaveModalData.toDateTime) {
+      showToast("Please provide both departure and return dates", "error");
+      return;
+    }
+    if (new Date(editLeaveModalData.toDateTime) <= new Date(editLeaveModalData.fromDateTime)) {
+      showToast("Return date must be after departure date", "error");
+      return;
+    }
+
+    setIsSubmittingEditLeave(true);
+    try {
+      if (editLeaveModalData.permissionId) {
+        const res = await fetch("/api/permissions", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            permissionId: editLeaveModalData.permissionId,
+            fromDateTime: editLeaveModalData.fromDateTime,
+            toDateTime: editLeaveModalData.toDateTime,
+            reason: editLeaveModalData.reason,
+            userType: userType || "warden",
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          showToast(data.error || "Failed to update leave dates", "error");
+          setIsSubmittingEditLeave(false);
+          return;
+        }
+      }
+
+      if (editLeaveModalData.studentId) {
+        try {
+          await fetch("/api/getpass/manual-toggle", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              studentId: editLeaveModalData.studentId,
+              action: "out",
+              requestType: "HOME-LEAVE",
+              reason: editLeaveModalData.reason,
+              fromDateTime: editLeaveModalData.fromDateTime,
+              toDateTime: editLeaveModalData.toDateTime,
+              userType: userType || "warden",
+              operator: userType || "Warden",
+            }),
+          });
+        } catch (e) {
+          console.error("Failed to sync manual toggle:", e);
+        }
+      }
+
+      setPermissions((prev) =>
+        prev.map((p) => {
+          const pId = p._id || p.id;
+          if (pId === editLeaveModalData.permissionId) {
+            return {
+              ...p,
+              fromDateTime: editLeaveModalData.fromDateTime,
+              toDateTime: editLeaveModalData.toDateTime,
+              reason: editLeaveModalData.reason,
+            };
+          }
+          return p;
+        })
+      );
+
+      if (editLeaveModalData.studentId) {
+        setSelectedRoomStudents((prev) =>
+          prev.map((s) => {
+            const sId = (s.id || s._id)?.toString();
+            if (sId === editLeaveModalData.studentId) {
+              return {
+                ...s,
+                leaveFrom: editLeaveModalData.fromDateTime,
+                leaveTo: editLeaveModalData.toDateTime,
+                leaveReason: editLeaveModalData.reason,
+              };
+            }
+            return s;
+          })
+        );
+
+        setStudents((prev) =>
+          prev.map((s) => {
+            const sId = (s.id || s._id)?.toString();
+            if (sId === editLeaveModalData.studentId) {
+              return {
+                ...s,
+                leaveFrom: editLeaveModalData.fromDateTime,
+                leaveTo: editLeaveModalData.toDateTime,
+                leaveReason: editLeaveModalData.reason,
+              };
+            }
+            return s;
+          })
+        );
+      }
+
+      showToast("Leave details and return date updated successfully!", "success");
+      setEditLeaveModalData(null);
+    } catch (err: any) {
+      console.error("Save edited leave error:", err);
+      showToast("Error: " + (err.message || "Failed to update leave"), "error");
+    } finally {
+      setIsSubmittingEditLeave(false);
     }
   };
 
@@ -7865,6 +8032,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <span className="hidden md:inline">•</span>
                                         <span className="whitespace-nowrap">to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
                                       </div>
+                                      {(userType === "warden" || userType === "dean" || userType === "admin") && (
+                                        <button
+                                          onClick={() => openEditLeaveModal(permission)}
+                                          className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[8.5px] md:text-[9.5px] font-bold shadow-2xs w-fit cursor-pointer"
+                                          title="Edit Leave Dates / Extend Return Date"
+                                        >
+                                          <span>✏️</span> Edit Leave
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                   
@@ -10245,12 +10421,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         ? 'bg-red-50/95 border border-red-300 ring-1 ring-red-200' 
                                         : 'bg-blue-50/90 border border-blue-200/90'
                                     }`}>
-                                      <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold text-slate-800 leading-tight">
-                                        <span className="text-slate-500 font-bold shrink-0 text-[7.5px] sm:text-[9px]">Leave:</span>
-                                        <span className={`font-bold flex items-center gap-0.5 truncate ${isOverdue ? 'text-red-700' : 'text-blue-700'}`}>
-                                          <span className="text-[9px]">📅</span>
-                                          <span>{formatLeaveDate(leaveFrom) || "Active"}</span>
-                                        </span>
+                                      <div className="flex items-center justify-between gap-1">
+                                        <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold text-slate-800 leading-tight">
+                                          <span className="text-slate-500 font-bold shrink-0 text-[7.5px] sm:text-[9px]">Leave:</span>
+                                          <span className={`font-bold flex items-center gap-0.5 truncate ${isOverdue ? 'text-red-700' : 'text-blue-700'}`}>
+                                            <span className="text-[9px]">📅</span>
+                                            <span>{formatLeaveDate(leaveFrom) || "Active"}</span>
+                                          </span>
+                                        </div>
+                                        {(userType === "warden" || userType === "dean" || userType === "admin") && (
+                                          <button
+                                            onClick={() => openEditLeaveModalForStudent(student, studentPermission)}
+                                            className="px-1.5 py-0.5 bg-white/90 border border-blue-300 text-blue-700 rounded-md text-[7px] sm:text-[8px] font-black uppercase hover:bg-blue-50 transition-colors shadow-2xs cursor-pointer shrink-0"
+                                            title="Edit Leave / Extend Return Date"
+                                          >
+                                            ✏️ Edit Leave
+                                          </button>
+                                        )}
                                       </div>
                                       {leaveTo && (
                                         <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold leading-tight mt-0.5">
@@ -10431,6 +10618,85 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
                           >
                             {isSubmittingHomeLeave ? "Saving..." : "Confirm Home-Leave"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ✏️ Edit Leave Dates & Reason Modal (Warden & Dean) */}
+                  {editLeaveModalData && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+                      <div className="bg-white w-full max-w-md rounded-3xl p-5 sm:p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-100 space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="p-2 bg-blue-50 rounded-xl text-blue-600 text-lg font-bold">
+                              ✏️
+                            </div>
+                            <div>
+                              <h3 className="text-base font-black text-slate-800">Edit Leave / Extend Date</h3>
+                              <p className="text-xs font-bold text-slate-400">{editLeaveModalData.studentName} {editLeaveModalData.registrationId ? `(${editLeaveModalData.registrationId})` : ''}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setEditLeaveModalData(null)}
+                            className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Departure Date & Time</label>
+                            <input
+                              type="datetime-local"
+                              value={editLeaveModalData.fromDateTime}
+                              onChange={(e) => setEditLeaveModalData(prev => prev ? { ...prev, fromDateTime: e.target.value } : null)}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-xs font-black uppercase tracking-wider text-blue-700">Extended Return Date & Time</label>
+                              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.2 rounded">Extendable</span>
+                            </div>
+                            <input
+                              type="datetime-local"
+                              value={editLeaveModalData.toDateTime}
+                              onChange={(e) => setEditLeaveModalData(prev => prev ? { ...prev, toDateTime: e.target.value } : null)}
+                              className="w-full px-3 py-2 bg-blue-50/50 border-2 border-blue-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Reason / Extension Remarks</label>
+                            <textarea
+                              rows={2}
+                              value={editLeaveModalData.reason}
+                              onChange={(e) => setEditLeaveModalData(prev => prev ? { ...prev, reason: e.target.value } : null)}
+                              placeholder="e.g. Leave extended by 2 days per parent call"
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditLeaveModalData(null)}
+                            className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-wider transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isSubmittingEditLeave}
+                            onClick={handleSaveEditedLeave}
+                            className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+                          >
+                            {isSubmittingEditLeave ? "Saving..." : "Save Changes"}
                           </button>
                         </div>
                       </div>

@@ -2142,6 +2142,88 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
     };
 
+    const [studentEditLeaveModalData, setStudentEditLeaveModalData] = useState<{
+        permissionId: string;
+        fromDateTime: string;
+        toDateTime: string;
+        reason: string;
+    } | null>(null);
+    const [isSavingStudentEditLeave, setIsSavingStudentEditLeave] = useState(false);
+
+    const openStudentEditLeaveModal = (permission: any) => {
+        const isApproved = permission.status === 'allowed' || permission.status === 'approved' || permission.wardenStatus === 'allowed' || permission.deanStatus === 'allowed';
+        if (isApproved) {
+            showToast("Unable to edit: Leave has already been approved by authorities. Please contact your warden to extend dates.", "error");
+            return;
+        }
+
+        const formatForInput = (dVal: any) => {
+            if (!dVal) return '';
+            const d = new Date(dVal);
+            if (isNaN(d.getTime())) return '';
+            const tzOffset = d.getTimezoneOffset() * 60000;
+            return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+        };
+
+        setStudentEditLeaveModalData({
+            permissionId: permission._id || permission.id,
+            fromDateTime: formatForInput(permission.fromDateTime),
+            toDateTime: formatForInput(permission.toDateTime),
+            reason: permission.reason || '',
+        });
+    };
+
+    const handleSaveStudentEditLeave = async () => {
+        if (!studentEditLeaveModalData) return;
+        if (!studentEditLeaveModalData.fromDateTime || !studentEditLeaveModalData.toDateTime) {
+            showToast("Please select both departure and return dates.", "error");
+            return;
+        }
+        if (new Date(studentEditLeaveModalData.toDateTime) <= new Date(studentEditLeaveModalData.fromDateTime)) {
+            showToast("Return date and time must be after departure date and time.", "error");
+            return;
+        }
+
+        setIsSavingStudentEditLeave(true);
+        try {
+            const res = await fetch(`/api/permissions${getTenantParam()}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    permissionId: studentEditLeaveModalData.permissionId,
+                    fromDateTime: studentEditLeaveModalData.fromDateTime,
+                    toDateTime: studentEditLeaveModalData.toDateTime,
+                    reason: studentEditLeaveModalData.reason,
+                    role: 'student'
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                showToast("Leave request updated successfully.", "success");
+                setPermissions(prev => prev.map(p => {
+                    if (p._id === studentEditLeaveModalData.permissionId || p.id === studentEditLeaveModalData.permissionId) {
+                        return {
+                            ...p,
+                            fromDateTime: studentEditLeaveModalData.fromDateTime,
+                            toDateTime: studentEditLeaveModalData.toDateTime,
+                            reason: studentEditLeaveModalData.reason
+                        };
+                    }
+                    return p;
+                }));
+                if (fetchStudentHistoryData) fetchStudentHistoryData();
+                setStudentEditLeaveModalData(null);
+            } else {
+                showToast(data.error || "Failed to update leave request.", "error");
+            }
+        } catch (e: any) {
+            console.error("Error updating leave request:", e);
+            showToast("Error updating leave request.", "error");
+        } finally {
+            setIsSavingStudentEditLeave(false);
+        }
+    };
+
     const formatDate = (dateString: string | undefined) => {
         if (!dateString) return "N/A";
         try {
@@ -3856,6 +3938,24 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                             <div className="flex items-center justify-between mb-2 border-b border-gray-100 pb-1.5 gap-2">
                                                 <h3 className="text-[9px] sm:text-[9.5px] font-bold text-gray-400 uppercase tracking-wider">Active Request Status</h3>
                                                 <div className="flex items-center gap-1.5 shrink-0">
+                                                    {/* ✏️ Option B: Edit Leave Button (Visible before approval, restricted after) */}
+                                                    {!isParentView && studentProfile?.studentStatus !== 'out' && latestPermission.status !== 'cancelled' && latestPermission.status !== 'rejected' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const isApproved = latestPermission.status === 'allowed' || latestPermission.status === 'approved' || latestPermission.wardenStatus === 'allowed' || latestPermission.deanStatus === 'allowed';
+                                                                if (isApproved) {
+                                                                    showToast("Unable to edit: Leave has already been approved. Please contact your warden to extend dates.", "error");
+                                                                    return;
+                                                                }
+                                                                openStudentEditLeaveModal(latestPermission);
+                                                            }}
+                                                            className="px-2 py-0.5 rounded-md text-[9px] sm:text-[9.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all flex items-center gap-1 cursor-pointer"
+                                                            title="Edit Leave Details (Before Approval)"
+                                                        >
+                                                            <span className="text-[10px]">✏️</span> Edit Leave
+                                                        </button>
+                                                    )}
                                                     {/* ↩️ Option A: Cancel Leave Button (Visible when student is in campus and request is pending or allowed) */}
                                                     {!isParentView && studentProfile?.studentStatus !== 'out' && (latestPermission.status === 'pending' || latestPermission.status === 'allowed' || latestPermission.status === 'approved' || latestPermission.status === 'accepted') && (
                                                         <button
@@ -6595,6 +6695,82 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     </div>
                 )
             }
+
+            {/* ✏️ Student Edit Leave Details Modal */}
+            {studentEditLeaveModalData && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200 font-outfit">
+                    <div className="bg-white w-full max-w-md rounded-3xl p-5 sm:p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-100 space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-blue-50 rounded-xl text-blue-600 text-lg font-bold">
+                                    ✏️
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-black text-slate-800">Edit Leave Application</h3>
+                                    <p className="text-xs font-bold text-slate-400">Modify your pending leave dates before approval</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setStudentEditLeaveModalData(null)}
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Departure Date & Time</label>
+                                <input
+                                    type="datetime-local"
+                                    value={studentEditLeaveModalData.fromDateTime}
+                                    onChange={(e) => setStudentEditLeaveModalData(prev => prev ? { ...prev, fromDateTime: e.target.value } : null)}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Expected Return Date & Time</label>
+                                <input
+                                    type="datetime-local"
+                                    value={studentEditLeaveModalData.toDateTime}
+                                    onChange={(e) => setStudentEditLeaveModalData(prev => prev ? { ...prev, toDateTime: e.target.value } : null)}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Reason for Leave</label>
+                                <textarea
+                                    rows={2}
+                                    value={studentEditLeaveModalData.reason}
+                                    onChange={(e) => setStudentEditLeaveModalData(prev => prev ? { ...prev, reason: e.target.value } : null)}
+                                    placeholder="Enter your updated reason..."
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setStudentEditLeaveModalData(null)}
+                                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-wider transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isSavingStudentEditLeave}
+                                onClick={handleSaveStudentEditLeave}
+                                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+                            >
+                                {isSavingStudentEditLeave ? "Saving..." : "Update Application"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <ParentConsentVideoModal
                 url={activeConsentVideoUrl}
