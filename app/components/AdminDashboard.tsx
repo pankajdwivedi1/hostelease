@@ -3231,7 +3231,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   };
 
   const openEditLeaveModal = (permission: any) => {
-    const student = typeof permission.studentId === "object" ? permission.studentId : null;
+    const student = (typeof permission.studentId === "object" ? permission.studentId : null) || permission.students || permission.student || null;
     const formatForInput = (dVal: any) => {
       if (!dVal) return "";
       const d = new Date(dVal);
@@ -3240,11 +3240,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
     };
 
+    const sId = student?._id || student?.id || (typeof permission.studentId === 'string' ? permission.studentId : null);
+    const sName = student?.name || permission.name || permission.studentName || "Student";
+    const sReg = student?.registrationId || permission.registrationId || "";
+
     setEditLeaveModalData({
       permissionId: permission._id || permission.id,
-      studentId: student?._id || student?.id || permission.studentId,
-      studentName: student?.name || permission.name || "Student",
-      registrationId: student?.registrationId || permission.registrationId || "",
+      studentId: sId,
+      studentName: sName,
+      registrationId: sReg,
       fromDateTime: formatForInput(permission.fromDateTime),
       toDateTime: formatForInput(permission.toDateTime),
       reason: permission.reason || "",
@@ -3308,9 +3312,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           setIsSubmittingEditLeave(false);
           return;
         }
-      }
-
-      if (editLeaveModalData.studentId) {
+      } else if (editLeaveModalData.studentId) {
         try {
           await fetch("/api/getpass/manual-toggle", {
             method: "POST",
@@ -10665,167 +10667,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               </div>
                             );
                           })}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 🏠 Home Leave Date & Details Modal */}
-                  {showHomeLeaveModal && homeLeaveModalStudent && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-                      <div className="bg-white w-full max-w-md rounded-3xl p-5 sm:p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-100 space-y-4">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="p-2 bg-amber-50 rounded-xl text-amber-600 text-lg font-bold">
-                              🏠
-                            </div>
-                            <div>
-                              <h3 className="text-base font-black text-slate-800">Mark Home-Leave</h3>
-                              <p className="text-xs font-bold text-slate-400">{homeLeaveModalStudent.name} (Room {homeLeaveModalStudent.roomNumber || selectedRoom})</p>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => {
-                              setShowHomeLeaveModal(false);
-                              setHomeLeaveModalStudent(null);
-                            }}
-                            className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
-                          >
-                            ✕
-                          </button>
-                        </div>
-
-                        <div className="space-y-3">
-                          <div>
-                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">From Date & Time</label>
-                            <input
-                              type="datetime-local"
-                              value={homeLeaveFromDate}
-                              onChange={(e) => setHomeLeaveFromDate(e.target.value)}
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Expected Return Date & Time</label>
-                            <input
-                              type="datetime-local"
-                              value={homeLeaveToDate}
-                              onChange={(e) => setHomeLeaveToDate(e.target.value)}
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Reason / Remarks</label>
-                            <input
-                              type="text"
-                              value={homeLeaveReason}
-                              onChange={(e) => setHomeLeaveReason(e.target.value)}
-                              placeholder="e.g. Family Function / Medical / Festival"
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 pt-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowHomeLeaveModal(false);
-                              setHomeLeaveModalStudent(null);
-                            }}
-                            className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-wider transition-colors"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isSubmittingHomeLeave}
-                            onClick={handleConfirmHomeLeave}
-                            className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
-                          >
-                            {isSubmittingHomeLeave ? "Saving..." : "Confirm Home-Leave"}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ✏️ Edit Leave Dates & Reason Modal (Warden & Dean) */}
-                  {editLeaveModalData && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-                      <div className="bg-white w-full max-w-md rounded-3xl p-5 sm:p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-100 space-y-4">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="p-2 bg-blue-50 rounded-xl text-blue-600 text-lg font-bold">
-                              ✏️
-                            </div>
-                            <div>
-                              <h3 className="text-base font-black text-slate-800">Edit Leave / Extend Date</h3>
-                              <p className="text-xs font-bold text-slate-400">{editLeaveModalData.studentName} {editLeaveModalData.registrationId ? `(${editLeaveModalData.registrationId})` : ''}</p>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => setEditLeaveModalData(null)}
-                            className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
-                          >
-                            ✕
-                          </button>
-                        </div>
-
-                        <div className="space-y-3">
-                          <div>
-                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Departure Date & Time</label>
-                            <input
-                              type="datetime-local"
-                              value={editLeaveModalData.fromDateTime}
-                              onChange={(e) => setEditLeaveModalData(prev => prev ? { ...prev, fromDateTime: e.target.value } : null)}
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                          </div>
-
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="block text-xs font-black uppercase tracking-wider text-blue-700">Extended Return Date & Time</label>
-                              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.2 rounded">Extendable</span>
-                            </div>
-                            <input
-                              type="datetime-local"
-                              value={editLeaveModalData.toDateTime}
-                              onChange={(e) => setEditLeaveModalData(prev => prev ? { ...prev, toDateTime: e.target.value } : null)}
-                              className="w-full px-3 py-2 bg-blue-50/50 border-2 border-blue-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Reason / Extension Remarks</label>
-                            <textarea
-                              rows={2}
-                              value={editLeaveModalData.reason}
-                              onChange={(e) => setEditLeaveModalData(prev => prev ? { ...prev, reason: e.target.value } : null)}
-                              placeholder="e.g. Leave extended by 2 days per parent call"
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 pt-2">
-                          <button
-                            type="button"
-                            onClick={() => setEditLeaveModalData(null)}
-                            className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-wider transition-colors"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isSubmittingEditLeave}
-                            onClick={handleSaveEditedLeave}
-                            className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
-                          >
-                            {isSubmittingEditLeave ? "Saving..." : "Save Changes"}
-                          </button>
                         </div>
                       </div>
                     </div>
@@ -18482,6 +18323,167 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* 🏠 Home Leave Date & Details Modal (Global) */}
+      {showHomeLeaveModal && homeLeaveModalStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-3xl p-5 sm:p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-amber-50 rounded-xl text-amber-600 text-lg font-bold">
+                  🏠
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-800">Mark Home-Leave</h3>
+                  <p className="text-xs font-bold text-slate-400">{homeLeaveModalStudent.name} (Room {homeLeaveModalStudent.roomNumber || selectedRoom || 'N/A'})</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowHomeLeaveModal(false);
+                  setHomeLeaveModalStudent(null);
+                }}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">From Date & Time</label>
+                <input
+                  type="datetime-local"
+                  value={homeLeaveFromDate}
+                  onChange={(e) => setHomeLeaveFromDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Expected Return Date & Time</label>
+                <input
+                  type="datetime-local"
+                  value={homeLeaveToDate}
+                  onChange={(e) => setHomeLeaveToDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Reason / Remarks</label>
+                <input
+                  type="text"
+                  value={homeLeaveReason}
+                  onChange={(e) => setHomeLeaveReason(e.target.value)}
+                  placeholder="e.g. Family Function / Medical / Festival"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowHomeLeaveModal(false);
+                  setHomeLeaveModalStudent(null);
+                }}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-wider transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingHomeLeave}
+                onClick={handleConfirmHomeLeave}
+                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                {isSubmittingHomeLeave ? "Saving..." : "Confirm Home-Leave"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✏️ Edit Leave Dates & Reason Modal (Global - Accessible from All Tabs) */}
+      {editLeaveModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-3xl p-5 sm:p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-blue-50 rounded-xl text-blue-600 text-lg font-bold">
+                  ✏️
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-800">Edit Leave / Extend Date</h3>
+                  <p className="text-xs font-bold text-slate-400">{editLeaveModalData.studentName} {editLeaveModalData.registrationId ? `(${editLeaveModalData.registrationId})` : ''}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditLeaveModalData(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Departure Date & Time</label>
+                <input
+                  type="datetime-local"
+                  value={editLeaveModalData.fromDateTime}
+                  onChange={(e) => setEditLeaveModalData(prev => prev ? { ...prev, fromDateTime: e.target.value } : null)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-black uppercase tracking-wider text-blue-700">Extended Return Date & Time</label>
+                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.2 rounded">Extendable</span>
+                </div>
+                <input
+                  type="datetime-local"
+                  value={editLeaveModalData.toDateTime}
+                  onChange={(e) => setEditLeaveModalData(prev => prev ? { ...prev, toDateTime: e.target.value } : null)}
+                  className="w-full px-3 py-2 bg-blue-50/50 border-2 border-blue-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Reason / Extension Remarks</label>
+                <textarea
+                  rows={2}
+                  value={editLeaveModalData.reason}
+                  onChange={(e) => setEditLeaveModalData(prev => prev ? { ...prev, reason: e.target.value } : null)}
+                  placeholder="e.g. Leave extended by 2 days per parent call"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setEditLeaveModalData(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-wider transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingEditLeave}
+                onClick={handleSaveEditedLeave}
+                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                {isSubmittingEditLeave ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
           </div>
         </div>
       )}
