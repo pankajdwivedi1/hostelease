@@ -10420,21 +10420,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         ? 'bg-red-50/95 border border-red-300 ring-1 ring-red-200' 
                                         : 'bg-blue-50/90 border border-blue-200/90'
                                     }`}>
-                                      <div className="flex items-center justify-between gap-1">
-                                        <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold text-slate-800 leading-tight">
-                                          <span className="text-slate-500 font-bold shrink-0 text-[7.5px] sm:text-[9px]">Leave:</span>
-                                          <span className={`font-bold flex items-center gap-0.5 truncate ${isOverdue ? 'text-red-700' : 'text-blue-700'}`}>
-                                            <span className="text-[9px]">📅</span>
-                                            <span>{formatLeaveDate(leaveFrom) || "Active"}</span>
-                                          </span>
-                                        </div>
-                                        <button
-                                          onClick={() => openEditLeaveModalForStudent(student, studentPermission)}
-                                          className="px-2 py-0.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400 rounded-md text-[7.5px] sm:text-[8.5px] font-black uppercase transition-all shadow-2xs cursor-pointer shrink-0 ml-auto"
-                                          title="Edit Leave / Extend Return Date"
-                                        >
-                                          ✏️ Edit Leave
-                                        </button>
+                                      <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold text-slate-800 leading-tight">
+                                        <span className="text-slate-500 font-bold shrink-0 text-[7.5px] sm:text-[9px]">Leave:</span>
+                                        <span className={`font-bold flex items-center gap-0.5 truncate ${isOverdue ? 'text-red-700' : 'text-blue-700'}`}>
+                                          <span className="text-[9px]">📅</span>
+                                          <span>{formatLeaveDate(leaveFrom) || "Active"}</span>
+                                        </span>
                                       </div>
                                       {leaveTo && (
                                         <div className="flex items-center gap-1 text-[8px] sm:text-[9.5px] font-semibold leading-tight mt-0.5">
@@ -10455,11 +10446,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   )}
                                 </div>
 
-                                {/* Row 2: Status & Action Button (Left) + Contact Icons (Right, straight horizontal line) */}
-                                <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100/90">
-                                  {/* Left: Status & Action Button */}
-                                  <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
-                                    <span className={`px-2 py-0.5 rounded-full text-[7.5px] sm:text-[8px] font-black uppercase tracking-wider shrink-0 ${
+                                {/* Row 2: Status & Action Buttons (Left) + Contact Icons (Right, straight single horizontal line) */}
+                                <div className="flex items-center justify-between gap-1 sm:gap-2 pt-1 border-t border-slate-100/90 flex-nowrap w-full">
+                                  {/* Left: Status Badge & Action Buttons */}
+                                  <div className="flex items-center gap-1 sm:gap-1.5 flex-nowrap shrink-0 min-w-0">
+                                    <span className={`px-1.5 py-0.5 rounded-full text-[7px] sm:text-[7.5px] font-black uppercase tracking-wider shrink-0 ${
                                       rStatus === 'in' ? 'bg-green-100 text-green-700' :
                                       rStatus === 'hleave' ? 'bg-blue-100 text-blue-700' :
                                       isOverdue ? 'bg-red-100 text-red-700 ring-1 ring-red-300 animate-pulse' :
@@ -10474,7 +10465,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     {rStatus === 'in' ? (
                                       <button
                                         onClick={() => openHomeLeaveModal(student)}
-                                        className="px-2 py-0.5 rounded-full text-[7.5px] sm:text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-all flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer shrink-0"
+                                        className="px-1.5 py-0.5 rounded-full text-[7px] sm:text-[7.5px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-all flex items-center gap-0.5 shadow-xs active:scale-95 cursor-pointer shrink-0"
                                         title="Mark Student on Home-Leave"
                                       >
                                         <span>🏠</span> HOME-LEAVE
@@ -10482,7 +10473,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     ) : rStatus === 'hleave' || isOverdue ? (
                                       <button
                                         onClick={() => handleUnmarkHomeLeave(student)}
-                                        className={`px-2 py-0.5 rounded-full text-[7.5px] sm:text-[8px] font-black uppercase tracking-wider transition-all flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer shrink-0 ${
+                                        className={`px-1.5 py-0.5 rounded-full text-[7px] sm:text-[7.5px] font-black uppercase tracking-wider transition-all flex items-center gap-0.5 shadow-xs active:scale-95 cursor-pointer shrink-0 ${
                                           isOverdue
                                             ? 'bg-red-600 text-white hover:bg-red-700 border border-red-700'
                                             : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
@@ -10494,19 +10485,30 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     ) : (
                                       <button
                                         onClick={() => openHomeLeaveModal(student)}
-                                        className="px-2 py-0.5 rounded-full text-[7.5px] sm:text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-all flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer shrink-0"
+                                        className="px-1.5 py-0.5 rounded-full text-[7px] sm:text-[7.5px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-all flex items-center gap-0.5 shadow-xs active:scale-95 cursor-pointer shrink-0"
                                         title="Convert Active Gatepass Outing to Home-Leave"
                                       >
                                         <span>🏠</span> HOME-LEAVE
                                       </button>
                                     )}
+
+                                    {/* ✏️ EDIT LEAVE Button - in single clean horizontal line */}
+                                    {(isHomeLeave || studentPermission) && (
+                                      <button
+                                        onClick={() => openEditLeaveModalForStudent(student, studentPermission)}
+                                        className="px-1.5 py-0.5 rounded-full text-[7px] sm:text-[7.5px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-all flex items-center gap-0.5 shadow-xs active:scale-95 cursor-pointer shrink-0"
+                                        title="Edit Leave Dates / Extend Return Date"
+                                      >
+                                        <span>✏️</span> EDIT LEAVE
+                                      </button>
+                                    )}
                                   </div>
 
                                   {/* Right: Contact Icons (Smaller, compact, straight horizontal line) */}
-                                  <div className="flex items-center gap-1 shrink-0 ml-auto">
+                                  <div className="flex items-center gap-1 shrink-0 ml-auto flex-nowrap">
                                     <a
                                       href={`tel:${student.phoneNumber}`}
-                                      className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-md hover:bg-slate-50 transition-colors shadow-2xs text-[10px] sm:text-[11px]"
+                                      className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-md hover:bg-slate-50 transition-colors shadow-2xs text-[9px] sm:text-[10px]"
                                       title="Call Student"
                                     >
                                       📞
@@ -10514,7 +10516,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     {student.fatherNumber && (
                                       <a
                                         href={`tel:${student.fatherNumber}`}
-                                        className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-md hover:bg-slate-50 transition-colors shadow-2xs text-[10px] sm:text-[11px]"
+                                        className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-md hover:bg-slate-50 transition-colors shadow-2xs text-[9px] sm:text-[10px]"
                                         title={`Call Parent: ${student.fatherName || "Father"}`}
                                       >
                                         👨‍👩‍👦
@@ -10524,7 +10526,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       href={`https://wa.me/${student.phoneNumber}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-md hover:bg-emerald-100/50 transition-colors shadow-2xs text-[10px] sm:text-[11px]"
+                                      className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-md hover:bg-emerald-100/50 transition-colors shadow-2xs text-[9px] sm:text-[10px]"
                                       title="WhatsApp Student"
                                     >
                                       💬
