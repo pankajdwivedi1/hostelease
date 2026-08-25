@@ -10034,11 +10034,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         roommates.map((r, i) => {
                                           const rStatus = getRoommateStatus(r);
                                           const isOverdue = rStatus === 'overdue';
-                                          const segColor = rStatus === 'in' ? '#10b981' : rStatus === 'hleave' ? '#2563eb' : isOverdue ? '#ef4444' : '#eab308';
+                                          const segColor = rStatus === 'in' ? '#10b981' : rStatus === 'hleave' ? '#2563eb' : isOverdue ? '#dc2626' : '#eab308';
                                           return (
                                             <div
                                               key={r.id || i}
-                                              className={`flex-1 h-full border-r border-white/40 last:border-r-0 ${isOverdue ? 'animate-pulse bg-red-500 ring-1 ring-red-400' : ''}`}
+                                              className={`flex-1 h-full border-r border-white/40 last:border-r-0 ${isOverdue ? 'animate-fast-blink bg-red-600 ring-1 ring-red-500 shadow-[0_0_8px_rgba(220,38,38,0.9)]' : ''}`}
                                               style={{ backgroundColor: segColor }}
                                               title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'HOME-LEAVE' : isOverdue ? '🚨 OVERDUE (NOT RETURNED)' : 'GATE-PASS'}`}
                                             />
@@ -10072,7 +10072,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                               className={`w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full flex items-center justify-center border border-white text-[5px] md:text-[7px] font-black text-white shrink-0 ${
                                                 rStatus === 'in' ? 'bg-green-500' :
                                                 rStatus === 'hleave' ? 'bg-blue-500' :
-                                                isOverdue ? 'bg-red-500 animate-pulse ring-1 ring-red-300' : 'bg-yellow-500'
+                                                isOverdue ? 'bg-red-600 animate-fast-blink ring-2 ring-red-400 shadow-sm' : 'bg-yellow-500'
                                               }`}
                                               title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'HOME-LEAVE' : isOverdue ? '🚨 OVERDUE (NOT RETURNED)' : 'GATE-PASS'}`}
                                             >

@@ -50,6 +50,19 @@
   animation-delay: 2s;
 }
 
+@keyframes fastBlink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+
+.animate-fast-blink {
+  animation: fastBlink 0.35s ease-in-out infinite;
+}
+
 .mesh-gradient {
   background-color: #050505;
   background-image:
