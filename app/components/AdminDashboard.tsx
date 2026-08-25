@@ -10011,7 +10011,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     className={`p-1 md:p-1.5 rounded-lg border md:border-2 text-left transition-all ${style.bg} ${style.border} active:scale-95 flex items-center min-h-[36px] md:min-h-[48px] shadow-sm relative overflow-hidden`}
                                   >
                                     {/* Segmented color bar indicator on top (per student status) */}
-                                    <div className="absolute top-0 left-0 right-0 h-1 md:h-1.5 flex">
+                                    <div className="absolute top-0 left-0 right-0 h-0.5 md:h-1 flex">
                                       {roommates.length > 0 ? (
                                         roommates.map((r, i) => {
                                           const rStatus = getRoommateStatus(r);
