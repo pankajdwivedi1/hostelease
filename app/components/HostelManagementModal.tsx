@@ -358,14 +358,14 @@ export default function HostelManagementModal({
                   
                   <div className="relative z-10">
                     <div className="flex items-center justify-between gap-2 mb-6">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="p-2.5 sm:p-3 bg-slate-50 border border-slate-200 rounded-xl text-lg sm:text-xl shrink-0">🏢</div>
-                        <div className="min-w-0">
-                          <h4 className="font-black text-slate-800 text-base sm:text-xl uppercase tracking-tight truncate">{formatHostelDisplay(hostel.name)}</h4>
-                          <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 truncate">ID: {hostel._id.slice(-6)}</p>
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="p-2 sm:p-2.5 bg-slate-50 border border-slate-200 rounded text-base sm:text-xl shrink-0">🏢</div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-black text-slate-800 text-xs sm:text-base md:text-lg uppercase tracking-tight leading-tight">{formatHostelDisplay(hostel.name)}</h4>
+                          <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">ID: {hostel._id.slice(-6)}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+                      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                         <button
                           onClick={async () => {
                             const newPass = await showPrompt("Enter new password for " + hostel.name + ":", (hostel.wardenPassword || "").trim());
@@ -378,16 +378,16 @@ export default function HostelManagementModal({
                               });
                             }
                           }}
-                          className="px-2.5 py-1.5 sm:px-4 sm:py-2.5 bg-slate-100 text-indigo-600 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest hover:bg-indigo-50 transition-all text-center shrink-0"
+                          className="px-2 py-1 sm:px-3 sm:py-1.5 bg-slate-100 text-indigo-600 rounded text-[9px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest hover:bg-indigo-50 transition-all text-center shrink-0"
                         >
                           Update Access
                         </button>
                         <button
                           onClick={() => handleDeleteHostelConfig(hostel._id, hostel.name)}
-                          className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 rounded-xl transition-colors shrink-0"
+                          className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 rounded transition-colors shrink-0"
                           title="Delete Hostel"
                         >
-                          <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
                       </div>
                     </div>
