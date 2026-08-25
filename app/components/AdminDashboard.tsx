@@ -1374,6 +1374,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [allowDeanRemoveStudent, setAllowDeanRemoveStudent] = useState(false);
   const [allowBulkStudentUpdates, setAllowBulkStudentUpdates] = useState(false);
   const [allowBulkPermissionManagement, setAllowBulkPermissionManagement] = useState(true);
+  const [superAdminNotifications, setSuperAdminNotifications] = useState(true);
+  const [deanNotifications, setDeanNotifications] = useState(true);
+  const [parentNotifications, setParentNotifications] = useState(true);
+  const [studentNotifications, setStudentNotifications] = useState(true);
   const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([]);
   const [isDeletingPermissions, setIsDeletingPermissions] = useState(false);
   const [isHidingPermissions, setIsHidingPermissions] = useState(false);
@@ -2712,18 +2716,24 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const initPush = async () => {
       try {
         const type = localStorage.getItem("userType");
-        const userId = localStorage.getItem("wardenUsername") || localStorage.getItem("userId") || "admin";
+        const storedWarden = localStorage.getItem("wardenUsername") || sessionStorage.getItem("wardenUsername");
         
         let mappedType: "student" | "parent" | "warden" | "dean" | null = null;
-        if (type === "warden") {
+        let userId = "admin";
+
+        if (isWarden || type === "warden") {
           mappedType = "warden";
+          userId = storedWarden || (wardenHostelName ? `${wardenHostelName.toLowerCase().replace(/ /g, "_")}_warden` : "warden");
         } else if (type === "dean" || title === "Dean Dashboard") {
           mappedType = "dean";
+          userId = "admin";
         } else if (title === "Super Admin Dashboard" || type === "admin" || type === "super_admin") {
           mappedType = "dean";
+          userId = "admin";
         }
 
         if (mappedType && userId) {
+          console.log(`[PUSH] Auto-registering device for role: ${mappedType}, userId: ${userId}`);
           await registerPushNotifications(userId, mappedType);
         }
       } catch (e) {
@@ -2731,7 +2741,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
     };
     initPush();
-  }, [isWarden, title]);
+  }, [isWarden, title, wardenHostelName]);
 
   // Initialize messaging defaults for wardens
   useEffect(() => {
@@ -2969,6 +2979,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (settingsData.allowDeanRemoveStudent !== undefined) setAllowDeanRemoveStudent(settingsData.allowDeanRemoveStudent);
         if (settingsData.allowBulkStudentUpdates !== undefined) setAllowBulkStudentUpdates(settingsData.allowBulkStudentUpdates);
         if (settingsData.allowBulkPermissionManagement !== undefined) setAllowBulkPermissionManagement(settingsData.allowBulkPermissionManagement);
+        if (settingsData.superAdminNotifications !== undefined) setSuperAdminNotifications(settingsData.superAdminNotifications);
+        if (settingsData.deanNotifications !== undefined) setDeanNotifications(settingsData.deanNotifications);
+        if (settingsData.parentNotifications !== undefined) setParentNotifications(settingsData.parentNotifications);
+        if (settingsData.studentNotifications !== undefined) setStudentNotifications(settingsData.studentNotifications);
         if (settingsData.developerPassword) setDeveloperPassword(settingsData.developerPassword);
         if (settingsData.leaveApprovalMethod) setLeaveApprovalMethod(settingsData.leaveApprovalMethod);
         if (settingsData.wifiWhitelist) setWifiWhitelist(settingsData.wifiWhitelist);
@@ -3021,6 +3035,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         if (key === 'allowDeanRemoveStudent') setAllowDeanRemoveStudent(value);
         if (key === 'allowBulkStudentUpdates') setAllowBulkStudentUpdates(value);
         if (key === 'allowBulkPermissionManagement') setAllowBulkPermissionManagement(value);
+        if (key === 'superAdminNotifications') setSuperAdminNotifications(value);
+        if (key === 'deanNotifications') setDeanNotifications(value);
+        if (key === 'parentNotifications') setParentNotifications(value);
+        if (key === 'studentNotifications') setStudentNotifications(value);
       } else {
         alert("Failed to update setting: " + (data.error || "Unknown error"));
       }
@@ -16198,6 +16216,94 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               type="checkbox"
                               checked={allowBulkPermissionManagement}
                               onChange={(e) => handleToggleDeveloperSetting('allowBulkPermissionManagement', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+
+                        {/* Super Admin Push Notifications */}
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-amber-50 rounded-lg text-amber-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                            </div>
+                            <div>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Enable Super Admin Notifications</h3>
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Master toggle for high-priority alerts on Super Admin mobile devices</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={superAdminNotifications}
+                              onChange={(e) => handleToggleDeveloperSetting('superAdminNotifications', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+
+                        {/* Dean Push Notifications */}
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                            </div>
+                            <div>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Enable Dean Notifications</h3>
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Master toggle for new leave requests and gatepass alerts sent to Deans</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={deanNotifications}
+                              onChange={(e) => handleToggleDeveloperSetting('deanNotifications', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+
+                        {/* Parent Push Notifications */}
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                            </div>
+                            <div>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Enable Parent Notifications</h3>
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Master toggle for student gate scan entries/exits and night absentee alerts to parents</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={parentNotifications}
+                              onChange={(e) => handleToggleDeveloperSetting('parentNotifications', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+
+                        {/* Global Student Push Notifications */}
+                        <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-100 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" /></svg>
+                            </div>
+                            <div>
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Enable Global Student Notifications</h3>
+                              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Master toggle for leave approvals, night attendance reminders, and broadcasts to students</p>
+                            </div>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={studentNotifications}
+                              onChange={(e) => handleToggleDeveloperSetting('studentNotifications', e.target.checked)}
                               className="sr-only peer"
                             />
                             <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>

@@ -90,10 +90,40 @@ export async function sendPushNotification(
       return { success: false, reason: "disabled_globally_by_super_admin" };
     }
 
-    // 1. Fetch system settings and check if this notification rule is enabled
+    // 1. Fetch system settings and check if this role and notification rule are enabled
     const settings = await db.settings.get();
     const notifSettings = settings?.notificationSettings || {};
     
+    // Check Role-Level Master Switches:
+    if (userType === "dean" || userId === "admin") {
+      if (settings?.deanNotifications === false && settings?.superAdminNotifications === false) {
+        console.log(`Push Notification for ${userType} blocked: dean/admin notifications are disabled.`);
+        return { success: false, reason: "role_notifications_disabled" };
+      }
+    }
+    if (userType === "parent" && settings?.parentNotifications === false) {
+      console.log(`Push Notification for parent blocked: parentNotifications is disabled.`);
+      return { success: false, reason: "parent_notifications_disabled" };
+    }
+    if (userType === "student" && settings?.studentNotifications === false) {
+      console.log(`Push Notification for student blocked: studentNotifications is disabled.`);
+      return { success: false, reason: "student_notifications_disabled" };
+    }
+
+    // Check Hostel-Level Warden Notification Switches:
+    if (userType === "warden") {
+      try {
+        const hostels = await db.hostels.getAll();
+        const matchedHostel = (hostels || []).find((h: any) => h.wardenUsername === userId);
+        if (matchedHostel && matchedHostel.allowWardenNotification === false) {
+          console.log(`Push Notification for warden [${userId}] blocked: allowWardenNotification is disabled for hostel ${matchedHostel.name}.`);
+          return { success: false, reason: "hostel_warden_notifications_disabled" };
+        }
+      } catch (hostelErr) {
+        console.warn("Could not check hostel warden notification toggle:", hostelErr);
+      }
+    }
+
     // Default to true if not explicitly configured/disabled
     const isEnabled = notifSettings[notificationType] !== false;
     

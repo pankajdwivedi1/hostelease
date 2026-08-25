@@ -28,7 +28,20 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { id, name, totalRooms, wardenUsername, wardenPassword, attendanceMode, allowWardenAddStudent, allowWardenEditProfile, allowWardenRemoveStudent, registrationFormat } = body;
+        const {
+            id,
+            name,
+            totalRooms,
+            wardenUsername,
+            wardenPassword,
+            attendanceMode,
+            allowWardenAddStudent,
+            allowWardenEditProfile,
+            allowWardenRemoveStudent,
+            allowWardenNotification,
+            allowStudentNotification,
+            registrationFormat
+        } = body;
         const formattedName = typeof name === 'string' ? name.trim().toUpperCase() : name;
         const trimmedWardenUsername = typeof wardenUsername === 'string' ? wardenUsername.trim() : wardenUsername;
         const trimmedWardenPassword = typeof wardenPassword === 'string' ? wardenPassword.trim() : wardenPassword;
@@ -44,6 +57,8 @@ export async function POST(request: NextRequest) {
                 allowWardenAddStudent,
                 allowWardenEditProfile,
                 allowWardenRemoveStudent,
+                allowWardenNotification: allowWardenNotification !== undefined ? allowWardenNotification : true,
+                allowStudentNotification: allowStudentNotification !== undefined ? allowStudentNotification : true,
                 registrationFormat
             });
         } else {
@@ -56,6 +71,8 @@ export async function POST(request: NextRequest) {
                 allowWardenAddStudent,
                 allowWardenEditProfile,
                 allowWardenRemoveStudent,
+                allowWardenNotification: allowWardenNotification !== undefined ? allowWardenNotification : true,
+                allowStudentNotification: allowStudentNotification !== undefined ? allowStudentNotification : true,
                 registrationFormat
             });
         }

@@ -66,6 +66,10 @@ export async function GET(request: NextRequest) {
             allowDeanRemoveStudent: settings?.allowDeanRemoveStudent || false,
             allowBulkStudentUpdates: settings?.allowBulkStudentUpdates || false,
             allowBulkPermissionManagement: settings?.allowBulkPermissionManagement ?? true,
+            superAdminNotifications: settings?.superAdminNotifications !== false,
+            deanNotifications: settings?.deanNotifications !== false,
+            parentNotifications: settings?.parentNotifications !== false,
+            studentNotifications: settings?.studentNotifications !== false,
             qrScanCooldownMinutes: settings?.qrScanCooldownMinutes !== undefined ? settings.qrScanCooldownMinutes : 5,
             enforceMandatoryPush
         });
@@ -153,6 +157,12 @@ export async function POST(request: NextRequest) {
         if (body.allowDeanRemoveStudent !== undefined) updateData.allowDeanRemoveStudent = body.allowDeanRemoveStudent;
         if (body.allowBulkStudentUpdates !== undefined) updateData.allowBulkStudentUpdates = body.allowBulkStudentUpdates;
         if (body.allowBulkPermissionManagement !== undefined) updateData.allowBulkPermissionManagement = body.allowBulkPermissionManagement;
+
+        // Role-based notification master switches
+        if (body.superAdminNotifications !== undefined) updateData.superAdminNotifications = body.superAdminNotifications;
+        if (body.deanNotifications !== undefined) updateData.deanNotifications = body.deanNotifications;
+        if (body.parentNotifications !== undefined) updateData.parentNotifications = body.parentNotifications;
+        if (body.studentNotifications !== undefined) updateData.studentNotifications = body.studentNotifications;
 
         const settings = await db.settings.update(updateData);
 
