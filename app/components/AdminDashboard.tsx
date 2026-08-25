@@ -10010,8 +10010,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     }}
                                     className={`p-1 md:p-1.5 rounded-lg border md:border-2 text-left transition-all ${style.bg} ${style.border} active:scale-95 flex items-center min-h-[36px] md:min-h-[48px] shadow-sm relative overflow-hidden`}
                                   >
-                                    {/* Color bar indicator on top */}
-                                    <div className="absolute top-0 left-0 right-0 h-0.5 md:h-1" style={{ backgroundColor: style.color }} />
+                                    {/* Segmented color bar indicator on top (per student status) */}
+                                    <div className="absolute top-0 left-0 right-0 h-1 md:h-1.5 flex">
+                                      {roommates.length > 0 ? (
+                                        roommates.map((r, i) => {
+                                          const rStatus = getRoommateStatus(r);
+                                          const segColor = rStatus === 'in' ? '#10b981' : rStatus === 'hleave' ? '#2563eb' : '#eab308';
+                                          return (
+                                            <div
+                                              key={r.id || i}
+                                              className="flex-1 h-full border-r border-white/40 last:border-r-0"
+                                              style={{ backgroundColor: segColor }}
+                                              title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'HOME-LEAVE' : 'GATE-PASS'}`}
+                                            />
+                                          );
+                                        })
+                                      ) : (
+                                        <div className="flex-1 h-full" style={{ backgroundColor: style.color }} />
+                                      )}
+                                    </div>
                                     
                                     {/* Left Side: Room number & Bed count */}
                                     <div className="flex flex-col shrink-0 pr-1.5 md:pr-2.5 border-r border-slate-200/80 min-w-[28px] md:min-w-[40px] text-center justify-center">
