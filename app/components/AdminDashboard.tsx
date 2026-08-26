@@ -8204,7 +8204,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           )}
                                         </div>
                                         <div className="flex flex-col items-center gap-1 relative">
-                                          <div className="flex items-center gap-1 md:gap-2.5 bg-white p-0.5 md:p-1 rounded-md border border-gray-100">
+                                          <div className="flex items-center gap-1 md:gap-1.5">
                                             <div className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
                                               <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                             </div>
@@ -8235,7 +8235,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             )}
                                           </div>
                                           <div className="flex flex-col items-center gap-1 relative">
-                                            <div className="flex items-center gap-1 md:gap-2.5 bg-white p-0.5 md:p-1 rounded-md border border-gray-100">
+                                            <div className="flex items-center gap-1 md:gap-1.5">
                                               <button
                                                 onClick={async () => {
                                                   if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
@@ -8280,7 +8280,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           )}
                                         </div>
                                         <div className="flex flex-col items-center gap-1 relative">
-                                          <div className="flex items-center gap-1 md:gap-2.5 bg-white p-0.5 md:p-1 rounded-md border border-gray-100">
+                                          <div className="flex items-center gap-1 md:gap-1.5">
                                             <button
                                               onClick={() => {
                                                 if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
