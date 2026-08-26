@@ -8101,60 +8101,63 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <div className="flex-1 min-w-0 flex flex-col md:flex-row gap-2 md:gap-4 items-stretch">
                                 {/* Left Side: Student Info & Approvals */}
                                 <div className="w-full md:w-[340px] shrink-0 flex flex-row md:flex-col gap-1 md:gap-2.5">
-                                  <div className="flex items-start gap-2 md:gap-4 flex-1 min-w-0 md:w-full">
-                                    <button
-                                      onClick={() => handleProfileClick((student._id || student.id)?.toString())}
-                                      className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
-                                    >
-                                      {profilePic ? (
-                                        <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
-                                      ) : (
-                                        initials
-                                      )}
-                                    </button>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-[11px] md:text-[13px] font-semibold text-foreground uppercase tracking-tight leading-tight">{student.name}</p>
-                                      <div className="flex flex-col md:flex-row md:items-center md:flex-wrap gap-0.5 md:gap-1.5 mt-0.5 text-[9px] md:text-xs text-secondary font-medium">
-                                        <span className="whitespace-nowrap">{new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
-                                        <span className="hidden md:inline">•</span>
-                                        <span className="whitespace-nowrap">to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
+                                  <div className="flex flex-col flex-1 min-w-0 md:w-full">
+                                    <div className="flex items-start gap-2 md:gap-4 w-full">
+                                      <button
+                                        onClick={() => handleProfileClick((student._id || student.id)?.toString())}
+                                        className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                                      >
+                                        {profilePic ? (
+                                          <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
+                                        ) : (
+                                          initials
+                                        )}
+                                      </button>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-[11px] md:text-[13px] font-semibold text-foreground uppercase tracking-tight leading-tight">{student.name}</p>
+                                        <div className="flex flex-col md:flex-row md:items-center md:flex-wrap gap-0.5 md:gap-1.5 mt-0.5 text-[9px] md:text-xs text-secondary font-medium">
+                                          <span className="whitespace-nowrap">{new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
+                                          <span className="hidden md:inline">•</span>
+                                          <span className="whitespace-nowrap">to {new Date(permission.toDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</span>
+                                        </div>
                                       </div>
-                                      {/* Action & Duration Row - side by side */}
-                                      {(() => {
-                                        const fromMs = permission.fromDateTime ? new Date(permission.fromDateTime).getTime() : 0;
-                                        const toMs = permission.toDateTime ? new Date(permission.toDateTime).getTime() : 0;
-                                        let durationStr = "";
-                                        if (fromMs && toMs && toMs > fromMs) {
-                                          const diffMs = toMs - fromMs;
-                                          const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
-                                          const days = Math.floor(totalHours / 24);
-                                          const hours = totalHours % 24;
-                                          if (days > 0 && hours > 0) durationStr = `${days}d ${hours}h`;
-                                          else if (days > 0) durationStr = `${days}d`;
-                                          else if (hours > 0) durationStr = `${hours}h`;
-                                          else durationStr = `${Math.round(diffMs / 60000)}m`;
-                                        }
-
-                                        return (
-                                          <div className="mt-1.5 flex items-center gap-1.5 flex-nowrap shrink-0">
-                                            <button
-                                              onClick={() => openEditLeaveModal(permission)}
-                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[9px] md:text-[10px] font-bold shadow-2xs w-fit cursor-pointer leading-tight whitespace-nowrap shrink-0"
-                                              title="Edit Leave Dates / Extend Return Date"
-                                            >
-                                              <span>✏️</span> Edit Leave
-                                            </button>
-
-                                            {durationStr && (
-                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50/90 text-blue-800 border border-blue-200 text-[9px] md:text-[10px] font-bold shadow-2xs leading-tight whitespace-nowrap shrink-0">
-                                                <span className="text-slate-500 font-semibold">Duration:</span>
-                                                <span className="font-extrabold text-blue-700">{durationStr}</span>
-                                              </span>
-                                            )}
-                                          </div>
-                                        );
-                                      })()}
                                     </div>
+
+                                    {/* Action & Duration Row - starting under the avatar with Duration on the left */}
+                                    {(() => {
+                                      const fromMs = permission.fromDateTime ? new Date(permission.fromDateTime).getTime() : 0;
+                                      const toMs = permission.toDateTime ? new Date(permission.toDateTime).getTime() : 0;
+                                      let durationStr = "";
+                                      if (fromMs && toMs && toMs > fromMs) {
+                                        const diffMs = toMs - fromMs;
+                                        const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
+                                        const days = Math.floor(totalHours / 24);
+                                        const hours = totalHours % 24;
+                                        if (days > 0 && hours > 0) durationStr = `${days}d ${hours}h`;
+                                        else if (days > 0) durationStr = `${days}d`;
+                                        else if (hours > 0) durationStr = `${hours}h`;
+                                        else durationStr = `${Math.round(diffMs / 60000)}m`;
+                                      }
+
+                                      return (
+                                        <div className="mt-2 flex items-center gap-1.5 flex-nowrap shrink-0">
+                                          {durationStr && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50/90 text-blue-800 border border-blue-200 text-[9px] md:text-[10px] font-bold shadow-2xs leading-tight whitespace-nowrap shrink-0">
+                                              <span className="text-slate-500 font-semibold">Duration:</span>
+                                              <span className="font-extrabold text-blue-700">{durationStr}</span>
+                                            </span>
+                                          )}
+
+                                          <button
+                                            onClick={() => openEditLeaveModal(permission)}
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[9px] md:text-[10px] font-bold shadow-2xs w-fit cursor-pointer leading-tight whitespace-nowrap shrink-0"
+                                            title="Edit Leave Dates / Extend Return Date"
+                                          >
+                                            <span>✏️</span> Edit Leave
+                                          </button>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                   
                                   {/* Permissions Block under name */}
@@ -12588,6 +12591,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                                       return (
                                         <div className="pt-1 flex items-center gap-1.5 flex-nowrap shrink-0">
+                                          {durationStr && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50/90 text-blue-800 border border-blue-200 text-[9px] font-bold shadow-2xs leading-tight whitespace-nowrap shrink-0">
+                                              <span className="text-slate-500 font-semibold">Duration:</span>
+                                              <span className="font-extrabold text-blue-700">{durationStr}</span>
+                                            </span>
+                                          )}
+
                                           <button
                                             onClick={() => openEditLeaveModal(permission)}
                                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[9px] font-bold shadow-2xs w-fit cursor-pointer leading-tight whitespace-nowrap shrink-0"
@@ -12595,13 +12605,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           >
                                             <span>✏️</span> Edit Leave
                                           </button>
-
-                                          {durationStr && (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50/90 text-blue-800 border border-blue-200 text-[9px] font-bold shadow-2xs leading-tight whitespace-nowrap shrink-0">
-                                              <span className="text-slate-500 font-semibold">Duration:</span>
-                                              <span className="font-extrabold text-blue-700">{durationStr}</span>
-                                            </span>
-                                          )}
                                         </div>
                                       );
                                     })()}
