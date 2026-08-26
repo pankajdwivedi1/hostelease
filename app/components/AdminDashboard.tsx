@@ -8304,11 +8304,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       
                                       {/* Manual Campus Toggle for Wardens */}
                                       {student.studentStatus === 'out' && (
-                                        <div className="flex items-center gap-2 w-full mt-1 pt-1 border-t border-gray-100">
-                                          <span className="text-[9px] md:text-[10px] font-black text-amber-600 uppercase whitespace-nowrap tracking-tighter w-12 text-left">Status</span>
+                                        <div className="flex items-center gap-1.5 md:gap-2 w-full mt-0.5 md:mt-1 pt-0.5 md:pt-1 border-t border-gray-100">
+                                          <span className="text-[7px] md:text-[10px] font-black text-amber-600 uppercase whitespace-nowrap tracking-tighter w-auto md:w-12 text-left">Status</span>
                                           <button
                                             onClick={() => handleManualToggle((student._id || student.id)?.toString(), "out")}
-                                            className="flex-1 py-1.5 rounded-lg bg-amber-500 text-white text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 shadow-sm transition-all active:scale-95"
+                                            className="flex-1 py-0.5 md:py-1.5 px-1.5 md:px-2 rounded md:rounded-lg bg-amber-500 text-white text-[7px] md:text-[9px] font-black uppercase tracking-wider md:tracking-widest hover:bg-amber-600 shadow-2xs md:shadow-sm transition-all active:scale-95 cursor-pointer leading-tight"
                                           >
                                             MARK IN
                                           </button>
