@@ -143,8 +143,18 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [highlightLocation, setHighlightLocation] = useState(false);
     const [requestType, setRequestType] = useState<"outing" | "leave">("outing");
     const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(initialData || null);
-    const [isFullProfileLoaded, setIsFullProfileLoaded] = useState(!!initialData?.collegeName || !!initialData?.joiningDate);
-    const [permissions, setPermissions] = useState<Permission[]>([]);
+    const [permissions, setPermissions] = useState<Permission[]>(() => {
+        if (typeof window !== "undefined") {
+            try {
+                const cached = localStorage.getItem("cachedStudentPermissions");
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                }
+            } catch (e) {}
+        }
+        return [];
+    });
     const consentVideoUrls = useMemo(
         () => permissions.map((p) => p.parentConsentUrl),
         [permissions]
@@ -1039,6 +1049,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         .then(permData => {
                             if (permData && permData.permissions && Array.isArray(permData.permissions)) {
                                 setPermissions(permData.permissions);
+                                try {
+                                    localStorage.setItem("cachedStudentPermissions", JSON.stringify(permData.permissions));
+                                } catch (e) {}
                             }
                         })
                         .catch(err => console.warn("Background permission sync error:", err))
@@ -1967,7 +1980,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         const permData = await permResponse.json();
 
                         if (permData.permissions && isMounted) {
-                            setPermissions(Array.isArray(permData.permissions) ? permData.permissions : []);
+                            const list = Array.isArray(permData.permissions) ? permData.permissions : [];
+                            setPermissions(list);
+                            try {
+                                localStorage.setItem("cachedStudentPermissions", JSON.stringify(list));
+                            } catch (e) {}
                         } else if (!permResponse.ok && isMounted) {
                             console.warn(`Permissions fetch returned status ${permResponse.status}`);
                             setPermissions([]);
@@ -2163,7 +2180,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             if (data.error) throw new Error(data.error);
 
             if (data.permission) {
-                setPermissions([data.permission, ...permissions]);
+                const updated = [data.permission, ...permissions];
+                setPermissions(updated);
+                try {
+                    localStorage.setItem("cachedStudentPermissions", JSON.stringify(updated));
+                } catch (e) {}
             }
 
             setFromDateTime("");
@@ -2201,7 +2222,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             const data = await res.json();
             if (data.success) {
                 showToast("Leave request cancelled successfully.", "success");
-                setPermissions(prev => prev.map(p => (p._id === permissionId || p.id === permissionId) ? { ...p, status: 'cancelled' } : p));
+                setPermissions(prev => {
+                    const updated = prev.map(p => (p._id === permissionId || p.id === permissionId) ? { ...p, status: 'cancelled' } : p);
+                    try {
+                        localStorage.setItem("cachedStudentPermissions", JSON.stringify(updated));
+                    } catch (e) {}
+                    return updated;
+                });
                 if (fetchStudentHistoryData) fetchStudentHistoryData();
             } else {
                 showToast(data.error || "Failed to cancel leave request.", "error");
@@ -2272,17 +2299,23 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             const data = await res.json();
             if (res.ok && data.success) {
                 showToast("Leave request updated successfully.", "success");
-                setPermissions(prev => prev.map(p => {
-                    if (p._id === studentEditLeaveModalData.permissionId || p.id === studentEditLeaveModalData.permissionId) {
-                        return {
-                            ...p,
-                            fromDateTime: studentEditLeaveModalData.fromDateTime,
-                            toDateTime: studentEditLeaveModalData.toDateTime,
-                            reason: studentEditLeaveModalData.reason
-                        };
-                    }
-                    return p;
-                }));
+                setPermissions(prev => {
+                    const updated = prev.map(p => {
+                        if (p._id === studentEditLeaveModalData.permissionId || p.id === studentEditLeaveModalData.permissionId) {
+                            return {
+                                ...p,
+                                fromDateTime: studentEditLeaveModalData.fromDateTime,
+                                toDateTime: studentEditLeaveModalData.toDateTime,
+                                reason: studentEditLeaveModalData.reason
+                            };
+                        }
+                        return p;
+                    });
+                    try {
+                        localStorage.setItem("cachedStudentPermissions", JSON.stringify(updated));
+                    } catch (e) {}
+                    return updated;
+                });
                 if (fetchStudentHistoryData) fetchStudentHistoryData();
                 setStudentEditLeaveModalData(null);
             } else {
