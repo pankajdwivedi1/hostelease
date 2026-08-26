@@ -8168,19 +8168,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     <div className="flex flex-col items-start gap-0.5 md:gap-1 origin-top-left border border-gray-200 rounded-md p-1 md:p-2 bg-white/30 shadow-sm w-full max-w-full md:max-w-[245px]">
                                       <div className="flex items-center justify-between w-full">
                                         <div className="flex items-center gap-1 md:gap-2">
-                                          <span className="w-10 sm:w-11 md:w-12 shrink-0 text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Parent</span>
+                                          <span className="w-10 sm:w-11 md:w-12 shrink-0 inline-block text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Parent</span>
                                           {permission.parentStatus === "rejected" && (
-                                            <span className="w-12 md:w-14 inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 py-0.5 rounded uppercase tracking-wider border border-red-100 text-center">
+                                            <span className="inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-red-100 text-center">
                                               Rejected
                                             </span>
                                           )}
                                           {permission.parentStatus === "allowed" && (
-                                            <span className="w-12 md:w-14 inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 py-0.5 rounded uppercase tracking-wider border border-green-100 text-center">
+                                            <span className="inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-green-100 text-center">
                                               AGREE
                                             </span>
                                           )}
                                           {(!permission.parentStatus || permission.parentStatus === "no_response" || permission.parentStatus === "pending") && (
-                                            <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                            <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
                                               Pending
                                             </span>
                                           )}
@@ -8217,19 +8217,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                                         <div className="flex items-center justify-between w-full mt-0.5">
                                           <div className="flex items-center gap-1 md:gap-2">
-                                            <span className="w-10 sm:w-11 md:w-12 shrink-0 text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Warden</span>
+                                            <span className="w-10 sm:w-11 md:w-12 shrink-0 inline-block text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Warden</span>
                                             {permission.wardenStatus === "rejected" && (
-                                              <span className="w-12 md:w-14 inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 py-0.5 rounded uppercase tracking-wider border border-red-100 text-center">
+                                              <span className="text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-red-100">
                                                 Rejected
                                               </span>
                                             )}
                                             {permission.wardenStatus === "allowed" && (
-                                              <span className="w-12 md:w-14 inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 py-0.5 rounded uppercase tracking-wider border border-green-100 text-center">
+                                              <span className="text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-green-100">
                                                 Accepted
                                               </span>
                                             )}
                                             {permission.wardenStatus === "pending" && (
-                                              <span className="w-12 md:w-14 inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 py-0.5 rounded uppercase tracking-wider border border-yellow-100 text-center">
+                                              <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
                                                 Pending
                                               </span>
                                             )}
@@ -8262,19 +8262,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                                       <div className="flex items-center justify-between w-full mt-0.5">
                                         <div className="flex items-center gap-1 md:gap-2">
-                                          <span className="w-10 sm:w-11 md:w-12 shrink-0 text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Dean</span>
+                                          <span className="w-10 sm:w-11 md:w-12 shrink-0 inline-block text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Dean</span>
                                           {permission.deanStatus === "rejected" && (
-                                            <span className="w-12 md:w-14 inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 py-0.5 rounded uppercase tracking-wider border border-red-100 text-center">
+                                            <span className="text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-red-100">
                                               Rejected
                                             </span>
                                           )}
                                           {permission.deanStatus === "allowed" && (
-                                            <span className="w-12 md:w-14 inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 py-0.5 rounded uppercase tracking-wider border border-green-100 text-center">
+                                            <span className="text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-green-100">
                                               Accepted
                                             </span>
                                           )}
                                           {permission.deanStatus === "pending" && (
-                                            <span className="w-12 md:w-14 inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 py-0.5 rounded uppercase tracking-wider border border-yellow-100 text-center">
+                                            <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
                                               Pending
                                             </span>
                                           )}
