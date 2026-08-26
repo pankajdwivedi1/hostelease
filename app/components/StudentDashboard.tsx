@@ -143,6 +143,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [highlightLocation, setHighlightLocation] = useState(false);
     const [requestType, setRequestType] = useState<"outing" | "leave">("outing");
     const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(initialData || null);
+    const [isFullProfileLoaded, setIsFullProfileLoaded] = useState(!!initialData?.collegeName || !!initialData?.joiningDate);
     const [permissions, setPermissions] = useState<Permission[]>(() => {
         if (typeof window !== "undefined") {
             try {
