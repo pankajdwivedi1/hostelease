@@ -20,6 +20,8 @@ export interface GateStatusEvent {
     studentName?: string;
     hostelName?: string;
     roomNumber?: string;
+    registrationId?: string;
+    phoneNumber?: string;
     timestamp: number;
 }
 

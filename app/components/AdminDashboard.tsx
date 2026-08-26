@@ -5541,12 +5541,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
     connectSSE();
 
-    // ⚡ RESILIENT AUTO-SYNC: When the Warden unlocks their phone or switches back to this tab,
-    // silently re-sync to ensure zero stale data is ever shown.
+    // ⚡ RESILIENT AUTO-SYNC: Throttled tab focus re-sync (60s cooldown)
+    // Only refreshes lightweight counts (4 KB), never re-downloads the heavy 1.5 MB student list!
+    let lastVisibilitySyncTime = 0;
     const handleVisibilityOrFocus = () => {
-      if (document.visibilityState === "visible") {
-        console.log("🔄 [Auto-Sync] Dashboard tab visible — refreshing live status...");
-        fetchStudents(true);
+      const now = Date.now();
+      if (document.visibilityState === "visible" && (now - lastVisibilitySyncTime >= 60000)) {
+        lastVisibilitySyncTime = now;
+        console.log("🔄 [Auto-Sync] Dashboard tab visible — refreshing live counts...");
         fetchAttendanceSummary();
       }
     };

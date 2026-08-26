@@ -520,11 +520,67 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
 
                         if (!data) return;
 
-                        const actionText = data.action === "checkout" || data.studentStatus === "out" ? "Check out" : "Check in";
+                        const isCheckOut = data.action === "checkout" || data.studentStatus === "out";
+                        const actionText = isCheckOut ? "Check out" : "Check in";
                         playSuccessChime();
                         speakStatus(actionText);
 
-                        // Instantly refresh live list
+                        // ⚡ INSTANT 0MS FEEDBACK: Update gate screen list immediately without waiting for network!
+                        setLiveData((prev: any) => {
+                            if (!prev) return prev;
+                            const newSummary = { ...prev.summary };
+                            const newCurrentlyOut = [...(prev.currentlyOut || [])];
+                            const newRecent = [...(prev.recentActivity || [])];
+
+                            const mapped: any = {
+                                _id: data.studentId,
+                                studentId: data.studentId,
+                                studentName: data.studentName,
+                                hostelName: data.hostelName,
+                                roomNumber: data.roomNumber,
+                                registrationId: data.registrationId || "",
+                                status: isCheckOut ? "out" : "in",
+                                type: data.outingType || "outing",
+                                phoneNumber: data.phoneNumber || "",
+                                currentDurationText: "Just now",
+                                currentDurationMinutes: 0
+                            };
+
+                            if (isCheckOut) {
+                                // Add to Outside list immediately
+                                if (!newCurrentlyOut.some(r => r._id === mapped._id || r.studentId === mapped.studentId)) {
+                                    newCurrentlyOut.unshift(mapped);
+                                    newSummary.studentsOut = (newSummary.studentsOut || 0) + 1;
+                                    newSummary.studentsIn = Math.max(0, (newSummary.studentsIn || 0) - 1);
+                                    if (data.outingType === "leave") {
+                                        newSummary.leaveCount = (newSummary.leaveCount || 0) + 1;
+                                    } else {
+                                        newSummary.gatePassCount = (newSummary.gatePassCount || 0) + 1;
+                                    }
+                                }
+                                newRecent.unshift(mapped);
+                            } else {
+                                // Check in: Remove from Outside list immediately
+                                const idx = newCurrentlyOut.findIndex(r => r._id === mapped._id || r.studentId === mapped.studentId);
+                                if (idx !== -1) {
+                                    newCurrentlyOut.splice(idx, 1);
+                                    newSummary.studentsOut = Math.max(0, (newSummary.studentsOut || 0) - 1);
+                                    newSummary.studentsIn = (newSummary.studentsIn || 0) + 1;
+                                }
+                                newRecent.unshift(mapped);
+                            }
+
+                            if (newRecent.length > 20) newRecent.pop();
+
+                            return {
+                                ...prev,
+                                summary: newSummary,
+                                currentlyOut: newCurrentlyOut,
+                                recentActivity: newRecent
+                            };
+                        });
+
+                        // Silently sync with server in the background
                         fetchLiveData(false);
                     } catch (parseErr) {
                         console.warn("Error parsing SSE gate_status:", parseErr);

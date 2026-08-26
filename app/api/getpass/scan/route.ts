@@ -427,7 +427,9 @@ export async function POST(request: NextRequest) {
                 action: "checkout",
                 studentName: student.name,
                 hostelName: student.hostelName,
-                roomNumber: student.roomNumber
+                roomNumber: student.roomNumber,
+                registrationId: student.registrationId || (student as any).erpId || "",
+                phoneNumber: student.phoneNumber || ""
             });
 
             // 🔥 Send MSG91 Gatepass Alert (Fire & Forget)
@@ -488,7 +490,9 @@ export async function POST(request: NextRequest) {
                     action: "checkin",
                     studentName: student.name,
                     hostelName: student.hostelName,
-                    roomNumber: student.roomNumber
+                    roomNumber: student.roomNumber,
+                    registrationId: student.registrationId || (student as any).erpId || "",
+                    phoneNumber: student.phoneNumber || ""
                 });
 
                 return NextResponse.json({
@@ -546,7 +550,9 @@ export async function POST(request: NextRequest) {
                 action: "checkin",
                 studentName: student.name,
                 hostelName: student.hostelName,
-                roomNumber: student.roomNumber
+                roomNumber: student.roomNumber,
+                registrationId: student.registrationId || (student as any).erpId || "",
+                phoneNumber: student.phoneNumber || ""
             });
 
             // 🔥 Send MSG91 Gatepass Alert (Fire & Forget)
