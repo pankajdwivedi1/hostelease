@@ -4246,13 +4246,37 @@ export const db = {
                 if (sortFieldMap[sortField]) sortField = sortFieldMap[sortField];
                 const sortOrder = options.sortOrder || 'desc';
 
-                const total = options.skipCount ? 0 : await prisma.gatePass.count({ where: whereClause });
+                // ⚡ OPTIMIZED PROJECTION: Omit heavy faceDescriptor, deviceHistory and raw pictures
+                const lightweightStudentSelect = {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        phoneNumber: true,
+                        hostelName: true,
+                        roomNumber: true,
+                        studentStatus: true,
+                        registrationId: true,
+                        erpId: true,
+                        collegeName: true,
+                        branch: true,
+                        year: true,
+                        semester: true,
+                        section: true,
+                        fatherName: true,
+                        fatherNumber: true,
+                        motherName: true,
+                        motherNumber: true,
+                    }
+                };
+
+                const total = (options as any).skipCount ? 0 : await prisma.gatePass.count({ where: whereClause });
                 const records = await prisma.gatePass.findMany({
                     where: whereClause,
                     orderBy: { [sortField]: sortOrder },
                     skip,
                     take: limit,
-                    include: shouldJoin ? { student: true } : undefined
+                    include: shouldJoin ? { student: lightweightStudentSelect } : undefined
                 });
 
                 const mappedRecords = records.map((g: any) => {
@@ -5563,6 +5587,30 @@ export const db = {
                 let total = 0;
                 let records: any[] = [];
 
+                // ⚡ OPTIMIZED PROJECTION: Omit heavy faceDescriptor, deviceHistory and raw base64 pictures
+                const lightweightStudentSelect = {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        phoneNumber: true,
+                        hostelName: true,
+                        roomNumber: true,
+                        studentStatus: true,
+                        registrationId: true,
+                        erpId: true,
+                        collegeName: true,
+                        branch: true,
+                        year: true,
+                        semester: true,
+                        section: true,
+                        fatherName: true,
+                        fatherNumber: true,
+                        motherName: true,
+                        motherNumber: true,
+                    }
+                };
+
                 try {
                     const testWhere = { ...whereClause };
                     if (filters.status === 'hidden') {
@@ -5577,7 +5625,7 @@ export const db = {
                         orderBy: { createdAt: 'desc' },
                         take: options.limit || undefined,
                         skip: options.offset || undefined,
-                        include: options.populate ? { student: true } : undefined
+                        include: options.populate ? { student: lightweightStudentSelect } : undefined
                     });
                 } catch (dbErr: any) {
                     // Column permissions.is_hidden does not exist in DB yet, fallback safely!
@@ -5590,7 +5638,7 @@ export const db = {
                         orderBy: { createdAt: 'desc' },
                         take: options.limit || undefined,
                         skip: options.offset || undefined,
-                        include: options.populate ? { student: true } : undefined
+                        include: options.populate ? { student: lightweightStudentSelect } : undefined
                     });
                 }
 

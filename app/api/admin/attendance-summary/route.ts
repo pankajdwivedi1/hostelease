@@ -139,18 +139,65 @@ export async function GET(request: NextRequest) {
             let totalIn = 0;
             let totalOut = 0;
 
-            await Promise.all(activeHostels.map(async (h) => {
-                const [hTotal, hIn, hOut] = await Promise.all([
-                    db.students.count({ hostelName: h }),
-                    db.students.count({ hostelName: h, studentStatus: 'in' }),
-                    db.students.count({ hostelName: h, studentStatus: 'out' })
-                ]);
-                
-                hostelStats[h] = { total: hTotal, in: hIn, out: hOut };
-                totalStudents += hTotal;
-                totalIn += hIn;
-                totalOut += hOut;
-            }));
+            try {
+                const { prisma } = await import("@/lib/prisma");
+                // ⚡ HIGH-PERFORMANCE SQL AGGREGATION: Single query replaces 15 separate count roundtrips
+                const whereClause: any = {
+                    ...(tenantId ? { tenantId } : {}),
+                    ...(authorizedHostels.length > 0 ? { hostelName: { in: authorizedHostels } } : {})
+                };
+
+                const groupedCounts = await prisma.student.groupBy({
+                    by: ['hostelName', 'studentStatus'],
+                    where: whereClause,
+                    _count: { id: true }
+                });
+
+                // Initialize stats map for all active hostels
+                activeHostels.forEach((h: string) => {
+                    hostelStats[h] = { total: 0, in: 0, out: 0 };
+                });
+
+                groupedCounts.forEach((group: any) => {
+                    const hName = group.hostelName;
+                    const status = (group.studentStatus || 'in').toLowerCase();
+                    const count = group._count?.id || 0;
+
+                    const targetHostel = activeHostels.find((h: string) => h.toLowerCase() === (hName || '').toLowerCase()) || hName;
+                    if (!hostelStats[targetHostel]) {
+                        hostelStats[targetHostel] = { total: 0, in: 0, out: 0 };
+                    }
+
+                    if (status === 'out') {
+                        hostelStats[targetHostel].out += count;
+                    } else {
+                        hostelStats[targetHostel].in += count;
+                    }
+                    hostelStats[targetHostel].total += count;
+                });
+
+                activeHostels.forEach((h: string) => {
+                    const stat = hostelStats[h];
+                    if (stat) {
+                        totalStudents += stat.total;
+                        totalIn += stat.in;
+                        totalOut += stat.out;
+                    }
+                });
+            } catch (aggErr) {
+                console.warn("⚠️ Prisma groupBy failed, falling back to dbAdapter:", aggErr);
+                await Promise.all(activeHostels.map(async (h) => {
+                    const [hTotal, hIn, hOut] = await Promise.all([
+                        db.students.count({ hostelName: h }),
+                        db.students.count({ hostelName: h, studentStatus: 'in' }),
+                        db.students.count({ hostelName: h, studentStatus: 'out' })
+                    ]);
+                    hostelStats[h] = { total: hTotal, in: hIn, out: hOut };
+                    totalStudents += hTotal;
+                    totalIn += hIn;
+                    totalOut += hOut;
+                }));
+            }
 
             stats = {
                 totalStudents,
@@ -166,15 +213,27 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        // ⚡ WARDEN FILTER: If authorized hostels are specified, filter the presentStudentIds
+        // ⚡ WARDEN FILTER: Fast single-trip query for authorized student IDs
         if (authorizedHostels.length > 0) {
-            const authorizedIds = new Set<string>();
-            // Only fetch strictly necessary lightweight IDs
-            await Promise.all(authorizedHostels.map(async (h) => {
-                const studentsInHostel = await db.students.list({ hostelName: h }, { select: '_id', limit: 5000 });
-                studentsInHostel.forEach((s: any) => authorizedIds.add(String(s.id || s._id)));
-            }));
-            presentStudentIds = presentStudentIds.filter(id => authorizedIds.has(String(id)));
+            try {
+                const { prisma } = await import("@/lib/prisma");
+                const authorizedStudents = await prisma.student.findMany({
+                    where: {
+                        ...(tenantId ? { tenantId } : {}),
+                        hostelName: { in: authorizedHostels }
+                    },
+                    select: { id: true }
+                });
+                const authorizedIds = new Set<string>(authorizedStudents.map(s => s.id));
+                presentStudentIds = presentStudentIds.filter(id => authorizedIds.has(String(id)));
+            } catch (filterErr) {
+                const authorizedIds = new Set<string>();
+                await Promise.all(authorizedHostels.map(async (h) => {
+                    const studentsInHostel = await db.students.list({ hostelName: h }, { select: '_id', limit: 5000 });
+                    studentsInHostel.forEach((s: any) => authorizedIds.add(String(s.id || s._id)));
+                }));
+                presentStudentIds = presentStudentIds.filter(id => authorizedIds.has(String(id)));
+            }
         }
 
         return NextResponse.json({

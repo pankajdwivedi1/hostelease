@@ -274,10 +274,69 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         router.push("/login?logout=success");
     };
 
-    // ===================== Fetch new QR token =====================
+    // ===================== Client-Side Cryptographic QR Generator (Zero Server Requests) =====================
+    const generateLocalQRToken = async (gate: string) => {
+        const timestamp = Date.now();
+        const secret = "hosteleaze_secure_gate_key_2026";
+        const encoder = new TextEncoder();
+        const keyData = encoder.encode(secret);
+        const messageData = encoder.encode(`${gate}:${timestamp}`);
+
+        const cryptoKey = await window.crypto.subtle.importKey(
+            "raw",
+            keyData,
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["sign"]
+        );
+
+        const signatureBuffer = await window.crypto.subtle.sign(
+            "HMAC",
+            cryptoKey,
+            messageData
+        );
+
+        const signature = Array.from(new Uint8Array(signatureBuffer))
+            .map(b => b.toString(16).padStart(2, "0"))
+            .join("");
+
+        const signedToken = `${timestamp}.${signature}`;
+        const expiresAt = new Date(timestamp + 25000);
+
+        const qrData = JSON.stringify({
+            t: signedToken,
+            g: gate,
+            ts: timestamp,
+            app: "hosteleaze-getpass",
+        });
+
+        return {
+            qrData,
+            token: signedToken,
+            expiresAt,
+        };
+    };
+
+    // ===================== Fetch / Generate new QR token =====================
     const fetchNewQR = useCallback(async () => {
         try {
+            // ⚡ ZERO NETWORK CALLS: Generate strict 15s HMAC signature right in the browser
+            if (typeof window !== "undefined" && window.crypto?.subtle) {
+                const localToken = await generateLocalQRToken(gateName);
+                setQrData(localToken.qrData);
+                setQrToken(localToken.token);
+                setQrExpiry(localToken.expiresAt);
+                setTimeLeft(15);
+                setError("");
+                return;
+            }
+
+            // Fallback for legacy environments
             const res = await fetch(`/api/getpass/generate-qr?gate=${encodeURIComponent(gateName)}`);
+            if (!res.ok) {
+                setError("Waiting for server...");
+                return;
+            }
             const data = await res.json();
 
             if (data.success) {
@@ -394,6 +453,7 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
     const fetchLiveData = useCallback(async (isMinimal = false) => {
         try {
             const res = await fetch(`/api/getpass/live?minimal=${isMinimal}&t=${Date.now()}`);
+            if (!res.ok) return;
             const data = await res.json();
 
             if (data.success) {
@@ -442,42 +502,61 @@ export default function GatepassView({ onClose }: { onClose?: () => void }) {
         return () => clearInterval(qrInterval);
     }, [fetchNewQR]);
 
-    // ===================== Timer: Refresh live data with Lightweight Heartbeat =====================
-    const lastUpdateRef = useRef<number>(0);
-
-    const fetchActivityHeartbeat = useCallback(async () => {
-        try {
-            const res = await fetch(`/api/getpass/heartbeat?t=${Date.now()}`);
-            const data = await res.json();
-            if (data.success && data.lastUpdate) {
-                if (lastUpdateRef.current === 0) {
-                    lastUpdateRef.current = data.lastUpdate;
-                } else if (data.lastUpdate > lastUpdateRef.current) {
-                    // A scan happened! Fetch full update so Outside and Returns Today columns update instantly.
-                    lastUpdateRef.current = data.lastUpdate;
-                    fetchLiveData(false);
-                    
-                    // Trigger generic audio chime since heartbeat doesn't know direction
-                    // (Supabase realtime handles targeted audio, this is fallback)
-                    playSuccessChime();
-                }
-            }
-        } catch (err) {
-            // ignore network errors for heartbeat
-        }
-    }, [fetchLiveData]);
-
+    // ===================== Real-time SSE Connection (/api/admin/events) =====================
     useEffect(() => {
-        // ⚡ Initial load is ALWAYS FULL for instant visibility
+        // Initial load is ALWAYS FULL for instant visibility
         fetchLiveData(false);
-        const liveInterval = setInterval(() => {
-            if (document.visibilityState === 'visible') {
-                // Heartbeat handles instant updates for Prisma/Mongo with almost 0 bandwidth
-                fetchActivityHeartbeat();
+
+        let eventSource: EventSource | null = null;
+
+        const connectSSE = () => {
+            try {
+                eventSource = new EventSource("/api/admin/events");
+
+                eventSource.addEventListener("gate_status", (event: MessageEvent) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        console.log("⚡ [GATEPASS_SSE] Received live scan event:", data);
+
+                        if (!data) return;
+
+                        const actionText = data.action === "checkout" || data.studentStatus === "out" ? "Check out" : "Check in";
+                        playSuccessChime();
+                        speakStatus(actionText);
+
+                        // Instantly refresh live list
+                        fetchLiveData(false);
+                    } catch (parseErr) {
+                        console.warn("Error parsing SSE gate_status:", parseErr);
+                    }
+                });
+
+                eventSource.onerror = () => {
+                    console.warn("SSE connection error in GatepassView, will auto-reconnect...");
+                };
+            } catch (err) {
+                console.warn("Failed to connect SSE in GatepassView:", err);
             }
-        }, 1000); // 1 second for sub-second updates
-        return () => clearInterval(liveInterval);
-    }, [fetchLiveData, fetchActivityHeartbeat]);
+        };
+
+        if (typeof window !== "undefined") {
+            connectSSE();
+        }
+
+        // Lightweight safety fallback: refresh live data every 60s instead of every 1s
+        const fallbackInterval = setInterval(() => {
+            if (document.visibilityState === "visible") {
+                fetchLiveData(true);
+            }
+        }, 60000);
+
+        return () => {
+            if (eventSource) {
+                eventSource.close();
+            }
+            clearInterval(fallbackInterval);
+        };
+    }, [fetchLiveData]);
 
     // ===================== Supabase Realtime Subscription =====================
     // ⚡ Provides INSTANT scan feedback with ZERO idle bandwidth

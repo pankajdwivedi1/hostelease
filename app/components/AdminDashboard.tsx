@@ -940,8 +940,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       permQuery.set("limit", "200");
 
       const [gpRes, permRes] = await Promise.allSettled([
-        fetch(`/api/getpass/history?${gpQuery.toString()}`).then(r => r.json()),
-        fetch(`/api/permissions?${permQuery.toString()}`).then(r => r.json()),
+        fetch(`/api/getpass/history?${gpQuery.toString()}`).then(r => (r.ok ? r.json() : null)),
+        fetch(`/api/permissions?${permQuery.toString()}`).then(r => (r.ok ? r.json() : null)),
       ]);
 
       const gpRecords: any[] = (gpRes.status === "fulfilled" && Array.isArray(gpRes.value?.records)) 
@@ -2937,6 +2937,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       // Fetch Registration Fields Config
       const settingsRes = await fetch("/api/admin/settings", { cache: "no-store" });
+      if (!settingsRes.ok) return;
       const settingsData = await settingsRes.json();
       if (settingsData.success) {
         const config = settingsData.registrationFieldsConfig || {};
@@ -4234,6 +4235,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const fetchBankSettings = async () => {
     try {
       const res = await fetch("/api/admin/settings");
+      if (!res.ok) return;
       const data = await res.json();
       if (data.success) {
         setBankFormData({
@@ -4979,6 +4981,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }
 
       const response = await fetch(url.href);
+      if (!response.ok) return;
       const data = await response.json();
       if (data.success) {
         setAttendanceSummary(data.summary);

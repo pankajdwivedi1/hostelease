@@ -198,6 +198,10 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [isOnCampusWifi, setIsOnCampusWifi] = useState<boolean | null>(null); // null = checking, true = on campus wifi, false = not on wifi
     const [attendanceWindow, setAttendanceWindow] = useState({ start: "21:00", end: "23:00" });
 
+    // ⚡ REQUEST DEDUPLICATION & FOCUS THROTTLE REFS
+    const settingsCacheRef = useRef<{ data: any; ts: number } | null>(null);
+    const lastFocusSyncRef = useRef<number>(0);
+
     const [showSoundBanner, setShowSoundBanner] = useState(false);
     useEffect(() => {
         if (typeof window !== "undefined" && isParentView) {
@@ -921,10 +925,25 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     const fetchSystemSettings = async () => {
         try {
+            // ⚡ 5-MINUTE CLIENT CACHE: Skip redundant network fetches
+            const CACHE_TTL = 5 * 60 * 1000;
+            if (settingsCacheRef.current && Date.now() - settingsCacheRef.current.ts < CACHE_TTL) {
+                const data = settingsCacheRef.current.data;
+                setFormBuilderConfig(data.formBuilderConfig || []);
+                if (data.startTime && data.endTime) {
+                    setAttendanceWindow({ start: data.startTime, end: data.endTime });
+                }
+                if (data.overlapRadius !== undefined) setOverlapRadius(data.overlapRadius);
+                if (data.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(data.prioritizeAssignedHostel);
+                if (data.enforceMandatoryPush !== undefined) setEnforceMandatoryPush(data.enforceMandatoryPush === true);
+                return;
+            }
+
             const res = await fetch(`/api/admin/settings${getTenantParam()}`);
             if (!res.ok) return;
             const data = await res.json();
             if (data.success) {
+                settingsCacheRef.current = { data, ts: Date.now() };
                 setFormBuilderConfig(data.formBuilderConfig || []);
                 if (data.startTime && data.endTime) {
                     console.log(`🕒 Syncing Attendance Window: ${data.startTime} - ${data.endTime}`);
@@ -991,8 +1010,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                 syncPromises.push(
                     fetch(`/api/students?${queryParam}${versionCheckParam}${getTenantParam(false)}`, { cache: 'no-store' })
-                        .then(r => r.json())
+                        .then(r => (r.ok ? r.json() : null))
                         .then(fullData => {
+                            if (!fullData) return;
                             if (fullData.notModified) {
                                 if (fullData.studentStatus) {
                                     setStudentProfile(prev => prev ? ({ ...prev, studentStatus: fullData.studentStatus, outingType: fullData.outingType }) : prev);
@@ -1015,9 +1035,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 // 2. Permissions Sync
                 syncPromises.push(
                     fetch(`/api/permissions?studentId=${encodeURIComponent(currentStudentId)}&light=true${getTenantParam(false)}`)
-                        .then(r => r.json())
+                        .then(r => (r.ok ? r.json() : null))
                         .then(permData => {
-                            if (permData.permissions && Array.isArray(permData.permissions)) {
+                            if (permData && permData.permissions && Array.isArray(permData.permissions)) {
                                 setPermissions(permData.permissions);
                             }
                         })
@@ -1144,11 +1164,22 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             const historyData = await historyRes.json();
             if (historyData.success) setPaymentHistory(historyData.payments);
 
-            // Fetch Bank Details
-            const settingsRes = await fetch(`/api/admin/settings${getTenantParam()}`);
-            if (!settingsRes.ok) throw new Error(`API error: ${settingsRes.status}`);
-            const settingsData = await settingsRes.json();
-            if (settingsData.success) {
+            // Fetch Bank Details (reuse cache if available to save redundant request)
+            let settingsData = settingsCacheRef.current && (Date.now() - settingsCacheRef.current.ts < 5 * 60 * 1000)
+                ? settingsCacheRef.current.data
+                : null;
+
+            if (!settingsData) {
+                const settingsRes = await fetch(`/api/admin/settings${getTenantParam()}`);
+                if (settingsRes.ok) {
+                    settingsData = await settingsRes.json();
+                    if (settingsData.success) {
+                        settingsCacheRef.current = { data: settingsData, ts: Date.now() };
+                    }
+                }
+            }
+
+            if (settingsData && settingsData.success) {
                 setBankSettings({
                     bank: settingsData.universityBankDetails,
                     fee: settingsData.hostelFeeAmount,
@@ -1540,29 +1571,32 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             // Run initial sync on mount
             syncStatusFromLocalStorage();
 
-            // Refetch/sync automatically when student opens the app or returns to tab
-            const handleVisibilityChange = () => {
-                if (document.visibilityState === 'visible') {
-                    syncStatusFromLocalStorage();
+            // ⚡ 60-SECOND THROTTLED SYNC: Prevent request swarms when student switches apps or unlocks phone
+            const handleFocusOrVisibility = () => {
+                syncStatusFromLocalStorage();
+                const now = Date.now();
+                if (now - lastFocusSyncRef.current >= 60000) {
+                    lastFocusSyncRef.current = now;
                     syncFullDashboard(false);
                 }
             };
 
-            const handleWindowFocus = () => {
-                syncStatusFromLocalStorage();
-                syncFullDashboard(false);
+            const handleDocVisibility = () => {
+                if (document.visibilityState === 'visible') {
+                    handleFocusOrVisibility();
+                }
             };
 
-            window.addEventListener('focus', handleWindowFocus);
-            window.addEventListener('pageshow', handleWindowFocus);
+            window.addEventListener('focus', handleFocusOrVisibility);
+            window.addEventListener('pageshow', handleFocusOrVisibility);
             window.addEventListener('storage', syncStatusFromLocalStorage);
-            document.addEventListener('visibilitychange', handleVisibilityChange);
+            document.addEventListener('visibilitychange', handleDocVisibility);
 
             return () => {
                 clearTimeout(initialNotifTimer);
-                document.removeEventListener('visibilitychange', handleVisibilityChange);
-                window.removeEventListener('focus', handleWindowFocus);
-                window.removeEventListener('pageshow', handleWindowFocus);
+                document.removeEventListener('visibilitychange', handleDocVisibility);
+                window.removeEventListener('focus', handleFocusOrVisibility);
+                window.removeEventListener('pageshow', handleFocusOrVisibility);
                 window.removeEventListener('storage', syncStatusFromLocalStorage);
             };
         }
@@ -1952,13 +1986,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 // ⚡ OPTIMIZATION: Periodic polling removed to save massive bandwidth.
                 // Profile & Permissions update on initial load or manual refresh.
 
-                // Insta-refresh when student returns to app
-                const handleVisibilityChange = () => {
-                    if (document.visibilityState === 'visible' && isMounted) {
-                        fetchPermissions();
-                    }
-                };
-                document.addEventListener('visibilitychange', handleVisibilityChange);
+                // Permissions are kept fresh via syncFullDashboard on throttled app resume
 
                 // Add to main component cleanup if needed, but for now we'll handle it via unmount
             } else if (!currentStudent && isMounted) {

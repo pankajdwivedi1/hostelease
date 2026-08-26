@@ -87,6 +87,12 @@ model Student {
   transactions             Transaction[]
   fieldProgress            StudentFieldProgress[]
 
+  @@index([tenantId])
+  @@index([tenantId, hostelName])
+  @@index([tenantId, studentStatus])
+  @@index([phoneNumber])
+  @@index([email])
+  @@index([erpId])
   @@map("students")
 }
 
@@ -122,6 +128,9 @@ model Attendance {
   updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@unique([studentId, date], map: "idx_attendance_student_date")
+  @@index([tenantId, date])
+  @@index([tenantId, hostelName, date])
+  @@index([tenantId, status])
   @@map("attendance")
 }
 
@@ -168,6 +177,7 @@ model AdminSettings {
   createdAt                DateTime @default(now()) @map("created_at")
   updatedAt                DateTime @default(now()) @updatedAt @map("updated_at")
 
+  @@index([tenantId])
   @@map("admin_settings")
 }
 
@@ -203,6 +213,11 @@ model GatePass {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at")
 
+  @@index([tenantId, status])
+  @@index([studentId])
+  @@index([checkOutIstDate])
+  @@index([tenantId, checkOutTime])
+  @@index([updatedAt])
   @@map("gate_passes")
 }
 
@@ -255,6 +270,9 @@ model Permission {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
+  @@index([studentId])
+  @@index([status])
+  @@index([createdAt])
   @@map("permissions")
 }
 
@@ -311,6 +329,8 @@ model Notification {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
 
+  @@index([targetHostel])
+  @@index([targetStudentId])
   @@map("notifications")
 }
 
@@ -364,6 +384,7 @@ model PushSubscription {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
+  @@index([userId])
   @@map("push_subscriptions")
 }
 

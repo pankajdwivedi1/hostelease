@@ -863,9 +863,20 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
         window.location.href = "/login?logout=success";
     };
 
+    // ⚡ IN-MEMORY CACHE: Prevent firing /api/admin/subscription-status on every sub-route transition
+    const lastCheckRef = useRef<{ data: any; timestamp: number } | null>(null);
+
     useEffect(() => {
         // Don't guard the superadmin, login, or impersonation pages
         if (pathname.startsWith("/superadmin") || pathname.startsWith("/login") || pathname.startsWith("/auth/impersonate")) {
+            setLoading(false);
+            return;
+        }
+
+        // Check if we checked subscription status in the last 5 minutes
+        const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+        if (lastCheckRef.current && Date.now() - lastCheckRef.current.timestamp < CACHE_TTL) {
+            setStatus(lastCheckRef.current.data);
             setLoading(false);
             return;
         }
@@ -888,6 +899,7 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
 
                 const data = await res.json();
                 if (data.success) {
+                    lastCheckRef.current = { data, timestamp: Date.now() };
                     setStatus(data);
                 }
             } catch (e) {
