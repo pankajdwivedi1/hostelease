@@ -8170,17 +8170,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         <div className="flex items-center gap-1 md:gap-2">
                                           <span className="w-10 sm:w-11 md:w-12 shrink-0 inline-block text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Parent</span>
                                           {permission.parentStatus === "rejected" && (
-                                            <span className="inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-red-100 text-center">
+                                            <span className="inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 px-0.5 py-0.5 rounded uppercase border border-red-100 text-center">
                                               Rejected
                                             </span>
                                           )}
                                           {permission.parentStatus === "allowed" && (
-                                            <span className="inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-green-100 text-center">
+                                            <span className="inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 px-0.5 py-0.5 rounded uppercase border border-green-100 text-center">
                                               AGREE
                                             </span>
                                           )}
                                           {(!permission.parentStatus || permission.parentStatus === "no_response" || permission.parentStatus === "pending") && (
-                                            <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                            <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 py-0.5 rounded uppercase border border-yellow-100">
                                               Pending
                                             </span>
                                           )}
@@ -8229,7 +8229,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                               </span>
                                             )}
                                             {permission.wardenStatus === "pending" && (
-                                              <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                              <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 py-0.5 rounded uppercase border border-yellow-100">
                                                 Pending
                                               </span>
                                             )}
@@ -8274,7 +8274,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             </span>
                                           )}
                                           {permission.deanStatus === "pending" && (
-                                            <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                            <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 py-0.5 rounded uppercase border border-yellow-100">
                                               Pending
                                             </span>
                                           )}
