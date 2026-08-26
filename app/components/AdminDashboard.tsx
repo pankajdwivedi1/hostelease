@@ -8124,6 +8124,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                     </div>
 
                                     {/* Action & Duration Row - starting under the avatar with Duration on the left */}
+                                    {/* Action & Duration Row */}
                                     {(() => {
                                       const fromMs = permission.fromDateTime ? new Date(permission.fromDateTime).getTime() : 0;
                                       const toMs = permission.toDateTime ? new Date(permission.toDateTime).getTime() : 0;
@@ -8140,21 +8141,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       }
 
                                       return (
-                                        <div className="mt-2 flex items-center gap-1.5 flex-nowrap shrink-0">
-                                          {durationStr && (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50/90 text-blue-800 border border-blue-200 text-[9px] md:text-[10px] font-bold shadow-2xs leading-tight whitespace-nowrap shrink-0">
-                                              <span className="text-slate-500 font-semibold">Duration:</span>
-                                              <span className="font-extrabold text-blue-700">{durationStr}</span>
-                                            </span>
-                                          )}
+                                        <div className="mt-2 flex items-center gap-1.5 flex-nowrap shrink-0 md:pl-8 lg:pl-[52px]">
+                                          <div className="flex items-center justify-start md:justify-center gap-1.5 w-full md:max-w-[245px]">
+                                            {durationStr && (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50/90 text-blue-800 border border-blue-200 text-[9px] md:text-[10px] font-bold shadow-2xs leading-tight whitespace-nowrap shrink-0">
+                                                <span className="text-slate-500 font-semibold">Duration:</span>
+                                                <span className="font-extrabold text-blue-700">{durationStr}</span>
+                                              </span>
+                                            )}
 
-                                          <button
-                                            onClick={() => openEditLeaveModal(permission)}
-                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[9px] md:text-[10px] font-bold shadow-2xs w-fit cursor-pointer leading-tight whitespace-nowrap shrink-0"
-                                            title="Edit Leave Dates / Extend Return Date"
-                                          >
-                                            <span>✏️</span> Edit Leave
-                                          </button>
+                                            <button
+                                              onClick={() => openEditLeaveModal(permission)}
+                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[9px] md:text-[10px] font-bold shadow-2xs w-fit cursor-pointer leading-tight whitespace-nowrap shrink-0"
+                                              title="Edit Leave Dates / Extend Return Date"
+                                            >
+                                              <span>✏️</span> Edit Leave
+                                            </button>
+                                          </div>
                                         </div>
                                       );
                                     })()}
