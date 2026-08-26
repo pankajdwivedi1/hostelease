@@ -8205,10 +8205,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         </div>
                                         <div className="flex flex-col items-center gap-1 relative">
                                           <div className="flex items-center gap-1 md:gap-1.5">
-                                            <div className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
+                                            <div className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.parentStatus === "allowed" ? "border-green-300 !bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
                                               <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                             </div>
-                                            <div className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.parentStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
+                                            <div className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.parentStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
                                               <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                             </div>
                                           </div>
@@ -8242,7 +8242,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                   if (userType === "warden" && await showConfirm("Are you sure you want to approve this permission?")) handleStatusChange(permission._id, "allowed");
                                                 }}
                                                 disabled={userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired}
-                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.wardenStatus === "allowed" ? "border-green-300 !bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                               >
                                                 <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                               </button>
@@ -8252,7 +8252,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                   if (userType === "warden") handleStatusChange(permission._id, "rejected");
                                                 }}
                                                 disabled={userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired}
-                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.wardenStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.wardenStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                               >
                                                 <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                               </button>
@@ -8287,7 +8287,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                 if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed");
                                               }}
                                               disabled={userType !== "admin" && userType !== "superadmin"}
-                                              className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.deanStatus === "allowed" ? "border-green-600 bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                              className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "allowed" ? "border-green-600 !bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                             >
                                               <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                             </button>
@@ -8297,7 +8297,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                 if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected");
                                               }}
                                               disabled={userType !== "admin" && userType !== "superadmin"}
-                                              className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all ${permission.deanStatus === "rejected" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                              className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                                             >
                                               <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                             </button>
