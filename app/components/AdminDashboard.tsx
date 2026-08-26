@@ -12308,18 +12308,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               </div>
 
               {showRemoveButton && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-4">
+                <div className="grid grid-cols-4 gap-1.5 sm:gap-2 md:gap-3 mt-4">
                   <div className="relative">
                     <button
                       onClick={() => setShowAttendanceModeSelector(!showAttendanceModeSelector)}
-                      className="w-full h-full flex flex-col sm:flex-row items-center justify-center text-center gap-1 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl border-2 border-indigo-600 text-indigo-600 font-bold transition-all hover:bg-indigo-50 text-[10px] sm:text-sm"
+                      className="w-full h-full flex flex-col sm:flex-row items-center justify-center text-center gap-0.5 sm:gap-2 px-1 sm:px-4 py-2 sm:py-2 rounded-lg sm:rounded-xl border sm:border-2 border-indigo-600 text-indigo-600 font-bold transition-all hover:bg-indigo-50 text-[8px] sm:text-xs md:text-sm cursor-pointer"
                     >
-                      <span className="text-base sm:text-lg">
+                      <span className="text-sm sm:text-lg">
                         {(!selectedStudent.attendanceMode || selectedStudent.attendanceMode === 'default') ? '🛡️' :
                           selectedStudent.attendanceMode === 'gps-only' ? '📍' :
                             selectedStudent.attendanceMode === 'biometric' ? '👆' : '📸'}
                       </span>
-                      <span className="leading-tight">
+                      <span className="leading-tight break-words font-extrabold">
                         {(!selectedStudent.attendanceMode || selectedStudent.attendanceMode === 'default') ? 'Security' :
                           selectedStudent.attendanceMode === 'gps-only' ? 'GPS Only' :
                             selectedStudent.attendanceMode === 'biometric' ? 'Biometric' : 'Strict'}
@@ -12357,12 +12357,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   </div>
                   <button
                     onClick={() => handleResetDeviceID(selectedStudent.id)}
-                    className="flex flex-col sm:flex-row items-center justify-center text-center gap-1 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl border-2 border-amber-600 text-amber-600 font-bold transition-all hover:bg-amber-50 text-[10px] sm:text-sm"
+                    className="w-full h-full flex flex-col sm:flex-row items-center justify-center text-center gap-0.5 sm:gap-2 px-1 sm:px-4 py-2 sm:py-2 rounded-lg sm:rounded-xl border sm:border-2 border-amber-600 text-amber-600 font-bold transition-all hover:bg-amber-50 text-[8px] sm:text-xs md:text-sm cursor-pointer"
                   >
-                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5 sm:w-5 sm:h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                     </svg>
-                    <span className="leading-tight">Reset Device ID</span>
+                    <span className="leading-tight break-words font-extrabold">Reset Device ID</span>
                   </button>
                   <button
                     onClick={() => {
@@ -12392,22 +12392,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       setEditErrors({});
                       setShowEditStudentModal(true);
                     }}
-                    className="flex flex-col sm:flex-row items-center justify-center text-center gap-1 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl border-2 border-blue-600 text-blue-600 font-bold transition-all hover:bg-blue-50 text-[10px] sm:text-sm"
+                    className="w-full h-full flex flex-col sm:flex-row items-center justify-center text-center gap-0.5 sm:gap-2 px-1 sm:px-4 py-2 sm:py-2 rounded-lg sm:rounded-xl border sm:border-2 border-blue-600 text-blue-600 font-bold transition-all hover:bg-blue-50 text-[8px] sm:text-xs md:text-sm cursor-pointer"
                   >
-                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5 sm:w-5 sm:h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
-                    <span className="leading-tight">Edit Details</span>
+                    <span className="leading-tight break-words font-extrabold">Edit Details</span>
                   </button>
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
                     disabled={deletingStudentId === selectedStudent.id}
-                    className="flex flex-col sm:flex-row items-center justify-center text-center gap-1 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl bg-red-600 text-white font-bold transition-all hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-[10px] sm:text-sm shadow-lg shadow-red-100"
+                    className="w-full h-full flex flex-col sm:flex-row items-center justify-center text-center gap-0.5 sm:gap-2 px-1 sm:px-4 py-2 sm:py-2 rounded-lg sm:rounded-xl bg-red-600 text-white font-bold transition-all hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-[8px] sm:text-xs md:text-sm shadow-md sm:shadow-lg shadow-red-100 cursor-pointer"
                   >
-                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5 sm:w-5 sm:h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                    <span className="leading-tight">Remove Student</span>
+                    <span className="leading-tight break-words font-extrabold">Remove Student</span>
                   </button>
                 </div>
               )}
