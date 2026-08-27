@@ -26,7 +26,9 @@ import {
     Lock,
     Zap,
     Database,
-    Loader2
+    Loader2,
+    Edit3,
+    FileText
 } from "lucide-react";
 
 interface Tenant {
@@ -634,6 +636,131 @@ export default function SuperAdminDashboard() {
             console.error("Failed to fetch billing ledger", error);
         } finally {
             setLoadingBilling(false);
+        }
+    };
+
+    // Manual Invoice Generation & Editing State (Boss Control)
+    const [invoiceModalOpen, setInvoiceModalOpen] = useState<boolean>(false);
+    const [invoiceModalMode, setInvoiceModalMode] = useState<"create" | "edit">("create");
+    const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+    const [invoiceTenantId, setInvoiceTenantId] = useState<string>("");
+    const [invoiceTenantName, setInvoiceTenantName] = useState<string>("");
+    const [invoiceAmount, setInvoiceAmount] = useState<string>("");
+    const [invoiceUtr, setInvoiceUtr] = useState<string>("");
+    const [invoiceDate, setInvoiceDate] = useState<string>("");
+    const [invoiceBillingType, setInvoiceBillingType] = useState<"Verified Payment" | "Complimentary" | "Deferred Billing (On Credit)">("Verified Payment");
+    const [invoicePaymentSource, setInvoicePaymentSource] = useState<string>("Direct Bank / UPI Transfer (UTR Verified)");
+    const [invoiceBillingPeriod, setInvoiceBillingPeriod] = useState<string>("1 Year");
+    const [invoiceRemarks, setInvoiceRemarks] = useState<string>("");
+    const [isSavingInvoice, setIsSavingInvoice] = useState<boolean>(false);
+    const [isDeletingInvoiceId, setIsDeletingInvoiceId] = useState<string | null>(null);
+
+    const handleOpenCreateInvoiceModal = () => {
+        setInvoiceModalMode("create");
+        setSelectedInvoiceId(null);
+        if (tenants.length > 0) {
+            const firstT = tenants[0];
+            setInvoiceTenantId((firstT as any)._id || (firstT as any).id || firstT.slug);
+            setInvoiceTenantName(firstT.name);
+        } else {
+            setInvoiceTenantId("");
+            setInvoiceTenantName("");
+        }
+        setInvoiceAmount("");
+        setInvoiceUtr("");
+        setInvoiceDate(new Date().toISOString().split("T")[0]);
+        setInvoiceBillingType("Verified Payment");
+        setInvoicePaymentSource("Direct Bank / UPI Transfer (UTR Verified)");
+        setInvoiceBillingPeriod("1 Year");
+        setInvoiceRemarks("");
+        setInvoiceModalOpen(true);
+    };
+
+    const handleOpenEditInvoiceModal = (log: any) => {
+        setInvoiceModalMode("edit");
+        setSelectedInvoiceId(log.id);
+        setInvoiceTenantId(log.tenantId || "");
+        setInvoiceTenantName(log.tenantName || "");
+        setInvoiceAmount(log.amount !== undefined ? String(log.amount) : "");
+        setInvoiceUtr(log.utr || "");
+        setInvoiceDate(log.date ? new Date(log.date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
+        setInvoiceBillingType(log.billingType || "Verified Payment");
+        setInvoicePaymentSource(log.paymentSource || "Direct Bank / UPI Transfer (UTR Verified)");
+        setInvoiceBillingPeriod(log.billingPeriod || "1 Year");
+        setInvoiceRemarks(log.remarks || "");
+        setInvoiceModalOpen(true);
+    };
+
+    const handleSaveInvoice = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!invoiceTenantId) {
+            showToast("Please select a college / tenant", "error");
+            return;
+        }
+
+        setIsSavingInvoice(true);
+        try {
+            const payload = {
+                id: selectedInvoiceId,
+                tenantId: invoiceTenantId,
+                tenantName: invoiceTenantName,
+                amount: Number(invoiceAmount) || 0,
+                utr: invoiceUtr,
+                date: invoiceDate ? new Date(invoiceDate).toISOString() : new Date().toISOString(),
+                billingType: invoiceBillingType,
+                paymentSource: invoicePaymentSource,
+                billingPeriod: invoiceBillingPeriod,
+                remarks: invoiceRemarks
+            };
+
+            const method = invoiceModalMode === "create" ? "POST" : "PUT";
+            const res = await fetch("/api/super-admin/billing-ledger", {
+                method,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                setBillingLogs(data.logs);
+                showToast(
+                    invoiceModalMode === "create"
+                        ? "New invoice generated and published to tenant!"
+                        : "Invoice successfully updated!",
+                    "success"
+                );
+                setInvoiceModalOpen(false);
+            } else {
+                showToast(data.error || "Failed to save invoice", "error");
+            }
+        } catch (error: any) {
+            showToast(error.message || "Failed to save invoice", "error");
+        } finally {
+            setIsSavingInvoice(false);
+        }
+    };
+
+    const handleDeleteInvoice = async (id: string, tenantName: string) => {
+        if (!confirm(`Are you sure you want to permanently delete this invoice for ${tenantName}? It will immediately be removed from the tenant portal.`)) {
+            return;
+        }
+
+        setIsDeletingInvoiceId(id);
+        try {
+            const res = await fetch(`/api/super-admin/billing-ledger?id=${encodeURIComponent(id)}`, {
+                method: "DELETE"
+            });
+            const data = await res.json();
+            if (data.success) {
+                setBillingLogs(data.logs);
+                showToast("Invoice permanently removed from ledger & tenant view", "success");
+            } else {
+                showToast(data.error || "Failed to delete invoice", "error");
+            }
+        } catch (error: any) {
+            showToast(error.message || "Failed to delete invoice", "error");
+        } finally {
+            setIsDeletingInvoiceId(null);
         }
     };
 
@@ -1360,13 +1487,21 @@ export default function SuperAdminDashboard() {
                                         <h3 className="font-black text-gray-900 uppercase tracking-tight text-sm">Subscription Billing Ledger</h3>
                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Logs of all approved payments, complimentary setups, and deferred credits</p>
                                     </div>
-                                    <button 
-                                        onClick={fetchBillingLedger}
-                                        disabled={loadingBilling}
-                                        className="bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all w-full sm:w-auto flex items-center justify-center gap-2"
-                                    >
-                                        {loadingBilling ? 'Syncing...' : '🔄 Refresh Ledger'}
-                                    </button>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <button 
+                                            onClick={handleOpenCreateInvoiceModal}
+                                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5 cursor-pointer"
+                                        >
+                                            <Plus className="w-3.5 h-3.5" /> Generate New Invoice
+                                        </button>
+                                        <button 
+                                            onClick={fetchBillingLedger}
+                                            disabled={loadingBilling}
+                                            className="bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                                        >
+                                            {loadingBilling ? 'Syncing...' : '🔄 Refresh Ledger'}
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div className="overflow-x-auto">
@@ -1380,12 +1515,13 @@ export default function SuperAdminDashboard() {
                                                 <th className="py-3 px-4">UTR Number</th>
                                                 <th className="py-3 px-4">Amount</th>
                                                 <th className="py-3 px-4">Remarks</th>
+                                                <th className="py-3 px-4 text-right">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-50 font-bold">
                                             {billingLogs.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={7} className="py-12 text-center text-slate-400 italic">No billing records found.</td>
+                                                    <td colSpan={8} className="py-12 text-center text-slate-400 italic">No billing records found.</td>
                                                 </tr>
                                             ) : billingLogs.map((log: any, idx: number) => (
                                                 <tr key={log.id || idx} className="hover:bg-slate-50 transition-colors">
@@ -1406,6 +1542,30 @@ export default function SuperAdminDashboard() {
                                                         {log.amount > 0 ? `₹${log.amount.toLocaleString("en-IN")}` : "₹0"}
                                                     </td>
                                                     <td className="py-3 px-4 text-slate-500 leading-normal max-w-xs truncate" title={log.remarks}>{log.remarks || "-"}</td>
+                                                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                                                        <div className="flex items-center justify-end gap-1.5">
+                                                            <button
+                                                                onClick={() => handleOpenEditInvoiceModal(log)}
+                                                                className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
+                                                                title="Edit this invoice"
+                                                            >
+                                                                <Edit3 className="w-3 h-3" /> Edit
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteInvoice(log.id, log.tenantName)}
+                                                                disabled={isDeletingInvoiceId === log.id}
+                                                                className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1 active:scale-95 shadow-2xs"
+                                                                title="Delete this invoice"
+                                                            >
+                                                                {isDeletingInvoiceId === log.id ? (
+                                                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                                                ) : (
+                                                                    <Trash2 className="w-3 h-3" />
+                                                                )}
+                                                                Delete
+                                                            </button>
+                                                        </div>
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -3010,6 +3170,234 @@ export default function SuperAdminDashboard() {
                                 className="px-5 py-2.5 sm:px-8 sm:py-3 rounded-xl bg-blue-600 text-white font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
                             >
                                 {isSavingPaymentSettings ? 'Saving...' : 'Save Settings'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Boss Manual Invoice Generation & Edit Modal */}
+            {invoiceModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-md animate-in fade-in">
+                    <div className="bg-white rounded-[28px] sm:rounded-[32px] w-full max-w-xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col font-sans border border-slate-100">
+                        {/* Modal Header */}
+                        <div className="p-5 sm:p-6 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-indigo-50/70 via-white to-blue-50/50">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+                                    <FileText className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base sm:text-lg font-black text-gray-900 tracking-tight uppercase">
+                                        {invoiceModalMode === "create" ? "Generate Tenant Invoice" : "Edit Tenant Invoice"}
+                                    </h3>
+                                    <p className="text-[10px] sm:text-xs text-gray-500 font-bold">
+                                        {invoiceModalMode === "create" 
+                                            ? "Publish an official invoice to the college's portal" 
+                                            : `Editing invoice: ${selectedInvoiceId}`}
+                                    </p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setInvoiceModalOpen(false)} 
+                                className="p-2 hover:bg-gray-200 rounded-full transition-colors bg-white shadow-sm border border-gray-100 cursor-pointer"
+                            >
+                                <X className="w-4 h-4 text-gray-500" />
+                            </button>
+                        </div>
+
+                        {/* Modal Form */}
+                        <div className="overflow-y-auto p-5 sm:p-7 flex-1 custom-scrollbar">
+                            <form id="boss-invoice-form" onSubmit={handleSaveInvoice} className="space-y-4">
+                                {/* College / Tenant Selection */}
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
+                                        College / University (Client) *
+                                    </label>
+                                    <select
+                                        required
+                                        value={invoiceTenantId}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setInvoiceTenantId(val);
+                                            const matched = tenants.find((t: any) => (t._id || t.id || t.slug) === val);
+                                            if (matched) {
+                                                setInvoiceTenantName(matched.name);
+                                            }
+                                        }}
+                                        className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer"
+                                    >
+                                        <option value="" disabled>-- Select Tenant --</option>
+                                        {tenants.map((t: any) => {
+                                            const tid = t._id || t.id || t.slug;
+                                            return (
+                                                <option key={tid} value={tid}>
+                                                    {t.name} ({t.slug})
+                                                </option>
+                                            );
+                                        })}
+                                        {/* If editing an invoice whose tenantId is not in active tenants list, provide it as an option */}
+                                        {invoiceTenantId && !tenants.some((t: any) => (t._id || t.id || t.slug) === invoiceTenantId) && (
+                                            <option value={invoiceTenantId}>
+                                                {invoiceTenantName || invoiceTenantId} (Current)
+                                            </option>
+                                        )}
+                                    </select>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                    {/* Amount */}
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
+                                            Amount (₹) *
+                                        </label>
+                                        <div className="relative">
+                                            <span className="absolute left-3.5 top-2.5 text-sm font-black text-gray-400">₹</span>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="1"
+                                                required
+                                                placeholder="e.g. 23130"
+                                                value={invoiceAmount}
+                                                onChange={(e) => setInvoiceAmount(e.target.value)}
+                                                className="w-full border-2 border-gray-100 rounded-xl pl-8 pr-4 py-2 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Date */}
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
+                                            Payment Date *
+                                        </label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={invoiceDate}
+                                            onChange={(e) => setInvoiceDate(e.target.value)}
+                                            className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                    {/* Billing Period */}
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
+                                            Subscription Period *
+                                        </label>
+                                        <select
+                                            value={invoiceBillingPeriod}
+                                            onChange={(e) => setInvoiceBillingPeriod(e.target.value)}
+                                            className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer"
+                                        >
+                                            <option value="1 Month">1 Month</option>
+                                            <option value="3 Months">3 Months</option>
+                                            <option value="6 Months">6 Months</option>
+                                            <option value="1 Year">1 Year</option>
+                                            <option value="2 Years">2 Years</option>
+                                            <option value="3 Years">3 Years</option>
+                                        </select>
+                                    </div>
+
+                                    {/* UTR / Ref ID */}
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
+                                            UTR / Transaction Ref ID
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. 659864589235"
+                                            value={invoiceUtr}
+                                            onChange={(e) => setInvoiceUtr(e.target.value)}
+                                            className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-mono font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all uppercase"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                    {/* Billing Type */}
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
+                                            Billing Classification
+                                        </label>
+                                        <select
+                                            value={invoiceBillingType}
+                                            onChange={(e) => setInvoiceBillingType(e.target.value as any)}
+                                            className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer"
+                                        >
+                                            <option value="Verified Payment">Verified Payment</option>
+                                            <option value="Complimentary">Complimentary</option>
+                                            <option value="Deferred Billing (On Credit)">Deferred Billing (On Credit)</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Payment Source */}
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
+                                            Payment Method / Source
+                                        </label>
+                                        <select
+                                            value={invoicePaymentSource}
+                                            onChange={(e) => setInvoicePaymentSource(e.target.value)}
+                                            className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer"
+                                        >
+                                            <option value="Direct Bank / UPI Transfer (UTR Verified)">Direct Bank / UPI Transfer (UTR Verified)</option>
+                                            <option value="Online Payment Gateway (Razorpay)">Online Payment Gateway (Razorpay)</option>
+                                            <option value="Direct Bank Transfer">Direct Bank Transfer</option>
+                                            <option value="Complimentary License">Complimentary License</option>
+                                            <option value="Offline Cheque / Cash">Offline Cheque / Cash</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* Remarks */}
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
+                                        Remarks & Invoice Notes
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Annual renewal payment for 482 students"
+                                        value={invoiceRemarks}
+                                        onChange={(e) => setInvoiceRemarks(e.target.value)}
+                                        className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-bold text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all"
+                                    />
+                                </div>
+                            </form>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-4 sm:p-5 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setInvoiceModalOpen(false)}
+                                className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-black text-[10px] uppercase tracking-wider hover:bg-gray-100 transition-all cursor-pointer"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                form="boss-invoice-form"
+                                disabled={isSavingInvoice}
+                                className="px-6 py-2.5 rounded-xl bg-indigo-600 text-white font-black text-[10px] uppercase tracking-wider hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-500/20 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                            >
+                                {isSavingInvoice ? (
+                                    <>
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                        Saving...
+                                    </>
+                                ) : invoiceModalMode === "create" ? (
+                                    <>
+                                        <Plus className="w-3.5 h-3.5" />
+                                        Generate Invoice
+                                    </>
+                                ) : (
+                                    <>
+                                        <Edit3 className="w-3.5 h-3.5" />
+                                        Save Changes
+                                    </>
+                                )}
                             </button>
                         </div>
                     </div>

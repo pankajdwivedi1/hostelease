@@ -96,3 +96,93 @@ export async function POST(request: NextRequest) {
     }
 }
 
+export async function PUT(request: NextRequest) {
+    try {
+        const updateData = await request.json(); // { id, tenantId, tenantName, amount, utr, date, billingType, billingPeriod, remarks, paymentSource }
+
+        if (!updateData.id) {
+            return NextResponse.json({ success: false, error: "Missing invoice ID" }, { status: 400 });
+        }
+
+        let currentLogs: any[] = [];
+        try {
+            const setting = await prisma.platformSetting.findUnique({
+                where: { id: 'super_admin_billing_ledger' }
+            });
+            if (setting?.settings && Array.isArray(setting.settings)) {
+                currentLogs = setting.settings as any[];
+            }
+        } catch (e) {}
+
+        const index = currentLogs.findIndex((log: any) => log.id === updateData.id);
+        if (index === -1) {
+            return NextResponse.json({ success: false, error: "Invoice not found in ledger" }, { status: 404 });
+        }
+
+        currentLogs[index] = {
+            ...currentLogs[index],
+            tenantId: updateData.tenantId !== undefined ? updateData.tenantId : currentLogs[index].tenantId,
+            tenantName: updateData.tenantName !== undefined ? updateData.tenantName : currentLogs[index].tenantName,
+            amount: updateData.amount !== undefined ? (Number(updateData.amount) || 0) : currentLogs[index].amount,
+            utr: updateData.utr !== undefined ? updateData.utr : currentLogs[index].utr,
+            date: updateData.date !== undefined ? updateData.date : currentLogs[index].date,
+            billingType: updateData.billingType !== undefined ? updateData.billingType : currentLogs[index].billingType,
+            paymentSource: updateData.paymentSource !== undefined ? updateData.paymentSource : currentLogs[index].paymentSource,
+            billingPeriod: updateData.billingPeriod !== undefined ? updateData.billingPeriod : currentLogs[index].billingPeriod,
+            remarks: updateData.remarks !== undefined ? updateData.remarks : currentLogs[index].remarks,
+            updatedAt: new Date().toISOString()
+        };
+
+        // Update Prisma (Railway PostgreSQL)
+        await prisma.platformSetting.upsert({
+            where: { id: 'super_admin_billing_ledger' },
+            update: { settings: currentLogs as any, updatedAt: new Date() },
+            create: { id: 'super_admin_billing_ledger', settings: currentLogs as any, updatedAt: new Date() }
+        });
+
+        return NextResponse.json({ success: true, logs: currentLogs });
+    } catch (error: any) {
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+}
+
+export async function DELETE(request: NextRequest) {
+    try {
+        const { searchParams } = new URL(request.url);
+        let id = searchParams.get("id");
+
+        if (!id) {
+            try {
+                const body = await request.json();
+                id = body.id;
+            } catch (e) {}
+        }
+
+        if (!id) {
+            return NextResponse.json({ success: false, error: "Missing invoice ID to delete" }, { status: 400 });
+        }
+
+        let currentLogs: any[] = [];
+        try {
+            const setting = await prisma.platformSetting.findUnique({
+                where: { id: 'super_admin_billing_ledger' }
+            });
+            if (setting?.settings && Array.isArray(setting.settings)) {
+                currentLogs = setting.settings as any[];
+            }
+        } catch (e) {}
+
+        const updatedLogs = currentLogs.filter((log: any) => log.id !== id);
+
+        await prisma.platformSetting.upsert({
+            where: { id: 'super_admin_billing_ledger' },
+            update: { settings: updatedLogs as any, updatedAt: new Date() },
+            create: { id: 'super_admin_billing_ledger', settings: updatedLogs as any, updatedAt: new Date() }
+        });
+
+        return NextResponse.json({ success: true, logs: updatedLogs, deletedId: id });
+    } catch (error: any) {
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+}
+
