@@ -606,10 +606,10 @@ export default function ParentConsentClient({
                             {/* Dynamic bilingual text container (no outer card border/bg) */}
                             <div className="space-y-1.5 sm:space-y-3 py-0.5 sm:py-1">
                                 <div className="flex flex-row justify-between items-center w-full gap-2 text-slate-300">
-                                    <span className="font-extrabold text-indigo-400 text-[10px] min-[375px]:text-[11px] sm:text-[12px] whitespace-nowrap">
+                                    <span className="font-extrabold text-indigo-400 text-[13px] sm:text-[15px] whitespace-nowrap">
                                         📜 Read script aloud / जोर से पढ़ें
                                     </span>
-                                    <span className="bg-slate-900/60 border border-slate-800/80 px-2 min-[375px]:px-2.5 py-0.5 rounded-full text-[8px] min-[375px]:text-[9px] sm:text-[10px] text-slate-400 font-bold font-mono whitespace-nowrap shrink-0 shadow-sm">
+                                    <span className="bg-slate-900/60 border border-slate-800/80 px-2 min-[375px]:px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] text-slate-400 font-bold font-mono whitespace-nowrap shrink-0 shadow-sm">
                                         Leave ID: <span className="text-indigo-300 font-black">{leaveId.slice(0, 8)}</span>
                                     </span>
                                 </div>
@@ -617,22 +617,22 @@ export default function ParentConsentClient({
                                 <div className="h-px bg-slate-800/60 my-0.5" />
 
                                 {/* Hindi Script */}
-                                <div className="leading-snug sm:leading-relaxed text-[12px] sm:text-sm text-slate-100 text-justify">
-                                    <span className="text-[11px] sm:text-xs font-black text-indigo-400 block mb-0.5">हिंदी में:</span>
+                                <div className="leading-relaxed text-[15px] text-slate-100 text-justify">
+                                    <span className="text-[13px] sm:text-sm font-black text-indigo-400 block mb-0.5">हिंदी में:</span>
                                     "नमस्कार। मेरा नाम <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{parentName}</span> है। मैं अपने पुत्र/पुत्री <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{studentName}</span> को दिनांक <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{startDate}</span> से दिनांक <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{endDate}</span> तक अवकाश लेने की अनुमति देता/देती हूँ। इस अवधि के दौरान मेरे बच्चे की जिम्मेदारी मेरी होगी। अतः मेरे बच्चे का अवकाश स्वीकृत करें। धन्यवाद।"
                                 </div>
 
                                 <div className="h-px bg-slate-800/30 my-0.5" />
 
                                 {/* English Script */}
-                                <div className="leading-snug sm:leading-relaxed text-[12px] sm:text-sm text-slate-300 text-justify">
-                                    <span className="text-[11px] sm:text-xs font-black text-indigo-400 block mb-0.5">In English:</span>
+                                <div className="leading-relaxed text-[15px] text-slate-300 text-justify">
+                                    <span className="text-[13px] sm:text-sm font-black text-indigo-400 block mb-0.5">In English:</span>
                                     "Namaskar. My name is <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{parentName}</span>. I grant permission for my son/daughter <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{studentName}</span> to take leave from <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{startDate}</span> to <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{endDate}</span>. I will be responsible for my child during this period. Please approve my child's leave. Thank you."
                                 </div>
                             </div>
 
                             {/* ⏱️ Recording Notice Banner (Red Pen Area) */}
-                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg sm:rounded-xl p-1.5 sm:p-2.5 text-center text-[9.5px] min-[375px]:text-[10.5px] sm:text-xs text-amber-200/90 font-medium shadow-sm leading-snug sm:leading-relaxed">
+                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg sm:rounded-xl p-2 sm:p-2.5 text-center text-[13px] sm:text-[15px] text-amber-200/90 font-medium shadow-sm leading-snug sm:leading-relaxed">
                                 ⏱️ <span className="font-bold text-amber-300">Recording Limit: 24 Seconds</span>, Ensure that your face is clearly visible during the recording | <span className="font-bold text-amber-300">रिकॉर्डिंग समय सीमा: 24 सेकंड है</span>, ध्यान दें कि रिकॉर्डिंग के दौरान आपका चेहरा साफ़-साफ़ दिखाई दे।
                             </div>
 
