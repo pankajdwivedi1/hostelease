@@ -652,6 +652,8 @@ export default function SuperAdminDashboard() {
     const [invoicePaymentSource, setInvoicePaymentSource] = useState<string>("Direct Bank / UPI Transfer (UTR Verified)");
     const [invoiceBillingPeriod, setInvoiceBillingPeriod] = useState<string>("1 Year");
     const [invoiceRemarks, setInvoiceRemarks] = useState<string>("");
+    const [invoiceExtraDiscountType, setInvoiceExtraDiscountType] = useState<"percent" | "amount">("amount");
+    const [invoiceExtraDiscountValue, setInvoiceExtraDiscountValue] = useState<string>("");
     const [isSavingInvoice, setIsSavingInvoice] = useState<boolean>(false);
     const [isDeletingInvoiceId, setIsDeletingInvoiceId] = useState<string | null>(null);
 
@@ -667,6 +669,8 @@ export default function SuperAdminDashboard() {
             setInvoiceTenantName("");
         }
         setInvoiceAmount("");
+        setInvoiceExtraDiscountType("amount");
+        setInvoiceExtraDiscountValue("");
         setInvoiceUtr("");
         setInvoiceDate(new Date().toISOString().split("T")[0]);
         setInvoiceBillingType("Verified Payment");
@@ -682,6 +686,16 @@ export default function SuperAdminDashboard() {
         setInvoiceTenantId(log.tenantId || "");
         setInvoiceTenantName(log.tenantName || "");
         setInvoiceAmount(log.amount !== undefined ? String(log.amount) : "");
+        if (log.extraDiscountType === "amount" || (log.extraDiscountAmount && Number(log.extraDiscountAmount) > 0)) {
+            setInvoiceExtraDiscountType("amount");
+            setInvoiceExtraDiscountValue(String(log.extraDiscountAmount || log.extraDiscountValue || ""));
+        } else if (log.extraDiscountPercent && Number(log.extraDiscountPercent) > 0) {
+            setInvoiceExtraDiscountType("percent");
+            setInvoiceExtraDiscountValue(String(log.extraDiscountPercent));
+        } else {
+            setInvoiceExtraDiscountType("amount");
+            setInvoiceExtraDiscountValue("");
+        }
         setInvoiceUtr(log.utr || "");
         setInvoiceDate(log.date ? new Date(log.date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
         setInvoiceBillingType(log.billingType || "Verified Payment");
@@ -700,11 +714,16 @@ export default function SuperAdminDashboard() {
 
         setIsSavingInvoice(true);
         try {
+            const discountNum = Number(invoiceExtraDiscountValue) || 0;
             const payload = {
                 id: selectedInvoiceId,
                 tenantId: invoiceTenantId,
                 tenantName: invoiceTenantName,
                 amount: Number(invoiceAmount) || 0,
+                extraDiscountType: invoiceExtraDiscountType,
+                extraDiscountValue: discountNum,
+                extraDiscountPercent: invoiceExtraDiscountType === "percent" ? discountNum : 0,
+                extraDiscountAmount: invoiceExtraDiscountType === "amount" ? discountNum : 0,
                 utr: invoiceUtr,
                 date: invoiceDate ? new Date(invoiceDate).toISOString() : new Date().toISOString(),
                 billingType: invoiceBillingType,
@@ -1514,6 +1533,7 @@ export default function SuperAdminDashboard() {
                                                 <th className="py-3 px-4">Billing Period</th>
                                                 <th className="py-3 px-4">UTR Number</th>
                                                 <th className="py-3 px-4">Amount</th>
+                                                <th className="py-3 px-4">Extra Disc</th>
                                                 <th className="py-3 px-4">Remarks</th>
                                                 <th className="py-3 px-4 text-right">Actions</th>
                                             </tr>
@@ -1521,7 +1541,7 @@ export default function SuperAdminDashboard() {
                                         <tbody className="divide-y divide-slate-50 font-bold">
                                             {billingLogs.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={8} className="py-12 text-center text-slate-400 italic">No billing records found.</td>
+                                                    <td colSpan={9} className="py-12 text-center text-slate-400 italic">No billing records found.</td>
                                                 </tr>
                                             ) : billingLogs.map((log: any, idx: number) => (
                                                 <tr key={log.id || idx} className="hover:bg-slate-50 transition-colors">
@@ -1540,6 +1560,19 @@ export default function SuperAdminDashboard() {
                                                     <td className="py-3 px-4 text-slate-700 font-mono select-all">{log.utr || "N/A"}</td>
                                                     <td className="py-3 px-4 text-slate-900 font-black">
                                                         {log.amount > 0 ? `₹${log.amount.toLocaleString("en-IN")}` : "₹0"}
+                                                    </td>
+                                                    <td className="py-3 px-4">
+                                                        {(log.extraDiscountType === "amount" || (log.extraDiscountAmount && Number(log.extraDiscountAmount) > 0)) ? (
+                                                            <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-black border border-purple-200 text-[8px] whitespace-nowrap">
+                                                                -₹{(Number(log.extraDiscountAmount) || Number(log.extraDiscountValue) || 0).toLocaleString("en-IN")}
+                                                            </span>
+                                                        ) : (log.extraDiscountPercent && Number(log.extraDiscountPercent) > 0) ? (
+                                                            <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-black border border-purple-200 text-[8px] whitespace-nowrap">
+                                                                +{log.extraDiscountPercent}% OFF
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-slate-300 font-bold">-</span>
+                                                        )}
                                                     </td>
                                                     <td className="py-3 px-4 text-slate-500 leading-normal max-w-xs truncate" title={log.remarks}>{log.remarks || "-"}</td>
                                                     <td className="py-3 px-4 text-right whitespace-nowrap">
@@ -3265,6 +3298,71 @@ export default function SuperAdminDashboard() {
                                         </div>
                                     </div>
 
+                                    {/* Extra / Special Discount Selector (% or Direct ₹) */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                                                Extra Discount ({invoiceExtraDiscountType === "amount" ? "Direct ₹" : "% Wise"})
+                                            </label>
+                                            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setInvoiceExtraDiscountType("amount")}
+                                                    className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                                        invoiceExtraDiscountType === "amount"
+                                                            ? "bg-purple-600 text-white shadow-xs"
+                                                            : "text-slate-500 hover:text-slate-800"
+                                                    }`}
+                                                >
+                                                    Direct ₹
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setInvoiceExtraDiscountType("percent")}
+                                                    className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                                        invoiceExtraDiscountType === "percent"
+                                                            ? "bg-purple-600 text-white shadow-xs"
+                                                            : "text-slate-500 hover:text-slate-800"
+                                                    }`}
+                                                >
+                                                    % Wise
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="relative">
+                                            {invoiceExtraDiscountType === "amount" ? (
+                                                <>
+                                                    <span className="absolute left-3.5 top-2 text-xs font-black text-purple-700">₹</span>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="1"
+                                                        placeholder="e.g. 11526"
+                                                        value={invoiceExtraDiscountValue}
+                                                        onChange={(e) => setInvoiceExtraDiscountValue(e.target.value)}
+                                                        className="w-full border-2 border-gray-100 rounded-xl pl-8 pr-4 py-2 text-xs font-black text-purple-900 bg-white focus:border-indigo-500 outline-none transition-all placeholder:text-gray-300"
+                                                    />
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="100"
+                                                        step="0.1"
+                                                        placeholder="e.g. 10"
+                                                        value={invoiceExtraDiscountValue}
+                                                        onChange={(e) => setInvoiceExtraDiscountValue(e.target.value)}
+                                                        className="w-full border-2 border-gray-100 rounded-xl pl-3.5 pr-8 py-2 text-xs font-black text-purple-900 bg-white focus:border-indigo-500 outline-none transition-all placeholder:text-gray-300"
+                                                    />
+                                                    <span className="absolute right-3.5 top-2 text-xs font-black text-purple-700">%</span>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                     {/* Date */}
                                     <div>
                                         <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
@@ -3278,9 +3376,7 @@ export default function SuperAdminDashboard() {
                                             className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all"
                                         />
                                     </div>
-                                </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                     {/* Billing Period */}
                                     <div>
                                         <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
@@ -3299,7 +3395,9 @@ export default function SuperAdminDashboard() {
                                             <option value="3 Years">3 Years</option>
                                         </select>
                                     </div>
+                                </div>
 
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                     {/* UTR / Ref ID */}
                                     <div>
                                         <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
@@ -3313,9 +3411,7 @@ export default function SuperAdminDashboard() {
                                             className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-mono font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all uppercase"
                                         />
                                     </div>
-                                </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                     {/* Billing Type */}
                                     <div>
                                         <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
@@ -3331,24 +3427,24 @@ export default function SuperAdminDashboard() {
                                             <option value="Deferred Billing (On Credit)">Deferred Billing (On Credit)</option>
                                         </select>
                                     </div>
+                                </div>
 
-                                    {/* Payment Source */}
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
-                                            Payment Method / Source
-                                        </label>
-                                        <select
-                                            value={invoicePaymentSource}
-                                            onChange={(e) => setInvoicePaymentSource(e.target.value)}
-                                            className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer"
-                                        >
-                                            <option value="Direct Bank / UPI Transfer (UTR Verified)">Direct Bank / UPI Transfer (UTR Verified)</option>
-                                            <option value="Online Payment Gateway (Razorpay)">Online Payment Gateway (Razorpay)</option>
-                                            <option value="Direct Bank Transfer">Direct Bank Transfer</option>
-                                            <option value="Complimentary License">Complimentary License</option>
-                                            <option value="Offline Cheque / Cash">Offline Cheque / Cash</option>
-                                        </select>
-                                    </div>
+                                {/* Payment Source */}
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">
+                                        Payment Method / Source
+                                    </label>
+                                    <select
+                                        value={invoicePaymentSource}
+                                        onChange={(e) => setInvoicePaymentSource(e.target.value)}
+                                        className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2 text-xs font-black text-gray-900 bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer"
+                                    >
+                                        <option value="Direct Bank / UPI Transfer (UTR Verified)">Direct Bank / UPI Transfer (UTR Verified)</option>
+                                        <option value="Online Payment Gateway (Razorpay)">Online Payment Gateway (Razorpay)</option>
+                                        <option value="Direct Bank Transfer">Direct Bank Transfer</option>
+                                        <option value="Complimentary License">Complimentary License</option>
+                                        <option value="Offline Cheque / Cash">Offline Cheque / Cash</option>
+                                    </select>
                                 </div>
 
                                 {/* Remarks */}

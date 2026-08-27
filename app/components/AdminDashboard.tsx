@@ -2354,20 +2354,35 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const isDirectTransfer = paymentMethodText.toLowerCase().includes("direct") || paymentMethodText.toLowerCase().includes("bank");
 
     // Determine discount rule % from app settings based on tenure (0%, 20%, 30%, 40%)
-    let discountPercent = tx.discountPercent !== undefined ? Number(tx.discountPercent) : 
+    let standardDiscountPercent = tx.discountPercent !== undefined ? Number(tx.discountPercent) : 
       months === 1 ? 0 :
       months === 3 ? 20 :
       months === 6 ? 30 : 40; // 40% for 12 months (Your exact Annual Plan setting)
 
     // If direct transfer, add your configured 3% direct transfer incentive
     if (isDirectTransfer && tx.discountPercent === undefined) {
-      discountPercent += 3;
+      standardDiscountPercent += 3;
     }
 
     // 2. Calculate Gross Subtotal at your set rate (₹30), discount amount, and exact net Total Paid
     const grossBase = studentCount * ratePerStudentMonth * months;
-    const discountAmount = Math.round(grossBase * (discountPercent / 100));
-    const netCalculated = grossBase - discountAmount;
+    const standardDiscountAmount = Math.round(grossBase * (standardDiscountPercent / 100));
+
+    // Extra discount added via BOSS CONTROL DASHBOARD (Direct ₹ Amount or % Wise)
+    let extraDiscountAmount = 0;
+    let extraDiscountPercent = 0;
+
+    if (tx.extraDiscountType === "amount" || (tx.extraDiscountAmount && Number(tx.extraDiscountAmount) > 0)) {
+      extraDiscountAmount = Number(tx.extraDiscountAmount || tx.extraDiscountValue || 0);
+      extraDiscountPercent = grossBase > 0 ? Number(((extraDiscountAmount / grossBase) * 100).toFixed(1)) : 0;
+    } else if (tx.extraDiscountPercent && Number(tx.extraDiscountPercent) > 0) {
+      extraDiscountPercent = Number(tx.extraDiscountPercent);
+      extraDiscountAmount = Math.round(grossBase * (extraDiscountPercent / 100));
+    }
+
+    const totalDiscountAmount = standardDiscountAmount + extraDiscountAmount;
+    const totalDiscountPercent = grossBase > 0 ? Math.round((totalDiscountAmount / grossBase) * 100) : (standardDiscountPercent + extraDiscountPercent);
+    const netCalculated = Math.max(0, grossBase - totalDiscountAmount);
     const finalPaid = (tx.amount && tx.amount > 0 && tx.amount <= grossBase) ? tx.amount : netCalculated;
     const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/logo.jpeg` : '/logo.jpeg';
 
@@ -2650,13 +2665,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   <td style="text-align: right; font-weight: 800;">₹${grossBase.toLocaleString("en-IN")}.00</td>
                 </tr>
 
-                ${discountAmount > 0 ? `
+                ${standardDiscountAmount > 0 ? `
                 <tr style="background: #fdf2f8;">
                   <td colspan="4" style="color: #be185d; font-weight: 700;">
-                    🎁 Subscription Plan Discount & Incentives (${discountPercent}% OFF)
+                    🎁 Subscription Plan Discount & Incentives (${standardDiscountPercent}% OFF)
                     ${isDirectTransfer ? '<span style="font-size: 9px; opacity: 0.8; margin-left: 4px;">(Includes Direct Transfer Incentive)</span>' : ''}
                   </td>
-                  <td style="text-align: right; font-weight: 800; color: #be185d;">-₹${discountAmount.toLocaleString("en-IN")}.00</td>
+                  <td style="text-align: right; font-weight: 800; color: #be185d;">-₹${standardDiscountAmount.toLocaleString("en-IN")}.00</td>
+                </tr>
+                ` : ''}
+
+                ${extraDiscountAmount > 0 ? `
+                <tr style="background: #fdf4ff;">
+                  <td colspan="4" style="color: #7e22ce; font-weight: 700;">
+                    ✨ Special Management Concession / Extra Discount (${extraDiscountPercent}% OFF)
+                    <span style="font-size: 9px; opacity: 0.8; margin-left: 4px;">(Authorized via Boss Control)</span>
+                  </td>
+                  <td style="text-align: right; font-weight: 800; color: #7e22ce;">-₹${extraDiscountAmount.toLocaleString("en-IN")}.00</td>
                 </tr>
                 ` : ''}
               </tbody>
@@ -2673,9 +2698,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               </div>
 
               <div style="width: 300px; shrink: 0;">
-                ${discountAmount > 0 ? `
+                ${totalDiscountAmount > 0 ? `
                 <div class="savings-badge">
-                  🎉 Total College Savings: ₹${discountAmount.toLocaleString("en-IN")}.00
+                  🎉 Total College Savings: ₹${totalDiscountAmount.toLocaleString("en-IN")}.00
                 </div>
                 ` : ''}
 
@@ -2684,10 +2709,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <td>Gross Subtotal</td>
                     <td>₹${grossBase.toLocaleString("en-IN")}.00</td>
                   </tr>
-                  ${discountAmount > 0 ? `
+                  ${extraDiscountAmount > 0 && standardDiscountAmount > 0 ? `
                   <tr>
-                    <td style="color: #be185d;">Total Discounts (${discountPercent}%)</td>
-                    <td style="color: #be185d;">-₹${discountAmount.toLocaleString("en-IN")}.00</td>
+                    <td style="color: #be185d;">Standard Plan Discount (${standardDiscountPercent}%)</td>
+                    <td style="color: #be185d;">-₹${standardDiscountAmount.toLocaleString("en-IN")}.00</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #7e22ce; font-weight: 700;">🌟 Extra Boss Discount (${extraDiscountPercent}%)</td>
+                    <td style="color: #7e22ce; font-weight: 700;">-₹${extraDiscountAmount.toLocaleString("en-IN")}.00</td>
+                  </tr>
+                  ` : extraDiscountAmount > 0 ? `
+                  <tr>
+                    <td style="color: #7e22ce; font-weight: 700;">🌟 Extra Boss Discount (${extraDiscountPercent}%)</td>
+                    <td style="color: #7e22ce; font-weight: 700;">-₹${extraDiscountAmount.toLocaleString("en-IN")}.00</td>
+                  </tr>
+                  ` : ''}
+                  ${totalDiscountAmount > 0 ? `
+                  <tr>
+                    <td style="color: #be185d; font-weight: 800;">Total Discounts (${totalDiscountPercent}%)</td>
+                    <td style="color: #be185d; font-weight: 800;">-₹${totalDiscountAmount.toLocaleString("en-IN")}.00</td>
                   </tr>
                   ` : ''}
                   <tr>

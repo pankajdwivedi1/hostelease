@@ -713,6 +713,17 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
                                     <td>Subtotal</td>
                                     <td>₹${tx.amount?.toLocaleString("en-IN") || 0}.00</td>
                                 </tr>
+                                ${(tx.extraDiscountType === "amount" || (tx.extraDiscountAmount && Number(tx.extraDiscountAmount) > 0)) ? `
+                                <tr>
+                                    <td style="color: #7e22ce; font-weight: 700;">🌟 Extra Management Discount</td>
+                                    <td style="color: #7e22ce; font-weight: 700;">-₹${(Number(tx.extraDiscountAmount) || Number(tx.extraDiscountValue) || 0).toLocaleString("en-IN")}.00</td>
+                                </tr>
+                                ` : (tx.extraDiscountPercent && Number(tx.extraDiscountPercent) > 0) ? `
+                                <tr>
+                                    <td style="color: #7e22ce; font-weight: 700;">🌟 Extra Management Discount (${tx.extraDiscountPercent}%)</td>
+                                    <td style="color: #7e22ce; font-weight: 700;">Applied</td>
+                                </tr>
+                                ` : ''}
                                 <tr>
                                     <td>Tax (0%)</td>
                                     <td>₹0.00</td>

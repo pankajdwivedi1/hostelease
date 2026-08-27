@@ -78,7 +78,10 @@ export async function POST(request: NextRequest) {
             billingType: newRecord.billingType,
             paymentSource: newRecord.paymentSource || (newRecord.utr ? "Direct Bank / UPI Transfer (UTR Verified)" : "Direct Bank Transfer"),
             billingPeriod: newRecord.billingPeriod || "1 Month",
-            remarks: newRecord.remarks || ""
+            remarks: newRecord.remarks || "",
+            extraDiscountType: newRecord.extraDiscountType || (newRecord.extraDiscountAmount ? "amount" : "percent"),
+            extraDiscountAmount: Number(newRecord.extraDiscountAmount) || 0,
+            extraDiscountPercent: Number(newRecord.extraDiscountPercent) || 0
         };
 
         const updatedLogs = [updatedRecord, ...currentLogs];
@@ -98,7 +101,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
     try {
-        const updateData = await request.json(); // { id, tenantId, tenantName, amount, utr, date, billingType, billingPeriod, remarks, paymentSource }
+        const updateData = await request.json(); // { id, tenantId, tenantName, amount, utr, date, billingType, billingPeriod, remarks, paymentSource, extraDiscountType, extraDiscountAmount, extraDiscountPercent }
 
         if (!updateData.id) {
             return NextResponse.json({ success: false, error: "Missing invoice ID" }, { status: 400 });
@@ -130,6 +133,9 @@ export async function PUT(request: NextRequest) {
             paymentSource: updateData.paymentSource !== undefined ? updateData.paymentSource : currentLogs[index].paymentSource,
             billingPeriod: updateData.billingPeriod !== undefined ? updateData.billingPeriod : currentLogs[index].billingPeriod,
             remarks: updateData.remarks !== undefined ? updateData.remarks : currentLogs[index].remarks,
+            extraDiscountType: updateData.extraDiscountType !== undefined ? updateData.extraDiscountType : currentLogs[index].extraDiscountType,
+            extraDiscountAmount: updateData.extraDiscountAmount !== undefined ? (Number(updateData.extraDiscountAmount) || 0) : (currentLogs[index].extraDiscountAmount || 0),
+            extraDiscountPercent: updateData.extraDiscountPercent !== undefined ? (Number(updateData.extraDiscountPercent) || 0) : (currentLogs[index].extraDiscountPercent || 0),
             updatedAt: new Date().toISOString()
         };
 
