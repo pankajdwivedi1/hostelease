@@ -552,23 +552,23 @@ export default function ParentConsentClient({
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-tr from-slate-900 via-indigo-950 to-slate-900 text-slate-100 flex flex-col items-center justify-center p-4">
+        <div className="min-h-screen bg-gradient-to-tr from-slate-900 via-indigo-950 to-slate-900 text-slate-100 flex flex-col items-center justify-center p-2 sm:p-4 py-2.5 sm:py-6">
             
             {/* Header branding */}
-            <div className="text-center mb-6 max-w-lg w-full">
-                <div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 px-3.5 py-1.5 rounded-full text-indigo-400 text-xs font-black uppercase tracking-wider mb-3">
-                    <ShieldCheck className="w-3.5 h-3.5" /> Secure Parent Consent Portal
+            <div className="text-center mb-2 sm:mb-4 max-w-lg w-full">
+                <div className="inline-flex items-center gap-1.5 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-0.5 sm:py-1 rounded-full text-indigo-400 text-[10px] sm:text-xs font-black uppercase tracking-wider mb-1 sm:mb-2">
+                    <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Secure Parent Consent Portal
                 </div>
-                <h1 className="text-2xl font-black tracking-tight text-white leading-tight">
+                <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white leading-tight">
                     Hostel Outing Approval
                 </h1>
-                <p className="text-xs text-slate-400 mt-1 font-semibold">
+                <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 font-semibold">
                     अभिभावक वीडियो सहमति सत्यापन पोर्टल
                 </p>
             </div>
 
             {/* Main card */}
-            <div className="bg-slate-950/40 backdrop-blur-md border border-slate-800/80 w-full max-w-xl rounded-3xl p-5 md:p-6 shadow-2xl space-y-6">
+            <div className="bg-slate-950/40 backdrop-blur-md border border-slate-800/80 w-full max-w-xl rounded-2xl sm:rounded-3xl p-3 sm:p-5 md:p-6 shadow-2xl space-y-2.5 sm:space-y-4">
 
                 {recordingState === "success" ? (
                     <div className="text-center py-10 space-y-6 flex flex-col items-center">
@@ -602,52 +602,52 @@ export default function ParentConsentClient({
                             </div>
                         )}
 
-                        <div className="space-y-4">
+                        <div className="space-y-2 sm:space-y-3">
                             {/* Dynamic bilingual text container (no outer card border/bg) */}
-                            <div className="space-y-4 py-2">
+                            <div className="space-y-1.5 sm:space-y-3 py-0.5 sm:py-1">
                                 <div className="flex flex-row justify-between items-center w-full gap-2 text-slate-300">
                                     <span className="font-extrabold text-indigo-400 text-[10px] min-[375px]:text-[11px] sm:text-[12px] whitespace-nowrap">
                                         📜 Read script aloud / जोर से पढ़ें
                                     </span>
-                                    <span className="bg-slate-900/60 border border-slate-800/80 px-2 min-[375px]:px-3 py-1 rounded-full text-[8px] min-[375px]:text-[9px] sm:text-[10px] text-slate-400 font-bold font-mono whitespace-nowrap shrink-0 shadow-sm">
+                                    <span className="bg-slate-900/60 border border-slate-800/80 px-2 min-[375px]:px-2.5 py-0.5 rounded-full text-[8px] min-[375px]:text-[9px] sm:text-[10px] text-slate-400 font-bold font-mono whitespace-nowrap shrink-0 shadow-sm">
                                         Leave ID: <span className="text-indigo-300 font-black">{leaveId.slice(0, 8)}</span>
                                     </span>
                                 </div>
 
-                                <div className="h-px bg-slate-800/60" />
+                                <div className="h-px bg-slate-800/60 my-0.5" />
 
                                 {/* Hindi Script */}
-                                <div className="leading-relaxed text-sm text-slate-100 text-justify">
-                                    <span className="text-xs font-black text-indigo-400 block mb-1">हिंदी में:</span>
+                                <div className="leading-snug sm:leading-relaxed text-[11px] min-[375px]:text-[12px] sm:text-sm text-slate-100 text-justify">
+                                    <span className="text-[10px] sm:text-xs font-black text-indigo-400 block mb-0.5">हिंदी में:</span>
                                     "नमस्कार। मेरा नाम <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{parentName}</span> है। मैं अपने पुत्र/पुत्री <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{studentName}</span> को दिनांक <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{startDate}</span> से दिनांक <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{endDate}</span> तक अवकाश लेने की अनुमति देता/देती हूँ। इस अवधि के दौरान मेरे बच्चे की जिम्मेदारी मेरी होगी। अतः मेरे बच्चे का अवकाश स्वीकृत करें। धन्यवाद।"
                                 </div>
 
-                                <div className="h-px bg-slate-800/30" />
+                                <div className="h-px bg-slate-800/30 my-0.5" />
 
                                 {/* English Script */}
-                                <div className="leading-relaxed text-sm text-slate-300 text-justify">
-                                    <span className="text-xs font-black text-indigo-400 block mb-1">In English:</span>
+                                <div className="leading-snug sm:leading-relaxed text-[11px] min-[375px]:text-[12px] sm:text-sm text-slate-300 text-justify">
+                                    <span className="text-[10px] sm:text-xs font-black text-indigo-400 block mb-0.5">In English:</span>
                                     "Namaskar. My name is <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{parentName}</span>. I grant permission for my son/daughter <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{studentName}</span> to take leave from <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{startDate}</span> to <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{endDate}</span>. I will be responsible for my child during this period. Please approve my child's leave. Thank you."
                                 </div>
                             </div>
 
                             {/* ⏱️ Recording Notice Banner (Red Pen Area) */}
-                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 sm:p-3 text-center text-[11px] sm:text-xs text-amber-200/90 font-medium shadow-sm leading-relaxed">
+                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg sm:rounded-xl p-1.5 sm:p-2.5 text-center text-[9.5px] min-[375px]:text-[10.5px] sm:text-xs text-amber-200/90 font-medium shadow-sm leading-snug sm:leading-relaxed">
                                 ⏱️ <span className="font-bold text-amber-300">Recording Limit: 24 Seconds</span>, Ensure that your face is clearly visible during the recording | <span className="font-bold text-amber-300">रिकॉर्डिंग समय सीमा: 24 सेकंड है</span>, ध्यान दें कि रिकॉर्डिंग के दौरान आपका चेहरा साफ़-साफ़ दिखाई दे।
                             </div>
 
                             {/* Camera / Recording Card Container (Matches Add Student Profile Photo Dimensions) */}
-                            <div className="space-y-3 border-2 border-dashed border-slate-700/80 p-3 sm:p-4 rounded-2xl flex flex-col items-center justify-center bg-slate-900/40 transition-all min-h-[160px] w-full max-w-[280px] sm:max-w-[320px] mx-auto shadow-md">
+                            <div className="space-y-2 sm:space-y-3 border-2 border-dashed border-slate-700/80 p-2 sm:p-4 rounded-xl sm:rounded-2xl flex flex-col items-center justify-center bg-slate-900/40 transition-all min-h-[100px] sm:min-h-[160px] w-full max-w-[260px] sm:max-w-[320px] mx-auto shadow-md">
                                 
                                 {/* Initial State: Before camera is opened (Screenshot 2 structure) */}
                                 {recordingState === "idle" && !stream && (
-                                    <div className="flex flex-col items-center gap-3 py-3">
+                                    <div className="flex flex-col items-center gap-2 py-1.5 sm:py-3">
                                         <button
                                             type="button"
                                             onClick={handleStartClick}
-                                            className="px-5 py-2.5 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 rounded-xl text-xs font-bold flex items-center gap-2 border border-purple-500/30 shadow-sm transition-all active:scale-95 cursor-pointer"
+                                            className="px-4 py-2 sm:px-5 sm:py-2.5 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 rounded-xl text-[11px] sm:text-xs font-bold flex items-center gap-2 border border-purple-500/30 shadow-sm transition-all active:scale-95 cursor-pointer"
                                         >
-                                            <Camera className="w-4 h-4 text-purple-400" />
+                                            <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
                                             <span>📷 OPEN CAMERA</span>
                                         </button>
                                     </div>
@@ -655,7 +655,7 @@ export default function ParentConsentClient({
 
                                 {/* Active Camera Preview & Recording State (Screenshot 1 structure) */}
                                 {(recordingState === "idle" || recordingState === "recording") && stream && (
-                                    <div className="flex flex-col items-center gap-3 w-full">
+                                    <div className="flex flex-col items-center gap-2 sm:gap-3 w-full">
                                         <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden border border-slate-700 bg-black shadow-md">
                                             <video
                                                 ref={videoPreviewRef}
@@ -753,26 +753,26 @@ export default function ParentConsentClient({
                                         {isVoiceVerified && (
                                             <div className="w-full bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-2.5 py-1.5 flex items-center justify-center gap-1.5 text-emerald-400 text-[10px] font-bold shadow-sm">
                                                 <CheckCircle2 className="w-3.5 h-3.5" />
-                                                <span>✅ आवाज़ सत्यापित (Voice & Sound Recorded)</span>
+                                                <span>आवाज़ सत्यापित (Voice & Sound Recorded)</span>
                                             </div>
                                         )}
 
-                                        <div className="flex items-center justify-center gap-2 w-full">
+                                        <div className="flex items-center justify-center gap-1.5 sm:gap-2 w-full">
                                             <button
                                                 type="button"
                                                 onClick={handleRetry}
-                                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all border border-slate-700 flex items-center gap-1 cursor-pointer"
+                                                className="flex-1 px-2 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] sm:text-[10px] font-black uppercase whitespace-nowrap rounded-xl transition-all border border-slate-700 flex items-center justify-center gap-1 cursor-pointer"
                                             >
-                                                <RefreshCw className="w-3 h-3" />
-                                                <span>RECORD AGAIN</span>
+                                                <RefreshCw className="w-3 h-3 shrink-0" />
+                                                <span>Record Again</span>
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={handleUpload}
-                                                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1 shadow-md active:scale-95 cursor-pointer"
+                                                className="flex-1 px-2 sm:px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] sm:text-[10px] font-black uppercase whitespace-nowrap rounded-xl transition-all flex items-center justify-center gap-1 shadow-md active:scale-95 cursor-pointer"
                                             >
-                                                <UploadCloud className="w-3 h-3" />
-                                                <span>SUBMIT CONSENT</span>
+                                                <UploadCloud className="w-3 h-3 shrink-0" />
+                                                <span>Submit Consent</span>
                                             </button>
                                         </div>
                                     </div>
