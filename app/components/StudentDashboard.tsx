@@ -4109,23 +4109,23 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                             </div>
                                             <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-stretch">
                                                 {/* Left Side: Student Info & Approvals */}
-                                                <div className="w-full md:w-auto shrink-0 flex flex-row md:flex-col items-stretch md:items-start justify-between md:justify-start gap-2">
+                                                <div className="w-full md:w-auto shrink-0 flex flex-row md:flex-col items-center md:items-start justify-between md:justify-start gap-2">
                                                     <div className="flex flex-col gap-1.5 bg-gray-50/80 p-2 md:p-2.5 rounded-lg border border-gray-100 w-fit shrink-0">
-                                                        <div className="flex items-start md:items-center gap-1.5 md:gap-2">
-                                                            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 mt-0.5 md:mt-0">
+                                                        <div className="flex items-center gap-1.5 md:gap-2">
+                                                            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
                                                                 <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
                                                             </div>
-                                                            <div className="min-w-0 flex flex-col md:flex-row md:items-baseline md:gap-1 text-[8.5px] sm:text-[9.5px] md:text-[11px] leading-tight">
-                                                                <span className="font-bold text-gray-500 uppercase tracking-tight whitespace-nowrap">CAMPUS OUT:</span>
+                                                            <div className="min-w-0 flex items-baseline gap-1 text-[8.5px] sm:text-[9.5px] md:text-[11px] leading-tight">
+                                                                <span className="font-bold text-gray-500 tracking-tight whitespace-nowrap">Campus Out:</span>
                                                                 <span className="font-extrabold text-gray-900 whitespace-nowrap">{formatPermDate(latestPermission, true)}</span>
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-start md:items-center gap-1.5 md:gap-2">
-                                                            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-green-100 text-green-600 flex items-center justify-center shrink-0 mt-0.5 md:mt-0">
+                                                        <div className="flex items-center gap-1.5 md:gap-2">
+                                                            <div className="w-4 h-4 md:w-5 md:h-5 rounded-md bg-green-100 text-green-600 flex items-center justify-center shrink-0">
                                                                 <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
                                                             </div>
-                                                            <div className="min-w-0 flex flex-col md:flex-row md:items-baseline md:gap-1 text-[8.5px] sm:text-[9.5px] md:text-[11px] leading-tight">
-                                                                <span className="font-bold text-gray-500 uppercase tracking-tight whitespace-nowrap">CAMPUS IN:</span>
+                                                            <div className="min-w-0 flex items-baseline gap-1 text-[8.5px] sm:text-[9.5px] md:text-[11px] leading-tight">
+                                                                <span className="font-bold text-gray-500 tracking-tight whitespace-nowrap">Campus In:</span>
                                                                 <span className="font-extrabold text-gray-900 whitespace-nowrap">{formatPermDate(latestPermission, false)}</span>
                                                             </div>
                                                         </div>
@@ -4138,7 +4138,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                         <svg className="w-3 h-3 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                                                     </div>
                                                                     <div className="min-w-0 flex items-baseline gap-1 text-[8.5px] sm:text-[9.5px] md:text-[11px] leading-tight">
-                                                                        <span className="font-bold text-gray-500 uppercase tracking-tight whitespace-nowrap">DURATION:</span>
+                                                                        <span className="font-bold text-gray-500 tracking-tight whitespace-nowrap">Duration:</span>
                                                                         <span className="font-black text-blue-700 whitespace-nowrap">{durationStr}</span>
                                                                     </div>
                                                                 </div>
