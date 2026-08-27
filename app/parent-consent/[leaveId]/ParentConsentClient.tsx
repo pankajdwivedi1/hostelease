@@ -617,16 +617,16 @@ export default function ParentConsentClient({
                                 <div className="h-px bg-slate-800/60 my-0.5" />
 
                                 {/* Hindi Script */}
-                                <div className="leading-snug sm:leading-relaxed text-[11px] min-[375px]:text-[12px] sm:text-sm text-slate-100 text-justify">
-                                    <span className="text-[10px] sm:text-xs font-black text-indigo-400 block mb-0.5">हिंदी में:</span>
+                                <div className="leading-snug sm:leading-relaxed text-[12px] sm:text-sm text-slate-100 text-justify">
+                                    <span className="text-[11px] sm:text-xs font-black text-indigo-400 block mb-0.5">हिंदी में:</span>
                                     "नमस्कार। मेरा नाम <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{parentName}</span> है। मैं अपने पुत्र/पुत्री <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{studentName}</span> को दिनांक <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{startDate}</span> से दिनांक <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{endDate}</span> तक अवकाश लेने की अनुमति देता/देती हूँ। इस अवधि के दौरान मेरे बच्चे की जिम्मेदारी मेरी होगी। अतः मेरे बच्चे का अवकाश स्वीकृत करें। धन्यवाद।"
                                 </div>
 
                                 <div className="h-px bg-slate-800/30 my-0.5" />
 
                                 {/* English Script */}
-                                <div className="leading-snug sm:leading-relaxed text-[11px] min-[375px]:text-[12px] sm:text-sm text-slate-300 text-justify">
-                                    <span className="text-[10px] sm:text-xs font-black text-indigo-400 block mb-0.5">In English:</span>
+                                <div className="leading-snug sm:leading-relaxed text-[12px] sm:text-sm text-slate-300 text-justify">
+                                    <span className="text-[11px] sm:text-xs font-black text-indigo-400 block mb-0.5">In English:</span>
                                     "Namaskar. My name is <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{parentName}</span>. I grant permission for my son/daughter <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{studentName}</span> to take leave from <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{startDate}</span> to <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{endDate}</span>. I will be responsible for my child during this period. Please approve my child's leave. Thank you."
                                 </div>
                             </div>
