@@ -2382,8 +2382,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               margin: 6mm 10mm;
             }
             * { box-sizing: border-box; }
+            body, table, th, td, h1, h2, h3, h4, p, div, span, button {
+              font-family: 'Cambria Math', Cambria, Georgia, serif !important;
+            }
             body {
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+              font-family: 'Cambria Math', Cambria, Georgia, serif !important;
               margin: 0;
               padding: 16px;
               color: #0f172a;
@@ -2665,7 +2668,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 <div style="flex: 1;">
                   <div style="font-size: 11px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2;">Scan to Verify Invoice</div>
                   <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 4px;">Official Digital Audit Proof</div>
-                  <div style="font-size: 9px; font-family: monospace; font-weight: 800; color: #3730a3; margin-top: 10px; background: #e0e7ff; border: 1px solid #c7d2fe; padding: 4px 8px; border-radius: 6px; display: inline-block;">✓ VERIFIED E-INVOICE</div>
+                  <div style="font-size: 9px; font-weight: 800; color: #3730a3; margin-top: 10px; background: #e0e7ff; border: 1px solid #c7d2fe; padding: 4px 8px; border-radius: 6px; display: inline-block;">✓ VERIFIED E-INVOICE</div>
                 </div>
               </div>
 
@@ -2703,7 +2706,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               <p style="margin: 0; font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; font-weight: 800; margin-bottom: 4px;">Payment Verification & Audit Proof</p>
               <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                  <p style="margin: 0; font-family: monospace; font-size: 12px; font-weight: 800; color: #0f172a;">Reference / UTR ID: ${tx.utr || tx.id || "N/A"}</p>
+                  <p style="margin: 0; font-size: 12px; font-weight: 800; color: #0f172a;">Reference / UTR ID: ${tx.utr || tx.id || "N/A"}</p>
                   <p style="margin: 2px 0 0 0; font-size: 10px; font-weight: 600; color: #64748b;">Method: ${paymentMethodText} • Timestamp: ${fullDateTimeStr}</p>
                 </div>
                 <div style="background: #dcfce7; border: 1px solid #86efac; color: #15803d; padding: 4px 12px; border-radius: 16px; font-size: 10px; font-weight: 900; letter-spacing: 0.5px;">

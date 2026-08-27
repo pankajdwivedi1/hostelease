@@ -508,8 +508,12 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
                 <head>
                     <title>Invoice ${invoiceNo}</title>
                     <style>
+                        * { box-sizing: border-box; }
+                        body, table, th, td, h1, h2, h3, h4, p, div, span, button {
+                            font-family: 'Cambria Math', Cambria, Georgia, serif !important;
+                        }
                         body {
-                            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                            font-family: 'Cambria Math', Cambria, Georgia, serif !important;
                             margin: 0;
                             padding: 40px;
                             color: #333;
