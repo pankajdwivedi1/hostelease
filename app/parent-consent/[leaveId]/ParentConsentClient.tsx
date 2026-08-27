@@ -619,7 +619,7 @@ export default function ParentConsentClient({
                                 {/* Hindi Script */}
                                 <div className="leading-relaxed text-sm text-slate-100 text-justify">
                                     <span className="text-xs font-black text-indigo-400 block mb-1">हिंदी में:</span>
-                                    "नमस्कार। मेरा नाम <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{parentName}</span> है। मैं अपने पुत्र/पुत्री <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{studentName}</span> को दिनांक <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{startDate}</span> से दिनांक <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{endDate}</span> तक अवकाश लेने की अनुमति देता/देती हूँ। इस अवधि के दौरान मेरे बच्चे की जिम्मेदारी मेरी होगी। कृपया मेरे बच्चे का अवकाश स्वीकृत करने की कृपा करें। धन्यवाद।"
+                                    "नमस्कार। मेरा नाम <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{parentName}</span> है। मैं अपने पुत्र/पुत्री <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{studentName}</span> को दिनांक <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{startDate}</span> से दिनांक <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{endDate}</span> तक अवकाश लेने की अनुमति देता/देती हूँ। इस अवधि के दौरान मेरे बच्चे की जिम्मेदारी मेरी होगी। अतः मेरे बच्चे का अवकाश स्वीकृत करें। धन्यवाद।"
                                 </div>
 
                                 <div className="h-px bg-slate-800/30" />
@@ -627,11 +627,14 @@ export default function ParentConsentClient({
                                 {/* English Script */}
                                 <div className="leading-relaxed text-sm text-slate-300 text-justify">
                                     <span className="text-xs font-black text-indigo-400 block mb-1">In English:</span>
-                                    "Namaskar. My name is <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{parentName}</span>. I grant permission for my son/daughter <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{studentName}</span> to take leave from <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{startDate}</span> to <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{endDate}</span>. I will be responsible for my child during this period. Please kindly approve my child's leave. Thank you."
+                                    "Namaskar. My name is <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{parentName}</span>. I grant permission for my son/daughter <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{studentName}</span> to take leave from <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{startDate}</span> to <span className="text-indigo-300 font-bold border-b border-indigo-500/30 pb-0.5">{endDate}</span>. I will be responsible for my child during this period. Please approve my child's leave. Thank you."
                                 </div>
                             </div>
 
-                            <div className="h-px bg-slate-800/40 my-2" />
+                            {/* ⏱️ Recording Notice Banner (Red Pen Area) */}
+                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 sm:p-3 text-center text-[11px] sm:text-xs text-amber-200/90 font-medium shadow-sm leading-relaxed">
+                                ⏱️ <span className="font-bold text-amber-300">Recording Limit: 24 Seconds</span>, Ensure that your face is clearly visible during the recording | <span className="font-bold text-amber-300">रिकॉर्डिंग समय सीमा: 24 सेकंड है</span>, ध्यान दें कि रिकॉर्डिंग के दौरान आपका चेहरा साफ़-साफ़ दिखाई दे।
+                            </div>
 
                             {/* Camera / Recording Card Container (Matches Add Student Profile Photo Dimensions) */}
                             <div className="space-y-3 border-2 border-dashed border-slate-700/80 p-3 sm:p-4 rounded-2xl flex flex-col items-center justify-center bg-slate-900/40 transition-all min-h-[160px] w-full max-w-[280px] sm:max-w-[320px] mx-auto shadow-md">
