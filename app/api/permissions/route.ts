@@ -221,7 +221,25 @@ export async function GET(request: NextRequest) {
     // Filter out artificial "Manual Management Override" records so only real student applications appear
     const realPermissions = (permissions || []).filter((p: any) => {
       const reason = String(p.reason || '').trim().toLowerCase();
-      return !reason.includes('manual management override');
+      if (reason.includes('manual management override')) return false;
+
+      // Auto-heal out-of-sync records where dean approved or rejected
+      if (p.deanStatus === 'allowed' && p.status === 'pending') {
+        p.status = 'allowed';
+        db.permissions.update(p._id || p.id, { status: 'allowed' }).catch(() => {});
+      } else if ((p.deanStatus === 'rejected' || p.wardenStatus === 'rejected') && p.status === 'pending') {
+        p.status = 'rejected';
+        db.permissions.update(p._id || p.id, { status: 'rejected' }).catch(() => {});
+      }
+
+      // If user is specifically querying for "pending", exclude any where dean already approved or rejected
+      if (status === 'pending') {
+        if (p.deanStatus === 'allowed' || p.deanStatus === 'rejected' || p.wardenStatus === 'rejected' || p.status !== 'pending') {
+          return false;
+        }
+      }
+
+      return true;
     });
 
     return NextResponse.json({ 
@@ -323,20 +341,20 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Logic for final status
-    const finalWardenStatus = wardenStatus || currentPermission.wardenStatus;
-    const finalDeanStatus = deanStatus || currentPermission.deanStatus;
+    const finalWardenStatus = wardenStatus !== undefined ? wardenStatus : currentPermission.wardenStatus;
+    const finalDeanStatus = deanStatus !== undefined ? deanStatus : currentPermission.deanStatus;
 
     if (status === "cancelled") {
       update.status = "cancelled";
       update.cancellationReason = body.cancellationReason || "Cancelled by student before leaving campus";
-    } else {
-      if (finalDeanStatus === "allowed" || finalDeanStatus === "approved") {
+    } else if (currentPermission.status !== "completed") {
+      if (finalDeanStatus === "allowed" || status === "allowed") {
         update.status = "allowed";
-      } else if (finalWardenStatus === "rejected" || finalDeanStatus === "rejected") {
+      } else if (finalDeanStatus === "rejected" || finalWardenStatus === "rejected" || status === "rejected") {
         update.status = "rejected";
       } else if (status) {
         update.status = status;
-      } else if (finalWardenStatus === "allowed" && (!finalDeanStatus || finalDeanStatus === "pending")) {
+      } else {
         update.status = "pending";
       }
     }

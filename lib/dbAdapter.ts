@@ -5508,8 +5508,10 @@ export const db = {
                 if (filters.studentId) query = query.eq('student_id', filters.studentId);
                 if (filters.status === 'hidden') {
                     query = query.eq('is_hidden', true);
-                } else {
-                    if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
+                } else if (filters.status === 'allowed') {
+                    query = query.or('status.eq.allowed,dean_status.eq.allowed');
+                } else if (filters.status && filters.status !== 'all') {
+                    query = query.eq('status', filters.status);
                 }
                 
                 // ⚡ WARDEN FILTER
@@ -5557,7 +5559,11 @@ export const db = {
 
                 if (filters.studentId) whereClause.studentId = filters.studentId;
                 if (filters.status && filters.status !== 'all' && filters.status !== 'hidden') {
-                    whereClause.status = filters.status;
+                    if (filters.status === 'allowed') {
+                        whereClause.OR = [{ status: 'allowed' }, { deanStatus: 'allowed' }];
+                    } else {
+                        whereClause.status = filters.status;
+                    }
                 }
 
                 // Exclude artificial manual toggle records
@@ -5664,7 +5670,12 @@ export const db = {
                     delete mongoFilters.status;
                 } else {
                     mongoFilters.isHidden = { $ne: true };
-                    if (mongoFilters.status === 'all') delete mongoFilters.status;
+                    if (mongoFilters.status === 'all') {
+                        delete mongoFilters.status;
+                    } else if (mongoFilters.status === 'allowed') {
+                        mongoFilters.$or = [{ status: 'allowed' }, { deanStatus: 'allowed' }];
+                        delete mongoFilters.status;
+                    }
                 }
 
                 // ⚡ WARDEN FILTER for Mongoose
