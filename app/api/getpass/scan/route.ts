@@ -369,8 +369,8 @@ export async function POST(request: NextRequest) {
             //   4. Current time is within [fromDateTime → toDateTime]
             //   5. requestType is explicitly "leave"
             const activeLeave = activePermissions?.find((p: any) => {
-                const isFullyAllowed = p.status === "allowed";
-                const isDeanAllowed = p.deanStatus === "allowed";
+                const isFullyAllowed = p.status === "allowed" || p.status === "approved";
+                const isDeanAllowed = p.deanStatus === "allowed" || p.deanStatus === "approved";
 
                 if (!isFullyAllowed && !isDeanAllowed) return false;
 
@@ -384,12 +384,16 @@ export async function POST(request: NextRequest) {
                 const start = new Date(p.fromDateTime).getTime();
                 const end = new Date(p.toDateTime).getTime();
                 const currentTime = now.getTime();
-                const isInTimeWindow = currentTime >= start && currentTime <= end;
+                // Allow student to scan out on the departure day (up to 18 hours before fromDateTime) through the end date
+                const isBeforeExpiry = currentTime <= end;
+                const isAfterOrNearDeparture = (start - currentTime) <= (18 * 60 * 60 * 1000);
+                const isInTimeWindow = isBeforeExpiry && isAfterOrNearDeparture;
 
                 if (!isInTimeWindow) return false;
 
-                // ONLY explicitly-tagged leave permissions count as leave
-                return p.requestType === "leave";
+                // Check for all leave request types (leave, home-leave, home, home_leave)
+                const rType = String(p.requestType || '').trim().toLowerCase();
+                return rType === "leave" || rType === "home-leave" || rType === "home" || rType === "home_leave";
             });
 
             // Create new gate pass (check-out)

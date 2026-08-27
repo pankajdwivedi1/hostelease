@@ -329,12 +329,14 @@ export async function PATCH(request: NextRequest) {
     if (status === "cancelled") {
       update.status = "cancelled";
       update.cancellationReason = body.cancellationReason || "Cancelled by student before leaving campus";
-    } else if (status) {
-      if (finalDeanStatus === "allowed" || (finalWardenStatus === "allowed" && finalDeanStatus === "allowed")) {
+    } else {
+      if (finalDeanStatus === "allowed" || finalDeanStatus === "approved") {
         update.status = "allowed";
       } else if (finalWardenStatus === "rejected" || finalDeanStatus === "rejected") {
         update.status = "rejected";
-      } else {
+      } else if (status) {
+        update.status = status;
+      } else if (finalWardenStatus === "allowed" && (!finalDeanStatus || finalDeanStatus === "pending")) {
         update.status = "pending";
       }
     }

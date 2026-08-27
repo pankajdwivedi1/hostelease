@@ -5177,9 +5177,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                             </div>
                                                                         ) : (
                                                                             studentPermissionsList.map((permission, idx) => {
-                                                                                const isAllowed = permission.status === "allowed" || permission.status === "accepted" || permission.status === "approved";
-                                                                                const isRejected = permission.status === "rejected";
-                                                                                const isPending = permission.status === "pending";
+                                                                                const isAllowed = permission.status === "allowed" || permission.status === "accepted" || permission.status === "approved" || permission.deanStatus === "allowed" || permission.deanStatus === "approved";
+                                                                                const isRejected = permission.status === "rejected" || permission.deanStatus === "rejected" || permission.wardenStatus === "rejected";
+                                                                                const isPending = !isAllowed && !isRejected;
 
                                                                                 const fromFormatted = permission.fromDateTime
                                                                                     ? new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })
@@ -5343,9 +5343,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                             studentHomeLeaves.map((item, idx) => {
                                                                                 const isGatePassOuting = item.source === 'gate_pass';
                                                                                 const isCurrentlyOut = item.status === 'out';
-                                                                                const isAllowed = item.status === 'allowed';
-                                                                                const isRejected = item.status === 'rejected';
-                                                                                const isPending = item.status === 'pending';
+                                                                                const isAllowed = item.status === 'allowed' || item.status === 'approved' || item.deanStatus === 'allowed' || item.deanStatus === 'approved';
+                                                                                const isRejected = item.status === 'rejected' || item.deanStatus === 'rejected' || item.wardenStatus === 'rejected';
+                                                                                const isPending = !isAllowed && !isRejected;
 
                                                                                 const fromRawDate = item.checkOutTime || item.fromDateTime || item.createdAt;
                                                                                 const toRawDate = item.checkInTime || item.toDateTime;

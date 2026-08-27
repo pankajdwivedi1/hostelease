@@ -5867,15 +5867,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const handleStatusChange = async (id: string, newStatus: "allowed" | "rejected") => {
+  const handleStatusChange = async (id: string, newStatus: "allowed" | "rejected", targetRole?: "warden" | "dean") => {
     try {
       const userType = localStorage.getItem("userType");
       const updateData: any = { permissionId: id };
 
-      if (userType === "warden") {
+      const isWardenTarget = targetRole === "warden" || (!targetRole && userType === "warden");
+      const isDeanTarget = targetRole === "dean" || (!targetRole && (userType === "admin" || userType === "superadmin"));
+
+      if (isWardenTarget) {
         updateData.wardenStatus = newStatus;
-      } else if (userType === "admin" || userType === "superadmin") {
+        if (newStatus === "rejected") updateData.status = "rejected";
+      } else if (isDeanTarget) {
         updateData.deanStatus = newStatus;
+        updateData.status = newStatus;
       } else {
         updateData.status = newStatus;
       }
@@ -5884,9 +5889,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         prevPermissions.map((perm) =>
           perm._id === id ? {
             ...perm,
-            status: userType === "admin" || userType === "superadmin" ? newStatus : perm.status,
-            wardenStatus: userType === "warden" ? newStatus : perm.wardenStatus,
-            deanStatus: (userType === "admin" || userType === "superadmin") ? newStatus : perm.deanStatus,
+            status: isDeanTarget ? newStatus : (newStatus === "rejected" ? "rejected" : perm.status),
+            wardenStatus: isWardenTarget ? newStatus : perm.wardenStatus,
+            deanStatus: isDeanTarget ? newStatus : perm.deanStatus,
           } : perm
         )
       );
@@ -8237,22 +8242,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           <div className="flex flex-col items-center gap-1 relative">
                                             <div className="flex items-center gap-2 md:gap-2.5">
                                               <button
-                                                onClick={async () => {
+                                                onClick={() => {
                                                   if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
-                                                  if (userType === "warden" && await showConfirm("Are you sure you want to approve this permission?")) handleStatusChange(permission._id, "allowed");
+                                                  if (userType === "warden" || userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed", "warden");
                                                 }}
-                                                disabled={userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired}
-                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.wardenStatus === "allowed" ? "border-green-300 !bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired) ? "cursor-not-allowed" : "cursor-pointer"}`}
+                                                disabled={(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired}
+                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.wardenStatus === "allowed" ? "border-green-300 !bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired ? "cursor-not-allowed" : "cursor-pointer"}`}
                                               >
                                                 <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                               </button>
                                               <button
                                                 onClick={() => {
                                                   if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
-                                                  if (userType === "warden") handleStatusChange(permission._id, "rejected");
+                                                  if (userType === "warden" || userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected", "warden");
                                                 }}
-                                                disabled={userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired}
-                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.wardenStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${(userType !== "warden" || permission.deanStatus !== "pending" || isLeaveExpired) ? "cursor-not-allowed" : "cursor-pointer"}`}
+                                                disabled={(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired}
+                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.wardenStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired ? "cursor-not-allowed" : "cursor-pointer"}`}
                                               >
                                                 <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                                               </button>
@@ -8284,7 +8289,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             <button
                                               onClick={() => {
                                                 if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
-                                                if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed");
+                                                if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed", "dean");
                                               }}
                                               disabled={userType !== "admin" && userType !== "superadmin"}
                                               className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "allowed" ? "border-green-600 !bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired) ? "cursor-not-allowed" : "cursor-pointer"}`}
@@ -8294,7 +8299,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             <button
                                               onClick={() => {
                                                 if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
-                                                if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected");
+                                                if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected", "dean");
                                               }}
                                               disabled={userType !== "admin" && userType !== "superadmin"}
                                               className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired) ? "cursor-not-allowed" : "cursor-pointer"}`}
@@ -12553,9 +12558,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           </div>
                         ) : (
                           studentPermissionsList.map((permission, idx) => {
-                            const isAllowed = permission.status === "allowed" || permission.status === "accepted";
-                            const isRejected = permission.status === "rejected";
-                            const isPending = permission.status === "pending";
+                            const isAllowed = permission.status === "allowed" || permission.status === "accepted" || permission.status === "approved" || permission.deanStatus === "allowed" || permission.deanStatus === "approved";
+                            const isRejected = permission.status === "rejected" || permission.deanStatus === "rejected" || permission.wardenStatus === "rejected";
+                            const isPending = !isAllowed && !isRejected;
 
                             const fromFormatted = permission.fromDateTime
                               ? new Date(permission.fromDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })
@@ -12720,9 +12725,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           studentHomeLeaves.map((item, idx) => {
                             const isGatePassOuting = item.source === 'gate_pass';
                             const isCurrentlyOut = item.status === 'out';
-                            const isAllowed = item.status === 'allowed';
-                            const isRejected = item.status === 'rejected';
-                            const isPending = item.status === 'pending';
+                            const isAllowed = item.status === 'allowed' || item.status === 'approved' || item.deanStatus === 'allowed' || item.deanStatus === 'approved';
+                            const isRejected = item.status === 'rejected' || item.deanStatus === 'rejected' || item.wardenStatus === 'rejected';
+                            const isPending = !isAllowed && !isRejected;
 
                             // Robust Date Resolution
                             const fromRawDate = item.checkOutTime || item.fromDateTime || item.createdAt;
