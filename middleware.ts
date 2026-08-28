@@ -94,6 +94,16 @@ export function middleware(request: NextRequest) {
 
 export const config = {
     matcher: [
-        '/((?!_next/static|_next/image|favicon.ico).*)',
+        /*
+         * Match all request paths except for:
+         * - _next/static (static files)
+         * - _next/image (image optimization files)
+         * - favicon.ico (favicon file)
+         * - models/ (Face-API & TensorFlow AI model shards)
+         * - icons/ (PWA icons)
+         * - uploads/ (Static uploaded files)
+         * - Static file extensions: .svg, .png, .jpg, .jpeg, .gif, .webp, .ico, .woff, .woff2, .json, .txt, .xml
+         */
+        '/((?!_next/static|_next/image|favicon.ico|models/|icons/|uploads/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|txt|xml)$).*)',
     ],
 };

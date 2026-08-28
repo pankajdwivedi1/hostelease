@@ -715,12 +715,12 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
                                 </tr>
                                 ${(tx.extraDiscountType === "amount" || (tx.extraDiscountAmount && Number(tx.extraDiscountAmount) > 0)) ? `
                                 <tr>
-                                    <td style="color: #7e22ce; font-weight: 700;">🌟 Extra Management Discount</td>
+                                    <td style="color: #7e22ce; font-weight: 700;">🌟 Special Concession</td>
                                     <td style="color: #7e22ce; font-weight: 700;">-₹${(Number(tx.extraDiscountAmount) || Number(tx.extraDiscountValue) || 0).toLocaleString("en-IN")}.00</td>
                                 </tr>
                                 ` : (tx.extraDiscountPercent && Number(tx.extraDiscountPercent) > 0) ? `
                                 <tr>
-                                    <td style="color: #7e22ce; font-weight: 700;">🌟 Extra Management Discount (${tx.extraDiscountPercent}%)</td>
+                                    <td style="color: #7e22ce; font-weight: 700;">🌟 Special Concession (${tx.extraDiscountPercent}%)</td>
                                     <td style="color: #7e22ce; font-weight: 700;">Applied</td>
                                 </tr>
                                 ` : ''}

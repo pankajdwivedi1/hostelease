@@ -15,6 +15,7 @@ import {
     useParentConsentVideoPrefetch,
 } from "@/lib/parentConsentVideo";
 import { getInstallationId } from "@/lib/installationId";
+import LiveFaceCaptureModal from "./LiveFaceCaptureModal";
 
 interface Permission {
     _id: string;
@@ -318,6 +319,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [showFieldEnforcementModal, setShowFieldEnforcementModal] = useState(false);
     const [enforcementFormData, setEnforcementFormData] = useState<Record<string, string>>({});
     const [savingEnforcementFields, setSavingEnforcementFields] = useState(false);
+    const [showLiveFaceRecaptureModal, setShowLiveFaceRecaptureModal] = useState(false);
     
     // ⚡ Student Profile History State (Permissions, Home-Leave & Gate-Pass)
     const [studentHistoryTab, setStudentHistoryTab] = useState<"permissions" | "home_leave" | "gate_pass">("permissions");
@@ -1379,6 +1381,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             }
             */
             setShowDeviceRegistration(false); // Force false as per user request
+
+            // ⚡ FACE RECAPTURE ENFORCEMENT: Check if admin flagged this student for live selfie recapture
+            if (!isParentView && isFullProfileLoaded) {
+                const needsFaceRecapture = !!(studentProfile?.dynamicFields && typeof studentProfile.dynamicFields === 'object' && studentProfile.dynamicFields.requiresFaceRecapture);
+                if (needsFaceRecapture) {
+                    setShowLiveFaceRecaptureModal(true);
+                }
+            }
 
             // ⚡ FIELD ENFORCEMENT: Check for admin-enforced missing fields (replaces old hardcoded check)
             const checkFieldEnforcement = async () => {
@@ -4149,62 +4159,56 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     {/* Permissions Block */}
                                                     <div className="w-fit min-w-[140px] sm:min-w-[160px] md:w-full shrink-0 flex flex-col">
                                                         <div className="flex flex-col items-start justify-between gap-1.5 border border-gray-100 rounded-md p-1.5 md:p-2 bg-gray-50/50 w-full h-full">
-                                                            <div className="flex items-center justify-between w-full">
-                                                                <div className="flex items-center gap-1 md:gap-1.5">
-                                                                    <span className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Parent</span>
-                                                                    {latestPermission.parentStatus === "rejected" && (
-                                                                        <span className="text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
+                                                            {/* Row 1: Parent */}
+                                                            <div className="flex items-center justify-between w-full gap-1">
+                                                                <span className="w-10 sm:w-11 md:w-12 shrink-0 inline-block text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">
+                                                                    Parent
+                                                                </span>
+                                                                <div className="flex-1 flex items-center justify-center text-center px-1 min-w-0">
+                                                                    {latestPermission.requestType === 'leave' && latestPermission.parentConsentUrl ? (
+                                                                        <button
+                                                                            onMouseEnter={() => prefetchVideo(latestPermission.parentConsentUrl!)}
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault();
+                                                                                setActiveConsentVideoUrl(
+                                                                                    resolveConsentVideoSrc(
+                                                                                        latestPermission.parentConsentUrl!,
+                                                                                        prefetchedVideoUrls
+                                                                                    )
+                                                                                );
+                                                                            }}
+                                                                            className="inline-flex items-center justify-center text-[6px] md:text-[8px] font-black text-green-600 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded uppercase tracking-wider hover:bg-green-100 transition-all gap-0.5 cursor-pointer whitespace-nowrap"
+                                                                            title="Play Consent Video"
+                                                                        >
+                                                                            🎥 Play Consent
+                                                                        </button>
+                                                                    ) : isParentView && latestPermission.requestType === 'leave' && latestPermission.status === 'pending' ? (
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                const cleanName = studentProfile?.name ? studentProfile.name.trim().replace(/\s+/g, '_') : 'Student';
+                                                                                const cleanErp = studentProfile?.registrationId ? studentProfile.registrationId.trim() : '';
+                                                                                const slug = cleanErp ? `${cleanName}_${cleanErp}` : cleanName;
+                                                                                window.open(`/parent-consent/${slug}--${latestPermission._id}`, "_blank");
+                                                                            }}
+                                                                            className="inline-flex items-center justify-center text-[6px] md:text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded uppercase tracking-wider hover:bg-indigo-100 transition-all gap-0.5 cursor-pointer whitespace-nowrap"
+                                                                        >
+                                                                            🎥 Record Video
+                                                                        </button>
+                                                                    ) : latestPermission.parentStatus === "rejected" ? (
+                                                                        <span className="inline-flex items-center justify-center text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-red-100 text-center whitespace-nowrap">
                                                                             Rejected
                                                                         </span>
-                                                                    )}
-                                                                    {latestPermission.parentStatus === "allowed" && (
-                                                                        <span className="text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
-                                                                            AGREE
+                                                                    ) : latestPermission.parentStatus === "allowed" ? (
+                                                                        <span className="inline-flex items-center justify-center text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-green-100 text-center whitespace-nowrap">
+                                                                            Accepted
                                                                         </span>
-                                                                    )}
-                                                                    {(!latestPermission.parentStatus || latestPermission.parentStatus === "no_response" || latestPermission.parentStatus === "pending") && (
-                                                                        <span className="text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                                                    ) : (
+                                                                        <span className="inline-flex items-center justify-center text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-yellow-100 text-center whitespace-nowrap">
                                                                             Pending
                                                                         </span>
                                                                     )}
-                                                                    {latestPermission.requestType === 'leave' && (
-                                                                        <>
-                                                                            {latestPermission.parentConsentUrl ? (
-                                                                                <button
-                                                                                    onMouseEnter={() => prefetchVideo(latestPermission.parentConsentUrl!)}
-                                                                                    onClick={(e) => {
-                                                                                        e.preventDefault();
-                                                                                        setActiveConsentVideoUrl(
-                                                                                            resolveConsentVideoSrc(
-                                                                                                latestPermission.parentConsentUrl!,
-                                                                                                prefetchedVideoUrls
-                                                                                            )
-                                                                                        );
-                                                                                    }}
-                                                                                    className="text-[6px] md:text-[8px] font-black text-green-600 bg-green-50 border border-green-200 px-1 py-0.5 rounded uppercase tracking-wider hover:bg-green-100 transition-all flex items-center gap-0.5 cursor-pointer ml-1"
-                                                                                    title="Play Consent Video"
-                                                                                >
-                                                                                    🎥 Play Consent
-                                                                                </button>
-                                                                            ) : (
-                                                                                isParentView && latestPermission.status === 'pending' && (
-                                                                                    <button
-                                                                                        onClick={() => {
-                                                                                            const cleanName = studentProfile?.name ? studentProfile.name.trim().replace(/\s+/g, '_') : 'Student';
-                                                                                            const cleanErp = studentProfile?.registrationId ? studentProfile.registrationId.trim() : '';
-                                                                                            const slug = cleanErp ? `${cleanName}_${cleanErp}` : cleanName;
-                                                                                            window.open(`/parent-consent/${slug}--${latestPermission._id}`, "_blank");
-                                                                                        }}
-                                                                                        className="text-[6px] md:text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 px-1 py-0.5 rounded uppercase tracking-wider hover:bg-indigo-100 transition-all flex items-center gap-0.5 cursor-pointer ml-1"
-                                                                                    >
-                                                                                        🎥 Record Video
-                                                                                    </button>
-                                                                                )
-                                                                            )}
-                                                                        </>
-                                                                    )}
                                                                 </div>
-                                                                <div className="flex items-center gap-1.5 relative">
+                                                                <div className="shrink-0 flex items-center gap-1.5 relative">
                                                                     <div className="flex items-center gap-1 md:gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
                                                                         {isParentView && latestPermission.status === 'pending' ? (
                                                                             <>
@@ -4237,26 +4241,27 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 </div>
                                                             </div>
 
-                                                            <div className="flex items-center justify-between w-full">
-                                                                <div className="flex items-center gap-1 md:gap-1.5">
-                                                                    <span className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Warden</span>
-                                                                    {latestPermission.wardenStatus === "rejected" && (
-                                                                        <span className="text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
+                                                            {/* Row 2: Warden */}
+                                                            <div className="flex items-center justify-between w-full gap-1">
+                                                                <span className="w-10 sm:w-11 md:w-12 shrink-0 inline-block text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">
+                                                                    Warden
+                                                                </span>
+                                                                <div className="flex-1 flex items-center justify-center text-center px-1 min-w-0">
+                                                                    {latestPermission.wardenStatus === "rejected" ? (
+                                                                        <span className="inline-flex items-center justify-center text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-red-100 text-center whitespace-nowrap">
                                                                             Rejected
                                                                         </span>
-                                                                    )}
-                                                                    {latestPermission.wardenStatus === "allowed" && (
-                                                                        <span className="text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
+                                                                    ) : latestPermission.wardenStatus === "allowed" ? (
+                                                                        <span className="inline-flex items-center justify-center text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-green-100 text-center whitespace-nowrap">
                                                                             Accepted
                                                                         </span>
-                                                                    )}
-                                                                    {latestPermission.wardenStatus === "pending" && (
-                                                                        <span className="text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                                                    ) : (
+                                                                        <span className="inline-flex items-center justify-center text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-yellow-100 text-center whitespace-nowrap">
                                                                             Pending
                                                                         </span>
                                                                     )}
                                                                 </div>
-                                                                <div className="flex items-center gap-1.5 relative">
+                                                                <div className="shrink-0 flex items-center gap-1.5 relative">
                                                                     <div className="flex items-center gap-1 md:gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
                                                                         <div className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${latestPermission.wardenStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm" : "border-gray-100 text-gray-300"} cursor-default`}>
                                                                             <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
@@ -4268,26 +4273,27 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 </div>
                                                             </div>
 
-                                                            <div className="flex items-center justify-between w-full">
-                                                                <div className="flex items-center gap-1 md:gap-1.5">
-                                                                    <span className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Dean</span>
-                                                                    {latestPermission.deanStatus === "rejected" && (
-                                                                        <span className="text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase tracking-wider border border-red-100">
+                                                            {/* Row 3: Dean */}
+                                                            <div className="flex items-center justify-between w-full gap-1">
+                                                                <span className="w-10 sm:w-11 md:w-12 shrink-0 inline-block text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">
+                                                                    Dean
+                                                                </span>
+                                                                <div className="flex-1 flex items-center justify-center text-center px-1 min-w-0">
+                                                                    {latestPermission.deanStatus === "rejected" ? (
+                                                                        <span className="inline-flex items-center justify-center text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-red-100 text-center whitespace-nowrap">
                                                                             Rejected
                                                                         </span>
-                                                                    )}
-                                                                    {latestPermission.deanStatus === "allowed" && (
-                                                                        <span className="text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1 py-0.5 rounded uppercase tracking-wider border border-green-100">
+                                                                    ) : latestPermission.deanStatus === "allowed" ? (
+                                                                        <span className="inline-flex items-center justify-center text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-green-100 text-center whitespace-nowrap">
                                                                             Accepted
                                                                         </span>
-                                                                    )}
-                                                                    {latestPermission.deanStatus === "pending" && (
-                                                                        <span className="text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100">
+                                                                    ) : (
+                                                                        <span className="inline-flex items-center justify-center text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-yellow-100 text-center whitespace-nowrap">
                                                                             Pending
                                                                         </span>
                                                                     )}
                                                                 </div>
-                                                                <div className="flex items-center gap-1.5 relative">
+                                                                <div className="shrink-0 flex items-center gap-1.5 relative">
                                                                     <div className="flex items-center gap-1 md:gap-1.5 bg-white p-0.5 rounded-md border border-gray-100">
                                                                         <div className={`w-4 h-4 md:w-6 md:h-6 rounded-md border flex items-center justify-center ${latestPermission.deanStatus === "allowed" ? "border-green-300 bg-green-50 text-green-600 shadow-sm scale-110" : "border-gray-100 text-gray-300"} cursor-default`}>
                                                                             <svg className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
@@ -5805,6 +5811,30 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                         </div>
                                     </div>
                                 </div>
+                            )}
+
+                            {/* ⚡ LIVE FACE RECAPTURE MODAL - Mandatory Live Selfie & Embedding Extraction */}
+                            {showLiveFaceRecaptureModal && studentProfile && (
+                                <LiveFaceCaptureModal
+                                    isOpen={showLiveFaceRecaptureModal}
+                                    studentId={studentProfile._id || (studentProfile as any).id}
+                                    firebaseUID={studentProfile.firebaseUID}
+                                    studentName={studentProfile.name}
+                                    onSuccess={(updatedStudent: any) => {
+                                        setShowLiveFaceRecaptureModal(false);
+                                        if (updatedStudent) {
+                                            setStudentProfile(prev => prev ? ({
+                                                ...prev,
+                                                profilePicture: updatedStudent.profilePicture || updatedStudent.profile_picture || prev.profilePicture,
+                                                faceDescriptor: updatedStudent.faceDescriptor || updatedStudent.face_descriptor || prev.faceDescriptor,
+                                                dynamicFields: {
+                                                    ...(prev.dynamicFields || {}),
+                                                    requiresFaceRecapture: false
+                                                }
+                                            }) : prev);
+                                        }
+                                    }}
+                                />
                             )}
 
                             {/* ⚡ DYNAMIC FIELD ENFORCEMENT MODAL - Blocks all actions until fields are filled */}

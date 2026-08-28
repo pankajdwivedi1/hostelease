@@ -341,7 +341,7 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
   return (
     <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl sm:rounded-2xl p-4 sm:p-8 border border-slate-200">
       <div className="mb-6 sm:mb-8">
-        <h2 className="text-lg sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">Field Enforcement Settings</h2>
+        <h2 className="text-lg md:text-xl font-bold text-foreground leading-tight tracking-tight mb-1">Field Enforcement Settings</h2>
         <p className="text-[10px] sm:text-sm text-slate-600">
           Manage which fields are displayed to students after login, and track completion status
         </p>

@@ -1140,7 +1140,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [paymentEndDate, setPaymentEndDate] = useState<string>("");
   const [paymentSearch, setPaymentSearch] = useState("");
   const [showBankSettingsModal, setShowBankSettingsModal] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<"fieldEnforcement" | "profile">(title === "Super Admin Dashboard" ? "fieldEnforcement" : "profile");
+  const [settingsTab, setSettingsTab] = useState<"fieldEnforcement" | "profile" | "subscription">(title === "Super Admin Dashboard" ? "fieldEnforcement" : "profile");
   const [bankFormData, setBankFormData] = useState({
     accountName: "",
     accountNumber: "",
@@ -1427,7 +1427,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   // Audit States
   const [auditResults, setAuditResults] = useState<any[]>([]);
   const [isAuditing, setIsAuditing] = useState(false);
-  const [activeAuditType, setActiveAuditType] = useState<"phone" | "regid" | "erpid" | "gibberish" | null>(null);
+  const [activeAuditType, setActiveAuditType] = useState<"phone" | "regid" | "erpid" | "gibberish" | "face" | null>(null);
+  const [selectedFaceAuditIds, setSelectedFaceAuditIds] = useState<string[]>([]);
+  const [faceAuditFilter, setFaceAuditFilter] = useState<"all" | "blank" | "missing_vector" | "photo_of_photo" | "blurry" | "flagged">("all");
+  const [isFlaggingRetake, setIsFlaggingRetake] = useState(false);
+  const [isScanningBlur, setIsScanningBlur] = useState(false);
+  const [blurScanProgress, setBlurScanProgress] = useState(0);
+  const [blurThreshold, setBlurThreshold] = useState(85);
 
   // MERGED WARDEN ACCOUNTS STATE
   const [wardenAccounts, setWardenAccounts] = useState<{ _id?: string, username: string, password?: string, hostels: string[] }[]>([]);
@@ -2678,8 +2684,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 ${extraDiscountAmount > 0 ? `
                 <tr style="background: #fdf4ff;">
                   <td colspan="4" style="color: #7e22ce; font-weight: 700;">
-                    ✨ Special Management Concession / Extra Discount (${extraDiscountPercent}% OFF)
-                    <span style="font-size: 9px; opacity: 0.8; margin-left: 4px;">(Authorized via Boss Control)</span>
+                    ✨ Special Concession (${extraDiscountPercent}% OFF)
                   </td>
                   <td style="text-align: right; font-weight: 800; color: #7e22ce;">-₹${extraDiscountAmount.toLocaleString("en-IN")}.00</td>
                 </tr>
@@ -2715,12 +2720,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <td style="color: #be185d;">-₹${standardDiscountAmount.toLocaleString("en-IN")}.00</td>
                   </tr>
                   <tr>
-                    <td style="color: #7e22ce; font-weight: 700;">🌟 Extra Boss Discount (${extraDiscountPercent}%)</td>
+                    <td style="color: #7e22ce; font-weight: 700;">🌟 Special Concession (${extraDiscountPercent}%)</td>
                     <td style="color: #7e22ce; font-weight: 700;">-₹${extraDiscountAmount.toLocaleString("en-IN")}.00</td>
                   </tr>
                   ` : extraDiscountAmount > 0 ? `
                   <tr>
-                    <td style="color: #7e22ce; font-weight: 700;">🌟 Extra Boss Discount (${extraDiscountPercent}%)</td>
+                    <td style="color: #7e22ce; font-weight: 700;">🌟 Special Concession (${extraDiscountPercent}%)</td>
                     <td style="color: #7e22ce; font-weight: 700;">-₹${extraDiscountAmount.toLocaleString("en-IN")}.00</td>
                   </tr>
                   ` : ''}
@@ -4003,6 +4008,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const handleUpdateHostelConfig = async (hostel: any) => {
     try {
       setIsSavingSystemSettings(true);
+      setHostels((prev: any[]) =>
+        prev.map((h: any) => ((h._id === hostel._id || h._id === hostel.id || h.id === hostel._id || h.id === hostel.id) ? { ...h, ...hostel } : h))
+      );
       const res = await fetch("/api/admin/hostels", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -4165,27 +4173,281 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     }
   };
 
-  const handleAudit = async (type: "duplicates-phone" | "duplicates-regid" | "duplicates-erpid" | "gibberish-names") => {
+  const analyzeImageQuality = (imgSrc: string, hasVector: boolean): Promise<{
+    isPoorQuality: boolean;
+    issueType: "BLANK_PHOTO" | "MISSING_VECTOR" | "PHOTO_OF_PHOTO" | "BLURRY_PHOTO" | "CLEAN";
+    issueLabel: string;
+    sharpnessScore: number;
+    borderScore: number;
+  }> => {
+    return new Promise((resolve) => {
+      if (!imgSrc || imgSrc.length < 50) {
+        return resolve({
+          isPoorQuality: true,
+          issueType: "BLANK_PHOTO",
+          issueLabel: "Blank / Missing Photo",
+          sharpnessScore: 0,
+          borderScore: 0
+        });
+      }
+
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          const w = 240;
+          const h = 240;
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          if (!ctx) {
+            return resolve({
+              isPoorQuality: !hasVector,
+              issueType: hasVector ? "CLEAN" : "MISSING_VECTOR",
+              issueLabel: hasVector ? "Clean" : "Missing Vector",
+              sharpnessScore: 100,
+              borderScore: 0
+            });
+          }
+
+          ctx.drawImage(img, 0, 0, w, h);
+          const imgData = ctx.getImageData(0, 0, w, h);
+          const data = imgData.data;
+
+          // 1. Grayscale map & darkness check
+          const gray = new Float32Array(w * h);
+          let darkPixelCount = 0;
+
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+            gray[i / 4] = luma;
+            if (luma < 12) darkPixelCount++;
+          }
+
+          // Entirely dark/black image check
+          if (darkPixelCount > (w * h * 0.70)) {
+            return resolve({
+              isPoorQuality: true,
+              issueType: "BLANK_PHOTO",
+              issueLabel: "Black / Dark Image",
+              sharpnessScore: 0,
+              borderScore: 0
+            });
+          }
+
+          // 2. Top Corners Background Uniformity
+          // In genuine selfies (Ashish, Anuranjan, etc.), the top corners are uniform wall (tlVar < 150, trVar < 150).
+          // In photos of photos held in fingers/table (Archita), top corners contain fingers/table/background clutter.
+          const topLeft: number[] = [];
+          const topRight: number[] = [];
+          for (let y = 5; y < 35; y++) {
+            for (let x = 5; x < 35; x++) {
+              topLeft.push(gray[y * w + x]);
+              topRight.push(gray[y * w + (w - 1 - x)]);
+            }
+          }
+          const tlMean = topLeft.reduce((a, b) => a + b, 0) / topLeft.length;
+          const trMean = topRight.reduce((a, b) => a + b, 0) / topRight.length;
+          const tlVar = Math.round(topLeft.reduce((a, b) => a + Math.pow(b - tlMean, 2), 0) / topLeft.length);
+          const trVar = Math.round(topRight.reduce((a, b) => a + Math.pow(b - trMean, 2), 0) / topRight.length);
+
+          // 3. Horizontal Paper Edge Line Strength (above head: y between 12% and 35%)
+          let maxHLine = 0;
+          for (let y = 12; y < Math.floor(h * 0.35); y++) {
+            let lineContrast = 0;
+            for (let x = 25; x < w - 25; x++) {
+              lineContrast += Math.abs(gray[y * w + x] - gray[(y + 4) * w + x]);
+            }
+            const avg = lineContrast / (w - 50);
+            if (avg > maxHLine) maxHLine = avg;
+          }
+
+          // 4. Vertical Paper Edge Line Strength (left & right sides: x between 8% and 25%)
+          let maxVLine = 0;
+          for (let x = 8; x < Math.floor(w * 0.25); x++) {
+            let vContrast = 0;
+            for (let y = 25; y < h - 25; y++) {
+              vContrast += Math.abs(gray[y * w + x] - gray[y * w + (x + 4)]);
+            }
+            const avg = vContrast / (h - 50);
+            if (avg > maxVLine) maxVLine = avg;
+          }
+
+          // 5. Center Face Sharpness (Laplacian on central 50% face zone)
+          let lapSum = 0;
+          let lapSumSq = 0;
+          let lapCount = 0;
+          for (let y = Math.floor(h * 0.25); y < Math.floor(h * 0.75); y++) {
+            for (let x = Math.floor(w * 0.25); x < Math.floor(w * 0.75); x++) {
+              const idx = y * w + x;
+              const lap = gray[idx - w] + gray[idx + w] + gray[idx - 1] + gray[idx + 1] - 4 * gray[idx];
+              lapSum += lap;
+              lapSumSq += lap * lap;
+              lapCount++;
+            }
+          }
+          const lapMean = lapSum / lapCount;
+          const sharpness = Math.round((lapSumSq / lapCount) - (lapMean * lapMean));
+
+          // Calibrated Decision Logic
+          const isPhotoOfPhoto = (maxHLine > 38 && maxVLine > 24) ||
+                                 (maxHLine > 40 && (tlVar > 450 || trVar > 450)) ||
+                                 (maxVLine > 35 && (tlVar > 400 || trVar > 400));
+
+          const isBlurry = sharpness < 75;
+
+          let issueType: "BLANK_PHOTO" | "MISSING_VECTOR" | "PHOTO_OF_PHOTO" | "BLURRY_PHOTO" | "CLEAN" = "CLEAN";
+          let issueLabel = "Clean Profile";
+          let isPoorQuality = false;
+
+          if (isPhotoOfPhoto) {
+            issueType = "PHOTO_OF_PHOTO";
+            issueLabel = "📷 Photo of a Printed Photo / Screen";
+            isPoorQuality = true;
+          } else if (isBlurry) {
+            issueType = "BLURRY_PHOTO";
+            issueLabel = `Blurry / Low Sharpness (${sharpness})`;
+            isPoorQuality = true;
+          } else if (!hasVector) {
+            issueType = "MISSING_VECTOR";
+            issueLabel = "Missing 128-D Vector";
+            isPoorQuality = true;
+          }
+
+          resolve({
+            isPoorQuality,
+            issueType,
+            issueLabel,
+            sharpnessScore: sharpness,
+            borderScore: Math.round(maxHLine + maxVLine)
+          });
+        } catch (e) {
+          resolve({
+            isPoorQuality: !hasVector,
+            issueType: hasVector ? "CLEAN" : "MISSING_VECTOR",
+            issueLabel: hasVector ? "Clean" : "Missing Vector",
+            sharpnessScore: 100,
+            borderScore: 0
+          });
+        }
+      };
+
+      img.onerror = () => {
+        resolve({
+          isPoorQuality: true,
+          issueType: "BLANK_PHOTO",
+          issueLabel: "Failed to Load Photo",
+          sharpnessScore: 0,
+          borderScore: 0
+        });
+      };
+
+      img.src = imgSrc;
+    });
+  };
+
+  const runQualityScanOnStudents = async (studentList: any[]) => {
+    setIsScanningBlur(true);
+    setBlurScanProgress(0);
+    const updated = [...studentList];
+    const total = updated.length;
+
+    // Process in parallel batches of 20
+    const batchSize = 20;
+    for (let i = 0; i < total; i += batchSize) {
+      const batch = updated.slice(i, i + batchSize);
+      await Promise.all(batch.map(async (s) => {
+        if (s.profilePicture && s.profilePicture.length > 50 && s.issueType !== "BLANK_PHOTO") {
+          const res = await analyzeImageQuality(s.profilePicture, s.hasVector);
+          s.sharpnessScore = res.sharpnessScore;
+          s.borderScore = res.borderScore;
+          s.isPhotoOfPhoto = res.issueType === "PHOTO_OF_PHOTO";
+          s.isBlurry = res.issueType === "BLURRY_PHOTO";
+          s.qualityIssueLabel = res.issueLabel;
+          if (res.isPoorQuality && (s.issueType === "CLEAN" || !s.issueType)) {
+            s.issueType = res.issueType;
+          } else if (res.isPhotoOfPhoto) {
+            s.issueType = "PHOTO_OF_PHOTO";
+          }
+        }
+      }));
+      setBlurScanProgress(Math.min(100, Math.round(((i + batch.length) / total) * 100)));
+      setAuditResults([...updated]);
+    }
+    setIsScanningBlur(false);
+  };
+
+  const handleAudit = async (type: "duplicates-phone" | "duplicates-regid" | "duplicates-erpid" | "gibberish-names" | "face-audit") => {
     try {
       setIsAuditing(true);
       setAuditResults([]);
+      setSelectedFaceAuditIds([]);
       // Extract middle part or whole for type
-      const typeLabel = type.includes('phone') ? 'phone' : (type.includes('regid') ? 'regid' : (type.includes('erpid') ? 'erpid' : 'gibberish'));
+      const typeLabel = type === 'face-audit' ? 'face' : (type.includes('phone') ? 'phone' : (type.includes('regid') ? 'regid' : (type.includes('erpid') ? 'erpid' : 'gibberish')));
       setActiveAuditType(typeLabel as any);
 
-      const response = await fetch(`/api/developer/audit?type=${type}`);
-      const data = await response.json();
-
-      if (data.success) {
-        setAuditResults(data.data);
+      if (type === "face-audit") {
+        const response = await fetch('/api/admin/face-audit');
+        const data = await response.json();
+        if (data.success) {
+          const list = data.students || [];
+          setAuditResults(list);
+          // Run AI quality, blur & printed-photo scan in background
+          runQualityScanOnStudents(list);
+        } else {
+          alert(data.error || "Face Audit failed");
+        }
       } else {
-        alert(data.error || "Audit failed");
+        const response = await fetch(`/api/developer/audit?type=${type}`);
+        const data = await response.json();
+
+        if (data.success) {
+          setAuditResults(data.data);
+        } else {
+          alert(data.error || "Audit failed");
+        }
       }
     } catch (e) {
       console.error(e);
       alert("Error performing audit");
     } finally {
       setIsAuditing(false);
+    }
+  };
+
+  const handleBulkFlagFaceRetake = async (requiresFaceRecapture: boolean, customIds?: string[]) => {
+    const targetIds = customIds || selectedFaceAuditIds;
+    if (targetIds.length === 0) {
+      alert("Please select at least one student.");
+      return;
+    }
+
+    try {
+      setIsFlaggingRetake(true);
+      const res = await fetch("/api/admin/face-audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentIds: targetIds,
+          requiresFaceRecapture
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        // Refresh audit list
+        await handleAudit("face-audit");
+      } else {
+        alert("Failed: " + (data.error || "Unknown error"));
+      }
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    } finally {
+      setIsFlaggingRetake(false);
     }
   };
 
@@ -4520,8 +4782,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const handleUpdateHostelMode = async (hostelId: string, mode: 'strict' | 'gps-only' | 'biometric') => {
     try {
       setUpdatingHostelId(hostelId);
-      const hostelToUpdate = hostels.find(h => h._id === hostelId);
+      const hostelToUpdate = hostels.find(h => h._id === hostelId || h.id === hostelId);
       if (!hostelToUpdate) throw new Error("Hostel not found");
+
+      setHostels(prev => prev.map(h => ((h._id === hostelId || h.id === hostelId) ? { ...h, attendanceMode: mode } : h)));
+      setHostelsConfig(prev => prev.map(h => ((h._id === hostelId || h.id === hostelId) ? { ...h, attendanceMode: mode } : h)));
 
       const res = await fetch('/api/admin/hostels', {
         method: 'POST',
@@ -4537,8 +4802,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       const data = await res.json();
       if (data.success) {
-        // Update local state
-        setHostels(prev => prev.map(h => h._id === hostelId ? { ...h, attendanceMode: mode } : h));
+        setHostels(prev => prev.map(h => ((h._id === hostelId || h.id === hostelId) ? { ...h, attendanceMode: mode } : h)));
+        setHostelsConfig(prev => prev.map(h => ((h._id === hostelId || h.id === hostelId) ? { ...h, attendanceMode: mode } : h)));
       }
     } catch (e) {
       console.error(e);
@@ -4871,11 +5136,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         try {
           const parsed = JSON.parse(cached);
           if (parsed && parsed.length > 0) {
-            // Invalidate cache if it contains mixed-case hostel names or stale student schema (missing gender/dynamicFields)
+            // Invalidate cache if it contains mixed-case hostel names
             const hasMixedCase = parsed.some((s: any) => s.hostelName && /[a-z]/.test(s.hostelName));
-            const isStaleSchema = parsed.some((s: any) => s.gender === undefined || s.dynamicFields === undefined);
-            if (hasMixedCase || isStaleSchema) {
-              console.log("Invalidating student cache due to mixed-case hostel names or stale student schema");
+            if (hasMixedCase) {
               localStorage.removeItem(CACHE_KEYS.STUDENTS);
               localStorage.removeItem(CACHE_KEYS.TIMESTAMP);
             } else {
@@ -4888,13 +5151,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         }
       }
 
+      // ⚡ BANDWIDTH OPTIMIZATION: If cache is fresh (< 5 mins) and not force-refreshing, skip redundant network call
+      const CACHE_TTL_MS = 5 * 60 * 1000;
+      const isCacheFresh = timestamp && (Date.now() - parseInt(timestamp, 10)) < CACHE_TTL_MS;
+      if (hasCache && isCacheFresh && !forceRefresh) {
+        return;
+      }
+
       // If we don't have cache, show loading spinner. Otherwise, fetch in the background silently.
       if (!hasCache) {
         setStudentsLoading(true);
       }
       // ⚡ OPTIMIZED: Fetch lightweight data (no big images) to save bandwidth
       const url = new URL("/api/students?light=true", window.location.origin);
-      const response = await fetch(url.href, { cache: "no-store" });
+      const response = await fetch(url.href);
       if (!response.ok) throw new Error(`Failed to fetch students: ${response.status}`);
       const data = await response.json();
       if (data.students) {
@@ -8189,18 +8459,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                       }
 
                                       return (
-                                        <div className="mt-2 flex items-center gap-1.5 flex-nowrap shrink-0 md:pl-8 lg:pl-[52px]">
-                                          <div className="flex items-center justify-start md:justify-center gap-1.5 w-full md:max-w-[245px]">
+                                        <div className="mt-1.5 flex items-center gap-1 flex-wrap shrink-0 md:pl-8 lg:pl-[52px]">
+                                          <div className="flex items-center flex-wrap gap-1 w-full max-w-full">
                                             {durationStr && (
-                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50/90 text-blue-800 border border-blue-200 text-[9px] md:text-[10px] font-bold shadow-2xs leading-tight whitespace-nowrap shrink-0">
+                                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50/90 text-blue-800 border border-blue-200 text-[8.5px] md:text-[10px] font-bold shadow-2xs leading-tight whitespace-nowrap shrink-0">
                                                 <span className="text-slate-500 font-semibold">Duration:</span>
                                                 <span className="font-extrabold text-blue-700">{durationStr}</span>
                                               </span>
                                             )}
-
                                             <button
                                               onClick={() => openEditLeaveModal(permission)}
-                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[9px] md:text-[10px] font-bold shadow-2xs w-fit cursor-pointer leading-tight whitespace-nowrap shrink-0"
+                                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors text-[8.5px] md:text-[10px] font-bold shadow-2xs w-fit cursor-pointer leading-tight whitespace-nowrap shrink-0"
                                               title="Edit Leave Dates / Extend Return Date"
                                             >
                                               <span>✏️</span> Edit Leave
@@ -8213,26 +8482,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   
                                   {/* Permissions Block under name */}
                                   <div className="pl-0 md:pl-8 lg:pl-[52px] shrink-0 md:w-full">
-                                    <div className="flex flex-col items-start gap-0.5 md:gap-1 origin-top-left border border-gray-200 rounded-md p-1 md:p-2 bg-white/30 shadow-sm w-full max-w-full md:max-w-[245px]">
-                                      <div className="flex items-center justify-between w-full">
-                                        <div className="flex items-center gap-1 md:gap-2">
-                                          <span className="w-10 sm:w-11 md:w-12 shrink-0 inline-block text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Parent</span>
-                                          {permission.parentStatus === "rejected" && (
-                                            <span className="inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 px-0.5 py-0.5 rounded uppercase border border-red-100 text-center">
-                                              Rejected
-                                            </span>
-                                          )}
-                                          {permission.parentStatus === "allowed" && (
-                                            <span className="inline-flex items-center justify-center text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 px-0.5 py-0.5 rounded uppercase border border-green-100 text-center">
-                                              AGREE
-                                            </span>
-                                          )}
-                                          {(!permission.parentStatus || permission.parentStatus === "no_response" || permission.parentStatus === "pending") && (
-                                            <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 py-0.5 rounded uppercase border border-yellow-100">
-                                              Pending
-                                            </span>
-                                          )}
-                                          {permission.parentConsentUrl && (
+                                    <div className="flex flex-col items-start gap-1 md:gap-1.5 origin-top-left border border-gray-200 rounded-md p-1 sm:p-1.5 md:p-2 bg-white/40 shadow-sm w-full max-w-[155px] sm:max-w-[185px] md:max-w-[255px]">
+                                      {/* Row 1: PARENT */}
+                                      <div className="flex items-center justify-between w-full gap-0.5 sm:gap-1">
+                                        <span className="w-8 sm:w-10 md:w-12 shrink-0 inline-block text-[7.5px] sm:text-[8.5px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">
+                                          Parent
+                                        </span>
+                                        <div className="flex-1 flex items-center justify-center text-center px-0.5 min-w-0">
+                                          {permission.parentConsentUrl ? (
                                             <button
                                               onMouseEnter={() => prefetchVideo(permission.parentConsentUrl!)}
                                               onClick={(e) => {
@@ -8244,112 +8501,120 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                   )
                                                 );
                                               }}
-                                              className="text-[6px] md:text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-150 px-1.5 py-0.5 rounded uppercase tracking-wider hover:bg-indigo-100 transition-all flex items-center gap-0.5 cursor-pointer ml-1"
+                                              className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 px-1 py-0.5 rounded uppercase tracking-wider hover:bg-indigo-100 transition-all gap-0.5 cursor-pointer whitespace-nowrap shadow-2xs"
                                               title="Play Consent Video"
                                             >
                                               🎥 Play Video
                                             </button>
-                                          )}
-                                        </div>
-                                        <div className="flex flex-col items-center gap-1 relative">
-                                          <div className="flex items-center gap-2 md:gap-2.5">
-                                            <div className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.parentStatus === "allowed" ? "border-green-300 !bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
-                                              <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                            </div>
-                                            <div className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.parentStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
-                                              <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                        <div className="flex items-center justify-between w-full mt-0.5">
-                                          <div className="flex items-center gap-1 md:gap-2">
-                                            <span className="w-10 sm:w-11 md:w-12 shrink-0 inline-block text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Warden</span>
-                                            {permission.wardenStatus === "rejected" && (
-                                              <span className="text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-red-100">
-                                                Rejected
-                                              </span>
-                                            )}
-                                            {permission.wardenStatus === "allowed" && (
-                                              <span className="text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-green-100">
-                                                Accepted
-                                              </span>
-                                            )}
-                                            {permission.wardenStatus === "pending" && (
-                                              <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 py-0.5 rounded uppercase border border-yellow-100">
-                                                Pending
-                                              </span>
-                                            )}
-                                          </div>
-                                          <div className="flex flex-col items-center gap-1 relative">
-                                            <div className="flex items-center gap-2 md:gap-2.5">
-                                              <button
-                                                onClick={() => {
-                                                  if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
-                                                  if (userType === "warden" || userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed", "warden");
-                                                }}
-                                                disabled={(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired}
-                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.wardenStatus === "allowed" ? "border-green-300 !bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired ? "cursor-not-allowed" : "cursor-pointer"}`}
-                                              >
-                                                <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                              </button>
-                                              <button
-                                                onClick={() => {
-                                                  if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
-                                                  if (userType === "warden" || userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected", "warden");
-                                                }}
-                                                disabled={(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired}
-                                                className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.wardenStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired ? "cursor-not-allowed" : "cursor-pointer"}`}
-                                              >
-                                                <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                              </button>
-                                            </div>
-                                          </div>
-                                        </div>
-
-                                      <div className="flex items-center justify-between w-full mt-0.5">
-                                        <div className="flex items-center gap-1 md:gap-2">
-                                          <span className="w-10 sm:w-11 md:w-12 shrink-0 inline-block text-[8px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">Dean</span>
-                                          {permission.deanStatus === "rejected" && (
-                                            <span className="text-[6px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-red-100">
+                                          ) : permission.parentStatus === "rejected" ? (
+                                            <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase border border-red-100 text-center tracking-wider whitespace-nowrap">
                                               Rejected
                                             </span>
-                                          )}
-                                          {permission.deanStatus === "allowed" && (
-                                            <span className="text-[6px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-green-100">
+                                          ) : permission.parentStatus === "allowed" ? (
+                                            <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1 py-0.5 rounded uppercase border border-green-100 text-center tracking-wider whitespace-nowrap">
                                               Accepted
                                             </span>
-                                          )}
-                                          {permission.deanStatus === "pending" && (
-                                            <span className="text-[6px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-0.5 py-0.5 rounded uppercase border border-yellow-100">
+                                          ) : (
+                                            <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1 py-0.5 rounded uppercase border border-yellow-100 text-center tracking-wider whitespace-nowrap">
                                               Pending
                                             </span>
                                           )}
                                         </div>
-                                        <div className="flex flex-col items-center gap-1 relative">
-                                          <div className="flex items-center gap-2 md:gap-2.5">
-                                            <button
-                                              onClick={() => {
-                                                if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
-                                                if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed", "dean");
-                                              }}
-                                              disabled={userType !== "admin" && userType !== "superadmin"}
-                                              className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "allowed" ? "border-green-600 !bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired) ? "cursor-not-allowed" : "cursor-pointer"}`}
-                                            >
-                                              <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                            </button>
-                                            <button
-                                              onClick={() => {
-                                                if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
-                                                if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected", "dean");
-                                              }}
-                                              disabled={userType !== "admin" && userType !== "superadmin"}
-                                              className={`w-4 h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired) ? "cursor-not-allowed" : "cursor-pointer"}`}
-                                            >
-                                              <svg className="w-2.5 h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                                            </button>
+                                        <div className="shrink-0 flex items-center gap-1 sm:gap-1.5 md:gap-2.5">
+                                          <div className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.parentStatus === "allowed" ? "border-green-300 !bg-green-50 text-green-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
+                                            <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                           </div>
+                                          <div className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.parentStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400"} cursor-default`}>
+                                            <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Row 2: WARDEN */}
+                                      <div className="flex items-center justify-between w-full mt-0.5 gap-0.5 sm:gap-1">
+                                        <span className="w-8 sm:w-10 md:w-12 shrink-0 inline-block text-[7.5px] sm:text-[8.5px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">
+                                          Warden
+                                        </span>
+                                        <div className="flex-1 flex items-center justify-center text-center px-0.5 min-w-0">
+                                          {permission.wardenStatus === "rejected" ? (
+                                            <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase tracking-wider border border-red-100 text-center whitespace-nowrap">
+                                              Rejected
+                                            </span>
+                                          ) : permission.wardenStatus === "allowed" ? (
+                                            <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1 py-0.5 rounded uppercase tracking-wider border border-green-100 text-center whitespace-nowrap">
+                                              Accepted
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100 text-center whitespace-nowrap">
+                                              Pending
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="shrink-0 flex items-center gap-1 sm:gap-1.5 md:gap-2.5">
+                                          <button
+                                            onClick={() => {
+                                              if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
+                                              if (userType === "warden" || userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed", "warden");
+                                            }}
+                                            disabled={(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired}
+                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.wardenStatus === "allowed" ? "border-green-300 !bg-green-50 text-gray-500 shadow-sm" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired ? "cursor-not-allowed" : "cursor-pointer"}`}
+                                          >
+                                            <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                          </button>
+                                          <button
+                                            onClick={() => {
+                                              if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
+                                              if (userType === "warden" || userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected", "warden");
+                                            }}
+                                            disabled={(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired}
+                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.wardenStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${(userType !== "warden" && userType !== "admin" && userType !== "superadmin") || isLeaveExpired ? "cursor-not-allowed" : "cursor-pointer"}`}
+                                          >
+                                            <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {/* Row 3: DEAN */}
+                                      <div className="flex items-center justify-between w-full mt-0.5 gap-0.5 sm:gap-1">
+                                        <span className="w-8 sm:w-10 md:w-12 shrink-0 inline-block text-[7.5px] sm:text-[8.5px] md:text-[10px] font-black text-secondary uppercase whitespace-nowrap tracking-tighter text-left">
+                                          Dean
+                                        </span>
+                                        <div className="flex-1 flex items-center justify-center text-center px-0.5 min-w-0">
+                                          {permission.deanStatus === "rejected" ? (
+                                            <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded uppercase tracking-wider border border-red-100 text-center whitespace-nowrap">
+                                              Rejected
+                                            </span>
+                                          ) : permission.deanStatus === "allowed" ? (
+                                            <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-green-600 bg-green-50 px-1 py-0.5 rounded uppercase tracking-wider border border-green-100 text-center whitespace-nowrap">
+                                              Accepted
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center justify-center text-[6px] sm:text-[7px] md:text-[8px] font-bold text-yellow-600 bg-yellow-50 px-1 py-0.5 rounded uppercase tracking-wider border border-yellow-100 text-center whitespace-nowrap">
+                                              Pending
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="shrink-0 flex items-center gap-1 sm:gap-1.5 md:gap-2.5">
+                                          <button
+                                            onClick={() => {
+                                              if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
+                                              if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "allowed", "dean");
+                                            }}
+                                            disabled={userType !== "admin" && userType !== "superadmin"}
+                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "allowed" ? "border-green-600 !bg-green-500 text-white shadow-md scale-105" : "border-gray-200 text-gray-400 hover:border-green-300 hover:bg-green-50/50"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired) ? "cursor-not-allowed" : "cursor-pointer"}`}
+                                          >
+                                            <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                          </button>
+                                          <button
+                                            onClick={() => {
+                                              if (isLeaveExpired) return showToast("Cannot modify: Leave end date has already passed.", "error");
+                                              if (userType === "admin" || userType === "superadmin") handleStatusChange(permission._id, "rejected", "dean");
+                                            }}
+                                            disabled={userType !== "admin" && userType !== "superadmin"}
+                                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-7 md:h-7 rounded-md border flex items-center justify-center transition-all bg-white shadow-2xs ${permission.deanStatus === "rejected" ? "border-red-500 !bg-red-50 text-red-600 shadow-sm" : "border-gray-200 text-gray-400 hover:border-red-300 hover:bg-red-50/50"} ${((userType !== "admin" && userType !== "superadmin") || isLeaveExpired) ? "cursor-not-allowed" : "cursor-pointer"}`}
+                                          >
+                                            <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                          </button>
                                         </div>
                                       </div>
                                       
@@ -9296,28 +9561,38 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
               <div className={currentTab === 'settings' ? 'block space-y-6' : 'hidden'}>
                   {/* Settings Sub-Navigation */}
-                  <div className="flex border-b border-gray-200">
+                  <div className="flex border-b border-gray-200 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     {title === "Super Admin Dashboard" && (
                       <button
                         onClick={() => setSettingsTab("fieldEnforcement")}
-                        className={`px-4 py-3 text-sm font-bold border-b-2 transition-colors ${
+                        className={`px-2.5 sm:px-3 md:px-4 py-2 md:py-3 text-[11px] sm:text-xs md:text-sm font-bold border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
                           settingsTab === "fieldEnforcement" 
                             ? "border-blue-600 text-blue-600" 
                             : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                         }`}
                       >
-                        Field Enforcement Settings
+                        Field Enforcement
                       </button>
                     )}
                     <button
                       onClick={() => setSettingsTab("profile")}
-                      className={`px-4 py-3 text-sm font-bold border-b-2 transition-colors ${
+                      className={`px-2.5 sm:px-3 md:px-4 py-2 md:py-3 text-[11px] sm:text-xs md:text-sm font-bold border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
                         settingsTab === "profile" 
+                          ? "border-blue-600 text-blue-600" 
+                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                        }`}
+                    >
+                      👤 Profile
+                    </button>
+                    <button
+                      onClick={() => setSettingsTab("subscription")}
+                      className={`px-2.5 sm:px-3 md:px-4 py-2 md:py-3 text-[11px] sm:text-xs md:text-sm font-bold border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
+                        settingsTab === "subscription" 
                           ? "border-blue-600 text-blue-600" 
                           : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                       }`}
                     >
-                      Profile Settings
+                      💳 Subscription & Billing
                     </button>
                   </div>
 
@@ -9326,8 +9601,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     {settingsTab === "fieldEnforcement" && title === "Super Admin Dashboard" && (
                       <FieldEnforcementComponent hostels={hostels.map(h => h.name)} />
                     )}
-                    {settingsTab === "profile" && (
-                      <TenantSettingsView onRenew={() => setShowRenewalModal(true)} generateInvoicePDF={generateInvoicePDF} />
+                    {settingsTab !== "fieldEnforcement" && (
+                      <TenantSettingsView 
+                        mode={settingsTab === "subscription" ? "subscription" : "profile"} 
+                        onRenew={() => setShowRenewalModal(true)} 
+                        generateInvoicePDF={generateInvoicePDF} 
+                      />
                     )}
                   </div>
               </div>
@@ -16720,7 +16999,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-4">
                       <button
                         onClick={() => handleAudit("duplicates-phone")}
                         disabled={isAuditing}
@@ -16764,6 +17043,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         </div>
                         <span className="text-[7px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest text-slate-900">Invalid Names</span>
                       </button>
+
+                      <button
+                        onClick={() => handleAudit("face-audit")}
+                        disabled={isAuditing}
+                        className="p-3 sm:p-6 bg-white border-2 border-slate-100 rounded-2xl hover:border-pink-500 hover:shadow-xl transition-all group flex flex-col items-center text-center gap-2 sm:gap-3 col-span-2 sm:col-span-1"
+                      >
+                        <div className="w-8 h-8 sm:w-12 sm:h-12 bg-pink-50 text-pink-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <svg className="w-4 h-4 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <span className="text-[7px] sm:text-xs font-black uppercase tracking-tight sm:tracking-widest text-slate-900">Face & Photo Audit</span>
+                      </button>
                     </div>
 
                     {isAuditing && (
@@ -16773,7 +17063,217 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       </div>
                     )}
 
-                    {!isAuditing && auditResults.length > 0 && (
+                    {!isAuditing && activeAuditType === "face" && (
+                      <div className="mt-8 space-y-4">
+                        {/* Blur Scan Progress Banner */}
+                        {isScanningBlur && (
+                          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs text-amber-900 font-bold animate-in fade-in">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+                              <span>AI Deep Scanning photos for blur & low quality ({blurScanProgress}%)...</span>
+                            </div>
+                            <span className="text-[10px] uppercase tracking-wider bg-amber-200/60 px-2 py-0.5 rounded-full font-black text-amber-800">
+                              Analyzing
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Filter Chips & Summary */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 border-2 border-slate-100 p-3.5 rounded-2xl">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              onClick={() => setFaceAuditFilter("all")}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${faceAuditFilter === "all" ? "bg-slate-900 text-white shadow" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"}`}
+                            >
+                              All Issues ({auditResults.filter(s => s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto).length})
+                            </button>
+                            <button
+                              onClick={() => setFaceAuditFilter("blank")}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${faceAuditFilter === "blank" ? "bg-rose-600 text-white shadow" : "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50"}`}
+                            >
+                              Blank Photos ({auditResults.filter(s => s.issueType === "BLANK_PHOTO").length})
+                            </button>
+                            <button
+                              onClick={() => setFaceAuditFilter("missing_vector")}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${faceAuditFilter === "missing_vector" ? "bg-amber-600 text-white shadow" : "bg-white text-amber-600 border border-amber-200 hover:bg-amber-50"}`}
+                            >
+                              Missing Vectors ({auditResults.filter(s => s.issueType === "MISSING_VECTOR").length})
+                            </button>
+                            <button
+                              onClick={() => setFaceAuditFilter("photo_of_photo")}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${faceAuditFilter === "photo_of_photo" ? "bg-red-600 text-white shadow" : "bg-white text-red-600 border border-red-200 hover:bg-red-50"}`}
+                            >
+                              📷 Photo of a Photo ({auditResults.filter(s => s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO").length})
+                            </button>
+                            <button
+                              onClick={() => setFaceAuditFilter("blurry")}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${faceAuditFilter === "blurry" ? "bg-orange-600 text-white shadow" : "bg-white text-orange-600 border border-orange-200 hover:bg-orange-50"}`}
+                            >
+                              Blurry Photos ({auditResults.filter(s => (s.isBlurry || s.issueType === "BLURRY_PHOTO") && !s.isPhotoOfPhoto).length})
+                            </button>
+                            <button
+                              onClick={() => setFaceAuditFilter("flagged")}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${faceAuditFilter === "flagged" ? "bg-purple-600 text-white shadow" : "bg-white text-purple-600 border border-purple-200 hover:bg-purple-50"}`}
+                            >
+                              Flagged for Retake ({auditResults.filter(s => s.isFlagged).length})
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                const filtered = auditResults.filter(s => {
+                                  if (faceAuditFilter === "blank") return s.issueType === "BLANK_PHOTO";
+                                  if (faceAuditFilter === "missing_vector") return s.issueType === "MISSING_VECTOR";
+                                  if (faceAuditFilter === "photo_of_photo") return s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO";
+                                  if (faceAuditFilter === "blurry") return (s.isBlurry || s.issueType === "BLURRY_PHOTO") && !s.isPhotoOfPhoto;
+                                  if (faceAuditFilter === "flagged") return s.isFlagged;
+                                  return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto;
+                                });
+                                if (selectedFaceAuditIds.length === filtered.length && filtered.length > 0) {
+                                  setSelectedFaceAuditIds([]);
+                                } else {
+                                  setSelectedFaceAuditIds(filtered.map(s => s.id || s._id));
+                                }
+                              }}
+                              className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-slate-50 transition-all"
+                            >
+                              {selectedFaceAuditIds.length > 0 ? "Deselect All" : "Select All"}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Bulk Action Controls */}
+                        {selectedFaceAuditIds.length > 0 && (
+                          <div className="bg-indigo-50 border-2 border-indigo-200 p-3 rounded-2xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+                            <span className="text-xs font-black text-indigo-900 uppercase tracking-widest px-2">
+                              {selectedFaceAuditIds.length} Student(s) Selected
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleBulkFlagFaceRetake(true)}
+                                disabled={isFlaggingRetake}
+                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all flex items-center gap-1.5"
+                              >
+                                🔒 Enforce Live Retake on Login
+                              </button>
+                              <button
+                                onClick={() => handleBulkFlagFaceRetake(false)}
+                                disabled={isFlaggingRetake}
+                                className="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+                              >
+                                ✓ Clear Retake Flag
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Students List */}
+                        <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
+                          {auditResults
+                            .filter(s => {
+                              if (faceAuditFilter === "blank") return s.issueType === "BLANK_PHOTO";
+                              if (faceAuditFilter === "missing_vector") return s.issueType === "MISSING_VECTOR";
+                              if (faceAuditFilter === "photo_of_photo") return s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO";
+                              if (faceAuditFilter === "blurry") return (s.isBlurry || s.issueType === "BLURRY_PHOTO") && !s.isPhotoOfPhoto;
+                              if (faceAuditFilter === "flagged") return s.isFlagged;
+                              return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto;
+                            })
+                            .map((s, sIdx) => {
+                              const isSelected = selectedFaceAuditIds.includes(s.id || s._id);
+                              return (
+                                <div
+                                  key={sIdx}
+                                  className={`p-3 rounded-2xl border-2 transition-all flex items-center justify-between gap-3 ${isSelected ? "bg-indigo-50/70 border-indigo-400 shadow-sm" : "bg-white border-slate-100 hover:border-slate-300"}`}
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        const sid = s.id || s._id;
+                                        if (e.target.checked) {
+                                          setSelectedFaceAuditIds(prev => [...prev, sid]);
+                                        } else {
+                                          setSelectedFaceAuditIds(prev => prev.filter(id => id !== sid));
+                                        }
+                                      }}
+                                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                    />
+
+                                    {/* Profile thumbnail */}
+                                    <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center">
+                                      {s.profilePicture && s.profilePicture.length > 50 ? (
+                                        <img src={s.profilePicture} alt={s.name} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <span className="text-[9px] font-black text-slate-400">NO PIC</span>
+                                      )}
+                                    </div>
+
+                                    <div className="min-w-0">
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <p className="text-xs font-black text-slate-900 uppercase truncate">{s.name}</p>
+                                        {s.isFlagged && (
+                                          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 border border-purple-200 rounded-full text-[8px] font-black uppercase tracking-wider shrink-0">
+                                            🔒 Retake Flagged
+                                          </span>
+                                        )}
+                                        {s.issueType === "BLANK_PHOTO" && (
+                                          <span className="px-2 py-0.5 bg-rose-100 text-rose-700 border border-rose-200 rounded-full text-[8px] font-black uppercase tracking-wider shrink-0">
+                                            Blank / Missing
+                                          </span>
+                                        )}
+                                        {s.issueType === "MISSING_VECTOR" && (
+                                          <span className="px-2 py-0.5 bg-amber-100 text-amber-700 border border-amber-200 rounded-full text-[8px] font-black uppercase tracking-wider shrink-0">
+                                            Missing 128-D Vector
+                                          </span>
+                                        )}
+                                        {(s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO") && (
+                                          <span className="px-2 py-0.5 bg-red-100 text-red-700 border border-red-300 rounded-full text-[8px] font-black uppercase tracking-wider shrink-0">
+                                            📷 Photo of a Photo / Printed
+                                          </span>
+                                        )}
+                                        {(s.isBlurry || s.issueType === "BLURRY_PHOTO") && !s.isPhotoOfPhoto && (
+                                          <span className="px-2 py-0.5 bg-orange-100 text-orange-800 border border-orange-200 rounded-full text-[8px] font-black uppercase tracking-wider shrink-0">
+                                            📷 Blurry Photo {s.sharpnessScore ? `(Score: ${s.sharpnessScore})` : ''}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">
+                                        {s.hostelName} • ROOM {s.roomNumber || "N/A"} • {s.registrationId || s.erpId || s.phoneNumber}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                      onClick={() => handleBulkFlagFaceRetake(!s.isFlagged, [s.id || s._id])}
+                                      disabled={isFlaggingRetake}
+                                      className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${s.isFlagged ? "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100" : "bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"}`}
+                                    >
+                                      {s.isFlagged ? "Unflag" : "Flag for Retake"}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          {auditResults.filter(s => {
+                            if (faceAuditFilter === "blank") return s.issueType === "BLANK_PHOTO";
+                            if (faceAuditFilter === "missing_vector") return s.issueType === "MISSING_VECTOR";
+                            if (faceAuditFilter === "photo_of_photo") return s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO";
+                            if (faceAuditFilter === "blurry") return (s.isBlurry || s.issueType === "BLURRY_PHOTO") && !s.isPhotoOfPhoto;
+                            if (faceAuditFilter === "flagged") return s.isFlagged;
+                            return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto;
+                          }).length === 0 && (
+                            <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+                              <p className="text-xs font-black text-slate-700 uppercase tracking-wider">No issues found in this category!</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {!isAuditing && activeAuditType !== "face" && auditResults.length > 0 && (
                       <div className="mt-8 space-y-4">
                         <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest px-1">Potential Issues Found ({auditResults.length})</h4>
                         <div className="space-y-3">

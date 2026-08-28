@@ -8,28 +8,36 @@ export async function GET(request: Request) {
     try {
         const tenantId = await db.getTenantIdOrThrow();
 
-        // 1. Fetch tenant basic info from Railway PostgreSQL
-        let tenant: any = null;
-        try {
-            tenant = await prisma.tenant.findUnique({
-                where: { id: tenantId }
-            });
-        } catch (e) {
-            console.error("Tenant lookup error in settings/get:", e);
-        }
-
-        // 2. Fetch admin settings (contact info) via dbAdapter
-        const settings = await db.settings.get();
+        // 1. Fetch tenant basic info and settings concurrently in parallel
+        const [tenant, settings] = await Promise.all([
+            prisma.tenant.findUnique({
+                where: { id: tenantId },
+                select: {
+                    adminEmail: true,
+                    subscriptionStatus: true,
+                    subscriptionEndDate: true,
+                    createdAt: true,
+                    slug: true,
+                }
+            }).catch(e => {
+                console.error("Tenant lookup error in settings/get:", e);
+                return null;
+            }),
+            db.settings.get().catch(e => {
+                console.error("Settings lookup error in settings/get:", e);
+                return null;
+            })
+        ]);
 
         const bankDetails = ((settings?.universityBankDetails || settings?.university_bank_details) || {}) as any;
 
         return NextResponse.json({
             success: true,
             settings: {
-                adminEmail: tenant?.adminEmail || tenant?.admin_email || '',
-                subscriptionStatus: tenant?.subscriptionStatus || tenant?.subscription_status || 'active',
-                subscriptionEndDate: tenant?.subscriptionEndDate || tenant?.subscription_end_date || null,
-                subscriptionStartDate: tenant?.createdAt || tenant?.created_at || null,
+                adminEmail: tenant?.adminEmail || '',
+                subscriptionStatus: tenant?.subscriptionStatus || 'active',
+                subscriptionEndDate: tenant?.subscriptionEndDate || null,
+                subscriptionStartDate: tenant?.createdAt || null,
                 slug: tenant?.slug || '',
                 contactName: bankDetails.contactName || '',
                 contactPhone: bankDetails.contactPhone || '',

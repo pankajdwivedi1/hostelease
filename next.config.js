@@ -28,6 +28,7 @@ const withPWA = require("next-pwa")({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    compress: true,
     typescript: {
         // !! WARN !!
         // Dangerously allow production builds to successfully complete even if
@@ -38,6 +39,40 @@ const nextConfig = {
         optimizePackageImports: ['firebase', 'firebase-admin', 'mongoose'],
     },
     reactStrictMode: true,
+    async headers() {
+        return [
+            {
+                // ⚡ Face-API & TensorFlow Model Weights: Cache immutably for 1 year
+                source: '/models/:path*',
+                headers: [
+                    {
+                        key: 'Cache-Control',
+                        value: 'public, max-age=31536000, immutable',
+                    },
+                ],
+            },
+            {
+                // ⚡ PWA Icons & Static Images: Cache for 30 days
+                source: '/icons/:path*',
+                headers: [
+                    {
+                        key: 'Cache-Control',
+                        value: 'public, max-age=2592000, stale-while-revalidate=604800',
+                    },
+                ],
+            },
+            {
+                // ⚡ Static upload files
+                source: '/uploads/:path*',
+                headers: [
+                    {
+                        key: 'Cache-Control',
+                        value: 'public, max-age=86400, stale-while-revalidate=604800',
+                    },
+                ],
+            },
+        ];
+    },
     webpack: (config, { isServer }) => {
         if (!isServer) {
             config.output = {

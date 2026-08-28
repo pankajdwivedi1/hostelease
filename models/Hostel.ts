@@ -9,6 +9,9 @@ export interface IHostel extends Document {
     allowWardenAddStudent?: boolean;
     allowWardenEditProfile?: boolean;
     allowWardenRemoveStudent?: boolean;
+    allowWardenNotification?: boolean;
+    allowStudentNotification?: boolean;
+    registrationFormat?: string;
     createdAt?: Date;
     updatedAt?: Date;
 }
@@ -50,6 +53,18 @@ const HostelSchema: Schema = new Schema(
         allowWardenRemoveStudent: {
             type: Boolean,
             default: false
+        },
+        allowWardenNotification: {
+            type: Boolean,
+            default: true
+        },
+        allowStudentNotification: {
+            type: Boolean,
+            default: true
+        },
+        registrationFormat: {
+            type: String,
+            default: ""
         }
     },
     { timestamps: true }

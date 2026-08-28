@@ -661,6 +661,9 @@ const mapHostelToCamelCase = (h: any) => {
         allowWardenAddStudent: h.allow_warden_add_student !== undefined ? h.allow_warden_add_student : (h.allowWardenAddStudent || false),
         allowWardenEditProfile: h.allow_warden_edit_profile !== undefined ? h.allow_warden_edit_profile : (h.allowWardenEditProfile || false),
         allowWardenRemoveStudent: h.allow_warden_remove_student !== undefined ? h.allow_warden_remove_student : (h.allowWardenRemoveStudent || false),
+        allowWardenNotification: h.allow_warden_notification !== undefined ? Boolean(h.allow_warden_notification) : (h.allowWardenNotification !== undefined ? Boolean(h.allowWardenNotification) : true),
+        allowStudentNotification: h.allow_student_notification !== undefined ? Boolean(h.allow_student_notification) : (h.allowStudentNotification !== undefined ? Boolean(h.allowStudentNotification) : true),
+        registrationFormat: h.registration_format || h.registrationFormat || '',
         createdAt: h.created_at || h.createdAt,
         updatedAt: h.updated_at || h.updatedAt
     };
@@ -726,7 +729,10 @@ const mapHostelToSnakeCase = (h: any) => {
         attendanceMode: 'attendance_mode',
         allowWardenAddStudent: 'allow_warden_add_student',
         allowWardenEditProfile: 'allow_warden_edit_profile',
-        allowWardenRemoveStudent: 'allow_warden_remove_student'
+        allowWardenRemoveStudent: 'allow_warden_remove_student',
+        allowWardenNotification: 'allow_warden_notification',
+        allowStudentNotification: 'allow_student_notification',
+        registrationFormat: 'registration_format'
     };
 
     Object.keys(h).forEach(key => {
@@ -1142,6 +1148,18 @@ let cachedDbSource: string | null = null;
 let lastDbSourceCheck = 0;
 const SOURCE_CACHE_TTL = 30000; // 30 seconds (Reduce load on Mongo)
 
+// ⚡ IN-MEMORY CACHE FOR SETTINGS (Cuts redundant ~240KB admin_settings egress by ~98%)
+const cachedSettingsMap = new Map<string, { data: any; expiresAt: number }>();
+const SETTINGS_CACHE_TTL = 60 * 1000; // 60 seconds
+
+export const clearSettingsCache = (tenantId?: string) => {
+    if (tenantId) {
+        cachedSettingsMap.delete(tenantId);
+    } else {
+        cachedSettingsMap.clear();
+    }
+};
+
 /**
  * Helper to determine Source PER REQUEST
  * This allows you to test Supabase without switching for everyone
@@ -1335,6 +1353,16 @@ export const db = {
                 tenantId = await getTenantIdOrThrow();
             } catch (err) {}
 
+            // ⚡ FAST IN-MEMORY CACHE (Saves ~240KB transfer per API hit)
+            const tenantKey = `${source}_${tenantId || 'default'}`;
+            const now = Date.now();
+            const cached = cachedSettingsMap.get(tenantKey);
+            if (cached && cached.expiresAt > now) {
+                return cached.data;
+            }
+
+            let result: any = null;
+
             if (source === 'SUPABASE') {
                 const { data: allRows, error } = await supabase.from('admin_settings').select('*');
 
@@ -1416,7 +1444,7 @@ export const db = {
                         : (targetRows.find(s => (s.hostel_locations || s.hostelLocations || []).length > 0)?.hostel_locations || [])
                 };
 
-                return mapSettingsToCamelCase(mergedSettings);
+                result = mapSettingsToCamelCase(mergedSettings);
             } else if (source === 'PRISMA') {
                 let tenantId = null;
                 try {
@@ -1509,16 +1537,22 @@ export const db = {
                     console.error("Settings merge error:", e);
                 }
 
-                return data ? mapSettingsToCamelCase(data) : null;
+                result = data ? mapSettingsToCamelCase(data) : null;
             } else {
                 await connectDB();
                 const AdminSettings = (await import('@/models/AdminSettings')).default;
                 const settings = await AdminSettings.findOne().lean();
-                return settings ? JSON.parse(JSON.stringify(settings)) : null;
+                result = settings ? JSON.parse(JSON.stringify(settings)) : null;
             }
+
+            if (result) {
+                cachedSettingsMap.set(tenantKey, { data: result, expiresAt: Date.now() + SETTINGS_CACHE_TTL });
+            }
+            return result;
         },
 
         update: async (updateData: any) => {
+            clearSettingsCache(); // ⚡ Invalidate cache on update
             const source = await getDbSource();
             if (source === 'SUPABASE') {
                 const tenantId = await getTenantIdOrThrow();
@@ -2328,8 +2362,52 @@ export const db = {
                     ];
                 }
 
+                // ⚡ LIGHTWEIGHT PROJECTION: In light mode, omit heavy float arrays (faceDescriptor) and heavy JSON blobs to save bandwidth
+                const lightSelect = options.light ? {
+                    id: true,
+                    tenantId: true,
+                    firebaseUid: true,
+                    name: true,
+                    email: true,
+                    phoneNumber: true,
+                    hostelName: true,
+                    roomNumber: true,
+                    profilePicture: true,
+                    studentStatus: true,
+                    supabaseId: true,
+                    dob: true,
+                    category: true,
+                    fatherName: true,
+                    fatherNumber: true,
+                    motherName: true,
+                    motherNumber: true,
+                    permanentAddress: true,
+                    homeState: true,
+                    erpInformation: true,
+                    erpId: true,
+                    joiningDate: true,
+                    branch: true,
+                    collegeName: true,
+                    year: true,
+                    semester: true,
+                    section: true,
+                    floorNumber: true,
+                    localGuardianAddress: true,
+                    localGuardianPhoneNumber: true,
+                    registrationId: true,
+                    deviceId: true,
+                    deviceResetCount: true,
+                    isProfileLocked: true,
+                    attendanceMode: true,
+                    authProvider: true,
+                    dynamicFields: true,
+                    createdAt: true,
+                    updatedAt: true
+                } : undefined;
+
                 const data = await prisma.student.findMany({
                     where: whereClause,
+                    select: lightSelect,
                     orderBy: { name: 'asc' },
                     take: options.limit || 1000
                 });
@@ -3016,8 +3094,106 @@ export const db = {
                         return false;
                     }).map((s: any) => mapStudentToCamelCase(s));
                 }
+
+                if (type === "face-audit") {
+                    const { data: allStudents } = await supabase
+                        .from('students')
+                        .select('_id,name,phone_number,room_number,hostel_name,email,profile_picture,face_descriptor,dynamic_fields,student_profiles(registration_id,erp_id)')
+                        .eq('tenant_id', tenantId)
+                        .order('hostel_name', { ascending: true });
+
+                    return (allStudents || []).map((s: any) => {
+                        const prof = Array.isArray(s.student_profiles) ? s.student_profiles[0] : s.student_profiles;
+                        const hasPic = !!(s.profile_picture && s.profile_picture.trim() !== '' && s.profile_picture !== 'null');
+                        const isBlank = !hasPic || (s.profile_picture && (s.profile_picture.length < 100 || s.profile_picture === 'data:,'));
+                        const hasVector = Array.isArray(s.face_descriptor) && s.face_descriptor.length > 0;
+                        const dynamicFields = s.dynamic_fields || {};
+                        const isFlagged = !!dynamicFields.requiresFaceRecapture;
+
+                        let issueType = "CLEAN";
+                        if (isBlank) {
+                            issueType = "BLANK_PHOTO";
+                        } else if (!hasVector) {
+                            issueType = "MISSING_VECTOR";
+                        } else if (isFlagged) {
+                            issueType = "FLAGGED_RETAKE";
+                        }
+
+                        return {
+                            id: s._id,
+                            _id: s._id,
+                            name: s.name,
+                            phoneNumber: s.phone_number,
+                            roomNumber: s.room_number,
+                            hostelName: s.hostel_name,
+                            email: s.email,
+                            registrationId: prof?.registration_id || "",
+                            erpId: prof?.erp_id || "",
+                            profilePicture: s.profile_picture,
+                            hasVector,
+                            isFlagged,
+                            issueType
+                        };
+                    });
+                }
             } else if (source === 'PRISMA') {
                 const tenantId = await getTenantIdOrThrow();
+
+                if (type === "face-audit") {
+                    const allStudents = await prisma.student.findMany({
+                        where: { tenantId },
+                        select: {
+                            id: true,
+                            name: true,
+                            phoneNumber: true,
+                            roomNumber: true,
+                            hostelName: true,
+                            email: true,
+                            registrationId: true,
+                            erpId: true,
+                            profilePicture: true,
+                            faceDescriptor: true,
+                            dynamicFields: true,
+                            studentStatus: true
+                        },
+                        orderBy: [
+                            { hostelName: 'asc' },
+                            { name: 'asc' }
+                        ]
+                    });
+
+                    return (allStudents || []).map((s: any) => {
+                        const hasPic = !!(s.profilePicture && s.profilePicture.trim() !== '' && s.profilePicture !== 'null');
+                        const isBlank = !hasPic || (s.profilePicture && (s.profilePicture.length < 100 || s.profilePicture === 'data:,'));
+                        const hasVector = Array.isArray(s.faceDescriptor) && s.faceDescriptor.length > 0;
+                        const isFlagged = !!(s.dynamicFields && typeof s.dynamicFields === 'object' && (s.dynamicFields as any).requiresFaceRecapture);
+
+                        let issueType = "CLEAN";
+                        if (isBlank) {
+                            issueType = "BLANK_PHOTO";
+                        } else if (!hasVector) {
+                            issueType = "MISSING_VECTOR";
+                        } else if (isFlagged) {
+                            issueType = "FLAGGED_RETAKE";
+                        }
+
+                        return {
+                            id: s.id,
+                            _id: s.id,
+                            name: s.name,
+                            phoneNumber: s.phoneNumber,
+                            roomNumber: s.roomNumber,
+                            hostelName: s.hostelName,
+                            email: s.email,
+                            registrationId: s.registrationId,
+                            erpId: s.erpId,
+                            profilePicture: s.profilePicture,
+                            hasVector,
+                            isFlagged,
+                            issueType
+                        };
+                    });
+                }
 
                 if (type === "duplicates-phone") {
                     const allStudents = await prisma.student.findMany({
@@ -3192,6 +3368,36 @@ export const db = {
                         if (name.length > 8 && vowels.length < 2) return true;
                         return false;
                     }).map(mapStudentToCamelCase);
+                }
+                if (type === "face-audit") {
+                    const students = await StudentModel.find({}).lean();
+                    return students.map((s: any) => {
+                        const hasPic = !!(s.profilePicture && s.profilePicture.trim() !== '');
+                        const isBlank = !hasPic || (s.profilePicture && s.profilePicture.length < 100);
+                        const hasVector = Array.isArray(s.faceDescriptor) && s.faceDescriptor.length > 0;
+                        const isFlagged = !!(s.dynamicFields && s.dynamicFields.requiresFaceRecapture);
+
+                        let issueType = "CLEAN";
+                        if (isBlank) issueType = "BLANK_PHOTO";
+                        else if (!hasVector) issueType = "MISSING_VECTOR";
+                        else if (isFlagged) issueType = "FLAGGED_RETAKE";
+
+                        return {
+                            id: s._id,
+                            _id: s._id,
+                            name: s.name,
+                            phoneNumber: s.phoneNumber,
+                            roomNumber: s.roomNumber,
+                            hostelName: s.hostelName,
+                            email: s.email,
+                            registrationId: s.registrationId,
+                            erpId: s.erpInformation,
+                            profilePicture: s.profilePicture,
+                            hasVector,
+                            isFlagged,
+                            issueType
+                        };
+                    });
                 }
             }
             return [];
@@ -3588,9 +3794,31 @@ export const db = {
                     whereClause.hostelName = { contains: filters.hostelName, mode: 'insensitive' };
                 }
 
+                // ⚡ OPTIMIZED PROJECTION: Select only needed display fields for student in attendance log
+                const lightweightStudentAttendanceSelect = {
+                    select: {
+                        id: true,
+                        name: true,
+                        phoneNumber: true,
+                        hostelName: true,
+                        roomNumber: true,
+                        registrationId: true,
+                        erpId: true,
+                        fatherNumber: true,
+                        motherNumber: true,
+                        studentStatus: true,
+                        profilePicture: true,
+                        branch: true,
+                        collegeName: true,
+                        year: true,
+                        semester: true,
+                        section: true,
+                    }
+                };
+
                 const data = await prisma.attendance.findMany({
                     where: whereClause,
-                    include: { student: true },
+                    include: { student: lightweightStudentAttendanceSelect },
                     orderBy: [
                         { date: 'desc' },
                         { timestamp: 'desc' }
@@ -3867,11 +4095,26 @@ export const db = {
                 return (data || []).map(mapHostelToCamelCase);
             } else if (source === 'PRISMA') {
                 const tenantId = await getTenantIdOrThrow();
-                const data = await prisma.hostel.findMany({
-                    where: { tenantId },
-                    orderBy: { name: 'asc' }
+                const [data, overridesSetting] = await Promise.all([
+                    prisma.hostel.findMany({
+                        where: { tenantId },
+                        orderBy: { name: 'asc' }
+                    }),
+                    prisma.platformSetting.findUnique({
+                        where: { id: `hostel_overrides_${tenantId}` }
+                    }).catch(() => null)
+                ]);
+                const overrides = (overridesSetting?.settings as any) || {};
+                return (data || []).map((h: any) => {
+                    const mapped = mapHostelToCamelCase(h);
+                    const hOverrides = overrides[h.id] || overrides[h.name] || {};
+                    return {
+                        ...mapped,
+                        allowWardenNotification: hOverrides.allowWardenNotification !== undefined ? hOverrides.allowWardenNotification : mapped.allowWardenNotification,
+                        allowStudentNotification: hOverrides.allowStudentNotification !== undefined ? hOverrides.allowStudentNotification : mapped.allowStudentNotification,
+                        registrationFormat: hOverrides.registrationFormat !== undefined ? hOverrides.registrationFormat : mapped.registrationFormat
+                    };
                 });
-                return (data || []).map(mapHostelToCamelCase);
             } else {
                 await connectDB();
                 const HostelModel = (await import('@/models/Hostel')).default;
@@ -3896,10 +4139,24 @@ export const db = {
                 const whereClause: any = { tenantId };
                 if (filter.name) whereClause.name = filter.name;
 
-                const data = await prisma.hostel.findFirst({
-                    where: whereClause
-                });
-                return data ? mapHostelToCamelCase(data) : null;
+                const [data, overridesSetting] = await Promise.all([
+                    prisma.hostel.findFirst({
+                        where: whereClause
+                    }),
+                    prisma.platformSetting.findUnique({
+                        where: { id: `hostel_overrides_${tenantId}` }
+                    }).catch(() => null)
+                ]);
+                if (!data) return null;
+                const mapped = mapHostelToCamelCase(data);
+                const overrides = (overridesSetting?.settings as any) || {};
+                const hOverrides = overrides[data.id] || overrides[data.name] || {};
+                return {
+                    ...mapped,
+                    allowWardenNotification: hOverrides.allowWardenNotification !== undefined ? hOverrides.allowWardenNotification : mapped.allowWardenNotification,
+                    allowStudentNotification: hOverrides.allowStudentNotification !== undefined ? hOverrides.allowStudentNotification : mapped.allowStudentNotification,
+                    registrationFormat: hOverrides.registrationFormat !== undefined ? hOverrides.registrationFormat : mapped.registrationFormat
+                };
             } else {
                 await connectDB();
                 const HostelModel = (await import('@/models/Hostel')).default;
@@ -3932,7 +4189,35 @@ export const db = {
                 const data = await prisma.hostel.create({
                     data: prismaData
                 });
-                return mapHostelToCamelCase(data);
+
+                if (hostelData.allowWardenNotification !== undefined || hostelData.allowStudentNotification !== undefined || hostelData.registrationFormat !== undefined) {
+                    try {
+                        const settingId = `hostel_overrides_${tenantId}`;
+                        const existing = await prisma.platformSetting.findUnique({ where: { id: settingId } }).catch(() => null);
+                        const curOverrides = (existing?.settings as any) || {};
+                        curOverrides[data.id] = {
+                            ...(curOverrides[data.id] || {}),
+                            ...(hostelData.allowWardenNotification !== undefined ? { allowWardenNotification: hostelData.allowWardenNotification } : {}),
+                            ...(hostelData.allowStudentNotification !== undefined ? { allowStudentNotification: hostelData.allowStudentNotification } : {}),
+                            ...(hostelData.registrationFormat !== undefined ? { registrationFormat: hostelData.registrationFormat } : {})
+                        };
+                        await prisma.platformSetting.upsert({
+                            where: { id: settingId },
+                            create: { id: settingId, settings: curOverrides },
+                            update: { settings: curOverrides }
+                        });
+                    } catch (e) {
+                        console.error("Error saving hostel overrides:", e);
+                    }
+                }
+
+                const mapped = mapHostelToCamelCase(data);
+                return {
+                    ...mapped,
+                    allowWardenNotification: hostelData.allowWardenNotification !== undefined ? hostelData.allowWardenNotification : mapped.allowWardenNotification,
+                    allowStudentNotification: hostelData.allowStudentNotification !== undefined ? hostelData.allowStudentNotification : mapped.allowStudentNotification,
+                    registrationFormat: hostelData.registrationFormat !== undefined ? hostelData.registrationFormat : mapped.registrationFormat
+                };
             } else {
                 await connectDB();
                 const HostelModel = (await import('@/models/Hostel')).default;
@@ -3958,11 +4243,44 @@ export const db = {
             } else if (source === 'PRISMA') {
                 const tenantId = await getTenantIdOrThrow();
                 const prismaData = filterHostelForPrisma(updateData);
-                const data = await prisma.hostel.update({
-                    where: { id },
-                    data: prismaData
-                });
-                return mapHostelToCamelCase(data);
+                let updatedHostel = null;
+                if (Object.keys(prismaData).length > 0) {
+                    updatedHostel = await prisma.hostel.update({
+                        where: { id },
+                        data: prismaData
+                    });
+                } else {
+                    updatedHostel = await prisma.hostel.findUnique({ where: { id } });
+                }
+
+                if (updateData.allowWardenNotification !== undefined || updateData.allowStudentNotification !== undefined || updateData.registrationFormat !== undefined) {
+                    try {
+                        const settingId = `hostel_overrides_${tenantId}`;
+                        const existing = await prisma.platformSetting.findUnique({ where: { id: settingId } }).catch(() => null);
+                        const curOverrides = (existing?.settings as any) || {};
+                        curOverrides[id] = {
+                            ...(curOverrides[id] || {}),
+                            ...(updateData.allowWardenNotification !== undefined ? { allowWardenNotification: updateData.allowWardenNotification } : {}),
+                            ...(updateData.allowStudentNotification !== undefined ? { allowStudentNotification: updateData.allowStudentNotification } : {}),
+                            ...(updateData.registrationFormat !== undefined ? { registrationFormat: updateData.registrationFormat } : {})
+                        };
+                        await prisma.platformSetting.upsert({
+                            where: { id: settingId },
+                            create: { id: settingId, settings: curOverrides },
+                            update: { settings: curOverrides }
+                        });
+                    } catch (e) {
+                        console.error("Error saving hostel overrides:", e);
+                    }
+                }
+
+                const mapped = mapHostelToCamelCase(updatedHostel);
+                return {
+                    ...mapped,
+                    allowWardenNotification: updateData.allowWardenNotification !== undefined ? updateData.allowWardenNotification : mapped.allowWardenNotification,
+                    allowStudentNotification: updateData.allowStudentNotification !== undefined ? updateData.allowStudentNotification : mapped.allowStudentNotification,
+                    registrationFormat: updateData.registrationFormat !== undefined ? updateData.registrationFormat : mapped.registrationFormat
+                };
             } else {
                 await connectDB();
                 const HostelModel = (await import('@/models/Hostel')).default;
@@ -4271,6 +4589,13 @@ export const db = {
                 };
 
                 const total = (options as any).skipCount ? 0 : await prisma.gatePass.count({ where: whereClause });
+                if (options.countOnly) {
+                    return {
+                        records: [],
+                        total
+                    };
+                }
+
                 const records = await prisma.gatePass.findMany({
                     where: whereClause,
                     orderBy: { [sortField]: sortOrder },

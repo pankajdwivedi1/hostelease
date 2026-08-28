@@ -42,13 +42,14 @@ export async function POST(request: NextRequest) {
             allowStudentNotification,
             registrationFormat
         } = body;
+        const hostelId = body.id || body._id;
         const formattedName = typeof name === 'string' ? name.trim().toUpperCase() : name;
         const trimmedWardenUsername = typeof wardenUsername === 'string' ? wardenUsername.trim() : wardenUsername;
         const trimmedWardenPassword = typeof wardenPassword === 'string' ? wardenPassword.trim() : wardenPassword;
 
         let hostel;
-        if (id) {
-            hostel = await db.hostels.update(id, {
+        if (hostelId) {
+            hostel = await db.hostels.update(hostelId, {
                 name: formattedName,
                 totalRooms,
                 wardenUsername: trimmedWardenUsername,

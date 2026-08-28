@@ -33,13 +33,21 @@ export async function GET(request: NextRequest) {
         });
 
 
-        return NextResponse.json({
-            success: true,
-            ip,
-            isWhitelisted,
-            hostelName: isWhitelisted ? (matchingEntry?.name || "Hostel WiFi") : null
-        });
+        return NextResponse.json(
+            {
+                success: true,
+                ip,
+                isWhitelisted,
+                hostelName: isWhitelisted ? (matchingEntry?.name || "Hostel WiFi") : null
+            },
+            {
+                status: 200,
+                headers: {
+                    "Cache-Control": "private, max-age=15, stale-while-revalidate=30",
+                }
+            }
+        );
     } catch (error: any) {
-        return NextResponse.json({ success: false, error: error.message });
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }
