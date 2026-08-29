@@ -37,19 +37,25 @@ export async function POST(req: NextRequest) {
             ? { ...student.dynamicFields } 
             : {};
 
-        // Clear recapture flag
+        // Explicitly clear recapture flag
         dynamicFields.requiresFaceRecapture = false;
 
-        const updated = await db.students.update(student._id || student.id, {
+        const updatePayload: any = {
             profilePicture,
             faceDescriptor,
-            dynamicFields
-        });
+            dynamicFields,
+            firebaseUid: student.firebaseUid || student.firebaseUID || firebaseUID,
+            email: student.email,
+            phoneNumber: student.phoneNumber
+        };
+
+        const studentIdToUpdate = student._id || student.id || targetId;
+        const updated = await db.students.update(studentIdToUpdate, updatePayload);
 
         return NextResponse.json({
             success: true,
             message: "Live face photo and embeddings saved successfully!",
-            student: updated
+            student: updated || { ...student, ...updatePayload }
         });
     } catch (error: any) {
         console.error("Retake Photo POST Error:", error);

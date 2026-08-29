@@ -186,7 +186,7 @@ export default function TenantSettingsView({ onRenew, generateInvoicePDF, mode =
                               <p className="text-[7px] sm:text-[9.5px] md:text-[11px] text-gray-500 font-bold uppercase tracking-tight sm:tracking-widest leading-none mb-1">Status</p>
                               <div className="flex items-center justify-center sm:justify-start gap-1 sm:gap-2">
                                 <span className={`w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 rounded-full shrink-0 ${settings.subscriptionStatus === 'expired' ? 'bg-red-500' : 'bg-green-500'}`}></span>
-                                <p className="text-[9.5px] sm:text-xs md:text-sm font-black text-gray-900 uppercase leading-none">
+                                <p className="text-[9px] sm:text-xs md:text-sm font-black text-gray-900 leading-none whitespace-nowrap">
                                   {settings.subscriptionStatus === 'expired' ? "Expired" : "Active"}
                                 </p>
                               </div>
@@ -194,7 +194,7 @@ export default function TenantSettingsView({ onRenew, generateInvoicePDF, mode =
                             
                             <div className="bg-white py-1.5 px-1 sm:py-2.5 sm:px-3 md:p-5 rounded sm:rounded-lg shadow-sm border border-slate-100 sm:border-indigo-100/50 flex flex-col justify-center text-center sm:text-left">
                               <p className="text-[7px] sm:text-[9.5px] md:text-[11px] text-gray-500 font-bold uppercase tracking-tight sm:tracking-widest leading-none mb-1">Remaining Time</p>
-                              <p className="text-[9.5px] sm:text-xs md:text-sm font-black text-gray-900 leading-none">
+                              <p className="text-[9px] sm:text-xs md:text-sm font-black text-gray-900 leading-none whitespace-nowrap">
                                 {daysRemaining !== null 
                                   ? `${daysRemaining} Days` 
                                   : "N/A"}
@@ -203,14 +203,14 @@ export default function TenantSettingsView({ onRenew, generateInvoicePDF, mode =
 
                             <div className="bg-white py-1.5 px-1 sm:py-2.5 sm:px-3 md:p-5 rounded sm:rounded-lg shadow-sm border border-slate-100 sm:border-indigo-100/50 flex flex-col justify-center text-center sm:text-left">
                               <p className="text-[7px] sm:text-[9.5px] md:text-[11px] text-gray-500 font-bold uppercase tracking-tight sm:tracking-widest leading-none mb-1">Activation Date</p>
-                              <p className="text-[8px] sm:text-xs md:text-sm font-bold text-gray-900 leading-none whitespace-nowrap">
+                              <p className="text-[9px] sm:text-xs md:text-sm font-black text-gray-900 leading-none whitespace-nowrap">
                                 {settings.subscriptionStartDate ? new Date(settings.subscriptionStartDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "N/A"}
                               </p>
                             </div>
 
                             <div className="bg-white py-1.5 px-1 sm:py-2.5 sm:px-3 md:p-5 rounded sm:rounded-lg shadow-sm border border-slate-100 sm:border-indigo-100/50 flex flex-col justify-center text-center sm:text-left">
                               <p className="text-[7px] sm:text-[9.5px] md:text-[11px] text-gray-500 font-bold uppercase tracking-tight sm:tracking-widest leading-none mb-1">Expiry Date</p>
-                              <p className="text-[8px] sm:text-xs md:text-sm font-bold text-gray-900 leading-none whitespace-nowrap">
+                              <p className="text-[9px] sm:text-xs md:text-sm font-black text-gray-900 leading-none whitespace-nowrap">
                                 {settings.subscriptionEndDate ? new Date(settings.subscriptionEndDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "N/A"}
                               </p>
                             </div>

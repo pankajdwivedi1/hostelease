@@ -342,14 +342,14 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
 
   return (
     <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl sm:rounded-2xl p-4 sm:p-8 border border-slate-200">
-      <div className="mb-6 sm:mb-8">
-        <h2 className="text-lg md:text-xl font-bold text-foreground leading-tight tracking-tight mb-1">Field Enforcement Settings</h2>
-        <p className="text-[10px] sm:text-sm text-slate-600">
+      <div className="mb-4 sm:mb-6">
+        <h2 className="text-sm sm:text-base md:text-lg font-bold text-foreground leading-tight tracking-tight mb-0.5">Field Enforcement Settings</h2>
+        <p className="text-[9px] sm:text-xs text-slate-600">
           Manage which fields are displayed to students after login, and track completion status
         </p>
       </div>
 
-      <div className="flex gap-2 sm:gap-3 mb-6 sm:mb-8 border-b overflow-hidden flex-nowrap">
+      <div className="flex gap-2 sm:gap-3 mb-4 sm:mb-6 border-b overflow-hidden flex-nowrap">
         <button
           onClick={() => setActiveTab("rules")}
           className={`px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-semibold transition whitespace-nowrap ${activeTab === "rules"
@@ -372,11 +372,11 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
 
       {/* Rules Configuration Tab */}
       {activeTab === "rules" && (
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-8">
           {/* Message */}
           {message && (
             <div
-              className={`p-3 sm:p-4 rounded-lg text-xs sm:text-sm ${message.includes("✓")
+              className={`p-2.5 sm:p-4 rounded-lg text-[10px] sm:text-xs ${message.includes("✓")
                 ? "bg-green-50 text-green-700 border border-green-200"
                 : "bg-red-50 text-red-700 border border-red-200"
                 }`}
@@ -386,23 +386,23 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
           )}
 
           {/* Step 1: Hostel Selection */}
-          <div className="bg-white rounded-lg sm:rounded-xl p-4 sm:p-6 border border-slate-200">
-            <div className="flex items-center justify-between gap-2 mb-3 sm:mb-4">
-              <h3 className="text-xs sm:text-sm font-bold text-slate-900">STEP 1: SELECT HOSTELS</h3>
+          <div className="bg-white rounded-lg sm:rounded-xl p-3 sm:p-5 border border-slate-200">
+            <div className="flex items-center justify-between gap-2 mb-2.5 sm:mb-3.5">
+              <h3 className="text-[10px] sm:text-xs font-bold text-slate-900">STEP 1: SELECT HOSTELS</h3>
               <button
                 onClick={deactivateAllRules}
                 disabled={loading}
-                className="px-3 py-1 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 rounded-lg text-[10px] sm:text-xs font-bold transition flex items-center gap-1"
+                className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition flex items-center gap-1"
               >
                 🚫 Deactivate All Enforcement
               </button>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-1.5 sm:gap-2.5">
               {hostels.map((hostel) => (
                 <button
                   key={hostel}
                   onClick={() => handleHostelSelect(hostel)}
-                  className={`p-2 sm:p-3 rounded-lg font-semibold transition text-center text-xs sm:text-sm ${selectedHostels.includes(hostel)
+                  className={`p-1.5 sm:p-2.5 rounded-lg font-bold transition text-center text-[10px] sm:text-xs uppercase tracking-tight ${selectedHostels.includes(hostel)
                     ? "bg-blue-600 text-white border-2 border-blue-700"
                     : "bg-slate-100 text-slate-900 border-2 border-slate-200 hover:bg-blue-50"
                     }`}
@@ -411,7 +411,7 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
                 </button>
               ))}
             </div>
-            <p className="text-xs text-slate-600 mt-2 sm:mt-3">
+            <p className="text-[9px] sm:text-[11px] text-slate-500 mt-1.5 sm:mt-2">
               {selectedHostels.length > 0
                 ? `${selectedHostels.length} hostel(s) selected`
                 : "Select hostels to apply rules"}
@@ -419,11 +419,11 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
           </div>
 
           {/* Step 2: Field Selection */}
-          <div className="bg-white rounded-lg sm:rounded-xl p-4 sm:p-6 border border-slate-200">
-            <h3 className="text-xs sm:text-sm font-bold text-slate-900 mb-2 sm:mb-4">
+          <div className="bg-white rounded-lg sm:rounded-xl p-3 sm:p-5 border border-slate-200">
+            <h3 className="text-[10px] sm:text-xs font-bold text-slate-900 mb-1.5 sm:mb-3">
               STEP 2: SELECT MANDATORY FIELDS
             </h3>
-            <p className="text-xs sm:text-sm text-slate-600 mb-3 sm:mb-4">
+            <p className="text-[9px] sm:text-xs text-slate-500 mb-2.5 sm:mb-3.5">
               Applying to {selectedHostels.length || 0} hostel(s)
             </p>
             <div className="grid grid-cols-3 md:grid-cols-4 gap-1 sm:gap-2 md:gap-3">

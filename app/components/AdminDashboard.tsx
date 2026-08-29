@@ -17099,47 +17099,47 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         )}
 
                         {/* Filter Chips & Summary */}
-                        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 border-2 border-slate-100 p-3.5 rounded-2xl">
-                          <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2.5 bg-slate-50 border border-slate-200 p-2 sm:p-3 rounded-xl sm:rounded-2xl">
+                          <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
                             <button
                               onClick={() => setFaceAuditFilter("all")}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${faceAuditFilter === "all" ? "bg-slate-900 text-white shadow" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"}`}
+                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "all" ? "bg-slate-900 text-white shadow" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"}`}
                             >
                               All Issues ({auditResults.filter(s => s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto).length})
                             </button>
                             <button
                               onClick={() => setFaceAuditFilter("blank")}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${faceAuditFilter === "blank" ? "bg-rose-600 text-white shadow" : "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50"}`}
+                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "blank" ? "bg-rose-600 text-white shadow" : "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50"}`}
                             >
                               Blank Photos ({auditResults.filter(s => s.issueType === "BLANK_PHOTO").length})
                             </button>
                             <button
                               onClick={() => setFaceAuditFilter("missing_vector")}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${faceAuditFilter === "missing_vector" ? "bg-amber-600 text-white shadow" : "bg-white text-amber-600 border border-amber-200 hover:bg-amber-50"}`}
+                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "missing_vector" ? "bg-amber-600 text-white shadow" : "bg-white text-amber-600 border border-amber-200 hover:bg-amber-50"}`}
                             >
                               Missing Vectors ({auditResults.filter(s => s.issueType === "MISSING_VECTOR").length})
                             </button>
                             <button
                               onClick={() => setFaceAuditFilter("photo_of_photo")}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${faceAuditFilter === "photo_of_photo" ? "bg-red-600 text-white shadow" : "bg-white text-red-600 border border-red-200 hover:bg-red-50"}`}
+                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "photo_of_photo" ? "bg-red-600 text-white shadow" : "bg-white text-red-600 border border-red-200 hover:bg-red-50"}`}
                             >
                               📷 Photo of a Photo ({auditResults.filter(s => s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO").length})
                             </button>
                             <button
                               onClick={() => setFaceAuditFilter("blurry")}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${faceAuditFilter === "blurry" ? "bg-orange-600 text-white shadow" : "bg-white text-orange-600 border border-orange-200 hover:bg-orange-50"}`}
+                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "blurry" ? "bg-orange-600 text-white shadow" : "bg-white text-orange-600 border border-orange-200 hover:bg-orange-50"}`}
                             >
                               Blurry Photos ({auditResults.filter(s => (s.isBlurry || s.issueType === "BLURRY_PHOTO") && !s.isPhotoOfPhoto).length})
                             </button>
                             <button
                               onClick={() => setFaceAuditFilter("flagged")}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${faceAuditFilter === "flagged" ? "bg-purple-600 text-white shadow" : "bg-white text-purple-600 border border-purple-200 hover:bg-purple-50"}`}
+                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "flagged" ? "bg-purple-600 text-white shadow" : "bg-white text-purple-600 border border-purple-200 hover:bg-purple-50"}`}
                             >
                               Flagged for Retake ({auditResults.filter(s => s.isFlagged).length})
                             </button>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 sm:gap-2">
                             <button
                               onClick={() => {
                                 const filtered = auditResults.filter(s => {
@@ -17156,7 +17156,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   setSelectedFaceAuditIds(filtered.map(s => s.id || s._id));
                                 }
                               }}
-                              className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-slate-50 transition-all"
+                              className="px-2 py-1 sm:px-3 sm:py-1.5 bg-white border border-slate-300 text-slate-700 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider hover:bg-slate-50 transition-all"
                             >
                               {selectedFaceAuditIds.length > 0 ? "Deselect All" : "Select All"}
                             </button>
@@ -17165,31 +17165,31 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                         {/* Bulk Action Controls */}
                         {selectedFaceAuditIds.length > 0 && (
-                          <div className="bg-indigo-50 border-2 border-indigo-200 p-3 rounded-2xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
-                            <span className="text-xs font-black text-indigo-900 uppercase tracking-widest px-2">
+                          <div className="bg-indigo-50 border-2 border-indigo-200 p-2 sm:p-3 rounded-xl sm:rounded-2xl flex flex-wrap items-center justify-between gap-2 sm:gap-3 animate-in fade-in slide-in-from-top-2">
+                            <span className="text-[9px] sm:text-xs font-black text-indigo-900 uppercase tracking-wider px-1">
                               {selectedFaceAuditIds.length} Student(s) Selected
                             </span>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 sm:gap-2">
                               <button
                                 onClick={() => handleBulkFlagFaceRetake(true)}
                                 disabled={isFlaggingRetake}
-                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all flex items-center gap-1.5"
+                                className="px-2.5 py-1.5 sm:px-4 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-tight sm:tracking-wider shadow-md transition-all flex items-center gap-1"
                               >
-                                🔒 Enforce Live Retake on Login
+                                🔒 Enforce Live Retake
                               </button>
                               <button
                                 onClick={() => handleBulkFlagFaceRetake(false)}
                                 disabled={isFlaggingRetake}
-                                className="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+                                className="px-2 py-1.5 sm:px-3 sm:py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all"
                               >
-                                ✓ Clear Retake Flag
+                                ✓ Clear Flag
                               </button>
                             </div>
                           </div>
                         )}
 
                         {/* Students List */}
-                        <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
+                        <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
                           {auditResults
                             .filter(s => {
                               if (faceAuditFilter === "blank") return s.issueType === "BLANK_PHOTO";
@@ -17204,9 +17204,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               return (
                                 <div
                                   key={sIdx}
-                                  className={`p-3 rounded-2xl border-2 transition-all flex items-center justify-between gap-3 ${isSelected ? "bg-indigo-50/70 border-indigo-400 shadow-sm" : "bg-white border-slate-100 hover:border-slate-300"}`}
+                                  className={`p-2 sm:p-3 rounded-xl sm:rounded-2xl border transition-all flex items-center justify-between gap-2 sm:gap-3 ${isSelected ? "bg-indigo-50/70 border-indigo-400 shadow-sm" : "bg-white border-slate-100 hover:border-slate-300"}`}
                                 >
-                                  <div className="flex items-center gap-3 min-w-0">
+                                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                                     <input
                                       type="checkbox"
                                       checked={isSelected}
@@ -17218,58 +17218,60 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                           setSelectedFaceAuditIds(prev => prev.filter(id => id !== sid));
                                         }
                                       }}
-                                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                      className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                                     />
 
                                     {/* Profile thumbnail */}
-                                    <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center">
+                                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center">
                                       {s.profilePicture && s.profilePicture.length > 50 ? (
                                         <img src={s.profilePicture} alt={s.name} className="w-full h-full object-cover" />
                                       ) : (
-                                        <span className="text-[9px] font-black text-slate-400">NO PIC</span>
+                                        <span className="text-[8px] sm:text-[9px] font-black text-slate-400">NO PIC</span>
                                       )}
                                     </div>
 
-                                    <div className="min-w-0">
-                                      <div className="flex flex-wrap items-center gap-1.5">
-                                        <p className="text-xs font-black text-slate-900 uppercase truncate">{s.name}</p>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <p className="text-[11px] sm:text-xs font-black text-slate-900 uppercase truncate leading-tight">{s.name}</p>
+                                      </div>
+                                      <div className="flex flex-wrap items-center gap-1 mt-0.5">
                                         {s.isFlagged && (
-                                          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 border border-purple-200 rounded-full text-[8px] font-black uppercase tracking-wider shrink-0">
-                                            🔒 Retake Flagged
+                                          <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 border border-purple-200 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
+                                            🔒 Flagged
                                           </span>
                                         )}
                                         {s.issueType === "BLANK_PHOTO" && (
-                                          <span className="px-2 py-0.5 bg-rose-100 text-rose-700 border border-rose-200 rounded-full text-[8px] font-black uppercase tracking-wider shrink-0">
-                                            Blank / Missing
+                                          <span className="px-1.5 py-0.5 bg-rose-100 text-rose-700 border border-rose-200 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
+                                            Blank Photo
                                           </span>
                                         )}
                                         {s.issueType === "MISSING_VECTOR" && (
-                                          <span className="px-2 py-0.5 bg-amber-100 text-amber-700 border border-amber-200 rounded-full text-[8px] font-black uppercase tracking-wider shrink-0">
-                                            Missing 128-D Vector
+                                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-200 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
+                                            Missing Vector
                                           </span>
                                         )}
                                         {(s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO") && (
-                                          <span className="px-2 py-0.5 bg-red-100 text-red-700 border border-red-300 rounded-full text-[8px] font-black uppercase tracking-wider shrink-0">
-                                            📷 Photo of a Photo / Printed
+                                          <span className="px-1.5 py-0.5 bg-red-100 text-red-700 border border-red-300 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
+                                            📷 Photo of Photo
                                           </span>
                                         )}
                                         {(s.isBlurry || s.issueType === "BLURRY_PHOTO") && !s.isPhotoOfPhoto && (
-                                          <span className="px-2 py-0.5 bg-orange-100 text-orange-800 border border-orange-200 rounded-full text-[8px] font-black uppercase tracking-wider shrink-0">
-                                            📷 Blurry Photo {s.sharpnessScore ? `(Score: ${s.sharpnessScore})` : ''}
+                                          <span className="px-1.5 py-0.5 bg-orange-100 text-orange-800 border border-orange-200 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
+                                            📷 Blurry {s.sharpnessScore ? `(${s.sharpnessScore})` : ''}
                                           </span>
                                         )}
                                       </div>
-                                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">
+                                      <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-tight truncate mt-0.5">
                                         {s.hostelName} • ROOM {s.roomNumber || "N/A"} • {s.registrationId || s.erpId || s.phoneNumber}
                                       </p>
                                     </div>
                                   </div>
 
-                                  <div className="flex items-center gap-2 shrink-0">
+                                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                                     <button
                                       onClick={() => handleBulkFlagFaceRetake(!s.isFlagged, [s.id || s._id])}
                                       disabled={isFlaggingRetake}
-                                      className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${s.isFlagged ? "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100" : "bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"}`}
+                                      className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-tight sm:tracking-wider whitespace-nowrap transition-all ${s.isFlagged ? "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100" : "bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"}`}
                                     >
                                       {s.isFlagged ? "Unflag" : "Flag for Retake"}
                                     </button>

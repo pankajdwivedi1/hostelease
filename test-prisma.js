@@ -19,19 +19,31 @@ async function test() {
     await prisma.$executeRawUnsafe('ALTER TABLE "hostels" ADD COLUMN IF NOT EXISTS "registration_format" TEXT DEFAULT \'\';');
     console.log('✅ Added missing columns to hostels table in Railway PostgreSQL!');
 
-    const studentCount = await prisma.student.count();
-    const attendanceCount = await prisma.attendance.count();
-    const tenantCount = await prisma.tenant.count();
-    const hostels = await prisma.hostel.findMany();
-
-    console.log('\n✅ Connection Successful!');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`🏢 Tenants in Railway:    ${tenantCount}`);
-    console.log(`🎓 Students in Railway:   ${studentCount}`);
-    console.log(`📝 Attendance in Railway: ${attendanceCount}`);
-    console.log(`🏨 Hostels in Railway:    ${hostels.length}`);
-    console.log('Hostels detail:', JSON.stringify(hostels, null, 2));
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    const students = await prisma.student.findMany({
+      where: {
+        name: { in: ['AAYUSH RAI SINDHIYA', 'ABHAY KUMAR', 'ABHAY TIWARI'] }
+      },
+      select: {
+        id: true,
+        name: true,
+        firebaseUid: true,
+        faceDescriptor: true,
+        dynamicFields: true,
+        profilePicture: true,
+        updatedAt: true
+      }
+    });
+    console.log(JSON.stringify(students.map(s => ({
+      id: s.id,
+      name: s.name,
+      firebaseUID: s.firebaseUID,
+      hasVector: Array.isArray(s.faceDescriptor) && s.faceDescriptor.length > 0,
+      vectorLength: Array.isArray(s.faceDescriptor) ? s.faceDescriptor.length : 0,
+      dynamicFields: s.dynamicFields,
+      hasPic: !!s.profilePicture,
+      picLength: s.profilePicture ? s.profilePicture.length : 0,
+      updatedAt: s.updatedAt
+    })), null, 2));
 
   } catch (err) {
     console.error('\n❌ Connection Failed:', err.message);

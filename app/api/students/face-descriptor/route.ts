@@ -18,9 +18,17 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Use the Database Adapter for a database-aware update (Mongo/Supabase)
-        // Note: db.students.save handles upsert by firebaseUID
-        const student = await db.students.save(firebaseUID, { faceDescriptor });
+        const existingStudent = await db.students.findOne({ firebaseUID });
+        const dynamicFields = typeof existingStudent?.dynamicFields === 'object' && existingStudent?.dynamicFields !== null
+            ? { ...existingStudent.dynamicFields }
+            : {};
+        dynamicFields.requiresFaceRecapture = false;
+
+        // Use the Database Adapter for a database-aware update (Mongo/Supabase/Prisma)
+        const student = await db.students.save(firebaseUID, { 
+            faceDescriptor,
+            dynamicFields
+        });
 
         if (!student) {
             return NextResponse.json({ error: "Student not found" }, { status: 404 });

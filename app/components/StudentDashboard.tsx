@@ -1384,9 +1384,28 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             // ⚡ FACE RECAPTURE ENFORCEMENT: Check if admin flagged this student for live selfie recapture
             if (!isParentView && isFullProfileLoaded) {
-                const needsFaceRecapture = !!(studentProfile?.dynamicFields && typeof studentProfile.dynamicFields === 'object' && studentProfile.dynamicFields.requiresFaceRecapture);
-                if (needsFaceRecapture) {
+                const hasValidPhoto = studentProfile?.profilePicture && typeof studentProfile.profilePicture === 'string' && studentProfile.profilePicture.length > 100;
+                const hasValidVector = Array.isArray(studentProfile?.faceDescriptor) && studentProfile.faceDescriptor.length >= 128;
+                const isFlagged = !!(studentProfile?.dynamicFields && typeof studentProfile.dynamicFields === 'object' && studentProfile.dynamicFields.requiresFaceRecapture);
+                
+                // Only enforce recapture if explicitly flagged AND student is actually missing vector or photo
+                if (isFlagged && (!hasValidPhoto || !hasValidVector)) {
                     setShowLiveFaceRecaptureModal(true);
+                } else if (isFlagged && hasValidPhoto && hasValidVector) {
+                    // Auto-heal: Student already has valid live photo and 128-D vector saved, clear the flag locally & in cache
+                    if (studentProfile) {
+                        const healed = {
+                            ...studentProfile,
+                            dynamicFields: {
+                                ...(studentProfile.dynamicFields || {}),
+                                requiresFaceRecapture: false
+                            }
+                        };
+                        setStudentProfile(healed);
+                        try {
+                            localStorage.setItem("cachedStudentData", JSON.stringify(healed));
+                        } catch (e) {}
+                    }
                 }
             }
 
@@ -5823,15 +5842,23 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     onSuccess={(updatedStudent: any) => {
                                         setShowLiveFaceRecaptureModal(false);
                                         if (updatedStudent) {
-                                            setStudentProfile(prev => prev ? ({
-                                                ...prev,
-                                                profilePicture: updatedStudent.profilePicture || updatedStudent.profile_picture || prev.profilePicture,
-                                                faceDescriptor: updatedStudent.faceDescriptor || updatedStudent.face_descriptor || prev.faceDescriptor,
-                                                dynamicFields: {
-                                                    ...(prev.dynamicFields || {}),
-                                                    requiresFaceRecapture: false
-                                                }
-                                            }) : prev);
+                                            setStudentProfile(prev => {
+                                                const updated = prev ? {
+                                                    ...prev,
+                                                    ...updatedStudent,
+                                                    profilePicture: updatedStudent.profilePicture || updatedStudent.profile_picture || prev.profilePicture,
+                                                    faceDescriptor: updatedStudent.faceDescriptor || updatedStudent.face_descriptor || prev.faceDescriptor,
+                                                    dynamicFields: {
+                                                        ...(prev.dynamicFields || {}),
+                                                        ...(updatedStudent.dynamicFields || {}),
+                                                        requiresFaceRecapture: false
+                                                    }
+                                                } : updatedStudent;
+                                                try {
+                                                    localStorage.setItem("cachedStudentData", JSON.stringify(updated));
+                                                } catch (e) {}
+                                                return updated;
+                                            });
                                         }
                                     }}
                                 />
