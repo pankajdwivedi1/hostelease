@@ -21,6 +21,28 @@ export default function AppBootstrap() {
   const [isRequesting, setIsRequesting] = useState(false);
 
   useEffect(() => {
+    // 0. Suppress unhandled errors from third-party browser extensions (e.g. MetaMask, crypto wallets)
+    if (typeof window !== "undefined") {
+      const suppressExtensionErrors = (e: any) => {
+        const msg = e?.message || e?.reason?.message || (typeof e?.reason === 'string' ? e.reason : '') || '';
+        if (
+          msg.includes("MetaMask") ||
+          msg.includes("inpage.js") ||
+          msg.includes("chrome-extension://") ||
+          msg.includes("moz-extension://") ||
+          msg.includes("safari-extension://") ||
+          msg.includes("ethereum")
+        ) {
+          if (e?.preventDefault) e.preventDefault();
+          if (e?.stopImmediatePropagation) e.stopImmediatePropagation();
+          return true;
+        }
+      };
+
+      window.addEventListener("error", suppressExtensionErrors, true);
+      window.addEventListener("unhandledrejection", suppressExtensionErrors, true);
+    }
+
     // 1. Install toast system immediately (overrides window.alert)
     installToastSystem();
 

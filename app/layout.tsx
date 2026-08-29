@@ -88,6 +88,25 @@ export default function RootLayout({
         <link rel="icon" href="/apple-touch-icon.png" type="image/png" />
         <link rel="shortcut icon" href="/apple-touch-icon.png" type="image/png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        {/* Suppress third-party Chrome extension errors (e.g. MetaMask inpage.js) from triggering Next.js dev overlay */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                var handler = function(e) {
+                  var text = (e.message || (e.reason && (e.reason.message || e.reason)) || e.filename || '').toString();
+                  if (text.includes('chrome-extension://') || text.includes('moz-extension://') || text.includes('safari-extension://') || text.includes('MetaMask') || text.includes('inpage.js') || text.includes('ethereum')) {
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                    if (e.preventDefault) e.preventDefault();
+                    return true;
+                  }
+                };
+                window.addEventListener('error', handler, true);
+                window.addEventListener('unhandledrejection', handler, true);
+              })();
+            `,
+          }}
+        />
       </head>
       <body className={`${lora.variable} antialiased`} suppressHydrationWarning>
         <InstallPWA />

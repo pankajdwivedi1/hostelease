@@ -48,6 +48,7 @@ export default function Dashboard() {
 
   const handleSelectStudent = (student: any) => {
     localStorage.setItem("parentSelectedStudentId", student._id);
+    localStorage.setItem("cachedParentStudentData", JSON.stringify(student));
     setStudentData(student);
     setUserType("parent");
   };
@@ -56,6 +57,7 @@ export default function Dashboard() {
     localStorage.removeItem("userType");
     localStorage.removeItem("parentPhone");
     localStorage.removeItem("parentSelectedStudentId");
+    localStorage.removeItem("cachedParentStudentData");
     router.push("/login");
   };
 
@@ -87,6 +89,7 @@ export default function Dashboard() {
       if (storedUserType === "admin") { setUserType("admin"); setLoading(false); return; }
       if (storedUserType === "warden") { setUserType("warden"); setLoading(false); return; }
       if (storedUserType === "superadmin") { setUserType("superadmin"); setLoading(false); return; }
+      if (storedUserType === "dean") { setUserType("dean"); setLoading(false); return; }
       if (storedUserType === "getpass") { router.push("/getpass"); setLoading(false); return; }
 
       // ⚡ FAST PATH FOR STUDENTS: Instant load from cache
@@ -145,6 +148,19 @@ export default function Dashboard() {
           } catch (e) {
             console.error("Cache parsing error", e);
           }
+        }
+      }
+
+      // ⚡ FAST PATH FOR PARENTS: Instant load from cache
+      if (storedUserType === "parent") {
+        const cachedParent = localStorage.getItem("cachedParentStudentData");
+        if (cachedParent) {
+          try {
+            const parsed = JSON.parse(cachedParent);
+            setStudentData(parsed);
+            setUserType("parent");
+            setLoading(false);
+          } catch (e) {}
         }
       }
 
@@ -222,11 +238,12 @@ export default function Dashboard() {
                 const hasSelected = selectedStudentId && data.students.some((s: any) => s._id === selectedStudentId);
                 if (hasSelected && data.student) {
                   const studentWithSubscription = { ...data.student, tenantSubscription: data.tenantSubscription };
+                  localStorage.setItem("cachedParentStudentData", JSON.stringify(studentWithSubscription));
                   setStudentData(studentWithSubscription);
                   setUserType("parent");
                   setLoading(false);
                   return;
-                } else {
+                } else if (!hasSelected) {
                   setUserType("parent-select");
                   setLoading(false);
                   return;
@@ -235,6 +252,7 @@ export default function Dashboard() {
                 if (data.tenantSubscription) {
                   data.student.tenantSubscription = data.tenantSubscription;
                 }
+                localStorage.setItem("cachedParentStudentData", JSON.stringify(data.student));
                 setStudentData(data.student);
                 setUserType("parent");
                 setLoading(false);
@@ -245,8 +263,10 @@ export default function Dashboard() {
             console.error("Parent student fetch failed", e);
           }
         }
-        router.push("/login");
-        setLoading(false);
+        if (!localStorage.getItem("cachedParentStudentData")) {
+          router.push("/login");
+          setLoading(false);
+        }
         return;
       }
 
