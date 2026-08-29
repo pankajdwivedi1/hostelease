@@ -94,8 +94,9 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
     try {
       const tenantParam = getTenantParam();
       const response = await fetch(`/api/admin/settings${tenantParam}`);
+      if (!response.ok) return;
       const data = await response.json();
-      if (data.success || data.formBuilderConfig) {
+      if (data && (data.success || data.formBuilderConfig)) {
         // Extract fields from formBuilderConfig
         const formConfig = data.formBuilderConfig || [];
         const fields: EnforcedField[] = formConfig.map((field: any) => ({
@@ -107,7 +108,7 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
         setAvailableFields(fields);
       }
     } catch (error) {
-      console.error("Error loading available fields:", error);
+      console.warn("Error loading available fields:", error);
       // Fallback to default fields if fetch fails
       setAvailableFields([
         { fieldId: "phoneNumber", fieldLabel: "Phone Number", isEnabled: false, displayMode: "on-login" },
@@ -144,8 +145,9 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
       setLoading(true);
       const tenantParam = getTenantParam();
       const response = await fetch(`/api/admin/field-enforcement${tenantParam}`);
+      if (!response.ok) return;
       const data = await response.json();
-      if (data.success && Array.isArray(data.data)) {
+      if (data && data.success && Array.isArray(data.data)) {
         const rulesMap: Record<string, EnforcementRule> = {};
         data.data.forEach((rule: EnforcementRule) => {
           if (rule && rule.hostelName) {
@@ -155,7 +157,7 @@ const FieldEnforcementComponent: React.FC<FieldEnforcementProps> = ({
         setEnforcementRules(rulesMap);
       }
     } catch (error) {
-      console.error("Error loading enforcement rules:", error);
+      console.warn("Error loading enforcement rules:", error);
       setMessage("Error loading enforcement rules");
     } finally {
       setLoading(false);

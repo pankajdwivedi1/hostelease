@@ -1455,6 +1455,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const fetchWardenAccounts = async () => {
     try {
       const res = await fetch("/api/admin/warden-accounts", { cache: "no-store" });
+      if (!res.ok) return;
       const data = await res.json();
       if (data.wardenAccounts) setWardenAccounts(data.wardenAccounts);
     } catch (error) {
@@ -2295,12 +2296,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const checkSubscription = async () => {
       try {
         const res = await fetch("/api/admin/subscription-status");
+        if (!res.ok) return;
         const data = await res.json();
-        if (data.success) {
+        if (data && data.success) {
           setSubscriptionStatus(data);
         }
       } catch (e) {
-        console.error("Subscription check failed", e);
+        console.warn("Subscription check failed", e);
       }
     };
     checkSubscription();
@@ -2310,12 +2312,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     setLoadingBillingHistory(true);
     try {
       const res = await fetch("/api/admin/billing-history");
+      if (!res.ok) return;
       const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         setBillingHistory(data.logs || []);
       }
     } catch (e) {
-      console.error("Failed to fetch billing history:", e);
+      console.warn("Failed to fetch billing history:", e);
     } finally {
       setLoadingBillingHistory(false);
     }
@@ -2839,9 +2842,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const fetchAttendanceTimeSettings = async () => {
     try {
       const response = await fetch("/api/admin/settings", { cache: "no-store" });
-      if (!response.ok) throw new Error("Failed to fetch settings");
+      if (!response.ok) return;
       const data = await response.json();
-      if (data.success) {
+      if (data && data.success) {
         setAttendanceTimeSettings({
           startTime: data.startTime || "21:00",
           endTime: data.endTime || "22:30"
@@ -2933,6 +2936,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const fetchTenantConfig = async () => {
     try {
       const res = await fetch("/api/admin/tenant", { cache: "no-store" });
+      if (!res.ok) return;
       const data = await res.json();
       if (data.success && data.tenant) {
         setTenantFormData({
@@ -2961,6 +2965,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(tenantFormData)
       });
+      if (!res.ok) return;
       const data = await res.json();
       if (data.success) {
         alert("University branding updated successfully!");
@@ -2985,79 +2990,93 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       // Fetch Registration Fields Config
       const settingsRes = await fetch("/api/admin/settings", { cache: "no-store" });
-      if (!settingsRes.ok) return;
-      const settingsData = await settingsRes.json();
-      if (settingsData.success) {
-        const config = settingsData.registrationFieldsConfig || {};
-        setRequireUndertaking(!!config.requireUndertaking);
-        setUndertakingText(config.undertakingText || DEFAULT_UNDERTAKING_TEXT);
-        const mergedFields = { ...DEFAULT_REGISTRATION_FIELDS };
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        if (settingsData.success) {
+          const config = settingsData.registrationFieldsConfig || {};
+          setRequireUndertaking(!!config.requireUndertaking);
+          setUndertakingText(config.undertakingText || DEFAULT_UNDERTAKING_TEXT);
+          const mergedFields = { ...DEFAULT_REGISTRATION_FIELDS };
 
-        // Merge DB config into defaults
-        Object.keys(config).forEach(key => {
-          if (mergedFields[key as keyof typeof DEFAULT_REGISTRATION_FIELDS]) {
-            mergedFields[key as keyof typeof DEFAULT_REGISTRATION_FIELDS] = {
-              ...mergedFields[key as keyof typeof DEFAULT_REGISTRATION_FIELDS],
-              ...config[key]
-            };
+          // Merge DB config into defaults
+          Object.keys(config).forEach(key => {
+            if (mergedFields[key as keyof typeof DEFAULT_REGISTRATION_FIELDS]) {
+              mergedFields[key as keyof typeof DEFAULT_REGISTRATION_FIELDS] = {
+                ...mergedFields[key as keyof typeof DEFAULT_REGISTRATION_FIELDS],
+                ...config[key]
+              };
+            }
+          });
+
+          setRegistrationFields(mergedFields);
+          setRegistrationFields(mergedFields);
+          setFormBuilderFields(settingsData.formBuilderConfig || []);
+          setSavedFormBuilderConfig(settingsData.formBuilderConfig || []); // ⚡ NEW: Save reference
+          setFormBuilderVersions(settingsData.formBuilderVersions || []);
+
+          if (settingsData.wardenPassword) {
+            setGlobalWardenPassword(settingsData.wardenPassword);
           }
-        });
-
-        setRegistrationFields(mergedFields);
-        setRegistrationFields(mergedFields);
-        setFormBuilderFields(settingsData.formBuilderConfig || []);
-        setSavedFormBuilderConfig(settingsData.formBuilderConfig || []); // ⚡ NEW: Save reference
-        setFormBuilderVersions(settingsData.formBuilderVersions || []);
-
-        if (settingsData.wardenPassword) {
-          setGlobalWardenPassword(settingsData.wardenPassword);
-        }
-        if (settingsData.adminPassword) {
-          setNewPassword(settingsData.adminPassword);
-        }
-        if (settingsData.developerPassword) {
-          setDeveloperPassword(settingsData.developerPassword);
-          setNewDeveloperPassword(settingsData.developerPassword);
-        }
-        if (settingsData.bankDetails) {
-          setBankFormData(prev => ({ ...prev, ...settingsData.bankDetails }));
-        }
-        if (settingsData.overlapRadius !== undefined) setOverlapRadius(settingsData.overlapRadius);
-        if (settingsData.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(settingsData.prioritizeAssignedHostel);
-        if (settingsData.getpassPassword) setGetpassPassword(settingsData.getpassPassword);
-        if (settingsData.enableManualAttendance !== undefined) setEnableManualAttendance(settingsData.enableManualAttendance);
-        if (settingsData.enforceUniqueErpId !== undefined) setEnforceUniqueErpId(settingsData.enforceUniqueErpId);
-        if (settingsData.enforceUniquePhone !== undefined) setEnforceUniquePhone(settingsData.enforceUniquePhone);
-        if (settingsData.enforceUniqueEmail !== undefined) setEnforceUniqueEmail(settingsData.enforceUniqueEmail);
-        if (settingsData.enforceUniqueFace !== undefined) setEnforceUniqueFace(settingsData.enforceUniqueFace);
-        if (settingsData.qrScanCooldownMinutes !== undefined) setQrScanCooldownMinutes(settingsData.qrScanCooldownMinutes);
-        if (settingsData.allowEmergencyExitWithoutCooldown !== undefined) setAllowEmergencyExitWithoutCooldown(settingsData.allowEmergencyExitWithoutCooldown);
-        if (settingsData.allowWardenAddStudent !== undefined) setAllowWardenAddStudent(settingsData.allowWardenAddStudent);
-        if (settingsData.allowDeanAddStudent !== undefined) setAllowDeanAddStudent(settingsData.allowDeanAddStudent);
-        if (settingsData.allowWardenEditProfile !== undefined) setAllowWardenEditProfile(settingsData.allowWardenEditProfile);
-        if (settingsData.allowDeanEditProfile !== undefined) setAllowDeanEditProfile(settingsData.allowDeanEditProfile);
-        if (settingsData.allowWardenRemoveStudent !== undefined) setAllowWardenRemoveStudent(settingsData.allowWardenRemoveStudent);
-        if (settingsData.allowDeanRemoveStudent !== undefined) setAllowDeanRemoveStudent(settingsData.allowDeanRemoveStudent);
-        if (settingsData.allowBulkStudentUpdates !== undefined) setAllowBulkStudentUpdates(settingsData.allowBulkStudentUpdates);
-        if (settingsData.allowBulkPermissionManagement !== undefined) setAllowBulkPermissionManagement(settingsData.allowBulkPermissionManagement);
-        if (settingsData.superAdminNotifications !== undefined) setSuperAdminNotifications(settingsData.superAdminNotifications);
-        if (settingsData.deanNotifications !== undefined) setDeanNotifications(settingsData.deanNotifications);
-        if (settingsData.parentNotifications !== undefined) setParentNotifications(settingsData.parentNotifications);
-        if (settingsData.studentNotifications !== undefined) setStudentNotifications(settingsData.studentNotifications);
-        if (settingsData.developerPassword) setDeveloperPassword(settingsData.developerPassword);
-        if (settingsData.leaveApprovalMethod) setLeaveApprovalMethod(settingsData.leaveApprovalMethod);
-        if (settingsData.wifiWhitelist) setWifiWhitelist(settingsData.wifiWhitelist);
-        if (settingsData.enableManualAttendance !== undefined) setEnableManualAttendance(settingsData.enableManualAttendance);
-        if (settingsData.notificationSettings) {
-          setNotificationSettings(prev => ({ ...prev, ...settingsData.notificationSettings }));
+          if (settingsData.adminPassword) {
+            setNewPassword(settingsData.adminPassword);
+          }
+          if (settingsData.developerPassword) {
+            setDeveloperPassword(settingsData.developerPassword);
+            setNewDeveloperPassword(settingsData.developerPassword);
+          }
+          if (settingsData.bankDetails) {
+            setBankFormData(prev => ({ ...prev, ...settingsData.bankDetails }));
+          }
+          if (settingsData.overlapRadius !== undefined) setOverlapRadius(settingsData.overlapRadius);
+          if (settingsData.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(settingsData.prioritizeAssignedHostel);
+          if (settingsData.getpassPassword) setGetpassPassword(settingsData.getpassPassword);
+          if (settingsData.enableManualAttendance !== undefined) setEnableManualAttendance(settingsData.enableManualAttendance);
+          if (settingsData.enforceUniqueErpId !== undefined) setEnforceUniqueErpId(settingsData.enforceUniqueErpId);
+          if (settingsData.enforceUniquePhone !== undefined) setEnforceUniquePhone(settingsData.enforceUniquePhone);
+          if (settingsData.enforceUniqueEmail !== undefined) setEnforceUniqueEmail(settingsData.enforceUniqueEmail);
+          if (settingsData.enforceUniqueFace !== undefined) setEnforceUniqueFace(settingsData.enforceUniqueFace);
+          if (settingsData.qrScanCooldownMinutes !== undefined) setQrScanCooldownMinutes(settingsData.qrScanCooldownMinutes);
+          if (settingsData.allowEmergencyExitWithoutCooldown !== undefined) setAllowEmergencyExitWithoutCooldown(settingsData.allowEmergencyExitWithoutCooldown);
+          if (settingsData.allowWardenAddStudent !== undefined) setAllowWardenAddStudent(settingsData.allowWardenAddStudent);
+          if (settingsData.allowDeanAddStudent !== undefined) setAllowDeanAddStudent(settingsData.allowDeanAddStudent);
+          if (settingsData.allowWardenEditProfile !== undefined) setAllowWardenEditProfile(settingsData.allowWardenEditProfile);
+          if (settingsData.allowDeanEditProfile !== undefined) setAllowDeanEditProfile(settingsData.allowDeanEditProfile);
+          if (settingsData.allowWardenRemoveStudent !== undefined) setAllowWardenRemoveStudent(settingsData.allowWardenRemoveStudent);
+          if (settingsData.allowDeanRemoveStudent !== undefined) setAllowDeanRemoveStudent(settingsData.allowDeanRemoveStudent);
+          if (settingsData.allowBulkStudentUpdates !== undefined) setAllowBulkStudentUpdates(settingsData.allowBulkStudentUpdates);
+          if (settingsData.allowBulkPermissionManagement !== undefined) setAllowBulkPermissionManagement(settingsData.allowBulkPermissionManagement);
+          if (settingsData.superAdminNotifications !== undefined) setSuperAdminNotifications(settingsData.superAdminNotifications);
+          if (settingsData.deanNotifications !== undefined) setDeanNotifications(settingsData.deanNotifications);
+          if (settingsData.parentNotifications !== undefined) setParentNotifications(settingsData.parentNotifications);
+          if (settingsData.studentNotifications !== undefined) setStudentNotifications(settingsData.studentNotifications);
+          if (settingsData.developerPassword) setDeveloperPassword(settingsData.developerPassword);
+          if (settingsData.leaveApprovalMethod) setLeaveApprovalMethod(settingsData.leaveApprovalMethod);
+          if (settingsData.wifiWhitelist) setWifiWhitelist(settingsData.wifiWhitelist);
+          if (settingsData.enableManualAttendance !== undefined) setEnableManualAttendance(settingsData.enableManualAttendance);
+          if (settingsData.notificationSettings) {
+            setNotificationSettings(prev => ({ ...prev, ...settingsData.notificationSettings }));
+          }
         }
       }
 
       // Fetch Hostels (with warden/room info)
-      const hostelsRes = await fetch("/api/admin/hostels", { cache: "no-store" });
-      const hostelsData = await hostelsRes.json();
-      if (hostelsData.success) {
-        setHostelsConfig(hostelsData.hostels || []);
+      try {
+        const hostelsRes = await fetch("/api/admin/hostels", { cache: "no-store" });
+        if (hostelsRes.ok) {
+          const hostelsData = await hostelsRes.json();
+          if (hostelsData.success && Array.isArray(hostelsData.hostels) && hostelsData.hostels.length > 0) {
+            setHostelsConfig(hostelsData.hostels);
+          } else if (hostels && hostels.length > 0) {
+            setHostelsConfig(hostels);
+          }
+        } else if (hostels && hostels.length > 0) {
+          setHostelsConfig(hostels);
+        }
+      } catch (hErr) {
+        console.warn("Silent fallback: Error fetching hostels config:", hErr);
+        if (hostels && hostels.length > 0) {
+          setHostelsConfig(hostels);
+        }
       }
     } catch (error) {
       console.warn("Silent fallback: Error fetching system settings:", error);
@@ -4084,7 +4103,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const saveUndertakingSettings = async (newRequire: boolean, newText: string) => {
     try {
       const settingsRes = await fetch("/api/admin/settings", { cache: "no-store" });
-      const settingsData = await settingsRes.json();
+      const settingsData = settingsRes.ok ? await settingsRes.json() : {};
       const currentConfig = settingsData?.registrationFieldsConfig || {};
 
       const updatedConfig = {
@@ -4100,12 +4119,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           registrationFieldsConfig: updatedConfig
         })
       });
+      if (!res.ok) return;
       const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         showToast(newRequire ? "Student Undertaking Enabled & Saved!" : "Student Undertaking Disabled & Saved!", "success");
       }
     } catch (err) {
-      console.error("Failed to auto-save undertaking settings:", err);
+      console.warn("Failed to auto-save undertaking settings:", err);
     }
   };
 
@@ -5677,7 +5697,6 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const loadData = () => {
       setLoading(true);
 
-      // ⚡ BANDWIDTH OPTIMIZATION: Only fetch summary stats on first load
       setStudentsLoading(true);
       fetchAttendanceSummary()
         .finally(() => {
@@ -5685,7 +5704,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             setStudentsLoading(false);
         });
 
-      // Fetch hostels, notifications, and settings (only once)
+      // Fetch students, hostels, notifications, and settings immediately on load
+      fetchStudents();
       fetchHostels();
       fetchAdminNotifications();
       fetchBankSettings();

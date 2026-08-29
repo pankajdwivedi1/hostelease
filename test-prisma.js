@@ -14,15 +14,23 @@ const prisma = new PrismaClient();
 async function test() {
   console.log('🔌 Connecting to Railway PostgreSQL database via Prisma...');
   try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "hostels" ADD COLUMN IF NOT EXISTS "allow_warden_notification" BOOLEAN DEFAULT true;');
+    await prisma.$executeRawUnsafe('ALTER TABLE "hostels" ADD COLUMN IF NOT EXISTS "allow_student_notification" BOOLEAN DEFAULT true;');
+    await prisma.$executeRawUnsafe('ALTER TABLE "hostels" ADD COLUMN IF NOT EXISTS "registration_format" TEXT DEFAULT \'\';');
+    console.log('✅ Added missing columns to hostels table in Railway PostgreSQL!');
+
     const studentCount = await prisma.student.count();
     const attendanceCount = await prisma.attendance.count();
     const tenantCount = await prisma.tenant.count();
+    const hostels = await prisma.hostel.findMany();
 
     console.log('\n✅ Connection Successful!');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log(`🏢 Tenants in Railway:    ${tenantCount}`);
     console.log(`🎓 Students in Railway:   ${studentCount}`);
     console.log(`📝 Attendance in Railway: ${attendanceCount}`);
+    console.log(`🏨 Hostels in Railway:    ${hostels.length}`);
+    console.log('Hostels detail:', JSON.stringify(hostels, null, 2));
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   } catch (err) {

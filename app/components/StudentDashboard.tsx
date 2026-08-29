@@ -373,8 +373,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             permQuery.set("limit", "200");
 
             const [gpRes, permRes] = await Promise.allSettled([
-                fetch(`/api/getpass/history?${gpQuery.toString()}${getTenantParam(false)}`).then(r => r.json()),
-                fetch(`/api/permissions?${permQuery.toString()}${getTenantParam(false)}`).then(r => r.json()),
+                fetch(`/api/getpass/history?${gpQuery.toString()}${getTenantParam(false)}`).then(r => (r.ok ? r.json() : null)),
+                fetch(`/api/permissions?${permQuery.toString()}${getTenantParam(false)}`).then(r => (r.ok ? r.json() : null)),
             ]);
 
             const gpRecords: any[] = (gpRes.status === "fulfilled" && Array.isArray(gpRes.value?.records)) 
@@ -2561,8 +2561,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
         // ⚡ 100% RELIABILITY: WiFi IP Check
         // If student is on Hostel WiFi, bypass GPS.
-        fetch("/api/check-network").then(res => res.json()).then(data => {
-            if (data.success && data.isWhitelisted && !isCompleted) {
+        fetch("/api/check-network").then(res => (res.ok ? res.json() : null)).then(data => {
+            if (data && data.success && data.isWhitelisted && !isCompleted) {
                 console.log("📶 Verified via Hostel WiFi IP:", data.ip);
                 isCompleted = true;
                 if (watchId !== null) navigator.geolocation.clearWatch(watchId);
@@ -3026,8 +3026,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         if (studentProfile?.hostelName) {
             console.log(`🏢 Resolving Hostel Mode for: ${studentProfile.hostelName}`);
             // Fetch public hostel list and find my hostel's settings
-            fetch('/api/hostels').then(res => res.json()).then(data => {
-                if (data.hostels) {
+            fetch('/api/hostels').then(res => (res.ok ? res.json() : null)).then(data => {
+                if (data && data.hostels) {
                     // ⚡ ROBUST: Trim names to handle hidden whitespace/newlines from DB
                     const myHostel = data.hostels.find((h: any) =>
                         h.name.trim().toLowerCase() === (studentProfile.hostelName || "").trim().toLowerCase()

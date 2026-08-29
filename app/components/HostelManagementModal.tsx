@@ -21,12 +21,13 @@ function HostelLogsButton({ hostelName, onClick }: { hostelName: string; onClick
     async function loadCount() {
       try {
         const res = await fetch(`/api/hostels/logs?hostelName=${encodeURIComponent(hostelName)}`);
+        if (!res.ok) return;
         const data = await res.json();
-        if (data.success && active) {
+        if (data && data.success && active) {
           setLogsCount(data.logs?.length || 0);
         }
       } catch (err) {
-        console.error("Failed to load logs count for " + hostelName, err);
+        console.warn("Failed to load logs count for " + hostelName, err);
       }
     }
     loadCount();
@@ -63,14 +64,17 @@ function HostelLogsModal({ hostelName, onClose }: { hostelName: string; onClose:
     try {
       setIsLoading(true);
       const res = await fetch(`/api/hostels/logs?hostelName=${encodeURIComponent(hostelName)}`);
+      if (!res.ok) {
+        setLogs([]);
+        return;
+      }
       const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         setLogs(data.logs || []);
         setSelectedLogIds(new Set());
       }
     } catch (err) {
-      console.error("Failed to load logs for " + hostelName, err);
-      showToast("Failed to load logs", "error");
+      console.warn("Failed to load logs for " + hostelName, err);
     } finally {
       setIsLoading(false);
     }
@@ -283,7 +287,9 @@ export default function HostelManagementModal({
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [newAccountForm, setNewAccountForm] = useState({ username: "", password: "", hostels: [] as string[] });
   const [activeLogHostel, setActiveLogHostel] = useState<string | null>(null);
-
+  const effectiveHostels = (hostelsConfig && hostelsConfig.length > 0) 
+    ? hostelsConfig 
+    : ((hostels && hostels.length > 0) ? hostels : []);
 
   return (
     <div className="fixed inset-0 z-[60] bg-black/50 lg:bg-slate-50 backdrop-blur-sm lg:backdrop-blur-none flex items-center justify-center p-1 sm:p-4 lg:p-0 animate-in fade-in duration-200">
@@ -341,16 +347,17 @@ export default function HostelManagementModal({
             </div>
           </div>
           
-          {hostelsConfig.length === 0 && (
+          {effectiveHostels.length === 0 && (
             <div className="text-center py-12 text-gray-400 font-bold text-sm bg-white rounded-xl border border-dashed">
               No hostels found. Add hostels to begin configuration.
             </div>
           )}
 
           <div className="grid gap-6">
-            {hostelsConfig.map((hostel: any) => {
-              const matchedHostel = hostels.find((h: any) => h._id === hostel._id || h.name === hostel.name) || hostel;
-              const isLoading = updatingHostelId === matchedHostel._id;
+            {effectiveHostels.map((hostel: any) => {
+              const matchedHostel = (hostels || []).find((h: any) => (h._id && h._id === (hostel._id || hostel.id)) || (h.id && h.id === (hostel._id || hostel.id)) || h.name === hostel.name) || hostel;
+              const hostelKey = hostel._id || hostel.id || hostel.name;
+              const isLoading = updatingHostelId === (matchedHostel._id || matchedHostel.id);
 
               return (
                 <div key={hostel._id} className="bg-white border-2 border-slate-100 p-3 sm:p-6 rounded-2xl hover:border-indigo-100 hover:shadow-xl transition-all relative overflow-hidden group">
@@ -731,8 +738,8 @@ export default function HostelManagementModal({
                 <div className="mb-8">
                   <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 px-1">Assign Hostels</label>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {hostelsConfig.map((h: any) => (
-                      <label key={h._id} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${newAccountForm.hostels.includes(h.name) ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 hover:border-slate-200'}`}>
+                    {effectiveHostels.map((h: any) => (
+                      <label key={h._id || h.id || h.name} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${newAccountForm.hostels.includes(h.name) ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 hover:border-slate-200'}`}>
                         <input
                           type="checkbox"
                           checked={newAccountForm.hostels.includes(h.name)}

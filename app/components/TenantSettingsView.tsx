@@ -34,14 +34,15 @@ export default function TenantSettingsView({ onRenew, generateInvoicePDF, mode =
         try {
             if (!cachedBillingHistory) setLoadingBilling(true);
             const res = await fetch("/api/admin/billing-history");
+            if (!res.ok) return;
             const data = await res.json();
-            if (data.success) {
+            if (data && data.success) {
                 const logs = data.logs || [];
                 setBillingHistory(logs);
                 cachedBillingHistory = logs;
             }
         } catch (err) {
-            console.error("Error fetching billing history:", err);
+            console.warn("Error fetching billing history:", err);
         } finally {
             setLoadingBilling(false);
         }
@@ -53,8 +54,9 @@ export default function TenantSettingsView({ onRenew, generateInvoicePDF, mode =
         }
         try {
             const res = await fetch("/api/admin/settings/get");
+            if (!res.ok) return;
             const data = await res.json();
-            if (data.success && data.settings) {
+            if (data && data.success && data.settings) {
                 setSettings(data.settings);
                 cachedSettings = data.settings;
                 setContactName(data.settings.contactName || "");
