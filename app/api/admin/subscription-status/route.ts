@@ -3,6 +3,7 @@ import { getSubscriptionStatus } from "@/lib/tenant";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import { prisma } from "@/lib/prisma";
 import { db } from "@/lib/dbAdapter";
+import { createCachedResponse } from "@/lib/cacheHelper";
 
 export const dynamic = 'force-dynamic';
 
@@ -49,9 +50,9 @@ export async function GET(request: NextRequest) {
         delete safePaymentSettings.razorpayKeySecret;
 
         if (!status) {
-            return NextResponse.json({ success: true, isDefault: true, paymentSettings: safePaymentSettings });
+            return createCachedResponse({ success: true, isDefault: true, paymentSettings: safePaymentSettings }, request, 60);
         }
-        return NextResponse.json({ success: true, ...status, paymentSettings: safePaymentSettings });
+        return createCachedResponse({ success: true, ...status, paymentSettings: safePaymentSettings }, request, 60);
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }

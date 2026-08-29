@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { createCachedResponse } from "@/lib/cacheHelper";
 
 export const dynamic = "force-dynamic";
 
@@ -255,7 +256,7 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        return NextResponse.json({
+        return createCachedResponse({
             success: true,
             summary: formattedSummary, 
             hostelStats,              
@@ -263,7 +264,7 @@ export async function GET(request: NextRequest) {
             presentStudentIds,
             enableManualAttendance,
             date
-        });
+        }, request, 15);
 
 
     } catch (error: any) {

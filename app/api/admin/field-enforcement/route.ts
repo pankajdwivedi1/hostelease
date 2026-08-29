@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { createCachedResponse } from "@/lib/cacheHelper";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +17,10 @@ export async function GET(request: NextRequest) {
 
     const enforcementRules = await db.fieldEnforcement.find(filter);
 
-    return NextResponse.json({
+    return createCachedResponse({
       success: true,
       data: enforcementRules,
-    });
+    }, request, 30);
   } catch (error: any) {
     console.error("Error fetching field enforcement rules:", error);
     return NextResponse.json(

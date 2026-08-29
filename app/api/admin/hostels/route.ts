@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
+import { createCachedResponse } from "@/lib/cacheHelper";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
             }
             return h;
         });
-        return NextResponse.json({ success: true, hostels: mappedHostels });
+        return createCachedResponse({ success: true, hostels: mappedHostels }, request, 60);
     } catch (error: any) {
         console.error("Error in GET /api/admin/hostels:", error);
         const fallbackHostels = [
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
             { _id: "3", id: "3", name: "BOYS HOSTEL", totalRooms: 0, attendanceMode: "strict" },
             { _id: "4", id: "4", name: "GHB HOSTEL", totalRooms: 0, attendanceMode: "strict" },
         ];
-        return NextResponse.json({ success: true, hostels: fallbackHostels });
+        return createCachedResponse({ success: true, hostels: fallbackHostels }, request, 60);
     }
 }
 

@@ -12,43 +12,46 @@ if (match && match[1]) {
 const prisma = new PrismaClient();
 
 async function test() {
-  console.log('🔌 Connecting to Railway PostgreSQL database via Prisma...');
-  try {
-    await prisma.$executeRawUnsafe('ALTER TABLE "hostels" ADD COLUMN IF NOT EXISTS "allow_warden_notification" BOOLEAN DEFAULT true;');
-    await prisma.$executeRawUnsafe('ALTER TABLE "hostels" ADD COLUMN IF NOT EXISTS "allow_student_notification" BOOLEAN DEFAULT true;');
-    await prisma.$executeRawUnsafe('ALTER TABLE "hostels" ADD COLUMN IF NOT EXISTS "registration_format" TEXT DEFAULT \'\';');
-    console.log('✅ Added missing columns to hostels table in Railway PostgreSQL!');
+  const routes = [
+    'http://localhost:3000/api/admin/hostels',
+    'http://localhost:3000/api/admin/settings',
+    'http://localhost:3000/api/admin/subscription-status',
+    'http://localhost:3000/api/admin/field-enforcement',
+    'http://localhost:3000/api/admin/attendance-summary'
+  ];
 
-    const students = await prisma.student.findMany({
-      where: {
-        name: { in: ['AAYUSH RAI SINDHIYA', 'ABHAY KUMAR', 'ABHAY TIWARI'] }
-      },
-      select: {
-        id: true,
-        name: true,
-        firebaseUid: true,
-        faceDescriptor: true,
-        dynamicFields: true,
-        profilePicture: true,
-        updatedAt: true
+  console.log('🚀 Running ETag & HTTP 304 Zero-Egress Tests on Live Server...\n');
+
+  for (const url of routes) {
+    const routeName = url.replace('http://localhost:3000', '');
+    try {
+      // 1. First Request: Fresh fetch (No ETag)
+      const res1 = await fetch(url);
+      const etag = res1.headers.get('etag');
+      const cacheControl = res1.headers.get('cache-control');
+      const body1 = await res1.text();
+      const bytes1 = Buffer.byteLength(body1);
+
+      console.log('📍 ' + routeName);
+      console.log('   Call 1 (Fresh):  Status=' + res1.status + ', Bytes=' + bytes1 + ', ETag=' + etag);
+
+      // 2. Second Request: Conditional fetch with If-None-Match
+      const res2 = await fetch(url, {
+        headers: { 'If-None-Match': etag || '' }
+      });
+      const body2 = await res2.text();
+      const bytes2 = Buffer.byteLength(body2);
+
+      console.log('   Call 2 (Cached): Status=' + res2.status + ' (Expected 304), Body Bytes=' + bytes2 + ' (Zero Egress!)');
+
+      if (res1.status === 200 && res2.status === 304 && bytes2 === 0) {
+        console.log('   ✅ PASS: Perfect 304 Zero-Egress behavior!\n');
+      } else {
+        console.log('   ⚠️ Review: Status=' + res2.status + '\n');
       }
-    });
-    console.log(JSON.stringify(students.map(s => ({
-      id: s.id,
-      name: s.name,
-      firebaseUID: s.firebaseUID,
-      hasVector: Array.isArray(s.faceDescriptor) && s.faceDescriptor.length > 0,
-      vectorLength: Array.isArray(s.faceDescriptor) ? s.faceDescriptor.length : 0,
-      dynamicFields: s.dynamicFields,
-      hasPic: !!s.profilePicture,
-      picLength: s.profilePicture ? s.profilePicture.length : 0,
-      updatedAt: s.updatedAt
-    })), null, 2));
-
-  } catch (err) {
-    console.error('\n❌ Connection Failed:', err.message);
-  } finally {
-    await prisma.$disconnect();
+    } catch (e) {
+      console.error('   ❌ ERROR on ' + routeName + ':', e.message);
+    }
   }
 }
 

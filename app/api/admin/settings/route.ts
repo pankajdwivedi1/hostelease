@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/dbAdapter";
 import { cookies } from "next/headers";
+import { createCachedResponse } from "@/lib/cacheHelper";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
             enforceMandatoryPush = true;
         }
 
-        return NextResponse.json({
+        return createCachedResponse({
             success: true,
             locations: settings?.hostelLocations || [],
             startTime: settings?.attendanceStartTime || "21:00",
@@ -72,7 +73,7 @@ export async function GET(request: NextRequest) {
             studentNotifications: settings?.studentNotifications !== false,
             qrScanCooldownMinutes: settings?.qrScanCooldownMinutes !== undefined ? settings.qrScanCooldownMinutes : 5,
             enforceMandatoryPush
-        });
+        }, request, 30);
     } catch (error: any) {
         console.error("Error fetching admin settings:", error);
         return NextResponse.json(
