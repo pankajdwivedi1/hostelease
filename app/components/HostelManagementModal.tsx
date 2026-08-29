@@ -660,6 +660,25 @@ export default function HostelManagementModal({
                               </label>
                             </div>
 
+                            {/* Student Alerts */}
+                            <div className="flex items-center justify-between bg-white p-1.5 sm:p-2.5 rounded-lg border border-slate-200 shadow-sm">
+                              <div className="min-w-0 pr-1">
+                                <p className="text-[9px] sm:text-[10px] font-black text-slate-700 uppercase tracking-wider truncate flex items-center gap-1">
+                                  <span>📱</span> Student Alerts
+                                </p>
+                                <p className="text-[7px] sm:text-[8px] text-slate-400 font-bold mt-0.5 uppercase truncate">Hostel student alerts</p>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                <input
+                                  type="checkbox"
+                                  checked={hostel.allowStudentNotification !== false}
+                                  onChange={(e) => handleUpdateHostelConfig({ ...hostel, id: hostel._id, allowStudentNotification: e.target.checked })}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-7 h-4 sm:w-9 sm:h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 sm:after:h-4 sm:after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                              </label>
+                            </div>
+
                             {/* Warden Alerts */}
                             <div className="flex items-center justify-between bg-white p-1.5 sm:p-2.5 rounded-lg border border-slate-200 shadow-sm">
                               <div className="min-w-0 pr-1">

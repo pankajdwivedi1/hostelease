@@ -46,6 +46,42 @@ export async function POST(request: NextRequest) {
             expiresAt: expiresAt ? new Date(expiresAt) : null,
         });
 
+        // ⚡ Dispatch Web Push Notifications to Phone Lock Screens
+        (async () => {
+            try {
+                const { sendPushNotification } = await import("@/lib/pushNotification");
+                const pushTitle = senderRole === "dean" ? "📢 Dean Announcement" : "📢 Warden Announcement";
+                const payload = {
+                    title: pushTitle,
+                    body: message,
+                    url: "/",
+                    image: body.image || undefined,
+                };
+
+                if (targetType === "individual" && targetStudentId) {
+                    await sendPushNotification(targetStudentId, "student", "deanBroadcast", payload);
+                } else if (targetType === "hostel" && targetHostel) {
+                    const students = await db.students.findMany({ hostelName: targetHostel });
+                    for (const s of (students || [])) {
+                        const sid = s._id || s.id;
+                        if (sid) {
+                            sendPushNotification(sid, "student", "deanBroadcast", payload).catch(() => {});
+                        }
+                    }
+                } else if (targetType === "all") {
+                    const students = await db.students.getAll();
+                    for (const s of (students || [])) {
+                        const sid = s._id || s.id;
+                        if (sid) {
+                            sendPushNotification(sid, "student", "deanBroadcast", payload).catch(() => {});
+                        }
+                    }
+                }
+            } catch (pushErr) {
+                console.warn("Background push dispatch notice:", pushErr);
+            }
+        })();
+
         return NextResponse.json({ success: true, notification });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });

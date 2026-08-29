@@ -105,9 +105,24 @@ export async function sendPushNotification(
       console.log(`Push Notification for parent blocked: parentNotifications is disabled.`);
       return { success: false, reason: "parent_notifications_disabled" };
     }
-    if (userType === "student" && settings?.studentNotifications === false) {
-      console.log(`Push Notification for student blocked: studentNotifications is disabled.`);
-      return { success: false, reason: "student_notifications_disabled" };
+    if (userType === "student") {
+      if (settings?.studentNotifications === false) {
+        console.log(`Push Notification for student blocked: studentNotifications is disabled.`);
+        return { success: false, reason: "student_notifications_disabled" };
+      }
+      try {
+        const student = await db.students.getById(userId);
+        if (student?.hostelName) {
+          const hostels = await db.hostels.getAll();
+          const matchedHostel = (hostels || []).find((h: any) => h.name?.toUpperCase() === student.hostelName?.toUpperCase());
+          if (matchedHostel && matchedHostel.allowStudentNotification === false) {
+            console.log(`Push Notification for student [${userId}] blocked: allowStudentNotification is disabled for hostel ${matchedHostel.name}.`);
+            return { success: false, reason: "hostel_student_notifications_disabled" };
+          }
+        }
+      } catch (studentErr) {
+        console.warn("Could not check hostel student notification toggle:", studentErr);
+      }
     }
 
     // Check Hostel-Level Warden Notification Switches:

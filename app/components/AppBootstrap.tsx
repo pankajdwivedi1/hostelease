@@ -84,11 +84,46 @@ export default function AppBootstrap() {
       });
     }
   }, []);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+
   const handleGrantPermissions = async () => {
     if (isRequesting) return;
     setIsRequesting(true);
+    setPermissionError(null);
 
-    // ─── 📍 1. Request LOCATION ─────────────────────────
+    // ─── 🔔 1. Request PUSH NOTIFICATIONS ───────────────
+    let notifGranted = true;
+    try {
+      if (typeof window !== "undefined" && "Notification" in window) {
+        const notifStatus = await Notification.requestPermission();
+        if (notifStatus !== "granted") {
+          notifGranted = false;
+        } else {
+          // Register Web Push subscription
+          const cachedStudent = localStorage.getItem("cachedStudentData");
+          if (cachedStudent) {
+            try {
+              const parsed = JSON.parse(cachedStudent);
+              const sid = parsed._id || parsed.id;
+              if (sid) {
+                const { registerPushNotifications } = await import("@/lib/pushRegister");
+                registerPushNotifications(sid, "student").catch(() => {});
+              }
+            } catch (e) {}
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Notification request error:", err);
+    }
+
+    if (!notifGranted) {
+      setIsRequesting(false);
+      setPermissionError("Notification permission is required to receive Dean broadcasts, curfew notices, and leave approvals. Please tap the 🔒 or ℹ️ icon next to the address bar, allow notifications, and try again.");
+      return;
+    }
+
+    // ─── 📍 2. Request LOCATION ─────────────────────────
     try {
       await new Promise<void>((resolve) => {
         navigator.geolocation.getCurrentPosition(
@@ -99,7 +134,7 @@ export default function AppBootstrap() {
       });
     } catch {}
 
-    // ─── 📷 🎤 2. Request CAMERA & MICROPHONE ────────────
+    // ─── 📷 🎤 3. Request CAMERA & MICROPHONE ────────────
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       stream.getTracks().forEach(t => t.stop()); // Close immediately
@@ -107,7 +142,7 @@ export default function AppBootstrap() {
       console.warn("Camera/Microphone permission error during bootstrap:", err);
     }
 
-    // 🏁 3. Finish
+    // 🏁 4. Finish
     localStorage.setItem(PERMISSIONS_ASKED_KEY, "1");
     document.cookie = `${PERMISSIONS_ASKED_KEY}=1; max-age=31536000; path=/`;
     showToast("Permissions configured successfully!", "success");
@@ -128,41 +163,49 @@ export default function AppBootstrap() {
       {/* Background Glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-600/20 blur-[100px] rounded-full pointer-events-none" />
 
-      <div className="w-full max-w-sm bg-white/10 backdrop-blur-2xl border border-white/20 rounded-[32px] p-8 flex flex-col items-center text-center shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-10 duration-700">
+      <div className="w-full max-w-sm bg-white/10 backdrop-blur-2xl border border-white/20 rounded-[32px] p-7 flex flex-col items-center text-center shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-10 duration-700">
         
         {/* Animated App Icon Shell */}
-        <div className="w-20 h-20 bg-blue-600 rounded-3xl mb-6 flex items-center justify-center shadow-[0_0_40px_rgba(37,99,235,0.4)] animate-pulse">
-            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="w-16 h-16 bg-blue-600 rounded-2xl mb-4 flex items-center justify-center shadow-[0_0_30px_rgba(37,99,235,0.4)] animate-pulse">
+            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A10.003 10.003 0 0112 3a9.991 9.991 0 017.93 4M12 11a9.994 9.994 0 00-6.212 5.1a10.042 10.042 0 003.458 2.035m3.107.037A10.05 10.05 0 0018 12.5V12" />
             </svg>
         </div>
 
-        <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">Setup Access</h1>
-        <p className="text-blue-100/60 text-sm mb-8 leading-relaxed">
-          To provide secure attendance, face biometric scanning, and video verification, Hosteleaze requires Location, Camera, and Microphone permissions.
+        <h1 className="text-xl font-bold text-white mb-1.5 tracking-tight">Required Permissions</h1>
+        <p className="text-blue-100/60 text-xs mb-5 leading-relaxed">
+          Hosteleaze requires push notifications, biometric camera, and campus location access to operate.
         </p>
 
+        {permissionError && (
+          <div className="w-full mb-4 p-3 bg-red-500/20 border border-red-500/40 rounded-xl text-left">
+            <p className="text-[11px] text-red-200 font-semibold leading-tight">
+              ⚠️ {permissionError}
+            </p>
+          </div>
+        )}
+
         {/* Feature List */}
-        <div className="w-full space-y-4 mb-8">
-            <div className="flex items-center gap-4 text-left">
-                <div className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center text-xl shrink-0">📍</div>
+        <div className="w-full space-y-3 mb-6">
+            <div className="flex items-center gap-3 text-left">
+                <div className="w-9 h-9 bg-white/5 rounded-xl flex items-center justify-center text-lg shrink-0">🔔</div>
                 <div>
-                    <h3 className="text-white text-xs font-bold uppercase tracking-widest opacity-40">Location</h3>
+                    <h3 className="text-white text-[10px] font-bold uppercase tracking-widest opacity-50">Push Notifications</h3>
+                    <p className="text-white/80 text-[11px] font-medium leading-tight">Dean broadcasts, gatepass approvals, and curfew alerts.</p>
+                </div>
+            </div>
+            <div className="flex items-center gap-3 text-left">
+                <div className="w-9 h-9 bg-white/5 rounded-xl flex items-center justify-center text-lg shrink-0">📍</div>
+                <div>
+                    <h3 className="text-white text-[10px] font-bold uppercase tracking-widest opacity-50">Location</h3>
                     <p className="text-white/80 text-[11px] font-medium leading-tight">Verifies you are currently on campus when checking in.</p>
                 </div>
             </div>
-            <div className="flex items-center gap-4 text-left">
-                <div className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center text-xl shrink-0">📷</div>
+            <div className="flex items-center gap-3 text-left">
+                <div className="w-9 h-9 bg-white/5 rounded-xl flex items-center justify-center text-lg shrink-0">📷</div>
                 <div>
-                    <h3 className="text-white text-xs font-bold uppercase tracking-widest opacity-40">Camera</h3>
-                    <p className="text-white/80 text-[11px] font-medium leading-tight">Registers your facial biometric and scans QR codes.</p>
-                </div>
-            </div>
-            <div className="flex items-center gap-4 text-left">
-                <div className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center text-xl shrink-0">🎙️</div>
-                <div>
-                    <h3 className="text-white text-xs font-bold uppercase tracking-widest opacity-40">Microphone</h3>
-                    <p className="text-white/80 text-[11px] font-medium leading-tight">Allows recording video with audio for consent and security verification.</p>
+                    <h3 className="text-white text-[10px] font-bold uppercase tracking-widest opacity-50">Camera & Biometrics</h3>
+                    <p className="text-white/80 text-[11px] font-medium leading-tight">Facial recognition for attendance and scanning gatepass QR codes.</p>
                 </div>
             </div>
         </div>
@@ -170,20 +213,20 @@ export default function AppBootstrap() {
         <button
           onClick={handleGrantPermissions}
           disabled={isRequesting}
-          className={`w-full py-4 rounded-2xl bg-blue-600 text-white font-black uppercase tracking-widest text-xs hover:bg-blue-500 shadow-xl shadow-blue-900/40 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2`}
+          className={`w-full py-3.5 rounded-xl bg-blue-600 text-white font-black uppercase tracking-widest text-xs hover:bg-blue-500 shadow-xl shadow-blue-900/40 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2`}
         >
           {isRequesting ? (
             <>
                 <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                Wait for System Prompt...
+                Processing...
             </>
           ) : (
-            "Grant All Permissions"
+            permissionError ? "Retry & Grant Notifications" : "Grant All Permissions"
           )}
         </button>
 
-        <p className="mt-4 text-[10px] text-white/30 font-medium">
-          Note: Your device will show native system confirmation prompts next.
+        <p className="mt-3 text-[10px] text-white/30 font-medium">
+          Note: Your device will display system permission popups next.
         </p>
       </div>
     </div>

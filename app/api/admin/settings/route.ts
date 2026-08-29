@@ -33,8 +33,19 @@ export async function GET(request: NextRequest) {
             enforceMandatoryPush = true;
         }
 
+        let hostelAlertsMap: Record<string, boolean> = {};
+        try {
+            const allHostels = await db.hostels.getAll();
+            (allHostels || []).forEach((h: any) => {
+                if (h.name) {
+                    hostelAlertsMap[h.name.toUpperCase()] = h.allowStudentNotification !== false;
+                }
+            });
+        } catch (e) {}
+
         return createCachedResponse({
             success: true,
+            hostelAlertsMap,
             locations: settings?.hostelLocations || [],
             startTime: settings?.attendanceStartTime || "21:00",
             endTime: settings?.attendanceEndTime || "22:30",

@@ -948,7 +948,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 }
                 if (data.overlapRadius !== undefined) setOverlapRadius(data.overlapRadius);
                 if (data.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(data.prioritizeAssignedHostel);
-                if (data.enforceMandatoryPush !== undefined) setEnforceMandatoryPush(data.enforceMandatoryPush === true);
+                const hName = (studentProfile?.hostelName || studentProfile?.hostel_name || "").toUpperCase();
+                if (hName && data.hostelAlertsMap && data.hostelAlertsMap[hName] !== undefined) {
+                    setEnforceMandatoryPush(data.hostelAlertsMap[hName] === true);
+                } else if (data.enforceMandatoryPush !== undefined) {
+                    setEnforceMandatoryPush(data.enforceMandatoryPush === true);
+                }
                 return;
             }
 
@@ -964,7 +969,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 }
                 if (data.overlapRadius !== undefined) setOverlapRadius(data.overlapRadius);
                 if (data.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(data.prioritizeAssignedHostel);
-                if (data.enforceMandatoryPush !== undefined) setEnforceMandatoryPush(data.enforceMandatoryPush === true);
+                const hName = (studentProfile?.hostelName || studentProfile?.hostel_name || "").toUpperCase();
+                if (hName && data.hostelAlertsMap && data.hostelAlertsMap[hName] !== undefined) {
+                    setEnforceMandatoryPush(data.hostelAlertsMap[hName] === true);
+                } else if (data.enforceMandatoryPush !== undefined) {
+                    setEnforceMandatoryPush(data.enforceMandatoryPush === true);
+                }
             }
         } catch (e) {
             console.warn("Silent fallback: Error fetching system settings:", e);
