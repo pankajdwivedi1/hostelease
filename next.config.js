@@ -5,11 +5,12 @@ const defaultRuntimeCaching = require("next-pwa/cache");
 // fetching fresh updates in the background.
 const customRuntimeCaching = defaultRuntimeCaching.map((entry) => {
     if (entry.options && entry.options.cacheName === "others") {
+        const { networkTimeoutSeconds, ...restOptions } = entry.options;
         return {
             ...entry,
             handler: "StaleWhileRevalidate",
             options: {
-                ...entry.options,
+                ...restOptions,
                 expiration: {
                     maxEntries: 64,
                     maxAgeSeconds: 24 * 60 * 60, // 24 hours
