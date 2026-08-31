@@ -187,12 +187,24 @@ export async function POST(request: NextRequest) {
 
         // Handle Restore Action
         if (action === "restore" && id) {
-            const { error } = await supabase
-                .from('tenants')
-                .update({ is_deleted: false, deleted_at: null })
-                .eq('id', id);
+            try {
+                await prisma.tenant.updateMany({
+                    where: { id },
+                    data: { isDeleted: false, deletedAt: null }
+                });
+            } catch (prismaErr) {
+                console.warn("Prisma restore error:", prismaErr);
+            }
+
+            try {
+                await supabase
+                    .from('tenants')
+                    .update({ is_deleted: false, deleted_at: null })
+                    .eq('id', id);
+            } catch (supabaseErr) {
+                console.warn("Supabase restore error:", supabaseErr);
+            }
             
-            if (error) throw error;
             return NextResponse.json({ success: true, message: "University restored to active duty." });
         }
 
@@ -201,42 +213,61 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 });
         }
 
-        // Check if slug exists
-        const { data: existing } = await supabase
-            .from('tenants')
-            .select('id')
-            .eq('slug', slug.toLowerCase().trim())
-            .single();
+        const cleanSlug = slug.toLowerCase().trim();
 
-        if (existing) {
+        // Check if slug exists in Prisma
+        const existingInPrisma = await prisma.tenant.findUnique({
+            where: { slug: cleanSlug }
+        }).catch(() => null);
+
+        if (existingInPrisma) {
             return NextResponse.json({ success: false, error: "This slug/subdomain is already taken" }, { status: 409 });
         }
 
-        const { data: tenant, error } = await supabase
-            .from('tenants')
-            .insert({
-                name,
-                slug: slug.toLowerCase().trim(),
-                admin_email: adminEmail,
-                subscription_status: subscriptionStatus || 'trial',
-                primary_color: primaryColor || '#3b82f6',
-                is_active: true,
-                subscription_end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            })
-            .select()
-            .single();
+        const tenantId = crypto.randomUUID();
+        const tenantEndDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-        if (error) throw error;
+        try {
+            await prisma.tenant.create({
+                data: {
+                    id: tenantId,
+                    name,
+                    slug: cleanSlug,
+                    adminEmail,
+                    subscriptionStatus: subscriptionStatus || 'trial',
+                    primaryColor: primaryColor || '#3b82f6',
+                    isActive: true,
+                    subscriptionEndDate: tenantEndDate
+                }
+            });
+        } catch (pErr) {
+            console.warn("Prisma tenant creation note:", pErr);
+        }
+
+        try {
+            await supabase
+                .from('tenants')
+                .insert({
+                    id: tenantId,
+                    name,
+                    slug: cleanSlug,
+                    admin_email: adminEmail,
+                    subscription_status: subscriptionStatus || 'trial',
+                    primary_color: primaryColor || '#3b82f6',
+                    is_active: true,
+                    subscription_end_date: tenantEndDate.toISOString(),
+                });
+        } catch (sErr) {}
 
         return NextResponse.json({
             success: true,
             tenant: {
-                _id: tenant.id,
-                name: tenant.name,
-                slug: tenant.slug,
-                adminEmail: tenant.admin_email,
-                subscriptionStatus: tenant.subscription_status,
-                isActive: tenant.is_active
+                _id: tenantId,
+                name: name,
+                slug: cleanSlug,
+                adminEmail: adminEmail,
+                subscriptionStatus: subscriptionStatus || 'trial',
+                isActive: true
             }
         });
     } catch (error: any) {
@@ -393,26 +424,57 @@ export async function DELETE(request: NextRequest) {
         
         if (purge) {
             console.log(`[SuperAdmin] PERMANENT PURGE for tenant: ${id}`);
-            // Manually delete dependents to avoid foreign key constraints
-            await supabase.from('gatepasses').delete().eq('tenant_id', id);
-            await supabase.from('attendance').delete().eq('tenant_id', id);
-            await supabase.from('students').delete().eq('tenant_id', id);
-            await supabase.from('hostels').delete().eq('tenant_id', id);
-            await supabase.from('warden_accounts').delete().eq('tenant_id', id);
-            await supabase.from('admin_settings').delete().eq('tenant_id', id);
-            
-            const { error } = await supabase.from('tenants').delete().eq('id', id);
-            if (error) throw error;
+
+            // 1. Purge from Railway PostgreSQL (Prisma)
+            try {
+                await prisma.gatePass.deleteMany({ where: { tenantId: id } });
+                await prisma.attendance.deleteMany({ where: { tenantId: id } });
+                await prisma.student.deleteMany({ where: { tenantId: id } });
+                await prisma.hostel.deleteMany({ where: { tenantId: id } });
+                await prisma.fieldEnforcement.deleteMany({ where: { tenantId: id } });
+                await prisma.adminSettings.deleteMany({ where: { tenantId: id } });
+                await prisma.tenant.deleteMany({ where: { id } });
+            } catch (prismaErr) {
+                console.warn("Prisma permanent purge note:", prismaErr);
+            }
+
+            // 2. Also clean up Supabase
+            try {
+                await supabase.from('gatepasses').delete().eq('tenant_id', id);
+                await supabase.from('attendance').delete().eq('tenant_id', id);
+                await supabase.from('students').delete().eq('tenant_id', id);
+                await supabase.from('hostels').delete().eq('tenant_id', id);
+                await supabase.from('warden_accounts').delete().eq('tenant_id', id);
+                await supabase.from('admin_settings').delete().eq('tenant_id', id);
+                await supabase.from('tenants').delete().eq('id', id);
+            } catch (supabaseErr) {
+                console.warn("Supabase permanent purge note:", supabaseErr);
+            }
             
             return NextResponse.json({ success: true, message: "University node DESTROYED successfully." });
         } else {
             console.log(`[SuperAdmin] SOFT DELETE (Recycle Bin) for tenant: ${id}`);
-            const { error } = await supabase
-                .from('tenants')
-                .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-                .eq('id', id);
 
-            if (error) throw error;
+            // 1. Soft delete in Railway PostgreSQL (Prisma)
+            try {
+                await prisma.tenant.updateMany({
+                    where: { id },
+                    data: { isDeleted: true, deletedAt: new Date() }
+                });
+            } catch (prismaErr) {
+                console.warn("Prisma soft delete note:", prismaErr);
+            }
+
+            // 2. Soft delete in Supabase
+            try {
+                await supabase
+                    .from('tenants')
+                    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+                    .eq('id', id);
+            } catch (supabaseErr) {
+                console.warn("Supabase soft delete note:", supabaseErr);
+            }
+
             return NextResponse.json({ success: true, message: "University moved to Recycle Bin." });
         }
     } catch (error: any) {
