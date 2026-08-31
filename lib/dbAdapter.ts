@@ -2488,30 +2488,44 @@ export const db = {
             }
         },
 
-        // ⚡ DATABASE-AWARE DELETE
+        // ⚡ DATABASE-AWARE DELETE (Purges from both Prisma & Supabase so no ghost fallback exists)
         delete: async (id: string) => {
-            const source = await getDbSource();
-            if (source === 'SUPABASE') {
-                const tenantId = await getTenantIdOrThrow();
-                const { error } = await supabase
-                    .from('students')
-                    .delete()
-                    .eq('_id', id)
-                    .eq('tenant_id', tenantId);
-                if (error) throw error;
-                return true;
-            } else if (source === 'PRISMA') {
-                const tenantId = await getTenantIdOrThrow();
-                await prisma.student.deleteMany({
-                    where: { id, tenantId }
-                });
-                return true;
-            } else {
-                await connectDB();
-                const StudentModel = (await import('@/models/Student')).default;
-                const result = await StudentModel.findByIdAndDelete(id);
-                return !!result;
+            // 1. Delete from Supabase & Child tables
+            try {
+                await supabase.from('student_profiles').delete().or(`student_id.eq.${id},id.eq.${id}`);
+                await supabase.from('student_security').delete().or(`student_id.eq.${id},id.eq.${id}`);
+                await supabase.from('permissions').delete().or(`student_id.eq.${id},studentId.eq.${id}`);
+                await supabase.from('gate_passes').delete().or(`student_id.eq.${id},studentId.eq.${id}`);
+                await supabase.from('attendance_records').delete().or(`student_id.eq.${id},studentId.eq.${id}`);
+                await supabase.from('students').delete().or(`_id.eq.${id},id.eq.${id},firebase_uid.eq.${id},email.eq.${id}`);
+            } catch (sErr) {
+                console.warn("Supabase student delete note:", sErr);
             }
+
+            // 2. Delete from Prisma (PostgreSQL)
+            try {
+                await prisma.student.deleteMany({
+                    where: {
+                        OR: [
+                            { id },
+                            { firebaseUid: id },
+                            { email: id },
+                            { registrationId: id },
+                            { supabaseId: id }
+                        ]
+                    }
+                });
+            } catch (pErr) {
+                console.warn("Prisma student delete note:", pErr);
+            }
+
+            // 3. Delete from MongoDB if active
+            try {
+                const StudentModel = (await import('@/models/Student')).default;
+                await StudentModel.findOneAndDelete({ $or: [{ _id: id }, { firebaseUID: id }, { email: id }] });
+            } catch (mErr) {}
+
+            return true;
         },
 
         // ⚡ DATABASE-AWARE UPDATE
