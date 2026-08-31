@@ -12579,28 +12579,34 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                   <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-100 shadow-2xs">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">Guardian Information</p>
                     <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                      {selectedStudent.fatherName && (
-                        <div className="bg-slate-50/70 p-2 sm:p-2.5 rounded-lg border border-slate-100 min-w-0">
-                          <p className="text-[10px] text-slate-400 uppercase font-bold">Father</p>
-                          <p className="text-[10px] text-slate-900 font-bold break-words leading-tight">{selectedStudent.fatherName}</p>
-                          {selectedStudent.fatherNumber && (
-                            <a href={`tel:${selectedStudent.fatherNumber}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] font-bold inline-block hover:underline mt-0.5 break-all max-w-full">
-                              {selectedStudent.fatherNumber}
-                            </a>
-                          )}
-                        </div>
-                      )}
-                      {selectedStudent.motherName && (
-                        <div className="bg-slate-50/70 p-2 sm:p-2.5 rounded-lg border border-slate-100 min-w-0">
-                          <p className="text-[10px] text-slate-400 uppercase font-bold">Mother</p>
-                          <p className="text-[10px] text-slate-900 font-bold break-words leading-tight">{selectedStudent.motherName}</p>
-                          {selectedStudent.motherNumber && (
-                            <a href={`tel:${selectedStudent.motherNumber}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] font-bold inline-block hover:underline mt-0.5 break-all max-w-full">
-                              {selectedStudent.motherNumber}
-                            </a>
-                          )}
-                        </div>
-                      )}
+                      {selectedStudent.fatherName && (() => {
+                        const fNum = selectedStudent.fatherNumber || (selectedStudent as any).father_number || (selectedStudent.dynamicFields && (selectedStudent.dynamicFields.fatherNumber || selectedStudent.dynamicFields.fatherPhone || selectedStudent.dynamicFields.fathersPhoneNo || selectedStudent.dynamicFields.father_number));
+                        return (
+                          <div className="bg-slate-50/70 p-2 sm:p-2.5 rounded-lg border border-slate-100 min-w-0">
+                            <p className="text-[10px] text-slate-400 uppercase font-bold">Father</p>
+                            <p className="text-[10px] text-slate-900 font-bold break-words leading-tight">{selectedStudent.fatherName}</p>
+                            {fNum && (
+                              <a href={`tel:${fNum}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] font-bold inline-block hover:underline mt-0.5 break-all max-w-full">
+                                {fNum}
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })()}
+                      {selectedStudent.motherName && (() => {
+                        const mNum = selectedStudent.motherNumber || (selectedStudent as any).mother_number || (selectedStudent.dynamicFields && (selectedStudent.dynamicFields.motherNumber || selectedStudent.dynamicFields.motherPhone || selectedStudent.dynamicFields.mothersPhoneNo || selectedStudent.dynamicFields.mother_number));
+                        return (
+                          <div className="bg-slate-50/70 p-2 sm:p-2.5 rounded-lg border border-slate-100 min-w-0">
+                            <p className="text-[10px] text-slate-400 uppercase font-bold">Mother</p>
+                            <p className="text-[10px] text-slate-900 font-bold break-words leading-tight">{selectedStudent.motherName}</p>
+                            {mNum && (
+                              <a href={`tel:${mNum}`} className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px] font-bold inline-block hover:underline mt-0.5 break-all max-w-full">
+                                {mNum}
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
