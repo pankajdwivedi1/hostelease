@@ -225,11 +225,30 @@ export default function LiveFaceCaptureModal({
             ctx.drawImage(video, 0, 0, width, height);
             const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
 
-            // Ensure face-api models are ready
-            await faceMatching.loadFaceApiModels(true);
+            // Ensure face-api models are ready (fast load)
+            await faceMatching.loadFaceApiModels(false);
 
-            // Run real-time face detection & embedding extraction
-            const res = await faceMatching.detectFace(canvas, true);
+            // Create downscaled AI canvas for instant <250ms vector extraction
+            const aiCanvas = document.createElement("canvas");
+            const maxDim = 320;
+            let aiW = width;
+            let aiH = height;
+            if (aiW > maxDim || aiH > maxDim) {
+                if (aiW > aiH) { aiH = Math.round((aiH * maxDim) / aiW); aiW = maxDim; }
+                else { aiW = Math.round((aiW * maxDim) / aiH); aiH = maxDim; }
+            }
+            aiCanvas.width = aiW;
+            aiCanvas.height = aiH;
+            const aiCtx = aiCanvas.getContext("2d");
+            if (aiCtx) aiCtx.drawImage(video, 0, 0, aiW, aiH);
+
+            // Run real-time face detection & embedding extraction (Fast <250ms)
+            let res = await faceMatching.detectFace(aiCtx ? aiCanvas : canvas, false, true);
+            if (!res || !res.descriptor) {
+                // Fallback to pro accurate detector if tiny detector didn't catch face
+                await faceMatching.loadFaceApiModels(true);
+                res = await faceMatching.detectFace(aiCtx ? aiCanvas : canvas, true, true);
+            }
 
             if (!res || !res.descriptor) {
                 showToast("No clear face detected! Please look straight at the camera.", "warning");
