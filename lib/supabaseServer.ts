@@ -4,10 +4,11 @@ import { createClient } from '@supabase/supabase-js';
 let cachedSupabaseAdmin: any = null;
 
 const createSafeDummyAdminClient = () => {
-    const dummyFn: any = (...args: any[]) => dummyProxy;
-    const dummyProxy: any = new Proxy(dummyFn, {
+    const dummyProxy: any = new Proxy(() => dummyProxy, {
         get(target, prop) {
-            if (prop === 'then') return undefined;
+            if (prop === 'then') {
+                return (resolve: any) => resolve({ data: null, error: null, count: 0 });
+            }
             if (prop === 'auth') {
                 return {
                     admin: {
@@ -18,13 +19,10 @@ const createSafeDummyAdminClient = () => {
                     getSession: async () => ({ data: { session: null }, error: null }),
                 };
             }
-            if (prop === 'from') {
-                return () => dummyProxy;
-            }
             return dummyProxy;
         },
         apply(target, thisArg, argumentsList) {
-            return Promise.resolve({ data: null, error: null, count: 0 });
+            return dummyProxy;
         }
     });
     return dummyProxy;

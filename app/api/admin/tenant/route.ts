@@ -22,22 +22,22 @@ export async function GET(request: NextRequest) {
             settings = await db.settings.get();
         } catch (e) {}
 
-        const instConfig = settings?.universityBankDetails || {};
+        const instConfig = settings?.universityBankDetails || settings?.university_bank_details || {};
 
         return NextResponse.json({
             success: true,
             tenant: {
-                name: tenant.name,
-                logo: tenant.logo,
-                primaryColor: tenant.primaryColor,
-                secondaryColor: tenant.secondaryColor,
-                slug: tenant.slug,
-                address: instConfig.address || tenant.address || "",
-                email: instConfig.email || tenant.email || "",
-                phone: instConfig.phone || tenant.phone || "",
+                name: tenant.name || "Oriental Group of Institutes (OGI)",
+                logo: tenant.logoUrl || tenant.logo || "",
+                primaryColor: tenant.primaryColor || tenant.primary_color || "#3b82f6",
+                secondaryColor: tenant.secondaryColor || tenant.secondary_color || "#1e40af",
+                slug: tenant.slug || "ogi",
+                address: instConfig.address || tenant.address || "Oriental Campus, Raisen Road, Bhopal, MP - 462021",
+                email: instConfig.email || tenant.email || tenant.adminEmail || tenant.admin_email || "info@oriental.ac.in",
+                phone: instConfig.phone || tenant.phone || "+91 9981414729 / 0755-2529015",
                 gstin: instConfig.gstin || tenant.gstin || "",
-                contactName: instConfig.contactName || "",
-                contactPhone: instConfig.contactPhone || ""
+                contactName: instConfig.contactName || instConfig.coordinatorName || "Dr Pankaj Dwivedi",
+                contactPhone: instConfig.contactPhone || instConfig.coordinatorPhone || "7974704918"
             }
         });
     } catch (error: any) {
@@ -59,38 +59,55 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { name, logo, primaryColor, secondaryColor, address, email, phone, gstin, contactName, contactPhone } = body;
 
+        const tenantId = tenant._id || tenant.id;
+
         const prismaData: any = {};
         if (name) prismaData.name = name;
         if (logo !== undefined) prismaData.logoUrl = logo;
         if (primaryColor) prismaData.primaryColor = primaryColor;
         if (secondaryColor) prismaData.secondaryColor = secondaryColor;
 
-        if (tenant._id) {
+        if (tenantId) {
             try {
                 const { prisma } = await import("@/lib/prisma");
                 await prisma.tenant.update({
-                    where: { id: tenant._id },
+                    where: { id: tenantId },
                     data: prismaData
                 });
             } catch (pErr: any) {
                 console.warn("Prisma tenant update notice:", pErr?.message);
             }
+
+            // Also update Supabase tenants table
+            try {
+                const supabaseAdmin = getSupabaseAdmin();
+                await supabaseAdmin.from('tenants').update({
+                    name: name || tenant.name,
+                    logo_url: logo !== undefined ? logo : (tenant.logoUrl || tenant.logo),
+                    primary_color: primaryColor || tenant.primaryColor,
+                    secondary_color: secondaryColor || tenant.secondaryColor
+                }).eq('id', tenantId);
+            } catch (sErr: any) {
+                console.warn("Supabase tenant update notice:", sErr?.message);
+            }
         }
 
         // Save detailed institution info into existing universityBankDetails column of admin_settings
         const existingSettings = await db.settings.get();
+        const existingBank = existingSettings?.universityBankDetails || existingSettings?.university_bank_details || {};
         const updatedBankDetails = {
-            ...(existingSettings?.universityBankDetails || {}),
-            address: address !== undefined ? address : (existingSettings?.universityBankDetails?.address || ""),
-            email: email !== undefined ? email : (existingSettings?.universityBankDetails?.email || ""),
-            phone: phone !== undefined ? phone : (existingSettings?.universityBankDetails?.phone || ""),
-            gstin: gstin !== undefined ? gstin : (existingSettings?.universityBankDetails?.gstin || ""),
-            contactName: contactName !== undefined ? contactName : (existingSettings?.universityBankDetails?.contactName || ""),
-            contactPhone: contactPhone !== undefined ? contactPhone : (existingSettings?.universityBankDetails?.contactPhone || "")
+            ...existingBank,
+            address: address !== undefined ? address : (existingBank.address || ""),
+            email: email !== undefined ? email : (existingBank.email || ""),
+            phone: phone !== undefined ? phone : (existingBank.phone || ""),
+            gstin: gstin !== undefined ? gstin : (existingBank.gstin || ""),
+            contactName: contactName !== undefined ? contactName : (existingBank.contactName || ""),
+            contactPhone: contactPhone !== undefined ? contactPhone : (existingBank.contactPhone || "")
         };
 
         await db.settings.update({
-            universityBankDetails: updatedBankDetails
+            universityBankDetails: updatedBankDetails,
+            university_bank_details: updatedBankDetails
         });
 
         return NextResponse.json({ success: true, message: "Tenant configuration updated successfully" });

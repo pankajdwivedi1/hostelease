@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { auth as firebaseAuth } from "@/lib/firebase";
-import { supabase } from "@/lib/supabase";
 import Barcode from "react-barcode";
 import * as faceMatching from "@/lib/faceMatching";
 import { showToast, showConfirm } from "@/lib/toast";
@@ -948,12 +947,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 }
                 if (data.overlapRadius !== undefined) setOverlapRadius(data.overlapRadius);
                 if (data.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(data.prioritizeAssignedHostel);
-                const hName = (studentProfile?.hostelName || studentProfile?.hostel_name || "").toUpperCase();
-                if (hName && data.hostelAlertsMap && data.hostelAlertsMap[hName] !== undefined) {
-                    setEnforceMandatoryPush(data.hostelAlertsMap[hName] === true);
-                } else if (data.enforceMandatoryPush !== undefined) {
-                    setEnforceMandatoryPush(data.enforceMandatoryPush === true);
-                }
+                if (data.enforceMandatoryPush !== undefined) setEnforceMandatoryPush(data.enforceMandatoryPush === true);
                 return;
             }
 
@@ -969,12 +963,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 }
                 if (data.overlapRadius !== undefined) setOverlapRadius(data.overlapRadius);
                 if (data.prioritizeAssignedHostel !== undefined) setPrioritizeAssignedHostel(data.prioritizeAssignedHostel);
-                const hName = (studentProfile?.hostelName || studentProfile?.hostel_name || "").toUpperCase();
-                if (hName && data.hostelAlertsMap && data.hostelAlertsMap[hName] !== undefined) {
-                    setEnforceMandatoryPush(data.hostelAlertsMap[hName] === true);
-                } else if (data.enforceMandatoryPush !== undefined) {
-                    setEnforceMandatoryPush(data.enforceMandatoryPush === true);
-                }
+                if (data.enforceMandatoryPush !== undefined) setEnforceMandatoryPush(data.enforceMandatoryPush === true);
             }
         } catch (e) {
             console.warn("Silent fallback: Error fetching system settings:", e);
@@ -1571,28 +1560,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 localStorage.setItem("getpass_uid", studentProfile.firebaseUID || "");
                 localStorage.setItem("getpass_device_id", studentProfile.deviceId || "");
             }
-
-            // ⚡ REALTIME STATUS UPDATE: Listen for instant status changes (In/Out)
-            const statusChannel = supabase
-                .channel(`student-status-${studentProfile._id}`)
-                .on(
-                    'postgres_changes',
-                    {
-                        event: 'UPDATE',
-                        schema: 'public',
-                        table: 'students',
-                        filter: `_id=eq.${studentProfile._id}`
-                    },
-                    (payload: any) => {
-                        const newStatus = payload.new.student_status || payload.new.studentStatus;
-                        console.log("⚡ [REALTIME] Student status updated:", newStatus);
-                        if (newStatus) {
-                            localStorage.setItem("studentStatus", newStatus);
-                            setStudentProfile(prev => prev ? ({ ...prev, studentStatus: newStatus }) : prev);
-                        }
-                    }
-                )
-                .subscribe();
 
             // Delay initial notification fetch by 3 seconds as requested
             const initialNotifTimer = setTimeout(fetchStudentNotifications, 3000);

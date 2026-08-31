@@ -7616,39 +7616,39 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     <div className="min-h-screen bg-white">
       <main className="w-full max-w-4xl mx-auto">
         {/* ⚡ SUBSCRIPTION WARNING BANNER */}
-        {subscriptionStatus && (subscriptionStatus.isWarning || subscriptionStatus.isExpired) && (
-          <div className={`m-2 sm:m-4 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border flex items-center justify-between gap-2 sm:gap-4 animate-in slide-in-from-top duration-500 ${subscriptionStatus.isExpired
+        {subscriptionStatus && (subscriptionStatus.isWarning || subscriptionStatus.isExpired || (subscriptionStatus.daysRemaining !== null && subscriptionStatus.daysRemaining <= 7)) && (
+          <div className={`m-1.5 sm:m-4 p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border flex items-center justify-between gap-1.5 sm:gap-3.5 animate-in slide-in-from-top duration-500 ${subscriptionStatus.isExpired
             ? "bg-red-50 border-red-100 text-red-700"
             : "bg-amber-50 border-amber-100 text-amber-700"
             }`}>
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              <div className={`w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 text-xs sm:text-base animate-pulse ${subscriptionStatus.isExpired ? "bg-red-100" : "bg-amber-100"
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1 overflow-hidden">
+              <div className={`w-6 h-6 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 text-xs sm:text-base animate-pulse ${subscriptionStatus.isExpired ? "bg-red-100" : "bg-amber-100"
                 }`}>
                 {subscriptionStatus.isExpired ? "🚨" : "⏳"}
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1 overflow-hidden">
                 <style>{`
                   @keyframes digitalBlink {
                     0%, 49% { opacity: 1; }
                     50%, 100% { opacity: 0.15; }
                   }
                 `}</style>
-                <p className="text-[10px] sm:text-xs font-black uppercase tracking-tight truncate">
+                <p className="text-[11px] sm:text-xs font-black tracking-tight leading-tight truncate">
                   {subscriptionStatus.isExpired ? "Subscription Expired" : "Subscription Expiring Soon"}
                 </p>
                 <p 
-                  className="text-[7.5px] sm:text-[9.5px] font-black text-red-600 sm:text-amber-900 uppercase tracking-wider mt-0.5 whitespace-nowrap truncate"
+                  className="text-[7.5px] min-[360px]:text-[8.2px] min-[400px]:text-[9px] sm:text-[9.5px] font-bold text-red-600 sm:text-amber-900 mt-0.5 whitespace-nowrap leading-tight"
                   style={{ animation: "digitalBlink 1s steps(2, start) infinite" }}
                 >
                   {subscriptionStatus.isExpired
                     ? "Access Restricted - Contact Hosteleaze HQ"
-                    : `Only ${subscriptionStatus.daysRemaining} days remaining in active period`}
+                    : `Only ${subscriptionStatus.daysRemaining} days remaining in active period (${subscriptionStatus.endDate ? `${new Date(subscriptionStatus.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}, 11:59:59 PM` : '11:59:59 PM'})`}
                 </p>
               </div>
             </div>
             <button
               onClick={() => setShowRenewalModal(true)}
-              className="px-2.5 py-1.5 sm:px-4.5 sm:py-2 bg-white/90 hover:bg-white backdrop-blur-sm border border-current rounded-lg sm:rounded-xl text-[9px] sm:text-xs font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 text-slate-800 whitespace-nowrap shrink-0"
+              className="px-2 py-1 sm:px-3.5 sm:py-2 bg-white/90 hover:bg-white backdrop-blur-sm border border-current rounded-lg sm:rounded-xl text-[9px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 text-slate-800 whitespace-nowrap shrink-0 ml-1"
             >
               Renew Now ⚡
             </button>
@@ -18402,14 +18402,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
             {/* Modal Body (Scrollable on Mobile, One-Shot with NO Scrollbar on Desktop) */}
             {(() => {
-              const totalStudents = Math.max(1, students?.length || 454);
+              const totalStudents = Math.max(1, students?.length || 524);
               const pricePerMonth = subscriptionStatus?.paymentSettings?.pricePerStudentPerMonth ?? 25;
               
               let baseDiscount = 0;
-              if (selectedPlanMonths === 1) baseDiscount = Number(subscriptionStatus?.paymentSettings?.discount1Month) || 0;
-              else if (selectedPlanMonths === 3) baseDiscount = subscriptionStatus?.paymentSettings?.discount3Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount3Month) : 15;
-              else if (selectedPlanMonths === 6) baseDiscount = subscriptionStatus?.paymentSettings?.discount6Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount6Month) : 25;
-              else if (selectedPlanMonths >= 12) baseDiscount = subscriptionStatus?.paymentSettings?.discount12Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount12Month) : 30;
+              if (selectedPlanMonths === 1) baseDiscount = subscriptionStatus?.paymentSettings?.discount1Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount1Month) : 10;
+              else if (selectedPlanMonths === 3) baseDiscount = subscriptionStatus?.paymentSettings?.discount3Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount3Month) : 20;
+              else if (selectedPlanMonths === 6) baseDiscount = subscriptionStatus?.paymentSettings?.discount6Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount6Month) : 30;
+              else if (selectedPlanMonths >= 12) baseDiscount = subscriptionStatus?.paymentSettings?.discount12Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount12Month) : 40;
 
               const bankBonus = paymentMethod === "bank" ? (subscriptionStatus?.paymentSettings?.bankTransferDiscount !== undefined ? Number(subscriptionStatus?.paymentSettings?.bankTransferDiscount) : 3) : 0;
               const totalDiscountPercent = baseDiscount + bankBonus;
@@ -18421,8 +18421,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               };
 
               const baseTotal = totalStudents * pricePerMonth * selectedPlanMonths;
-              const discountAmount = (baseTotal * totalDiscountPercent) / 100;
-              const finalTotal = baseTotal - discountAmount;
+              const planDiscountAmount = (baseTotal * baseDiscount) / 100;
+              const subtotalAfterPlanDiscount = baseTotal - planDiscountAmount;
+              const bankBonusAmount = paymentMethod === "bank" ? (subtotalAfterPlanDiscount * bankBonus) / 100 : 0;
+              const finalTotal = Math.max(0, subtotalAfterPlanDiscount - bankBonusAmount);
 
               const bankName = subscriptionStatus?.paymentSettings?.bankName || "PNB Bank";
               const accountName = subscriptionStatus?.paymentSettings?.accountName || "DR. PANKAJ DWIVEDI";
@@ -18437,18 +18439,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <span className="break-words min-w-0 flex-1">Subtotal ({totalStudents} students × {selectedPlanMonths} months)</span>
                     <span className="shrink-0 whitespace-nowrap ml-1">₹{formatINR(baseTotal)}</span>
                   </div>
-                  {totalDiscountPercent > 0 && (
+                  {planDiscountAmount > 0 && (
                     <div className="flex items-center justify-between gap-1 text-[9.5px] sm:text-[12px] text-emerald-400 font-bold min-w-0">
                       <span className="break-words min-w-0 flex-1">
-                        {paymentMethod === "bank" && bankBonus > 0
-                          ? (baseDiscount > 0
-                              ? `Discount (${baseDiscount}% Plan + ${bankBonus}% Bank or QR code = ${totalDiscountPercent}% Total OFF)`
-                              : `Discount (${bankBonus}% Bank or QR code OFF)`
-                            )
-                          : `Discount (${baseDiscount}% Plan OFF)`
-                        }
+                        Discount ({baseDiscount}% Plan OFF)
                       </span>
-                      <span className="shrink-0 whitespace-nowrap ml-1">-₹{formatINR(discountAmount)}</span>
+                      <span className="shrink-0 whitespace-nowrap ml-1">-₹{formatINR(planDiscountAmount)}</span>
+                    </div>
+                  )}
+                  {paymentMethod === "bank" && bankBonusAmount > 0 && (
+                    <div className="flex items-center justify-between gap-1 text-[9.5px] sm:text-[12px] text-emerald-400 font-bold min-w-0">
+                      <span className="break-words min-w-0 flex-1">
+                        Extra Direct Bank / QR Bonus ({bankBonus}% OFF)
+                      </span>
+                      <span className="shrink-0 whitespace-nowrap ml-1">-₹{formatINR(bankBonusAmount)}</span>
                     </div>
                   )}
 
@@ -18537,10 +18541,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <div className="grid grid-cols-2 gap-2">
                       {(() => {
                         const bankDiscountVal = subscriptionStatus?.paymentSettings?.bankTransferDiscount !== undefined ? Number(subscriptionStatus?.paymentSettings?.bankTransferDiscount) : 3;
-                        const d1 = subscriptionStatus?.paymentSettings?.discount1Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount1Month) : 0;
-                        const d3 = subscriptionStatus?.paymentSettings?.discount3Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount3Month) : 15;
-                        const d6 = subscriptionStatus?.paymentSettings?.discount6Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount6Month) : 25;
-                        const d12 = subscriptionStatus?.paymentSettings?.discount12Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount12Month) : 30;
+                        const d1 = subscriptionStatus?.paymentSettings?.discount1Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount1Month) : 10;
+                        const d3 = subscriptionStatus?.paymentSettings?.discount3Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount3Month) : 20;
+                        const d6 = subscriptionStatus?.paymentSettings?.discount6Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount6Month) : 30;
+                        const d12 = subscriptionStatus?.paymentSettings?.discount12Month !== undefined ? Number(subscriptionStatus?.paymentSettings?.discount12Month) : 40;
 
                         return [
                           {
@@ -18788,9 +18792,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             `- *Total Active Students*: ${totalStudents} Students`,
                             `- *Selected Plan*: ${selectedPlanMonths} Month(s) (${planNameStr})`,
                             `- *Billing Formula*: ${totalStudents} students × ${selectedPlanMonths} month(s) @ ₹${pricePerMonth}/mo`,
-                            `- *Subtotal*: ₹${baseTotal.toLocaleString('en-IN')}`,
-                            `- *Discount Applied*: ${paymentMethod === 'bank' && bankBonus > 0 ? (baseDiscount > 0 ? `${baseDiscount}% Plan OFF + ${bankBonus}% Bank or QR code = ${totalDiscountPercent}% Total OFF` : `${bankBonus}% Bank or QR code OFF`) : `${baseDiscount}% Plan OFF`} (-₹${discountAmount.toLocaleString('en-IN')})`,
-                            `- *Total Amount Paid*: ₹${finalTotal.toLocaleString('en-IN')}`,
+                            `- *Subtotal*: ₹${formatINR(baseTotal)}`,
+                            `- *Discount Applied*: ${paymentMethod === 'bank' && bankBonusAmount > 0 ? `${baseDiscount}% Plan OFF + ${bankBonus}% Bank Bonus` : `${baseDiscount}% Plan OFF`} (-₹${formatINR(baseTotal - finalTotal)})`,
+                            `- *Total Amount Paid*: ₹${formatINR(finalTotal)}`,
                             `- *Payment UTR / Ref No*: ${utrNumber.trim() || '[Pending]'}`,
                             ``,
                             `Please verify and activate our subscription plan. Receipt screenshot attached.`

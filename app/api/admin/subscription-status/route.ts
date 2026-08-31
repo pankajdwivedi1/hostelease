@@ -17,10 +17,10 @@ const DEFAULT_SETTINGS = {
     razorpayKeyId: "rzp_live_TAKnbp18wnY8Mu",
     razorpayKeySecret: "KEXn7SaynyjQ0uQhIlscY1Sc",
     pricePerStudentPerMonth: 25,
-    discount1Month: 0,
-    discount3Month: 15,
-    discount6Month: 25,
-    discount12Month: 30,
+    discount1Month: 10,
+    discount3Month: 20,
+    discount6Month: 30,
+    discount12Month: 40,
     bankTransferDiscount: 3,
     supportWhatsappNumber: "8269418956",
     customQrCodeUrl: "",
@@ -50,9 +50,13 @@ export async function GET(request: NextRequest) {
         delete safePaymentSettings.razorpayKeySecret;
 
         if (!status) {
-            return createCachedResponse({ success: true, isDefault: true, paymentSettings: safePaymentSettings }, request, 60);
+            return NextResponse.json({ success: true, isDefault: true, paymentSettings: safePaymentSettings }, {
+                headers: { "Cache-Control": "no-store, max-age=0" }
+            });
         }
-        return createCachedResponse({ success: true, ...status, paymentSettings: safePaymentSettings }, request, 60);
+        return NextResponse.json({ success: true, ...status, paymentSettings: safePaymentSettings }, {
+            headers: { "Cache-Control": "no-store, max-age=0" }
+        });
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }

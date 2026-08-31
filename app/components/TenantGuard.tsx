@@ -35,8 +35,133 @@ function QRCodeCanvas({ data, size = 120 }: { data: string; size?: number }) {
     );
 }
 
-function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, error, setError, successMsg, isResubmitting, setIsResubmitting, handleRenewalSubmit, handleRazorpayPayment, billingHistory, loadingBillingHistory, generateInvoicePDF }: any) {
+function AdminExpiredPortal({ 
+    status, 
+    handleLogout, 
+    utr, 
+    setUtr, 
+    submitting, 
+    setSubmitting,
+    error, 
+    setError, 
+    successMsg, 
+    isResubmitting, 
+    setIsResubmitting, 
+    handleRenewalSubmit, 
+    handleRazorpayPayment, 
+    billingHistory, 
+    loadingBillingHistory, 
+    generateInvoicePDF,
+    handleDirectPaymentSubmit
+}: any) {
     const [view, setView] = useState<"suspended" | "history" | "renew">("suspended");
+    const [selectedPlanMonths, setSelectedPlanMonths] = useState<number>(3);
+    const [paymentMethod, setPaymentMethod] = useState<"razorpay" | "bank">("razorpay");
+    const [copiedField, setCopiedField] = useState<string | null>(null);
+
+    const switchView = (newView: "suspended" | "history" | "renew") => {
+        if (setSubmitting) setSubmitting(false);
+        if (setError) setError("");
+        setView(newView);
+    };
+
+    // Pricing & Student calculations
+    const studentCount = Number(status?.studentCount) || 524;
+    const pricePerStudent = Number(status?.paymentSettings?.pricePerStudentPerMonth) || 25;
+    const bankBonusPercent = status?.paymentSettings?.bankTransferDiscount !== undefined ? Number(status?.paymentSettings?.bankTransferDiscount) : 3;
+    const d1 = status?.paymentSettings?.discount1Month !== undefined ? Number(status?.paymentSettings?.discount1Month) : 10;
+    const d3 = status?.paymentSettings?.discount3Month !== undefined ? Number(status?.paymentSettings?.discount3Month) : 20;
+    const d6 = status?.paymentSettings?.discount6Month !== undefined ? Number(status?.paymentSettings?.discount6Month) : 30;
+    const d12 = status?.paymentSettings?.discount12Month !== undefined ? Number(status?.paymentSettings?.discount12Month) : 40;
+
+    let planDiscountPercent = 0;
+    if (selectedPlanMonths === 1) planDiscountPercent = d1;
+    else if (selectedPlanMonths === 3) planDiscountPercent = d3;
+    else if (selectedPlanMonths === 6) planDiscountPercent = d6;
+    else if (selectedPlanMonths >= 12) planDiscountPercent = d12;
+
+    const baseTotal = studentCount * pricePerStudent * selectedPlanMonths;
+    const planDiscountAmount = (baseTotal * planDiscountPercent) / 100;
+    const subtotalAfterPlanDiscount = baseTotal - planDiscountAmount;
+    const bankBonusAmount = paymentMethod === "bank" ? (subtotalAfterPlanDiscount * bankBonusPercent) / 100 : 0;
+    const finalTotal = Math.max(0, subtotalAfterPlanDiscount - bankBonusAmount);
+
+    const bankName = status?.paymentSettings?.bankName || "PNB Bank";
+    const accountName = status?.paymentSettings?.accountName || "DR. PANKAJ DWIVEDI";
+    const accountNumber = status?.paymentSettings?.accountNumber || "06102413001048";
+    const ifsc = status?.paymentSettings?.ifsc || "PUNB0061010";
+    const upiId = status?.paymentSettings?.upiId || "pankaj86.dwivedi-1@okicici";
+    const customQrUrl = status?.paymentSettings?.customQrCodeUrl || "";
+
+    const upiNote = `Hosteleaze Renewal (${selectedPlanMonths}M) - ${status?.name || 'Node'}`;
+    const upiDeepLink = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(accountName)}&am=${finalTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(upiNote)}`;
+
+    const copyToClipboard = (text: string, fieldKey: string) => {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text);
+            setCopiedField(fieldKey);
+            setTimeout(() => setCopiedField(null), 2000);
+        }
+    };
+
+    const formatINR = (val: number) => {
+        return Number.isInteger(val)
+            ? val.toLocaleString("en-IN")
+            : val.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
+    const planOptions = [
+        {
+            months: 1,
+            label: "1 MONTH",
+            tag: "Monthly",
+            discount: d1,
+            points: [
+                "Standard Base Tariff",
+                `+${bankBonusPercent}% Bank or QR Bonus`,
+                "GPS/WIFI Attendance & Gatepass",
+                "Warden Controls & Parent Portal"
+            ]
+        },
+        {
+            months: 3,
+            label: "3 MONTHS",
+            tag: "Quarterly",
+            discount: d3,
+            points: [
+                `${d3}% Plan Discount Applied`,
+                `+${bankBonusPercent}% Bank or QR Bonus`,
+                "GPS/WIFI Attendance & Gatepass",
+                "Warden Controls & Parent Portal"
+            ]
+        },
+        {
+            months: 6,
+            label: "6 MONTHS",
+            tag: "Half-Yearly",
+            discount: d6,
+            badge: "Popular",
+            points: [
+                `${d6}% Plan Discount Applied`,
+                `+${bankBonusPercent}% Bank or QR Bonus`,
+                "GPS/WIFI Attendance & Gatepass",
+                "Warden Controls & Parent Portal"
+            ]
+        },
+        {
+            months: 12,
+            label: "12 MONTHS",
+            tag: "Annual Plan",
+            discount: d12,
+            badge: "BEST VALUE",
+            points: [
+                `${d12}% Maximum Plan Discount`,
+                `+${bankBonusPercent}% Bank or QR Bonus`,
+                "GPS/WIFI Attendance & Gatepass",
+                "Priority Server & Instant Support"
+            ]
+        },
+    ];
 
     if (view === "suspended") {
         return (
@@ -52,7 +177,7 @@ function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, err
                     <div className="space-y-2">
                         <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-xs text-red-400 font-bold uppercase tracking-wider mb-2">
                             <span className="h-2 w-2 rounded-full bg-red-500 animate-ping"></span>
-                            Access Suspended
+                            {status?.daysRemaining && status.daysRemaining > 0 ? "Expiring Soon" : "Access Suspended"}
                         </div>
                         <h1 className="text-3xl font-black tracking-tight uppercase sm:text-4xl bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
                             {status.name || "University Node"}
@@ -69,13 +194,13 @@ function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, err
                         
                         <div className="flex flex-col gap-3">
                             <button
-                                onClick={() => setView("history")}
+                                onClick={() => switchView("history")}
                                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl transition-all active:scale-95 text-xs uppercase tracking-widest"
                             >
                                 📊 View Subscription History
                             </button>
                             <button
-                                onClick={() => setView("renew")}
+                                onClick={() => switchView("renew")}
                                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 rounded-2xl transition-all active:scale-95 text-xs uppercase tracking-widest"
                             >
                                 💳 Renew Subscription Now
@@ -95,72 +220,72 @@ function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, err
 
     if (view === "history") {
         return (
-            <div className="fixed inset-0 z-[9999] bg-[#050510] flex items-center justify-center p-4 text-white overflow-y-auto">
-                <div className="w-full max-w-xl relative z-10 animate-in fade-in zoom-in duration-500">
-                    <div className="text-center mb-6 space-y-2">
-                        <h1 className="text-3xl font-black tracking-tight uppercase sm:text-4xl text-white">
+            <div className="fixed inset-0 z-[9999] bg-[#050510] flex items-center justify-center p-3 sm:p-4 text-white overflow-y-auto">
+                <div className="w-full max-w-lg relative z-10 animate-in fade-in zoom-in duration-500 my-auto">
+                    <div className="text-center mb-4 sm:mb-6 space-y-1 sm:space-y-2">
+                        <h1 className="text-lg sm:text-2xl md:text-3xl font-black tracking-tight uppercase text-white">
                             {status.name}
                         </h1>
-                        <p className="text-gray-400 text-xs tracking-widest font-black uppercase">
+                        <p className="text-gray-400 text-[10px] sm:text-xs tracking-widest font-black uppercase">
                             Subscription History
                         </p>
                     </div>
 
-                    <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-xl space-y-6">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-white/5 border border-white/5 p-5 rounded-2xl">
-                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Status</p>
-                                <div className="flex items-center gap-2">
-                                    <span className="w-3 h-3 rounded-full bg-red-500"></span>
-                                    <p className="text-lg font-black text-white uppercase">
-                                        Expired
+                    <div className="bg-white/5 border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 backdrop-blur-xl space-y-4 sm:space-y-6">
+                        <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
+                            <div className="bg-white/5 border border-white/5 p-3 sm:p-4 rounded-xl sm:rounded-2xl">
+                                <p className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-0.5 sm:mb-1">Status</p>
+                                <div className="flex items-center gap-1.5 sm:gap-2">
+                                    <span className={`w-2.5 h-2.5 rounded-full ${status.daysRemaining && status.daysRemaining > 0 ? "bg-amber-400" : "bg-red-500"}`}></span>
+                                    <p className="text-sm sm:text-base md:text-lg font-black text-white uppercase">
+                                        {status.daysRemaining && status.daysRemaining > 0 ? `${status.daysRemaining} Days Left` : "Expired"}
                                     </p>
                                 </div>
                             </div>
-                            <div className="bg-white/5 border border-white/5 p-5 rounded-2xl">
-                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Activated On</p>
-                                <p className="text-lg font-black text-white">
+                            <div className="bg-white/5 border border-white/5 p-3 sm:p-4 rounded-xl sm:rounded-2xl">
+                                <p className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-0.5 sm:mb-1">Activated On</p>
+                                <p className="text-sm sm:text-base md:text-lg font-black text-white">
                                     {status.startDate ? new Date(status.startDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}
                                 </p>
                             </div>
-                            <div className="bg-white/5 border border-white/5 p-5 rounded-2xl col-span-2">
-                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Expired On</p>
-                                <p className="text-lg font-black text-rose-400">
-                                    {status.endDate ? new Date(status.endDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}
+                            <div className="bg-white/5 border border-white/5 p-3 sm:p-4 rounded-xl sm:rounded-2xl col-span-2">
+                                <p className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-0.5 sm:mb-1">Subscription Valid Until (Midnight)</p>
+                                <p className="text-sm sm:text-base md:text-lg font-black text-rose-400">
+                                    {status.endDate ? `${new Date(status.endDate).toLocaleDateString("en-IN", { dateStyle: "medium" })} (11:59:59 PM)` : "N/A"}
                                 </p>
                             </div>
                         </div>
 
                         {/* Invoice & Payment History */}
-                        <div className="space-y-3 pt-2">
-                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest px-1">Payment History & Invoices</p>
+                        <div className="space-y-2 sm:space-y-3 pt-1 sm:pt-2">
+                            <p className="text-[9px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest px-1">Payment History & Invoices</p>
                             {loadingBillingHistory ? (
-                                <div className="text-center py-4 text-xs text-gray-400">
-                                    <div className="inline-block w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin mr-2" />
+                                <div className="text-center py-3 text-xs text-gray-400">
+                                    <div className="inline-block w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin mr-2" />
                                     Loading history...
                                 </div>
                             ) : !billingHistory || billingHistory.length === 0 ? (
-                                <div className="text-center py-4 bg-white/5 rounded-2xl text-xs text-gray-500 font-bold uppercase">
+                                <div className="text-center py-3 bg-white/5 rounded-xl text-[10px] sm:text-xs text-gray-500 font-bold uppercase">
                                     No transaction logs found
                                 </div>
                             ) : (
-                                <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                                <div className="space-y-2 max-h-40 sm:max-h-48 overflow-y-auto pr-1 custom-scrollbar">
                                     {billingHistory.map((tx: any) => (
-                                        <div key={tx.id} className="bg-white/5 border border-white/5 p-3 rounded-2xl flex items-center justify-between text-xs font-bold">
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-white">₹{tx.amount?.toLocaleString("en-IN")}</span>
-                                                    <span className="text-[9px] text-gray-500 font-medium">({tx.billingPeriod || "1 Year"})</span>
+                                        <div key={tx.id || tx.utr} className="bg-white/5 border border-white/5 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl flex items-center justify-between text-xs font-bold">
+                                            <div className="space-y-0.5">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-white text-xs sm:text-sm">₹{tx.amount?.toLocaleString("en-IN")}</span>
+                                                    <span className="text-[8px] sm:text-[9px] text-gray-500 font-medium">({tx.billingPeriod || "1 Year"})</span>
                                                 </div>
-                                                <div className="text-[10px] text-gray-400 font-medium font-mono select-all">
+                                                <div className="text-[9px] sm:text-[10px] text-gray-400 font-mono select-all">
                                                     ID: {tx.utr || "N/A"}
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-[9px] text-gray-500">{new Date(tx.date).toLocaleDateString("en-IN")}</span>
+                                            <div className="flex items-center gap-2 sm:gap-3">
+                                                <span className="text-[8px] sm:text-[9px] text-gray-500">{new Date(tx.date || tx.createdAt).toLocaleDateString("en-IN")}</span>
                                                 <button
                                                     onClick={() => generateInvoicePDF(tx, status.name)}
-                                                    className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl transition-all text-[9px] uppercase tracking-wider"
+                                                    className="px-2 py-1 sm:px-2.5 sm:py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-lg sm:rounded-xl transition-all text-[8px] sm:text-[9px] uppercase tracking-wider"
                                                 >
                                                     Invoice
                                                 </button>
@@ -171,16 +296,16 @@ function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, err
                             )}
                         </div>
 
-                        <div className="flex gap-4 pt-4 border-t border-white/10">
+                        <div className="flex gap-2.5 sm:gap-4 pt-3 sm:pt-4 border-t border-white/10">
                             <button
-                                onClick={() => setView("suspended")}
-                                className="flex-1 bg-white/10 hover:bg-white/20 text-white font-black py-4 rounded-2xl transition-all text-xs uppercase tracking-widest"
+                                onClick={() => switchView("suspended")}
+                                className="flex-1 bg-white/10 hover:bg-white/20 text-white font-black py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl transition-all text-[11px] sm:text-xs uppercase tracking-widest"
                             >
                                 Back
                             </button>
                             <button
-                                onClick={() => setView("renew")}
-                                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl transition-all text-xs uppercase tracking-widest"
+                                onClick={() => switchView("renew")}
+                                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-black py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl transition-all text-[11px] sm:text-xs uppercase tracking-widest"
                             >
                                 Renew Now
                             </button>
@@ -191,229 +316,543 @@ function AdminExpiredPortal({ status, handleLogout, utr, setUtr, submitting, err
         );
     }
 
+    // View: RENEW
     return (
-        <div className="fixed inset-0 z-[9999] bg-[#050510] flex items-center justify-center p-4 text-white overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] bg-[#050510]/95 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 text-white overflow-y-auto">
             {/* Animated Background Elements */}
             <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none"></div>
             <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none"></div>
 
-            <div className="w-full max-w-2xl my-8 relative z-10 animate-in fade-in zoom-in duration-500">
-                <button onClick={() => setView("suspended")} className="mb-4 text-[10px] text-gray-400 hover:text-white uppercase tracking-widest font-black flex items-center gap-2">
-                    ← Back to Notice
-                </button>
-                {/* Header */}
-                <div className="text-center mb-6 space-y-2">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-xs text-red-400 font-bold uppercase tracking-wider">
-                        <span className="h-2 w-2 rounded-full bg-red-500 animate-ping"></span>
-                        Subscription Expired
-                    </div>
-                    <h1 className="text-3xl font-black tracking-tight uppercase sm:text-4xl bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
-                        {status.name || "University Node"}
-                    </h1>
-                    <p className="text-gray-400 text-xs tracking-widest font-black uppercase">
-                        Portal Offline • Action Required
-                    </p>
-                </div>
-
-                {/* Renewal Portal Card */}
-                <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-xl space-y-6 shadow-2xl relative">
-                    {/* Previous subscription timeline */}
-                    <div className="grid grid-cols-2 gap-4 bg-white/5 border border-white/5 p-4 rounded-2xl text-center">
-                        <div>
-                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Activated On</p>
-                            <p className="text-sm font-black text-white mt-1">
-                                {status.startDate ? new Date(status.startDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}
-                            </p>
-                        </div>
-                        <div className="border-l border-white/5">
-                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Expired On</p>
-                            <p className="text-sm font-black text-rose-400 mt-1">
-                                {status.endDate ? new Date(status.endDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Content based on submission status */}
-                    {(status.renewalStatus === 'pending' || successMsg) && !isResubmitting ? (
-                        <div className="space-y-6 text-center py-4 animate-in fade-in slide-in-from-bottom duration-300">
-                            <div className="w-16 h-16 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-amber-500/5">
-                                <RefreshCw className="w-8 h-8 text-amber-500 animate-spin" style={{ animationDuration: '4s' }} />
+            <div className="w-full max-w-5xl my-auto relative z-10 animate-in fade-in zoom-in duration-300">
+                {/* Modal Container */}
+                <div className="bg-[#0b1120] border border-slate-700/60 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-[#0e1629]">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-lg shadow-sm">
+                                💳
                             </div>
-                            <div className="space-y-2">
-                                <h3 className="text-xl font-bold text-amber-400 uppercase tracking-tight">Payment Verification Pending</h3>
-                                <p className="text-gray-400 text-xs leading-relaxed max-w-md mx-auto">
-                                    Your transaction reference is currently undergoing manual reconciliation by the Hosteleaze Finance Department. The portal will reactivate immediately upon confirmation.
+                            <div>
+                                <h2 className="text-sm sm:text-base font-black text-white uppercase tracking-wider">
+                                    SUBSCRIPTION PLAN RENEWAL
+                                </h2>
+                                <p className="text-[10px] text-gray-400 font-bold">
+                                    {status.name || "University Portal"} • {status?.daysRemaining && status.daysRemaining > 0 ? `Expires in ${status.daysRemaining} Days` : 'Subscription Expired'}
                                 </p>
                             </div>
+                        </div>
 
-                            <div className="bg-white/5 border border-white/5 p-4 rounded-2xl text-left max-w-sm mx-auto space-y-2 text-xs">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-500 font-medium">Submitted UTR:</span>
-                                    <span className="text-white font-black tracking-wider uppercase">{successMsg || status.renewalUtr}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-500 font-medium">Status:</span>
-                                    <span className="text-amber-400 font-black uppercase tracking-wider">Awaiting Verification</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-500 font-medium">Submitted At:</span>
-                                    <span className="text-gray-300 font-bold">
-                                        {status.renewalSubmittedAt ? new Date(status.renewalSubmittedAt).toLocaleString("en-IN") : new Date().toLocaleString("en-IN")}
-                                    </span>
-                                </div>
-                            </div>
+                        <button 
+                            onClick={() => switchView("suspended")} 
+                            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-gray-300 hover:text-white flex items-center justify-center transition-colors text-sm font-bold"
+                            title="Close / Back"
+                        >
+                            ✕
+                        </button>
+                    </div>
 
-                            <div className="pt-2">
-                                <button
-                                    onClick={() => setIsResubmitting(true)}
-                                    className="text-[10px] text-gray-500 hover:text-white font-bold uppercase tracking-widest underline transition-colors"
-                                >
-                                    Submit a different UTR
-                                </button>
+                    {/* Pending Verification Banner (if submitted) */}
+                    {(status.renewalStatus === 'pending' || successMsg) && !isResubmitting ? (
+                        <div className="m-6 p-5 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-center space-y-3">
+                            <div className="w-10 h-10 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto">
+                                <RefreshCw className="w-5 h-5 text-amber-400 animate-spin" style={{ animationDuration: '4s' }} />
                             </div>
+                            <h3 className="text-sm font-black text-amber-400 uppercase tracking-tight">Payment Verification In Progress</h3>
+                            <p className="text-gray-300 text-xs max-w-md mx-auto">
+                                Your transaction reference <strong className="text-white font-mono">{successMsg || status.renewalUtr}</strong> has been submitted and is undergoing reconciliation.
+                            </p>
+                            <button
+                                onClick={() => setIsResubmitting(true)}
+                                className="text-[10px] text-amber-300 hover:text-white font-black uppercase tracking-widest underline"
+                            >
+                                Submit a different UTR or Plan
+                            </button>
                         </div>
                     ) : (
-                        <div className="space-y-6 animate-in fade-in duration-300">
-                            <div className="space-y-2 text-center md:text-left">
-                                <h2 className="text-lg font-black text-white uppercase tracking-tight flex items-center justify-center md:justify-start gap-2">
-                                    <CreditCard className="w-5 h-5 text-blue-500" />
-                                    Renew Subscription
-                                </h2>
-                                <p className="text-gray-400 text-xs">
-                                    Please transfer the subscription fee to the developer account and input the transaction UTR reference below.
-                                </p>
-                            </div>
-
-                            {/* Razorpay Option */}
-                            {status?.paymentSettings?.enableRazorpay ? (
-                                <div className="bg-white/5 border border-white/5 p-6 rounded-2xl text-center space-y-4">
-                                    <div className="w-16 h-16 bg-indigo-500/10 border border-indigo-500/20 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/5 mb-2">
-                                        <CreditCard className="w-8 h-8 text-indigo-400" />
-                                    </div>
-                                    <h3 className="font-black text-white text-lg uppercase tracking-tight">Instant Renewal</h3>
-                                    <p className="text-gray-400 text-xs max-w-sm mx-auto">
-                                        Pay via Razorpay for immediate automated subscription reactivation.
-                                    </p>
-                                    <button
-                                        onClick={handleRazorpayPayment}
-                                        disabled={submitting}
-                                        className="inline-block mt-4 w-full sm:w-auto px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl transition-all shadow-xl shadow-indigo-500/20 active:scale-95 text-xs uppercase tracking-widest disabled:opacity-50"
-                                    >
-                                        {submitting ? "Processing..." : "Pay with Razorpay"}
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="flex flex-col md:flex-row gap-6 bg-white/5 border border-white/5 p-5 rounded-2xl">
-                                    {/* Bank details */}
-                                    <div className="flex-1 space-y-4 text-xs">
-                                        <h3 className="font-black text-gray-400 uppercase tracking-widest text-[10px]">Developer Account</h3>
-
-                                        <div className="space-y-3">
-                                            <div>
-                                                <p className="text-gray-500 font-medium">Bank Name</p>
-                                                <p className="text-white font-black tracking-tight text-sm">{status?.paymentSettings?.bankName || "PNB Bank"}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-gray-500 font-medium">Account Name</p>
-                                                <p className="text-white font-black tracking-tight text-sm">{status?.paymentSettings?.accountName || "DR. PANKAJ DWIVEDI"}</p>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div>
-                                                    <p className="text-gray-500 font-medium">Account Number</p>
-                                                    <p className="text-white font-black tracking-tight text-sm select-all">{status?.paymentSettings?.accountNumber || "06102413001048"}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-gray-500 font-medium">IFSC Code</p>
-                                                    <p className="text-white font-black tracking-tight text-sm select-all">{status?.paymentSettings?.ifsc || "PUNB0061010"}</p>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <p className="text-gray-500 font-medium">UPI ID</p>
-                                                <p className="text-[#00ff88] font-black tracking-tight text-sm select-all">{status?.paymentSettings?.upiId || "pankaj86.dwivedi-1@okicici"}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* QR Code Column */}
-                                    <div className="flex flex-col items-center justify-center gap-2 shrink-0 border-t md:border-t-0 md:border-l border-white/5 pt-4 md:pt-0 md:pl-6">
-                                        <div className="bg-white p-2 rounded-2xl shadow-xl flex items-center justify-center overflow-hidden" style={{ width: 136, height: 136 }}>
-                                            {status?.paymentSettings?.customQrCodeUrl ? (
-                                                <img 
-                                                    src={status.paymentSettings.customQrCodeUrl} 
-                                                    alt="Payment QR Code" 
-                                                    className="w-full h-full object-cover rounded-[10px]"
-                                                />
-                                            ) : (
-                                                <QRCodeCanvas 
-                                                    data={`upi://pay?pa=${status?.paymentSettings?.upiId || "pankaj86.dwivedi-1@okicici"}&pn=${encodeURIComponent(status?.paymentSettings?.accountName || "DR. PANKAJ DWIVEDI")}&cu=INR`} 
-                                                    size={120} 
-                                                />
-                                            )}
-                                        </div>
-                                        <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest flex items-center gap-1.5 mt-1">
-                                            <QrCode className="w-3.5 h-3.5" /> Scan QR to Pay
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* UTR Form */}
-                            <form onSubmit={handleRenewalSubmit} className="space-y-4 pt-2">
-                                <div className="space-y-2">
-                                    <label htmlFor="utrInput" className="block text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-                                        Transaction Reference / UTR Number (12-Digit)
-                                    </label>
-                                    <input
-                                        id="utrInput"
-                                        type="text"
-                                        placeholder="Enter UTR reference e.g., 215478965412"
-                                        value={utr}
-                                        onChange={(e) => {
-                                            setUtr(e.target.value);
-                                            if (error) setError("");
-                                        }}
-                                        disabled={submitting}
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono tracking-widest text-center"
-                                    />
-                                    {error && (
-                                        <p className="text-red-400 text-xs font-semibold text-center mt-1 animate-pulse">
-                                            {error}
+                        /* 2-Column Content Grid */
+                        <div className="p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-6">
+                            {/* Left Column (5 Cols): Stats & Plans */}
+                            <div className="lg:col-span-5 space-y-3 sm:space-y-4 flex flex-col justify-between">
+                                {/* Active Student Count & Tariff Card */}
+                                <div className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 flex items-center justify-between text-slate-800 shadow-md">
+                                    <div>
+                                        <p className="text-[8px] sm:text-[9.5px] font-black uppercase text-slate-400 tracking-wider">
+                                            ACTIVE STUDENTS COUNT
                                         </p>
-                                    )}
+                                        <p className="text-base sm:text-2xl font-black text-slate-900 mt-0.5">
+                                            {studentCount} Students
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[8px] sm:text-[9.5px] font-black uppercase text-slate-400 tracking-wider">
+                                            BASE TARIFF
+                                        </p>
+                                        <p className="text-base sm:text-2xl font-black text-blue-600 mt-0.5">
+                                            ₹{pricePerStudent} <span className="text-[9px] sm:text-[10px] font-bold text-slate-400">/ student / mo</span>
+                                        </p>
+                                    </div>
                                 </div>
 
-                                <div className="flex gap-3">
-                                    {isResubmitting && (
+                                {/* Select Duration Header */}
+                                <div>
+                                    <label className="block text-[9px] sm:text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1.5 sm:mb-2">
+                                        SELECT SUBSCRIPTION DURATION
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+                                        {planOptions.map((plan) => {
+                                            const isSelected = selectedPlanMonths === plan.months;
+                                            return (
+                                                <button
+                                                    key={plan.months}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (setSubmitting) setSubmitting(false);
+                                                        if (setError) setError("");
+                                                        setSelectedPlanMonths(plan.months);
+                                                    }}
+                                                    className={`relative p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border-2 text-left flex flex-col justify-between transition-all bg-white shadow-sm ${
+                                                        isSelected
+                                                            ? "border-blue-600 ring-2 ring-blue-500/20 bg-blue-50/20"
+                                                            : "border-slate-200 hover:border-slate-300"
+                                                    }`}
+                                                >
+                                                    {plan.badge && (
+                                                        <span className={`absolute -top-2.5 left-2 px-1.5 py-0.5 text-[6.5px] sm:text-[7.5px] font-black uppercase tracking-wider rounded shadow ${
+                                                            plan.months === 12 ? "bg-amber-500 text-black font-extrabold" : "bg-blue-600 text-white"
+                                                        }`}>
+                                                            {plan.badge}
+                                                        </span>
+                                                    )}
+
+                                                    <div className="flex items-start justify-between gap-1 w-full mt-0.5">
+                                                        <div>
+                                                            <p className={`text-[11px] sm:text-xs font-black uppercase ${isSelected ? "text-blue-600" : "text-slate-900"}`}>
+                                                                {plan.label}
+                                                            </p>
+                                                            <p className="text-[8px] sm:text-[9px] text-slate-500 font-medium">{plan.tag}</p>
+                                                        </div>
+                                                        {plan.discount > 0 && (
+                                                            <span className="text-[7px] sm:text-[8px] font-black text-emerald-700 bg-emerald-100 border border-emerald-300 px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded uppercase">
+                                                                {plan.discount}% OFF
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <ul className="space-y-0.5 mt-1.5 sm:mt-2 text-[7px] min-[400px]:text-[7.5px] sm:text-[8px] font-medium text-slate-600">
+                                                        {plan.points.map((pt, idx) => (
+                                                            <li key={idx} className="flex items-start gap-1 leading-tight">
+                                                                <span className="text-blue-600 font-bold shrink-0">✓</span>
+                                                                <span className="truncate">{pt}</span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Payment Method Toggle */}
+                                <div>
+                                    <label className="block text-[9px] sm:text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1.5 sm:mb-2">
+                                        PAYMENT METHOD
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-2">
                                         <button
                                             type="button"
-                                            onClick={() => setIsResubmitting(false)}
-                                            className="bg-white/5 hover:bg-white/10 border border-white/10 text-white font-black py-4 px-6 rounded-2xl transition-all active:scale-95 text-xs uppercase tracking-widest"
+                                            onClick={() => {
+                                                if (setSubmitting) setSubmitting(false);
+                                                if (setError) setError("");
+                                                setPaymentMethod("razorpay");
+                                            }}
+                                            className={`py-2 sm:py-2.5 px-2 sm:px-3 rounded-lg sm:rounded-xl border-2 font-black text-[10.5px] sm:text-xs flex items-center justify-center gap-1.5 transition-all ${
+                                                paymentMethod === "razorpay"
+                                                    ? "border-blue-600 bg-blue-600 text-white shadow-md"
+                                                    : "border-slate-700 bg-slate-800/80 text-gray-300 hover:bg-slate-700"
+                                            }`}
                                         >
-                                            Cancel
+                                            <span>💳 Online Gateway</span>
                                         </button>
-                                    )}
-                                    <button
-                                        type="submit"
-                                        disabled={submitting}
-                                        className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black py-4 rounded-2xl transition-all active:scale-95 shadow-xl shadow-blue-900/30 uppercase tracking-widest text-xs flex items-center justify-center gap-2 disabled:opacity-50 disabled:scale-100"
-                                    >
-                                        {submitting ? (
-                                            <>
-                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                                Submitting...
-                                            </>
-                                        ) : (
-                                            "Submit Verification Request"
-                                        )}
-                                    </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (setSubmitting) setSubmitting(false);
+                                                if (setError) setError("");
+                                                setPaymentMethod("bank");
+                                            }}
+                                            className={`py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-lg sm:rounded-xl border-2 font-black text-[9px] min-[360px]:text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all relative ${
+                                                paymentMethod === "bank"
+                                                    ? "border-emerald-600 bg-emerald-600 text-white shadow-md"
+                                                    : "border-slate-700 bg-slate-800/80 text-gray-300 hover:bg-slate-700"
+                                            }`}
+                                        >
+                                            <span className="whitespace-nowrap">🏦 Direct Bank / QR</span>
+                                            <span className="bg-amber-400 text-black text-[6.5px] min-[360px]:text-[7px] sm:text-[7.5px] font-black px-1 py-0.5 rounded shadow-sm shrink-0 whitespace-nowrap">
+                                                +{bankBonusPercent}% OFF
+                                            </span>
+                                        </button>
+                                    </div>
                                 </div>
-                            </form>
+                            </div>
+
+                            {/* Right Column (7 Cols): Payment Details & Summary */}
+                            <div className="lg:col-span-7 flex flex-col justify-between space-y-3 sm:space-y-4">
+                                {/* Top Content Box */}
+                                {paymentMethod === "razorpay" ? (
+                                    /* Razorpay Options Cards (Screenshot 2 Match) */
+                                    <div className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-5 text-slate-800 shadow-md space-y-2.5 sm:space-y-3">
+                                        <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                                                <h3 className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-800">
+                                                    SUPPORTED PAYMENT OPTIONS
+                                                </h3>
+                                            </div>
+                                            <span className="px-1.5 sm:px-2 py-0.5 bg-blue-600 text-white text-[7.5px] sm:text-[8.5px] font-black uppercase tracking-wider rounded">
+                                                INSTANT RENEWAL
+                                            </span>
+                                        </div>
+
+                                        {/* 4 White Tiles */}
+                                        <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+                                            <div className="bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl p-2 sm:p-2.5 flex items-center gap-2 sm:gap-2.5 shadow-sm">
+                                                <div className="text-lg sm:text-xl">📱</div>
+                                                <div>
+                                                    <p className="text-[10px] sm:text-[11px] font-black uppercase text-slate-900">UPI & QR</p>
+                                                    <p className="text-[8px] sm:text-[9px] text-slate-500">GPay, PhonePe, Paytm</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl p-2 sm:p-2.5 flex items-center gap-2 sm:gap-2.5 shadow-sm">
+                                                <div className="text-lg sm:text-xl">💳</div>
+                                                <div>
+                                                    <p className="text-[10px] sm:text-[11px] font-black uppercase text-slate-900">CARDS</p>
+                                                    <p className="text-[8px] sm:text-[9px] text-slate-500">Visa, Mastercard, RuPay</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl p-2 sm:p-2.5 flex items-center gap-2 sm:gap-2.5 shadow-sm">
+                                                <div className="text-lg sm:text-xl">🏦</div>
+                                                <div>
+                                                    <p className="text-[10px] sm:text-[11px] font-black uppercase text-slate-900">NETBANKING</p>
+                                                    <p className="text-[8px] sm:text-[9px] text-slate-500">SBI, HDFC, ICICI, Axis</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl p-2 sm:p-2.5 flex items-center gap-2 sm:gap-2.5 shadow-sm">
+                                                <div className="text-lg sm:text-xl">👛</div>
+                                                <div>
+                                                    <p className="text-[10px] sm:text-[11px] font-black uppercase text-slate-900">WALLET & EMI</p>
+                                                    <p className="text-[8px] sm:text-[9px] text-slate-500">Paytm, Mobikwik, EMI</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="pt-1.5 sm:pt-2 border-t border-slate-100 flex items-center justify-between text-[8px] sm:text-[9.5px] text-slate-500 font-medium">
+                                            <span>🔒 256-Bit SSL Encrypted & Compliant</span>
+                                            <span className="text-blue-600 font-bold">Razorpay Checkout</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    /* Bank & QR Details View */
+                                    <div className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 text-slate-800 shadow-md space-y-2.5 sm:space-y-3">
+                                        
+                                        {/* 🖥️ DESKTOP VIEW: Bank Details on LEFT, QR on RIGHT (Screenshot 4 Match) */}
+                                        <div className="hidden sm:grid sm:grid-cols-12 gap-3.5 items-center">
+                                            {/* Left Side: Bank Details (7 Cols) */}
+                                            <div className="sm:col-span-7 space-y-1.5 text-xs">
+                                                <div className="flex justify-between border-b border-slate-100 pb-1">
+                                                    <span className="text-slate-500 text-[10px] font-bold">Bank:</span>
+                                                    <span className="font-black text-slate-800">{bankName}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-slate-100 pb-1">
+                                                    <span className="text-slate-500 text-[10px] font-bold">Account Holder:</span>
+                                                    <span className="font-black text-slate-800">{accountName}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-slate-100 pb-1">
+                                                    <span className="text-slate-500 text-[10px] font-bold">Account No:</span>
+                                                    <button type="button" onClick={() => copyToClipboard(accountNumber, "acc")} className="font-mono font-bold text-blue-600 flex items-center gap-1">
+                                                        {accountNumber} {copiedField === "acc" ? "✓" : "📋"}
+                                                    </button>
+                                                </div>
+                                                <div className="flex justify-between border-b border-slate-100 pb-1">
+                                                    <span className="text-slate-500 text-[10px] font-bold">IFSC Code:</span>
+                                                    <button type="button" onClick={() => copyToClipboard(ifsc, "ifsc")} className="font-mono font-bold text-blue-600 flex items-center gap-1">
+                                                        {ifsc} {copiedField === "ifsc" ? "✓" : "📋"}
+                                                    </button>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-500 text-[10px] font-bold">UPI ID:</span>
+                                                    <button type="button" onClick={() => copyToClipboard(upiId, "upi")} className="font-mono font-bold text-emerald-600 flex items-center gap-1">
+                                                        {upiId} {copiedField === "upi" ? "✓" : "📋"}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Right Side: Larger QR Code (5 Cols) (Screenshot 4 Match) */}
+                                            <div className="sm:col-span-5 flex flex-col items-center justify-center text-center">
+                                                <div className="relative p-1 bg-white rounded-xl border border-slate-200 shadow-sm flex items-center justify-center">
+                                                    {customQrUrl ? (
+                                                        <img src={customQrUrl} alt="QR" className="w-32 h-32 object-contain rounded-lg" />
+                                                    ) : (
+                                                        <div className="relative flex items-center justify-center">
+                                                            <QRCodeCanvas data={upiDeepLink} size={120} level="H" />
+                                                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                                                <div className="w-5 h-5 bg-white rounded-full p-0.5 shadow-md flex items-center justify-center border border-slate-100">
+                                                                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none">
+                                                                        <path d="M12 24C18.6274 24 24 18.6274 24 12C24 5.37258 18.6274 0 12 0C5.37258 0 0 5.37258 0 12C0 18.6274 5.37258 24 12 24Z" fill="white"/>
+                                                                        <path d="M12 5.5C13.6 5.5 14.7 6.2 15.3 6.8L17.5 4.6C16.1 3.3 14.2 2.5 12 2.5C8.4 2.5 5.3 4.6 3.9 7.6L6.9 9.9C7.6 7.4 9.6 5.5 12 5.5Z" fill="#EA4335"/>
+                                                                        <path d="M21.5 12.3C21.5 11.6 21.4 10.9 21.3 10.3H12V14.1H17.3C17.1 15.3 16.4 16.3 15.3 17L18.3 19.3C20.1 17.6 21.5 15.2 21.5 12.3Z" fill="#4285F4"/>
+                                                                        <path d="M6.9 14.1C6.7 13.5 6.6 12.8 6.6 12C6.6 11.2 6.7 10.5 6.9 9.9L3.9 7.6C3.3 8.9 3 10.4 3 12C3 13.6 3.3 15.1 3.9 16.4L6.9 14.1Z" fill="#FBBC05"/>
+                                                                        <path d="M12 21.5C14.7 21.5 17 20.6 18.3 19.3L15.3 17C14.5 17.6 13.4 18 12 18C9.6 18 7.6 16.1 6.9 13.6L3.9 15.9C5.3 18.9 8.4 21.5 12 21.5Z" fill="#34A853"/>
+                                                                    </svg>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <a
+                                                    href={upiDeepLink}
+                                                    className="text-[8.5px] font-black text-emerald-700 hover:text-emerald-800 uppercase mt-1 tracking-wide inline-flex items-center gap-0.5"
+                                                >
+                                                    📲 Tap QR to Pay
+                                                </a>
+                                            </div>
+                                        </div>
+
+                                        {/* 📱 MOBILE VIEW: Bank Details Top, QR on LEFT + UTR on RIGHT (Screenshot 1 & 3 Match) */}
+                                        <div className="sm:hidden space-y-2">
+                                            {/* Bank Details Table at Top */}
+                                            <div className="space-y-1 text-[10px] border-b border-slate-100 pb-1.5">
+                                                <div className="flex justify-between border-b border-slate-50 pb-0.5">
+                                                    <span className="text-slate-500 text-[9px] font-bold">Bank:</span>
+                                                    <span className="font-black text-slate-800">{bankName}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-slate-50 pb-0.5">
+                                                    <span className="text-slate-500 text-[9px] font-bold">Account Holder:</span>
+                                                    <span className="font-black text-slate-800">{accountName}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-slate-50 pb-0.5">
+                                                    <span className="text-slate-500 text-[9px] font-bold">Account No:</span>
+                                                    <button type="button" onClick={() => copyToClipboard(accountNumber, "acc")} className="font-mono font-bold text-blue-600 flex items-center gap-1">
+                                                        {accountNumber} {copiedField === "acc" ? "✓" : "📋"}
+                                                    </button>
+                                                </div>
+                                                <div className="flex justify-between border-b border-slate-50 pb-0.5">
+                                                    <span className="text-slate-500 text-[9px] font-bold">IFSC Code:</span>
+                                                    <button type="button" onClick={() => copyToClipboard(ifsc, "ifsc")} className="font-mono font-bold text-blue-600 flex items-center gap-1">
+                                                        {ifsc} {copiedField === "ifsc" ? "✓" : "📋"}
+                                                    </button>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-500 text-[9px] font-bold">UPI ID:</span>
+                                                    <button type="button" onClick={() => copyToClipboard(upiId, "upi")} className="font-mono font-bold text-emerald-600 flex items-center gap-1">
+                                                        {upiId} {copiedField === "upi" ? "✓" : "📋"}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Side-by-Side: Enlarged QR on LEFT, UTR Box on RIGHT */}
+                                            <div className="grid grid-cols-12 gap-3 items-center pt-1">
+                                                {/* Left: Enlarged QR Code (Screenshot 2 Match) */}
+                                                <div className="col-span-7 flex flex-col items-center justify-center text-center">
+                                                    <div className="relative p-1.5 bg-white rounded-xl border border-slate-200 shadow-sm flex items-center justify-center w-full max-w-[170px]">
+                                                        {customQrUrl ? (
+                                                            <img src={customQrUrl} alt="QR" className="w-full aspect-square object-contain rounded-lg" />
+                                                        ) : (
+                                                            <div className="relative flex items-center justify-center w-full">
+                                                                <QRCodeCanvas data={upiDeepLink} size={140} level="H" className="w-full h-auto max-w-[140px]" />
+                                                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                                                    <div className="w-5 h-5 bg-white rounded-full p-0.5 shadow-md flex items-center justify-center border border-slate-100">
+                                                                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none">
+                                                                            <path d="M12 24C18.6274 24 24 18.6274 24 12C24 5.37258 18.6274 0 12 0C5.37258 0 0 5.37258 0 12C0 18.6274 5.37258 24 12 24Z" fill="white"/>
+                                                                            <path d="M12 5.5C13.6 5.5 14.7 6.2 15.3 6.8L17.5 4.6C16.1 3.3 14.2 2.5 12 2.5C8.4 2.5 5.3 4.6 3.9 7.6L6.9 9.9C7.6 7.4 9.6 5.5 12 5.5Z" fill="#EA4335"/>
+                                                                            <path d="M21.5 12.3C21.5 11.6 21.4 10.9 21.3 10.3H12V14.1H17.3C17.1 15.3 16.4 16.3 15.3 17L18.3 19.3C20.1 17.6 21.5 15.2 21.5 12.3Z" fill="#4285F4"/>
+                                                                            <path d="M6.9 14.1C6.7 13.5 6.6 12.8 6.6 12C6.6 11.2 6.7 10.5 6.9 9.9L3.9 7.6C3.3 8.9 3 10.4 3 12C3 13.6 3.3 15.1 3.9 16.4L6.9 14.1Z" fill="#FBBC05"/>
+                                                                            <path d="M12 21.5C14.7 21.5 17 20.6 18.3 19.3L15.3 17C14.5 17.6 13.4 18 12 18C9.6 18 7.6 16.1 6.9 13.6L3.9 15.9C5.3 18.9 8.4 21.5 12 21.5Z" fill="#34A853"/>
+                                                                        </svg>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <a
+                                                        href={upiDeepLink}
+                                                        className="text-[8px] font-black text-emerald-700 hover:text-emerald-800 uppercase mt-1 tracking-tight inline-flex items-center gap-0.5"
+                                                    >
+                                                        📲 Tap QR to Pay
+                                                    </a>
+                                                </div>
+
+                                                {/* Right: UTR Input & helper box */}
+                                                <div className="col-span-5 flex flex-col justify-center space-y-1.5">
+                                                    <label className="block text-[8.5px] font-black uppercase text-slate-600 tracking-wider">
+                                                        Enter UTR / Ref ID:
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="12-Digit UTR ID"
+                                                        value={utr}
+                                                        onChange={(e) => {
+                                                            setUtr(e.target.value);
+                                                            if (error) setError("");
+                                                        }}
+                                                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-2 text-[11px] font-mono font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 text-center shadow-inner"
+                                                    />
+                                                    {error && <p className="text-red-500 text-[8px] font-bold text-center">{error}</p>}
+                                                    <p className="text-[7.5px] font-bold text-slate-400 leading-tight pt-0.5">
+                                                        Transfer via QR/Bank, then enter transaction UTR here.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Desktop UTR Input Span */}
+                                        <div className="hidden sm:block pt-2 border-t border-slate-100">
+                                            <input
+                                                type="text"
+                                                placeholder="Enter 12-Digit Transaction UTR / Ref ID"
+                                                value={utr}
+                                                onChange={(e) => {
+                                                    setUtr(e.target.value);
+                                                    if (error) setError("");
+                                                }}
+                                                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 text-center"
+                                            />
+                                            {error && <p className="text-red-500 text-[10px] font-bold text-center mt-1">{error}</p>}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Instructions & WhatsApp Verification Box (Screenshot 1 Match) */}
+                                {paymentMethod === "bank" && (
+                                    <div className="bg-[#fffbeb] border border-amber-200/80 rounded-xl sm:rounded-2xl p-2 sm:p-3 text-[8px] sm:text-[10px] text-amber-900 flex items-start gap-1.5 sm:gap-2 shadow-sm">
+                                        <span className="text-xs sm:text-base leading-none shrink-0 mt-0.5">📱</span>
+                                        <div className="space-y-0.5 leading-snug flex-1">
+                                            <p className="font-black text-amber-950 uppercase tracking-wider text-[7.5px] sm:text-[9.5px]">
+                                                Instructions & WhatsApp Verification:
+                                            </p>
+                                            <p className="font-bold text-amber-900/90 text-[7.5px] sm:text-[9.5px]">
+                                                Make payment via Bank/QR code. Enter 12-digit <span className="font-black text-amber-950">UTR Number</span> below &amp; send screenshot to{" "}
+                                                {(() => {
+                                                    const planNameStr = selectedPlanMonths === 1 ? 'Monthly' : selectedPlanMonths === 3 ? 'Quarterly' : selectedPlanMonths === 6 ? 'Half-Yearly' : 'Annual Plan';
+                                                    const collegeNameStr = status?.name || 'Oriental Group of Institutes (OGI)';
+                                                    const waLines = [
+                                                        `Hello, I have completed the direct transfer payment for *${collegeNameStr}*.`,
+                                                        ``,
+                                                        `*Subscription Details*:`,
+                                                        `- *College*: ${collegeNameStr}`,
+                                                        `- *Total Active Students*: ${studentCount} Students`,
+                                                        `- *Selected Plan*: ${selectedPlanMonths} Month(s) (${planNameStr})`,
+                                                        `- *Billing Formula*: ${studentCount} students × ${selectedPlanMonths} month(s) @ ₹${pricePerStudent}/mo`,
+                                                        `- *Subtotal*: ₹${formatINR(baseTotal)}`,
+                                                        `- *Discount Applied*: ${planDiscountPercent}% Plan OFF + ${bankBonusPercent}% Bank Bonus (-₹${formatINR(baseTotal - finalTotal)})`,
+                                                        `- *Total Amount Paid*: ₹${formatINR(finalTotal)}`,
+                                                        `- *Payment UTR / Ref No*: ${utr.trim() || '[Pending]'}`,
+                                                        ``,
+                                                        `Please verify and activate our subscription plan. Receipt screenshot attached.`
+                                                    ];
+                                                    const waNumber = status?.paymentSettings?.supportWhatsappNumber || '8269418956';
+                                                    const waEncodedUrl = `https://wa.me/91${waNumber.replace(/[^0-9]/g, '')}?text=${waLines.map(l => encodeURIComponent(l)).join('%0A')}`;
+                                                    return (
+                                                        <a
+                                                            href={waEncodedUrl}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="font-black text-green-700 underline hover:text-green-800 inline-flex items-center gap-0.5 ml-0.5"
+                                                        >
+                                                            +{waNumber} 💬
+                                                        </a>
+                                                    );
+                                                })()}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Bottom Dark Calculation & Action Card (Screenshot 2 Match) */}
+                                <div className="bg-[#050b18] border border-slate-800 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-white space-y-1.5 sm:space-y-2.5">
+                                    <div className="flex justify-between text-gray-300 text-[10px] sm:text-xs font-semibold">
+                                        <span>Subtotal ({studentCount} students × {selectedPlanMonths} months)</span>
+                                        <span>₹{formatINR(baseTotal)}</span>
+                                    </div>
+
+                                    {planDiscountAmount > 0 && (
+                                        <div className="flex justify-between text-emerald-400 text-[10px] sm:text-xs font-semibold">
+                                            <span>Discount ({planDiscountPercent}% Plan OFF)</span>
+                                            <span>-₹{formatINR(planDiscountAmount)}</span>
+                                        </div>
+                                    )}
+
+                                    {paymentMethod === "bank" && bankBonusAmount > 0 && (
+                                        <div className="flex justify-between text-emerald-400 text-[10px] sm:text-xs font-semibold">
+                                            <span>Extra Direct Bank / QR Bonus ({bankBonusPercent}% OFF)</span>
+                                            <span>-₹{formatINR(bankBonusAmount)}</span>
+                                        </div>
+                                    )}
+
+                                    <div className="pt-2 sm:pt-2.5 border-t border-slate-800 flex items-center justify-between">
+                                        <div>
+                                            <p className="text-[8px] sm:text-[9px] font-black uppercase text-gray-400 tracking-wider">
+                                                TOTAL AMOUNT PAYABLE
+                                            </p>
+                                            <p className="text-xl sm:text-3xl font-black text-emerald-400">
+                                                ₹{formatINR(finalTotal)}
+                                            </p>
+                                        </div>
+
+                                        {paymentMethod === "razorpay" ? (
+                                            <button
+                                                onClick={() => handleRazorpayPayment(selectedPlanMonths)}
+                                                disabled={submitting}
+                                                className="px-4 sm:px-8 py-2.5 sm:py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black rounded-lg sm:rounded-xl text-[10.5px] sm:text-xs uppercase tracking-wider shadow-lg shadow-blue-500/25 active:scale-95 disabled:opacity-50 flex items-center gap-1.5 sm:gap-2"
+                                            >
+                                                {submitting ? (
+                                                    <>
+                                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                        Processing...
+                                                    </>
+                                                ) : (
+                                                    "Pay & Renew ⚡"
+                                                )}
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    if (handleDirectPaymentSubmit) {
+                                                        handleDirectPaymentSubmit(finalTotal, selectedPlanMonths);
+                                                    } else {
+                                                        handleRenewalSubmit(e);
+                                                    }
+                                                }}
+                                                disabled={submitting || !utr || utr.trim().length < 6}
+                                                className="px-3.5 sm:px-8 py-2.5 sm:py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black rounded-lg sm:rounded-xl text-[10px] sm:text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/25 active:scale-95 disabled:opacity-50 flex items-center gap-1.5 sm:gap-2"
+                                            >
+                                                {submitting ? (
+                                                    <>
+                                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                        Processing...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        Submit Payment & Renew 🚀
+                                                    </>
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
 
-                    <div className="pt-4 border-t border-white/5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-center sm:text-left">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-center sm:justify-start gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider leading-relaxed">
-                            <span>Need urgent activation? Contact support at <a href="mailto:support@hosteleaze.com" className="text-blue-400 hover:underline">support@hosteleaze.com</a></span>
+                    {/* Support Links */}
+                    <div className="px-6 py-3 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-center sm:text-left bg-[#0e1629]">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-center sm:justify-start gap-2 text-[10px] text-gray-400 font-bold uppercase tracking-wider leading-relaxed">
+                            <span>Need assistance? <a href="mailto:support@hosteleaze.com" className="text-blue-400 hover:underline">support@hosteleaze.com</a></span>
                             <span className="hidden sm:inline text-gray-600">•</span>
                             <a 
                                 href="https://wa.me/918269418956" 
@@ -475,13 +914,20 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
     const fetchBillingHistory = async () => {
         setLoadingBillingHistory(true);
         try {
-            const res = await fetch("/api/admin/billing-history");
+            const res = await fetch("/api/admin/billing-history", { cache: "no-store" });
+            if (!res.ok) {
+                setBillingHistory([]);
+                return;
+            }
             const data = await res.json();
-            if (data.success) {
-                setBillingHistory(data.logs || []);
+            if (data?.success && Array.isArray(data?.logs)) {
+                setBillingHistory(data.logs);
+            } else {
+                setBillingHistory([]);
             }
         } catch (e) {
-            console.error("Failed to fetch billing history:", e);
+            // Silently fallback to empty array on network interruption
+            setBillingHistory([]);
         } finally {
             setLoadingBillingHistory(false);
         }
@@ -789,7 +1235,60 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
         }
     };
 
-    const handleRazorpayPayment = async () => {
+    const handleDirectPaymentSubmit = async (finalTotal: number, months: number = 12) => {
+        if (!utr || utr.trim().length < 6 || utr.trim().length > 25) {
+            setError("Please enter a valid transaction UTR reference (6 to 25 characters).");
+            return;
+        }
+
+        setSubmitting(true);
+        setError("");
+
+        try {
+            const res = await fetch("/api/admin/submit-direct-payment", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    tenantId: status.tenantId,
+                    utrNumber: utr.trim(),
+                    months,
+                    amount: finalTotal
+                })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                // Also trigger settings renewal status update
+                await fetch("/api/admin/submit-renewal", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ utr: utr.trim() })
+                }).catch(() => {});
+
+                setSuccessMsg(utr.trim());
+                setIsResubmitting(false);
+                setStatus((prev: any) => ({
+                    ...prev,
+                    renewalUtr: utr.trim(),
+                    renewalStatus: 'pending',
+                    renewalSubmittedAt: new Date().toISOString(),
+                    isExpired: false
+                }));
+
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                setError(data.error || "Failed to submit direct payment verification request.");
+            }
+        } catch (err) {
+            setError("Network error. Please try again.");
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleRazorpayPayment = async (months: number = 12) => {
         try {
             setSubmitting(true);
             setError("");
@@ -806,7 +1305,7 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
             const orderRes = await fetch("/api/admin/create-razorpay-order", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ tenantId: status.tenantId })
+                body: JSON.stringify({ tenantId: status.tenantId, months })
             });
             const orderData = await orderRes.json();
 
@@ -822,8 +1321,13 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
                 amount: orderData.amount,
                 currency: orderData.currency,
                 name: orderData.collegeName,
-                description: "Software Subscription Renewal (1 Year)",
+                description: `Software Subscription Renewal (${months} Month${months > 1 ? 's' : ''})`,
                 order_id: orderData.orderId,
+                modal: {
+                    ondismiss: function () {
+                        setSubmitting(false);
+                    }
+                },
                 handler: async function (response: any) {
                     try {
                         setSubmitting(true);
@@ -835,7 +1339,8 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
                                 razorpay_payment_id: response.razorpay_payment_id,
                                 razorpay_order_id: response.razorpay_order_id,
                                 razorpay_signature: response.razorpay_signature,
-                                tenantId: status.tenantId
+                                tenantId: status.tenantId,
+                                months
                             })
                         });
                         
@@ -984,6 +1489,7 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
                 utr={utr} 
                 setUtr={setUtr} 
                 submitting={submitting} 
+                setSubmitting={setSubmitting}
                 error={error} 
                 setError={setError} 
                 successMsg={successMsg} 
@@ -994,6 +1500,7 @@ export default function TenantGuard({ children }: { children: React.ReactNode })
                 billingHistory={billingHistory}
                 loadingBillingHistory={loadingBillingHistory}
                 generateInvoicePDF={generateInvoicePDF}
+                handleDirectPaymentSubmit={handleDirectPaymentSubmit}
             />
         );
     }
