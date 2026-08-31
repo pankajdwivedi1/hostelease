@@ -78,12 +78,16 @@ export default function InstallPWA() {
 
     const handleInstallClick = async () => {
         if (deferredPrompt) {
-            deferredPrompt.prompt();
-            const { outcome } = await deferredPrompt.userChoice;
-            if (outcome === 'accepted') {
-                setShowBanner(false);
+            try {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    setShowBanner(false);
+                }
+                setDeferredPrompt(null);
+            } catch (e) {
+                console.warn("Prompt error:", e);
             }
-            setDeferredPrompt(null);
         } else if (isInAppBrowser) {
             // Android Intent escape to native Google Chrome
             const currentUrl = window.location.href.replace(/^https?:\/\//, '');
@@ -125,11 +129,9 @@ export default function InstallPWA() {
                         </div>
                         <p className="text-[11px] text-slate-300 mt-0.5 leading-tight">
                             {isInAppBrowser
-                                ? "You are in an in-app preview. Open in Chrome or Safari for face scan & instant launch."
+                                ? "Open in Chrome or Safari for face scan & instant launch."
                                 : isIOS
-                                ? "Add to your iPhone Home Screen for instant <0.2s launch."
-                                : isOEMOrFirefox
-                                ? `Add to home screen from your ${browserName} menu.`
+                                ? "Add to your iPhone Home Screen for instant launch."
                                 : "Install on your phone for instant launch, offline support & live attendance."}
                         </p>
                     </div>
@@ -163,25 +165,15 @@ export default function InstallPWA() {
                             </div>
                             <ArrowBigUp className="w-4 h-4 text-blue-400 animate-bounce shrink-0" />
                         </div>
-                    ) : deferredPrompt ? (
-                        /* 3. NATIVE 1-TAP INSTALL (Chrome, Edge, Samsung) */
+                    ) : (
+                        /* 3. DIRECT INSTALL NOW ACTION */
                         <button
                             onClick={handleInstallClick}
-                            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold py-2.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20"
+                            className="w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-black py-2.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 cursor-pointer"
                         >
-                            <Download className="w-3.5 h-3.5" />
-                            <span>Install Now (Instant Access)</span>
+                            <Download className="w-4 h-4 text-white" />
+                            <span>Install Now</span>
                         </button>
-                    ) : (
-                        /* 4. OEM BROWSERS / FIREFOX GUIDE */
-                        <div className="bg-slate-800/80 rounded-xl p-2.5 border border-slate-700/60 text-[11px] text-slate-300 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <Globe className="w-4 h-4 text-indigo-400 shrink-0" />
-                                <span>
-                                    Tap <span className="text-indigo-400 font-bold">⋮ menu</span> &rarr; select <span className="text-indigo-400 font-bold">&quot;Add to Home screen&quot;</span> or <span className="text-indigo-400 font-bold">&quot;Install App&quot;</span>
-                                </span>
-                            </div>
-                        </div>
                     )}
                 </div>
             </div>

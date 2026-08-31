@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { signInWithPopup } from "firebase/auth";
+import { signInWithPopup, signInWithRedirect, getRedirectResult, User } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 // Supabase removed — using Firebase Auth for all logins
 import { useSearchParams } from "next/navigation";
@@ -83,6 +83,27 @@ function LoginForm() {
       // Clean up the URL
       window.history.replaceState({}, '', '/login');
     }
+
+    // 🍏 Process Firebase Google redirect login result (for iOS PWA / redirect logins)
+    const checkRedirectLogin = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result && result.user) {
+          setLoading(true);
+          setLoadingText("Verifying Account...");
+          await handleStudentUserAuth(result.user);
+        }
+      } catch (err: any) {
+        console.warn("Redirect auth check note:", err);
+        if (err.code && err.code !== 'auth/null-user') {
+          const errMsg = err.message || "Google sign-in failed. Please try again.";
+          setError(errMsg);
+          showToast(errMsg, "error");
+        }
+        setLoading(false);
+      }
+    };
+    checkRedirectLogin();
   }, [searchParams]);
 
   const fetchTenantConfig = async () => {
@@ -271,79 +292,94 @@ function LoginForm() {
     }
   };
 
+  const handleStudentUserAuth = async (user: User) => {
+    if (!user?.email) throw new Error("No email returned from Google login");
+
+    // Mark as student in localStorage & preserve email for onboarding pre-fill
+    localStorage.setItem("userType", "student");
+    if (user.email) {
+      localStorage.setItem("userEmail", user.email);
+      localStorage.setItem("studentEmail", user.email);
+    }
+
+    setLoadingText("Verifying Account...");
+
+    // ⚡ FAST DB CHECK: Look up student by firebaseUID or email
+    let studentDataObj: any = null;
+    let tenantSlugRes: string | null = null;
+
+    try {
+      const response = await fetch(
+        `/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email)}&minimal=true`
+      );
+      if (response.ok) {
+        const resJson = await response.json();
+        studentDataObj = resJson.student;
+        tenantSlugRes = resJson.tenantSlug;
+      }
+    } catch (err) {
+      console.warn("Primary student verification error:", err);
+    }
+
+    // Fallback query by email alone if primary check returned nothing
+    if (!studentDataObj && user.email) {
+      try {
+        const fallbackRes = await fetch(`/api/students?email=${encodeURIComponent(user.email)}`);
+        if (fallbackRes.ok) {
+          const fallbackJson = await fallbackRes.json();
+          studentDataObj = fallbackJson.student;
+          tenantSlugRes = fallbackJson.tenantSlug;
+        }
+      } catch (fallbackErr) {
+        console.warn("Fallback email student verification error:", fallbackErr);
+      }
+    }
+
+    if (studentDataObj) {
+      // Existing student found — cache and open dashboard
+      const cached = localStorage.getItem("cachedStudentData");
+      const existing = cached ? JSON.parse(cached) : {};
+      const merged = { ...existing, ...studentDataObj };
+      localStorage.setItem("cachedStudentData", JSON.stringify(merged));
+
+      if (tenantSlugRes) {
+        document.cookie = `tenant-slug=${tenantSlugRes}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+      }
+
+      setLoadingText("Opening your dashboard...");
+      router.push("/");
+      return;
+    } else {
+      // Truly new student — route to onboarding
+      router.push("/onboarding");
+      return;
+    }
+  };
+
   const handleGoogleLogin = async () => {
     try {
       setLoading(true);
       setLoadingText("");
       setError("");
 
-      console.log("Initiating Firebase Google Login for Student...");
+      // 🍏 Check if Apple iOS device in standalone PWA mode (where popups are blocked by WebKit)
+      const isIOSDevice = typeof window !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const isStandalone = typeof window !== 'undefined' && (
+        (window.navigator as any).standalone === true ||
+        window.matchMedia('(display-mode: standalone)').matches
+      );
 
-      // Use Firebase Google sign-in (same provider as Dean/Warden)
+      if (isIOSDevice && isStandalone) {
+        console.log("🍏 Initiating Firebase Redirect Login for iOS PWA...");
+        setLoadingText("Redirecting to Google...");
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
+
+      // 📱💻 Standard 1-click popup for Android, Desktop, Laptop, Windows & Mac (Preserved 100%)
+      console.log("Initiating Firebase Google Login for Student (Popup)...");
       const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-
-      if (!user?.email) throw new Error("No email returned from Google login");
-
-      // Mark as student in localStorage & preserve email for onboarding pre-fill
-      localStorage.setItem("userType", "student");
-      if (user.email) {
-        localStorage.setItem("userEmail", user.email);
-        localStorage.setItem("studentEmail", user.email);
-      }
-
-      setLoadingText("Verifying Account...");
-
-      // ⚡ FAST DB CHECK: Look up student by firebaseUID or email
-      let studentDataObj: any = null;
-      let tenantSlugRes: string | null = null;
-
-      try {
-        const response = await fetch(
-          `/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email)}&minimal=true`
-        );
-        if (response.ok) {
-          const resJson = await response.json();
-          studentDataObj = resJson.student;
-          tenantSlugRes = resJson.tenantSlug;
-        }
-      } catch (err) {
-        console.warn("Primary student verification error:", err);
-      }
-
-      // Fallback query by email alone if primary check returned nothing
-      if (!studentDataObj && user.email) {
-        try {
-          const fallbackRes = await fetch(`/api/students?email=${encodeURIComponent(user.email)}`);
-          if (fallbackRes.ok) {
-            const fallbackJson = await fallbackRes.json();
-            studentDataObj = fallbackJson.student;
-            tenantSlugRes = fallbackJson.tenantSlug;
-          }
-        } catch (fallbackErr) {
-          console.warn("Fallback email student verification error:", fallbackErr);
-        }
-      }
-
-      if (studentDataObj) {
-        // Existing student found — cache and open dashboard
-        const cached = localStorage.getItem("cachedStudentData");
-        const existing = cached ? JSON.parse(cached) : {};
-        const merged = { ...existing, ...studentDataObj };
-        localStorage.setItem("cachedStudentData", JSON.stringify(merged));
-
-        if (tenantSlugRes) {
-          document.cookie = `tenant-slug=${tenantSlugRes}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-        }
-
-        setLoadingText("Opening your dashboard...");
-        router.push("/");
-        return;
-      } else {
-        // Truly new student — route to onboarding
-        router.push("/onboarding");
-        return;
-      }
+      await handleStudentUserAuth(result.user);
 
     } catch (error: any) {
       console.error("Google Login error:", error);
