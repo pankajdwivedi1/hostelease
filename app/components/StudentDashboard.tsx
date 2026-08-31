@@ -1022,7 +1022,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                 syncPromises.push(
                     fetch(`/api/students?${queryParam}${versionCheckParam}${getTenantParam(false)}`, { cache: 'no-store' })
-                        .then(r => (r.ok ? r.json() : null))
+                        .then(r => {
+                            if (r.status === 404) {
+                                // ⚡ LIVE WIPE: Student was deleted on server -> purge local device cache & redirect!
+                                localStorage.removeItem("cachedStudentData");
+                                localStorage.removeItem("userType");
+                                localStorage.removeItem("userEmail");
+                                localStorage.removeItem("studentEmail");
+                                localStorage.removeItem("studentStatus");
+                                window.location.href = "/onboarding";
+                                return null;
+                            }
+                            return r.ok ? r.json() : null;
+                        })
                         .then(fullData => {
                             if (!fullData) return;
                             if (fullData.notModified) {
@@ -1850,17 +1862,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         : `firebaseUID=${user.uid}${user.email ? `&email=${encodeURIComponent(user.email)}` : ''}`;
                     const minimalResponse = await fetch(`/api/students?${queryParam}&minimal=true${getTenantParam(false)}`, { cache: 'no-store' });
                     
-                    // ⚡ NEW USER: If not found, redirect to onboarding immediately
+                    // ⚡ NEW USER / DELETED USER: If not found, purge cache and redirect to onboarding immediately
                     if (minimalResponse.status === 404) {
-                        const cached = typeof window !== 'undefined' ? localStorage.getItem('cachedStudentData') : null;
-                        if (!cached && !studentProfile) {
-                            console.log('[Dashboard] Student not found (404), redirecting to onboarding...');
-                            if (isMounted) {
-                                setLoading(false);
-                                router.push('/onboarding');
-                            }
-                        } else if (isMounted) {
+                        console.log('[Dashboard] Student not found on server (404), wiping local cache and redirecting...');
+                        if (typeof window !== 'undefined') {
+                            localStorage.removeItem("cachedStudentData");
+                            localStorage.removeItem("userType");
+                            localStorage.removeItem("userEmail");
+                            localStorage.removeItem("studentEmail");
+                            localStorage.removeItem("studentStatus");
+                        }
+                        if (isMounted) {
                             setLoading(false);
+                            router.push('/onboarding');
                         }
                         return;
                     }
@@ -1899,12 +1913,19 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         const versionCheckParam = cachedUpdatedAt ? `&versionCheck=true&updatedAt=${encodeURIComponent(cachedUpdatedAt)}` : "";
                         let fullResponse = await fetch(`/api/students?${queryParam}${versionCheckParam}${getTenantParam(false)}`, { cache: 'no-store' });
                         
-                        // ⚡ If server returns 404 during background check, keep existing profile
+                        // ⚡ LIVE WIPE: If server returns 404 during background check, purge local cache immediately!
                         if (fullResponse.status === 404) {
-                            console.warn(`[Profile] Server returned 404 during background check. Retaining existing loaded profile.`);
+                            console.warn(`[Profile] Student was deleted on server (404). Wiping local device cache.`);
+                            if (typeof window !== 'undefined') {
+                                localStorage.removeItem("cachedStudentData");
+                                localStorage.removeItem("userType");
+                                localStorage.removeItem("userEmail");
+                                localStorage.removeItem("studentEmail");
+                                localStorage.removeItem("studentStatus");
+                            }
                             if (isMounted) {
-                                setIsFullProfileLoaded(true);
                                 setLoading(false);
+                                router.push('/onboarding');
                             }
                             return;
                         }

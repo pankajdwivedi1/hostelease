@@ -119,9 +119,16 @@ export default function Dashboard() {
                       const cachedTime = currentCache.updatedAt || currentCache.updated_at || "";
                       const response = await fetch(`/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email || "")}&minimal=true&versionCheck=true&updatedAt=${encodeURIComponent(cachedTime)}`);
                       if (response.status === 404) {
-                        if (!cached) {
-                          router.push("/onboarding");
-                        }
+                        // ⚡ LIVE WIPE: Student was deleted from server -> purge local device cache immediately!
+                        localStorage.removeItem("cachedStudentData");
+                        localStorage.removeItem("userType");
+                        localStorage.removeItem("userEmail");
+                        localStorage.removeItem("studentEmail");
+                        localStorage.removeItem("studentStatus");
+                        setStudentData(null);
+                        setUserType(null);
+                        router.push("/onboarding");
+                        return;
                       } else if (response.ok) {
                         const data = await response.json();
                         if (data.notModified) {
@@ -183,12 +190,17 @@ export default function Dashboard() {
             try {
               const response = await fetch(`/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email || "")}&minimal=true`);
               if (response.status === 404) {
-                const cached = localStorage.getItem("cachedStudentData");
-                if (!cached) {
-                  router.push("/onboarding");
-                  setLoading(false);
-                  return;
-                }
+                // ⚡ LIVE WIPE: Student was deleted from server -> purge local device cache immediately!
+                localStorage.removeItem("cachedStudentData");
+                localStorage.removeItem("userType");
+                localStorage.removeItem("userEmail");
+                localStorage.removeItem("studentEmail");
+                localStorage.removeItem("studentStatus");
+                setStudentData(null);
+                setUserType(null);
+                router.push("/onboarding");
+                setLoading(false);
+                return;
               }
               if (response.ok) {
                 const data = await response.json();

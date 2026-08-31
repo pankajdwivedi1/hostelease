@@ -350,7 +350,10 @@ function LoginForm() {
       router.push("/");
       return;
     } else {
-      // Truly new student — route to onboarding
+      // ⚡ Truly new student (or deleted student) — purge any leftover stale device cache & route to onboarding
+      localStorage.removeItem("cachedStudentData");
+      localStorage.removeItem("cachedParentStudentData");
+      localStorage.removeItem("studentStatus");
       router.push("/onboarding");
       return;
     }
