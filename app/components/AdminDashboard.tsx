@@ -4201,7 +4201,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     borderScore: number;
   }> => {
     return new Promise((resolve) => {
-      if (!imgSrc || imgSrc.length < 50) {
+      const trimmedSrc = (imgSrc || "").trim();
+      const isBlank = !trimmedSrc || trimmedSrc === "null" || trimmedSrc === "undefined" || trimmedSrc === "data:," || trimmedSrc.length < 5 || (trimmedSrc.startsWith("data:") && trimmedSrc.length < 100);
+      if (isBlank) {
         return resolve({
           isPoorQuality: true,
           issueType: "BLANK_PHOTO",
@@ -4358,10 +4360,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       img.onerror = () => {
         resolve({
-          isPoorQuality: true,
-          issueType: "BLANK_PHOTO",
-          issueLabel: "Failed to Load Photo",
-          sharpnessScore: 0,
+          isPoorQuality: !hasVector,
+          issueType: hasVector ? "CLEAN" : "MISSING_VECTOR",
+          issueLabel: hasVector ? "Clean Profile" : "Missing 128-D Vector",
+          sharpnessScore: 100,
           borderScore: 0
         });
       };
@@ -4381,8 +4383,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     for (let i = 0; i < total; i += batchSize) {
       const batch = updated.slice(i, i + batchSize);
       await Promise.all(batch.map(async (s) => {
-        if (s.profilePicture && s.profilePicture.length > 50 && s.issueType !== "BLANK_PHOTO") {
-          const res = await analyzeImageQuality(s.profilePicture, s.hasVector);
+        const pic = (s.profilePicture || "").trim();
+        const isBlank = !pic || pic === "null" || pic === "undefined" || pic === "data:," || pic.length < 5 || (pic.startsWith("data:") && pic.length < 100);
+        if (!isBlank && s.issueType !== "BLANK_PHOTO") {
+          const res = await analyzeImageQuality(pic, s.hasVector);
           s.sharpnessScore = res.sharpnessScore;
           s.borderScore = res.borderScore;
           s.isPhotoOfPhoto = res.issueType === "PHOTO_OF_PHOTO";

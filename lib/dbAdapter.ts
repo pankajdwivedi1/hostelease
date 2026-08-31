@@ -3104,8 +3104,8 @@ export const db = {
 
                     return (allStudents || []).map((s: any) => {
                         const prof = Array.isArray(s.student_profiles) ? s.student_profiles[0] : s.student_profiles;
-                        const hasPic = !!(s.profile_picture && s.profile_picture.trim() !== '' && s.profile_picture !== 'null');
-                        const isBlank = !hasPic || (s.profile_picture && (s.profile_picture.length < 100 || s.profile_picture === 'data:,'));
+                        const pic = (s.profile_picture || "").trim();
+                        const isBlank = !pic || pic === "null" || pic === "undefined" || pic === "data:," || pic.length < 5 || (pic.startsWith("data:") && pic.length < 100);
                         const hasVector = Array.isArray(s.face_descriptor) && s.face_descriptor.length > 0;
                         const dynamicFields = s.dynamic_fields || {};
                         const isFlagged = !!dynamicFields.requiresFaceRecapture;
@@ -3163,8 +3163,8 @@ export const db = {
                     });
 
                     return (allStudents || []).map((s: any) => {
-                        const hasPic = !!(s.profilePicture && s.profilePicture.trim() !== '' && s.profilePicture !== 'null');
-                        const isBlank = !hasPic || (s.profilePicture && (s.profilePicture.length < 100 || s.profilePicture === 'data:,'));
+                        const pic = (s.profilePicture || "").trim();
+                        const isBlank = !pic || pic === "null" || pic === "undefined" || pic === "data:," || pic.length < 5 || (pic.startsWith("data:") && pic.length < 100);
                         const hasVector = Array.isArray(s.faceDescriptor) && s.faceDescriptor.length > 0;
                         const isFlagged = !!(s.dynamicFields && typeof s.dynamicFields === 'object' && (s.dynamicFields as any).requiresFaceRecapture);
 
