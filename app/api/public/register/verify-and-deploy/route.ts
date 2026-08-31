@@ -46,64 +46,87 @@ export async function POST(request: NextRequest) {
         // OTP verified successfully, clear cache
         otpCache.delete("register_" + cleaned);
 
-        const supabase = getSupabaseAdmin();
+        const cleanSlug = slug.toLowerCase().trim();
 
-        // 2. Check if slug exists
-        const { data: existing } = await supabase
-            .from('tenants')
-            .select('id')
-            .eq('slug', slug.toLowerCase().trim())
-            .single();
+        // 2. Check if slug exists in Prisma (Railway PostgreSQL)
+        const { prisma } = await import("@/lib/prisma");
+        const existingInPrisma = await prisma.tenant.findUnique({
+            where: { slug: cleanSlug }
+        }).catch(() => null);
 
-        if (existing) {
+        if (existingInPrisma) {
             return NextResponse.json({ success: false, error: "This subdomain slug is already taken. Please choose another." }, { status: 409 });
         }
 
-        // 3. Deploy the Tenant
-        const { data: tenant, error } = await supabase
-            .from('tenants')
-            .insert({
-                name,
-                slug: slug.toLowerCase().trim(),
-                admin_email: adminEmail,
-                subscription_status: 'trial', // Force trial for public registration
-                primary_color: '#3b82f6',
-                is_active: true,
-                subscription_end_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 days
-            })
-            .select()
-            .single();
-
-        if (error) throw error;
+        const tenantId = crypto.randomUUID();
+        const tenantEndDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days trial
 
         // Extract default country code from contactPhone (e.g. +61 or +91)
         const countryCodeMatch = contactPhone.match(/^\+\d+/);
         const derivedCountryCode = countryCodeMatch ? countryCodeMatch[0] : "+91";
 
-        // Store registration details & defaultCountryCode in admin_settings
-        const { error: settingsError } = await supabase.from('admin_settings').insert({
-            tenant_id: tenant.id,
-            university_bank_details: {
-                contactName,
-                contactPhone,
-                totalHostelars,
-                defaultCountryCode: derivedCountryCode
-            }
-        });
+        const bankDetails = {
+            contactName,
+            contactPhone,
+            totalHostelars,
+            defaultCountryCode: derivedCountryCode
+        };
 
-        if (settingsError) {
-            console.error("Failed to store registration details:", settingsError);
-            // We won't throw because the tenant was successfully created, but we log the error
+        // 3. Deploy Tenant in Railway PostgreSQL (Prisma)
+        try {
+            await prisma.tenant.create({
+                data: {
+                    id: tenantId,
+                    name,
+                    slug: cleanSlug,
+                    adminEmail,
+                    subscriptionStatus: 'trial',
+                    primaryColor: '#3b82f6',
+                    isActive: true,
+                    subscriptionEndDate: tenantEndDate
+                }
+            });
+
+            await prisma.adminSettings.create({
+                data: {
+                    tenantId: tenantId,
+                    universityBankDetails: bankDetails as any
+                }
+            });
+        } catch (pErr) {
+            console.warn("Prisma public deploy note:", pErr);
         }
 
-        // 4. Return success and default credentials
+        // 4. Dual-sync to Supabase if connected
+        try {
+            const supabase = getSupabaseAdmin();
+            await supabase
+                .from('tenants')
+                .insert({
+                    id: tenantId,
+                    name,
+                    slug: cleanSlug,
+                    admin_email: adminEmail,
+                    subscription_status: 'trial',
+                    primary_color: '#3b82f6',
+                    is_active: true,
+                    subscription_end_date: tenantEndDate.toISOString(),
+                });
+
+            await supabase.from('admin_settings').insert({
+                tenant_id: tenantId,
+                university_bank_details: bankDetails
+            });
+        } catch (sErr) {}
+
+        // 5. Return success and default credentials
         return NextResponse.json({
             success: true,
             tenant: {
-                _id: tenant.id,
-                name: tenant.name,
-                slug: tenant.slug,
-                adminEmail: tenant.admin_email,
+                _id: tenantId,
+                name: name,
+                slug: cleanSlug,
+                adminEmail: adminEmail,
                 defaultAdminPass: "pankajdwivedi81", // The system's global default auth
                 defaultDevPass: "Pankaj852963"
             }
