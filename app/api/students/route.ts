@@ -181,17 +181,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ✅ NEW: Save base64 profile photo to Railway local disk storage
+    // ✅ OPTION 1: Store base64 image permanently in PostgreSQL database (and cache to disk)
     let finalProfilePicture = profilePicture;
     if (profilePicture && profilePicture.startsWith("data:image/")) {
       try {
         const { saveFileToRailway } = await import("@/lib/fileStorage");
         const filename = `${firebaseUID || 'student'}_${Date.now()}`;
-        finalProfilePicture = await saveFileToRailway(profilePicture, `profile-pictures/${tenantId}`, filename);
-        console.log(`[Storage] Successfully saved profile picture to Railway storage: ${finalProfilePicture}`);
+        await saveFileToRailway(profilePicture, `profile-pictures/${tenantId}`, filename);
+        console.log(`[Storage] Cached profile picture to disk for ${filename}`);
       } catch (err: any) {
-        console.error("❌ Failed to save profile picture to Railway storage, saving as base64 fallback:", err.message);
+        console.warn("❌ Failed to cache profile picture to disk, preserved in DB:", err.message);
       }
+      // Preserve permanent base64 data in PostgreSQL so Railway redeployments never wipe it!
+      finalProfilePicture = profilePicture;
     }
 
     // ✅ NEW: Sanitize inputs before storing

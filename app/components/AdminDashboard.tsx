@@ -8450,7 +8450,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-foreground text-background flex items-center justify-center font-semibold text-sm flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
                                       >
                                         {profilePic ? (
-                                          <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
+                                          <img 
+                                            src={student.profilePicture} 
+                                            alt={student.name} 
+                                            className="w-full h-full rounded-full object-cover" 
+                                            onError={(e) => {
+                                              e.currentTarget.style.display = 'none';
+                                              if (e.currentTarget.parentElement) {
+                                                e.currentTarget.parentElement.innerText = initials;
+                                              }
+                                            }}
+                                          />
                                         ) : (
                                           initials
                                         )}
@@ -12026,7 +12036,17 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
                                   <div className="w-10 h-10 rounded-full bg-gray-100 text-gray-600 border border-gray-200 flex items-center justify-center font-bold text-xs flex-shrink-0 overflow-hidden">
                                     {student.profilePicture ? (
-                                      <img src={student.profilePicture} alt={student.name} className="w-full h-full rounded-full object-cover" />
+                                      <img 
+                                        src={student.profilePicture} 
+                                        alt={student.name} 
+                                        className="w-full h-full rounded-full object-cover" 
+                                        onError={(e) => {
+                                          e.currentTarget.style.display = 'none';
+                                          if (e.currentTarget.parentElement) {
+                                            e.currentTarget.parentElement.innerText = getInitials(student.name);
+                                          }
+                                        }}
+                                      />
                                     ) : (
                                       getInitials(student.name)
                                     )}

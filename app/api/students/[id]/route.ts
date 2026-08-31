@@ -158,7 +158,7 @@ export async function PATCH(
       }
     }
 
-    // ✅ NEW: Save base64 profile picture to Railway local disk storage
+    // ✅ OPTION 1: Store base64 image permanently in PostgreSQL database (and cache to disk)
     if (body.profilePicture && body.profilePicture.startsWith("data:image/")) {
       try {
         const student = await db.students.getById(studentId);
@@ -167,12 +167,12 @@ export async function PATCH(
         
         const { saveFileToRailway } = await import("@/lib/fileStorage");
         const filename = `${firebaseUID}_${Date.now()}`;
-        const publicUrl = await saveFileToRailway(body.profilePicture, `profile-pictures/${tenantId}`, filename);
-        body.profilePicture = publicUrl;
-        console.log(`[Storage] Successfully saved updated profile picture to Railway storage: ${publicUrl}`);
+        await saveFileToRailway(body.profilePicture, `profile-pictures/${tenantId}`, filename);
+        console.log(`[Storage] Cached updated profile picture to disk for ${filename}`);
       } catch (err: any) {
-        console.error("❌ Failed to save profile picture to Railway storage, saving as base64 fallback:", err.message);
+        console.warn("❌ Failed to cache profile picture to disk, preserved in DB:", err.message);
       }
+      // Preserve direct base64 image in PostgreSQL so Railway redeployments never wipe it!
     }
 
     // 🔒 OPTION A ENFORCEMENT: If profile picture is updated without explicit new faceDescriptor, clear old vector array
