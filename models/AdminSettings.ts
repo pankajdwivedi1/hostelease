@@ -191,7 +191,7 @@ const AdminSettingsSchema = new Schema<IAdminSettings>(
         { id: "motherName", label: "Mother's Name", type: "text", required: true, visible: true, section: "Guardian" },
         { id: "motherNumber", label: "Mother's Phone", type: "text", required: true, visible: true, section: "Guardian" },
         { id: "homePinCode", label: "Address & Pincode", type: "text", required: true, visible: true, section: "Address" },
-        { id: "homeState", label: "Home State", type: "select", options: ["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"], required: true, visible: true, section: "Address" },
+        { id: "homeState", label: "Home State", type: "select", options: ["ANDHRA PRADESH", "ARUNACHAL PRADESH", "ASSAM", "BIHAR", "CHHATTISGARH", "GOA", "GUJARAT", "HARYANA", "HIMACHAL PRADESH", "JAMMU & KASHMIR", "JHARKHAND", "KARNATAKA", "KERALA", "MADHYA PRADESH", "MAHARASHTRA", "MANIPUR", "MEGHALAYA", "MIZORAM", "NAGALAND", "ODISHA", "PUNJAB", "RAJASTHAN", "SIKKIM", "TAMIL NADU", "TELANGANA", "TRIPURA", "UTTAR PRADESH", "UTTARAKHAND", "WEST BENGAL"], required: true, visible: true, section: "Address" },
         { id: "localGuardianAddress", label: "Local Guardian Address", type: "text", required: true, visible: true, section: "Local Guardian" },
         { id: "localGuardianPhoneNumber", label: "Local Guardian Phone", type: "text", required: true, visible: true, section: "Local Guardian" },
       ]
