@@ -3541,7 +3541,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     setIsWardenCameraOpen(false);
   };
 
-  const captureWardenPhoto = (fieldId: string) => {
+  const captureWardenPhoto = async (fieldId: string) => {
     if (wardenVideoRef.current) {
       const canvas = document.createElement("canvas");
       canvas.width = wardenVideoRef.current.videoWidth || 640;
@@ -3552,6 +3552,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
         const dataUrl = canvas.toDataURL("image/jpeg");
         setAddStudentForm(prev => ({ ...prev, [fieldId]: dataUrl }));
         stopWardenCamera();
+
+        // ⚡ AUTO-EXTRACT 128-D FACE DESCRIPTOR (Prevents Missing Vector)
+        try {
+          const { detectFace, loadFaceApiModels } = await import("@/lib/faceMatching");
+          await loadFaceApiModels(false);
+          const res = await detectFace(canvas, false, true);
+          if (res && res.descriptor) {
+            setAddStudentForm(prev => ({ ...prev, faceDescriptor: Array.from(res.descriptor) }));
+            console.log("✅ Auto-extracted 128-D face vector during warden photo capture");
+          }
+        } catch (err) {
+          console.warn("Warden face vector extraction warning:", err);
+        }
       }
     }
   };
@@ -14263,7 +14276,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
                               if (editVideoRef.current && editCanvasRef.current) {
                                 const canvas = editCanvasRef.current;
                                 const video = editVideoRef.current;
@@ -14276,6 +14289,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   setEditStudentForm(prev => ({ ...prev, profilePicture: dataUrl }));
                                   if (video.srcObject) (video.srcObject as MediaStream).getTracks().forEach(t => t.stop());
                                   setIsEditCameraOpen(false);
+
+                                  // ⚡ AUTO-EXTRACT 128-D FACE DESCRIPTOR (Prevents Missing Vector)
+                                  try {
+                                    const { detectFace, loadFaceApiModels } = await import("@/lib/faceMatching");
+                                    await loadFaceApiModels(false);
+                                    const res = await detectFace(canvas, false, true);
+                                    if (res && res.descriptor) {
+                                      setEditStudentForm(prev => ({ ...prev, faceDescriptor: Array.from(res.descriptor) }));
+                                      console.log("✅ Auto-extracted 128-D face vector during edit photo capture");
+                                    }
+                                  } catch (err) {
+                                    console.warn("Edit face vector extraction warning:", err);
+                                  }
                                 }
                               }
                             }}
