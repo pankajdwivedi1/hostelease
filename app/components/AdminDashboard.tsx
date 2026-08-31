@@ -7642,7 +7642,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                 >
                   {subscriptionStatus.isExpired
                     ? "Access Restricted - Contact Hosteleaze HQ"
-                    : `Only ${subscriptionStatus.daysRemaining} days remaining in active period (${subscriptionStatus.endDate ? `${new Date(subscriptionStatus.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}, 11:59:59 PM` : '11:59:59 PM'})`}
+                    : `Only ${subscriptionStatus.daysRemaining} days remaining in active period (${subscriptionStatus.endDate ? `${new Date(subscriptionStatus.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })}, 11:59:59 PM` : '11:59:59 PM'})`}
                 </p>
               </div>
             </div>

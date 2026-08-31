@@ -265,16 +265,15 @@ export async function getSubscriptionStatus() {
     const now = new Date();
     const rawEndDate = tenant.subscriptionEndDate ? new Date(tenant.subscriptionEndDate) : null;
     let endOfDayDate: Date | null = null;
-
-    if (rawEndDate) {
-        endOfDayDate = new Date(rawEndDate);
-        // Ensure subscription remains valid until the final midnight 23:59:59.999 of the expiration date
-        endOfDayDate.setHours(23, 59, 59, 999);
-    }
-
     let daysRemaining = null;
-    if (rawEndDate) {
-        const diffTime = rawEndDate.getTime() - now.getTime();
+
+    if (rawEndDate && !isNaN(rawEndDate.getTime())) {
+        // Convert to YYYY-MM-DD in Indian Standard Time (Asia/Kolkata)
+        const istDateStr = rawEndDate.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+        // The expiration timestamp is 23:59:59.999 IST (+05:30) of that date
+        endOfDayDate = new Date(`${istDateStr}T23:59:59.999+05:30`);
+
+        const diffTime = endOfDayDate.getTime() - now.getTime();
         daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
     }
 

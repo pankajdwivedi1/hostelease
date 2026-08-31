@@ -251,7 +251,7 @@ function AdminExpiredPortal({
                             <div className="bg-white/5 border border-white/5 p-3 sm:p-4 rounded-xl sm:rounded-2xl col-span-2">
                                 <p className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-0.5 sm:mb-1">Subscription Valid Until (Midnight)</p>
                                 <p className="text-sm sm:text-base md:text-lg font-black text-rose-400">
-                                    {status.endDate ? `${new Date(status.endDate).toLocaleDateString("en-IN", { dateStyle: "medium" })} (11:59:59 PM)` : "N/A"}
+                                    {status.endDate ? `${new Date(status.endDate).toLocaleDateString("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" })} (11:59:59 PM)` : "N/A"}
                                 </p>
                             </div>
                         </div>

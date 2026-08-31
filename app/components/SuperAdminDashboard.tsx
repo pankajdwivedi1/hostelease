@@ -1766,8 +1766,10 @@ export default function SuperAdminDashboard() {
                                                 {/* Subscription Period Badge */}
                                                 {tenant.subscriptionEndDate && (() => {
                                                     const now = new Date();
-                                                    const end = new Date(tenant.subscriptionEndDate);
-                                                    const diffTime = end.getTime() - now.getTime();
+                                                    const rawEnd = new Date(tenant.subscriptionEndDate);
+                                                    const istDateStr = !isNaN(rawEnd.getTime()) ? rawEnd.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) : "";
+                                                    const endOfDay = istDateStr ? new Date(`${istDateStr}T23:59:59.999+05:30`) : rawEnd;
+                                                    const diffTime = endOfDay.getTime() - now.getTime();
                                                     const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                                                     
                                                     if (daysRemaining < 0) {
@@ -1810,12 +1812,12 @@ export default function SuperAdminDashboard() {
                                         <div className="mt-3 flex justify-between items-center text-xs font-bold text-gray-700 border-t border-slate-100 pt-3 w-full">
                                             <div>
                                                 <p className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest">Start Date</p>
-                                                <p className="text-[10px] font-extrabold text-left">{tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "N/A"}</p>
+                                                <p className="text-[10px] font-extrabold text-left">{tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" }) : "N/A"}</p>
                                             </div>
                                             <div className="h-4 w-px bg-slate-200" />
                                             <div className="text-right">
                                                 <p className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest">End Date</p>
-                                                <p className="text-[10px] font-extrabold text-right">{tenant.subscriptionEndDate ? new Date(tenant.subscriptionEndDate).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "Unlimited"}</p>
+                                                <p className="text-[10px] font-extrabold text-right">{tenant.subscriptionEndDate ? new Date(tenant.subscriptionEndDate).toLocaleDateString("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" }) : "Unlimited"}</p>
                                             </div>
                                         </div>
 
@@ -2230,7 +2232,7 @@ export default function SuperAdminDashboard() {
                                                     try {
                                                         const d = new Date(editingTenant.subscriptionEndDate);
                                                         if (isNaN(d.getTime())) return "";
-                                                        return d.toISOString().split('T')[0];
+                                                        return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
                                                     } catch {
                                                         return "";
                                                     }
@@ -2240,7 +2242,7 @@ export default function SuperAdminDashboard() {
                                                         const val = e.target.value;
                                                         setEditingTenant({
                                                             ...editingTenant,
-                                                            subscriptionEndDate: val ? new Date(val).toISOString() : undefined
+                                                            subscriptionEndDate: val ? `${val}T00:00:00.000Z` : undefined
                                                         });
                                                     }
                                                 }}
