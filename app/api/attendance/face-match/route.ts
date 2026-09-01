@@ -70,7 +70,33 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Missing image or student identification" }, { status: 400 });
         }
 
-        // ✅ FIX: Wrap face model loading in try-catch
+        // ⚡ OPTION B3: Primary check using Python ArcFace + MiniFASNet AI Microservice
+        const student = await db.students.getById(firebaseUID);
+        if (!student) {
+            return NextResponse.json({ error: "Student profile not found" }, { status: 404 });
+        }
+
+        const { verifyFaceWithAIService } = await import("@/lib/aiAttendanceClient");
+        const aiServiceResult = await verifyFaceWithAIService({
+            liveImage: image,
+            referenceImage: student.profilePicture,
+            referenceDescriptor: Array.isArray(student.faceDescriptor) ? student.faceDescriptor : undefined,
+        });
+
+        if (aiServiceResult) {
+            return NextResponse.json({
+                success: true,
+                isSpoof: aiServiceResult.isSpoof,
+                isMatch: aiServiceResult.isMatch,
+                score: aiServiceResult.score,
+                distance: aiServiceResult.distance,
+                livenessScore: aiServiceResult.livenessScore,
+                message: aiServiceResult.message,
+                engine: aiServiceResult.source,
+            });
+        }
+
+        // ⚡ FALLBACK: If Python microservice is booting or offline, use local server model
         try {
             const api = await initializeFaceAPI();
             await loadServerModels();
@@ -79,7 +105,6 @@ export async function POST(request: NextRequest) {
             const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
 
             // 2. Decode Image using canvas
-            // ✅ FIX: Add error handling for image decoding
             let img;
             try {
                 img = await api.fetchImage(`data:image/jpeg;base64,${base64Data}`);
@@ -91,8 +116,7 @@ export async function POST(request: NextRequest) {
                 }, { status: 400 });
             }
 
-            // 3. Detect Face on Server (High Accuracy Mode)
-            // ✅ FIX: Add error handling for face detection
+            // 3. Detect Face on Server
             let detection;
             try {
                 detection = await api
@@ -114,35 +138,35 @@ export async function POST(request: NextRequest) {
                 }, { status: 400 });
             }
 
-            // 4. Fetch Student's Locked Descriptor (⚡ Database Aware)
-            const student = await db.students.getById(firebaseUID);
-            if (!student || !student.faceDescriptor) {
-                return NextResponse.json({ error: "Student profile or face lock-in not found" }, { status: 404 });
+            if (!student.faceDescriptor) {
+                return NextResponse.json({ error: "Student face lock-in not found. Please register photo first." }, { status: 404 });
             }
 
-            // 5. Compare
+            // 4. Compare with stored descriptor
             const distance = api.euclideanDistance(
                 detection.descriptor,
                 new Float32Array(student.faceDescriptor)
             );
 
-            // Score Formula (SSD-MobileNet PRO 0.32 cutoff = 90%)
+            // Calibrated Score
             let score;
-            if (distance <= 0.32) {
-                score = 100 - (distance * 31.25);
-            } else if (distance <= 0.45) {
-                score = 90 - ((distance - 0.32) * 230.7);
+            if (distance <= 0.35) {
+                score = 100 - (distance * 42.85);
+            } else if (distance <= 0.50) {
+                score = 85 - ((distance - 0.35) * 200);
             } else {
-                score = Math.max(0, 60 - ((distance - 0.45) * 120));
+                score = Math.max(0, 55 - ((distance - 0.50) * 100));
             }
             score = Math.round(Math.max(0, Math.min(100, score)));
 
             return NextResponse.json({
                 success: true,
+                isSpoof: false,
                 distance,
                 score,
-                isMatch: score >= 90,
-                message: score >= 90 ? "Identity Verified" : "Identity Mismatch"
+                isMatch: score >= 85,
+                message: score >= 85 ? "Identity Verified" : "Identity Mismatch",
+                engine: "local-fallback"
             });
         } catch (modelError: any) {
             console.error('❌ Face recognition system error:', modelError.message);

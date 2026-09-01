@@ -50,3 +50,10 @@ next-env.d.ts
 
 # Android build
 android/
+
+# Python Virtual Environment & AI models
+venv/
+ai-attendance-service/venv/
+ai-attendance-service/models/
+*.pyc
+__pycache__/
