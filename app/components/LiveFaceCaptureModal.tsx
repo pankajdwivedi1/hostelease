@@ -62,8 +62,9 @@ export default function LiveFaceCaptureModal({
             setExtractedDescriptor(null);
             setIsConnectingCamera(true);
 
-            // Pre-load AI models asynchronously in the background (NON-BLOCKING)
-            faceMatching.loadFaceApiModels(true).catch(e => console.warn("Background model load:", e));
+            // Pre-load SSD (accurate) AI models in the background (NON-BLOCKING)
+            // ⚠️ Must pre-load SSD specifically — we always use SSD for descriptor extraction
+            faceMatching.loadFaceApiModels(true).catch(e => console.warn("Background SSD model load:", e));
 
             // Stop any existing stream
             if (streamRef.current) {
@@ -225,8 +226,8 @@ export default function LiveFaceCaptureModal({
             ctx.drawImage(video, 0, 0, width, height);
             const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
 
-            // Ensure face-api models are ready (fast load)
-            await faceMatching.loadFaceApiModels(false);
+            // Ensure SSD face-api models are ready (must be SSD — not TinyFace)
+            await faceMatching.loadFaceApiModels(true);
 
             // Create downscaled AI canvas for instant <250ms vector extraction
             const aiCanvas = document.createElement("canvas");
@@ -242,12 +243,13 @@ export default function LiveFaceCaptureModal({
             const aiCtx = aiCanvas.getContext("2d");
             if (aiCtx) aiCtx.drawImage(video, 0, 0, aiW, aiH);
 
-            // Run real-time face detection & embedding extraction (Fast <250ms)
-            let res = await faceMatching.detectFace(aiCtx ? aiCanvas : canvas, false, true);
+            // Run real-time face detection & embedding extraction using SSD-MobileNet
+            // ⚠️ MUST use accurate=true (SSD) here — the server also uses SSD at attendance time.
+            // Using TinyFaceDetector here would produce incompatible vectors that never match.
+            let res = await faceMatching.detectFace(aiCtx ? aiCanvas : canvas, true, true);
             if (!res || !res.descriptor) {
-                // Fallback to pro accurate detector if tiny detector didn't catch face
-                await faceMatching.loadFaceApiModels(true);
-                res = await faceMatching.detectFace(aiCtx ? aiCanvas : canvas, true, true);
+                // Retry with full-res canvas in case downscaled was too small for SSD
+                res = await faceMatching.detectFace(canvas, true, true);
             }
 
             if (!res || !res.descriptor) {

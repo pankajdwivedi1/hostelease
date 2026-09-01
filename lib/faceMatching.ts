@@ -221,8 +221,9 @@ export async function detectFace(
         const fa = await getFaceApi();
         if (!fa) return null;
 
-        // ⚡ ENSURE MODELS ARE READY (Prevents inference errors)
-        const ready = await loadFaceApiModels(accurate);
+        // ⚠️ CRITICAL: If we need a descriptor, load SSD models (not just lite/TinyFace models)
+        const modelsToLoad = accurate || withDescriptor;
+        const ready = await loadFaceApiModels(modelsToLoad);
         if (!ready) return null;
 
         // ⚡ CRITICAL: Validate input dimensions
@@ -239,7 +240,11 @@ export async function detectFace(
         }
 
         let task: any;
-        if (accurate) {
+        // ⚠️ CRITICAL: When extracting a face descriptor (128-D vector), we MUST use SSD-MobileNet.
+        // TinyFaceDetector and SSD produce incompatible vector spaces — comparing them gives wrong distances.
+        // Rule: descriptor extraction → ALWAYS SSD. Bare detection (no descriptor) → TinyFace is fine for speed.
+        const useSSD = accurate || withDescriptor;
+        if (useSSD) {
             task = fa.detectAllFaces(imageElement, new fa.SsdMobilenetv1Options({ minConfidence: 0.5 }))
                 .withFaceLandmarks(true);
         } else {

@@ -773,18 +773,25 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     useEffect(() => {
         if (studentProfile) {
             const hasVector = Array.isArray(studentProfile.faceDescriptor) && studentProfile.faceDescriptor.length > 0;
-            // Preload face-api models (Lite if vector exists, Pro only if background calculation is needed)
-            faceMatching.loadFaceApiModels(!hasVector).then(success => {
+            // ⚠️ Always pre-load SSD (pro) models — attendance verification always uses SSD.
+            // Old TinyFace vectors (loaded=false) would never match SSD at attendance time.
+            faceMatching.loadFaceApiModels(true).then(success => {
                 if (success) {
-                    console.log('Face matching models ready');
-                    // ⚡ SILENT BACKGROUND PRE-CALCULATOR: If face vector is missing, extract it in background now!
-                    if (!hasVector && studentProfile.profilePicture) {
-                        console.log('⚡ Silently pre-calculating student face vector for instant scanning...');
+                    console.log('Face matching SSD models ready');
+                    // ⚡ BACKGROUND VECTOR UPGRADE: If face vector is missing OR may be an old TinyFace vector,
+                    // silently re-compute it from profile picture using SSD for reliable matching.
+                    if (studentProfile.profilePicture) {
+                        if (!hasVector) {
+                            console.log('⚡ No face vector found — computing SSD vector from profile picture...');
+                        } else {
+                            // Already has vector — still recompute silently to upgrade any old TinyFace vectors
+                            console.log('⚡ Upgrading existing face vector to SSD format (background)...');
+                        }
                         faceMatching.loadImage(studentProfile.profilePicture).then(img => {
                             faceMatching.detectFace(img, true).then(res => {
                                 if (res && res.descriptor) {
                                     const vector = Array.from(res.descriptor);
-                                    console.log('✅ Background face vector pre-calculated successfully!');
+                                    console.log('✅ SSD face vector computed/upgraded successfully!');
                                     setStudentProfile(prev => prev ? ({ ...prev, faceDescriptor: vector }) : prev);
                                     fetch('/api/students/face-descriptor', {
                                         method: 'POST',
@@ -828,14 +835,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     if (ctx) {
                         ctx.drawImage(videoRef.current, 0, 0);
 
-                        // ⚡ FAIL-SAFE LOGIC: Try Lite first
-                        const useProForDetection = consecutiveFailuresRef.current > 10;
-                        if (useProForDetection && consecutiveFailuresRef.current === 11) {
-                            await faceMatching.loadFaceApiModels(true);
-                        }
-
-                        // ⚡ ANALYZE FRAME
-                        const res = await faceMatching.detectFace(canvas, false);
+                        // ⚠️ SSD models are already pre-loaded at dashboard start (loadFaceApiModels(true))
+                        // ⚡ ANALYZE FRAME — use SSD (accurate=true) to extract a descriptor
+                        // ⚠️ MUST use SSD here — the stored faceDescriptor is also SSD.
+                        // A TinyFace live descriptor compared to an SSD stored descriptor gives wrong scores.
+                        const res = await faceMatching.detectFace(canvas, true, true);
 
                         if (res) {
                             setFaceDetected(true);
@@ -2857,7 +2861,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     }, 100); // Super fast transition
                 } else if (result && result.status === 'rejected') {
                     stopCamera();
-                    showToast(`Identity Mismatch (${result.percentage}% Accuracy). Verification failed. Please ensure you are the account owner.`, "error");
+                    showToast(`Face Mismatch (Score: ${result.percentage}% — Need 85%). Try better lighting or look straight at the camera.`, "error");
                     setFaceMatchStep('error');
                 } else if (attempts < 2) {
                     // retry fallback
@@ -2901,8 +2905,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             // ⚡ INSTANT: Start detection loop immediately without blocking
             setFaceMatchStep('detecting');
 
-            // Ensure models are loaded in background if not already warmed up
-            faceMatching.loadFaceApiModels().catch(() => {});
+            // Ensure SSD models are loaded (they should already be from dashboard load, this is a safety net)
+            faceMatching.loadFaceApiModels(true).catch(() => {});
         } catch (err) {
             console.error("Camera error:", err);
             alert("Could not access camera. Please ensure permissions are granted.");
@@ -2947,28 +2951,17 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             let referenceDescriptor = studentProfile.faceDescriptor;
 
             if (!referenceDescriptor || referenceDescriptor.length === 0) {
-                console.log("⚡ Auto Lock-In: Using live camera face scan descriptor...");
-                if (existingRes && existingRes.descriptor) {
-                    referenceDescriptor = Array.from(existingRes.descriptor);
-                    const updatedProfile = { ...studentProfile, faceDescriptor: referenceDescriptor };
-                    setStudentProfile(updatedProfile);
-                    
-                    // Save vector asynchronously in background
-                    fetch('/api/students/face-descriptor', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            firebaseUID: studentProfile.firebaseUID,
-                            faceDescriptor: referenceDescriptor
-                        })
-                    }).catch(() => {});
-
-                    setFaceMatchStep('success');
-                    return {
-                        percentage: 100,
-                        status: 'auto-approved',
-                    };
-                }
+                // ❌ No face registered — attendance MUST be blocked.
+                // The old code auto-approved with 100% here (critical security bypass — now removed).
+                console.warn("⚠️ Attendance blocked: Student has no registered face descriptor.");
+                setFaceMatchStep('error');
+                stopCamera();
+                setIsMarkingAttendance(false);
+                showToast(
+                    "Face Not Registered! Please go to your Profile → Update Photo to register your face first.",
+                    "error"
+                );
+                return null;
             }
 
             setFaceMatchProgress(70);
@@ -2976,13 +2969,14 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             // ⚡ FAST PATH: Use existing detection result from the loop
             let liveRes = existingRes;
 
-            // If we don't have existingRes (fallback), detect now
+            // If we don't have existingRes (fallback), detect now using SSD
             if (!liveRes) {
                 const canvas = document.createElement('canvas');
                 canvas.width = videoRef.current.videoWidth;
                 canvas.height = videoRef.current.videoHeight;
                 canvas.getContext('2d')?.drawImage(videoRef.current, 0, 0);
-                liveRes = await faceMatching.detectFace(canvas, false);
+                // ⚠️ MUST use SSD (accurate=true) — stored descriptor is also SSD
+                liveRes = await faceMatching.detectFace(canvas, true, true);
             }
 
             if (!liveRes || !liveRes.descriptor) {
@@ -3005,8 +2999,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             setFaceMatchProgress(100);
 
-            // ⚡ ENTERPRISE IDENTIFICATION (Match Score >= 65% - Approves real-world room lighting scans)
-            if (matchPercentage >= 65) {
+            // ✅ INDUSTRY-GRADE THRESHOLD: >= 85% (was 65% — too easy to fool)
+            // 85% means the SSD neural network is highly confident it's the same person.
+            if (matchPercentage >= 85) {
                 setFaceMatchStep('success');
                 return {
                     percentage: matchPercentage,
@@ -3724,22 +3719,44 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     <p className="text-xs text-red-600 font-medium mt-0.5">
                                                         {attendanceFailedReason || "Please present your real physical face directly to the camera."}
                                                     </p>
+                                                    {/* ⚡ Helper hint for face mismatch — guides student to re-register */}
+                                                    {(attendanceFailedReason.includes('Mismatch') || attendanceFailedReason.includes('Score')) && (
+                                                        <p className="text-xs text-amber-700 font-semibold mt-1">
+                                                            💡 First time failing? Click <strong>Re-Register Face</strong> to update your photo.
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
-                                            <button
-                                                onClick={() => {
-                                                    setAttendanceStep('idle');
-                                                    setIsMarkingAttendance(false);
-                                                    setAttendanceFailedReason('');
-                                                    startCamera();
-                                                }}
-                                                className="px-4 py-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow transition-all shrink-0 flex items-center gap-1.5"
-                                            >
-                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                </svg>
-                                                TRY AGAIN
-                                            </button>
+                                            <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                                                {/* Re-Register Face button — opens live selfie to save fresh SSD descriptor */}
+                                                {(attendanceFailedReason.includes('Mismatch') || attendanceFailedReason.includes('Score')) && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setAttendanceStep('idle');
+                                                            setIsMarkingAttendance(false);
+                                                            setAttendanceFailedReason('');
+                                                            setShowLiveFaceRecaptureModal(true);
+                                                        }}
+                                                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5"
+                                                    >
+                                                        📸 Re-Register Face
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => {
+                                                        setAttendanceStep('idle');
+                                                        setIsMarkingAttendance(false);
+                                                        setAttendanceFailedReason('');
+                                                        startCamera();
+                                                    }}
+                                                    className="px-4 py-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                    </svg>
+                                                    TRY AGAIN
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -6170,7 +6187,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                             ) : (
                                                                 <>
                                                                     <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
-                                                                    {consecutiveFailuresRef.current > 10 ? "ENHANCED RECOGNITION..." : "SEARCHING FOR FACE..."}
+                                                                    {consecutiveFailuresRef.current > 10 ? "ENHANCED SCANNING..." : "SCANNING FOR FACE..."}
                                                                 </>
                                                             )}
                                                         </div>

@@ -19,12 +19,13 @@ const loadAIModels = async () => {
 
     warmupPromise = (async () => {
       try {
-        console.log("⚡ [AI LOADING] Starting model load...");
-        // Download face-api models
-        await faceMatching.loadFaceApiModels();
+        console.log("⚡ [AI LOADING] Starting SSD model load...");
+        // ⚠️ MUST load accurate=true (SSD) — TinyFaceDetector descriptors are incompatible
+        // with SSD descriptors used at attendance verification time.
+        await faceMatching.loadFaceApiModels(true);
         
         globalIsAIWarmedUp = true;
-        console.log("⚡ [AI LOADING] Models loaded successfully!");
+        console.log("⚡ [AI LOADING] SSD models loaded successfully!");
       } catch (e) {
         console.error("⚡ [AI LOADING] Failed to load models:", e);
       } finally {
@@ -903,8 +904,10 @@ export default function OnboardingPage() {
       await loadAIModels();
       await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
 
-      // 4. Run face descriptor generation on downscaled canvas
-      const descriptor = await faceMatching.detectFace(aiCanvas);
+      // 4. Run face descriptor generation using SSD-MobileNet (accurate=true)
+      // ⚠️ MUST use accurate=true (SSD) — attendance verification also uses SSD.
+      // Using TinyFaceDetector here produces incompatible descriptors that won't match at attendance time.
+      const descriptor = await faceMatching.detectFace(aiCanvas, true, true);
       await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
 
       if (!descriptor) {
