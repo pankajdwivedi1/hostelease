@@ -56,20 +56,24 @@ export async function GET(request: NextRequest) {
       hostelName: normalizedHostelName,
     });
 
+    const ruleUpdatedAt = enforcement.updatedAt ? new Date(enforcement.updatedAt).getTime() : 0;
+
     // Build completion status per student
     const studentsCompletionStatus = students.map((student: any) => {
       const studentProgress = fieldProgress.filter(
-        (fp: any) => (fp.studentId || "").toString() === (student._id || "").toString()
+        (fp: any) => (fp.studentId || "").toString() === (student._id || student.id || "").toString()
       );
 
       const fieldStatuses = (enforcement.enforcedFields || []).map((field: any) => {
         const progress = studentProgress.find(
           (fp: any) => fp.fieldId === field.fieldId
         );
+        const progressCompletedAt = progress?.completedAt ? new Date(progress.completedAt).getTime() : 0;
+        const isCompleted = !!progress?.isCompleted && (ruleUpdatedAt === 0 || progressCompletedAt >= (ruleUpdatedAt - 10000));
         return {
           fieldId: field.fieldId,
           fieldLabel: field.fieldLabel,
-          isCompleted: progress?.isCompleted || false,
+          isCompleted,
           completedAt: progress?.completedAt,
         };
       });

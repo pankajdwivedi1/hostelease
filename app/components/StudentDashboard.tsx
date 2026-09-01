@@ -1441,8 +1441,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                         // Pre-fill form with existing values (Check top-level AND dynamicFields)
                         const initialFormData: Record<string, string> = {};
                         data.missingFields.forEach((f: any) => {
-                            const val = (studentProfile as any)[f.fieldId] ?? studentProfile.dynamicFields?.[f.fieldId] ?? "";
-                            initialFormData[f.fieldId] = val.toString();
+                            const val = f.currentValue ?? (studentProfile as any)[f.fieldId] ?? studentProfile.dynamicFields?.[f.fieldId] ?? "";
+                            initialFormData[f.fieldId] = (val || "").toString();
                         });
                         setEnforcementFormData(initialFormData);
                         setShowFieldEnforcementModal(true);
@@ -5943,7 +5943,48 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                             );
                                                         }
                                                         return null;
-                                                    })() || (field.fieldId === 'category' ? (
+                                                    })() || (field.fieldId === 'gender' ? (
+                                                        <select
+                                                            value={enforcementFormData[field.fieldId] || ''}
+                                                            onChange={(e) => setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: e.target.value.toUpperCase() }))}
+                                                            className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-800 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white"
+                                                        >
+                                                            <option value="">SELECT GENDER</option>
+                                                            <option value="MALE">MALE</option>
+                                                            <option value="FEMALE">FEMALE</option>
+                                                            <option value="OTHER">OTHER</option>
+                                                        </select>
+                                                    ) : field.fieldId === 'profilePicture' ? (
+                                                        <div className="flex items-center gap-4 p-3 bg-white rounded-xl border border-gray-200">
+                                                            {enforcementFormData[field.fieldId] ? (
+                                                                <img src={enforcementFormData[field.fieldId]} alt="Profile" className="w-16 h-16 rounded-xl object-cover border-2 border-blue-500 shadow-sm" />
+                                                            ) : (
+                                                                <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 font-bold text-xs border border-dashed border-gray-300">
+                                                                    No Photo
+                                                                </div>
+                                                            )}
+                                                            <label className="flex-1 cursor-pointer bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs py-2.5 px-4 rounded-xl text-center border border-blue-200 transition">
+                                                                <span>📷 Choose Photo</span>
+                                                                <input
+                                                                    type="file"
+                                                                    accept="image/*"
+                                                                    className="hidden"
+                                                                    onChange={(e) => {
+                                                                        const file = e.target.files?.[0];
+                                                                        if (file) {
+                                                                            const reader = new FileReader();
+                                                                            reader.onload = (ev) => {
+                                                                                if (ev.target?.result) {
+                                                                                    setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: ev.target!.result as string }));
+                                                                                }
+                                                                            };
+                                                                            reader.readAsDataURL(file);
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            </label>
+                                                        </div>
+                                                    ) : field.fieldId === 'category' ? (
                                                         <select
                                                             value={enforcementFormData[field.fieldId] || ''}
                                                             onChange={(e) => setEnforcementFormData(prev => ({ ...prev, [field.fieldId]: e.target.value }))}

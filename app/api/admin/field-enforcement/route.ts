@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
       notificationPriority: notificationPriority || "normal",
       successMessage: successMessage || "All required fields have been completed! Thank you.",
       autoCloseNotification: autoCloseNotification ?? true,
+      updatedAt: new Date(),
     };
 
     console.log(`[FieldEnforcement API] Saving rules for ${normalizedHostelName}...`);
@@ -79,6 +80,16 @@ export async function POST(request: NextRequest) {
       { upsert: true, new: true }
     );
     console.log(`[FieldEnforcement API] Success for ${normalizedHostelName}`);
+
+    // If active rules are applied, reset progress records for this hostel so all students get prompted
+    if (isActive && sortedFields.length > 0) {
+      try {
+        await db.studentFieldProgress.deleteMany({ hostelName: normalizedHostelName });
+        console.log(`[FieldEnforcement API] Cleared old progress for ${normalizedHostelName}`);
+      } catch (delErr) {
+        console.warn("[FieldEnforcement API] Could not clear old studentFieldProgress:", delErr);
+      }
+    }
 
     return NextResponse.json({
       success: true,

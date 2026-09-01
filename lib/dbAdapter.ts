@@ -266,6 +266,9 @@ const filterStudentFieldProgressForPrisma = (data: any) => {
             }
         }
     }
+    if (!filtered.firebaseUid) {
+        filtered.firebaseUid = data.firebaseUID || data.firebase_uid || data.studentId || "student";
+    }
     return filtered;
 };
 
@@ -1089,17 +1092,17 @@ const mapTransactionToSnakeCase = (t: any) => {
 const mapStudentFieldProgressToCamelCase = (p: any) => {
     if (!p) return null;
     return {
-        _id: p._id,
-        studentId: p.student_id,
-        firebaseUID: p.firebase_uid,
-        hostelName: p.hostel_name,
-        fieldId: p.field_id,
-        fieldLabel: p.field_label,
-        isCompleted: p.is_completed,
-        completedAt: p.completed_at,
-        notificationId: p.notification_id,
-        createdAt: p.created_at,
-        updatedAt: p.updated_at
+        _id: p._id || p.id,
+        studentId: p.studentId || p.student_id,
+        firebaseUID: p.firebaseUID || p.firebaseUid || p.firebase_uid,
+        hostelName: p.hostelName || p.hostel_name,
+        fieldId: p.fieldId || p.field_id,
+        fieldLabel: p.fieldLabel || p.field_label,
+        isCompleted: p.isCompleted !== undefined ? p.isCompleted : (p.is_completed !== undefined ? p.is_completed : false),
+        completedAt: p.completedAt || p.completed_at,
+        notificationId: p.notificationId || p.notification_id,
+        createdAt: p.createdAt || p.created_at,
+        updatedAt: p.updatedAt || p.updated_at
     };
 };
 
@@ -2636,7 +2639,7 @@ export const db = {
                             return await db.students.getById(sId, true);
                         }
 
-                        const cleanUp = mapStudentFields(payload);
+                        const cleanUp = mapStudentToSnakeCase(payload);
                         const { studentUpdate, profileUpdate, securityUpdate } = splitStudentFields(cleanUp);
 
                         const sRecord = await db.students.getById(targetId, true);
@@ -2710,7 +2713,7 @@ export const db = {
                             return await db.students.getById(sId, true);
                         }
 
-                        const cleanUp = mapStudentFields(payload);
+                        const cleanUp = mapStudentToSnakeCase(payload);
                         const { studentUpdate, profileUpdate, securityUpdate } = splitStudentFields(cleanUp);
 
                         const sRecord = await db.students.getById(targetId, true);

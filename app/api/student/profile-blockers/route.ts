@@ -4,18 +4,17 @@ import { db } from "@/lib/dbAdapter";
 export const dynamic = "force-dynamic";
 
 /**
- * GET - Check which enforced fields still need student confirmation.
+ * GET - Check which enforced fields still need student confirmation/update.
  *
- * DESIGN: Progress record is the SOLE source of truth.
- *   • No progress record for a field  → BLOCKER (student must confirm this enforcement once)
- *   • Progress record with isCompleted = true → NOT a blocker (already confirmed)
- *   • skipCompleted = false → ALWAYS block (admin wants repeated collection every cycle)
- *
- * We do NOT check the student's profile field values.
- * Even if the student has existing data, they must click "Save & Continue" once
- * per enforcement rule to acknowledge it. After that it never appears again.
- *
- * Returns: { hasBlockers: boolean, missingFields: [], enforcement: {} }
+ * DESIGN:
+ *   • Active enforcement rule for student's hostel dictates mandatory fields.
+ *   • If displayMode === 'on-first-incomplete': ONLY block if student is actually missing data.
+ *   • If displayMode === 'on-next-login' or 'on-login':
+ *       - If student has completed THIS active enforcement cycle (progressRecord.isCompleted === true and
+ *         (!enforcement.updatedAt || new Date(progressRecord.completedAt) >= new Date(enforcement.updatedAt))):
+ *           NOT a blocker if skipCompleted !== false.
+ *       - Otherwise: It IS a blocker. The student will be prompted to confirm/update their details.
+ *   • If durationDays is configured and the enforcement period has expired: Do not block.
  */
 export async function GET(request: NextRequest) {
     try {
@@ -40,14 +39,22 @@ export async function GET(request: NextRequest) {
 
         // Fetch active enforcement rules for this student's hostel
         const studentHostel = (student.hostelName || "").trim();
+        if (!studentHostel) {
+            return NextResponse.json({
+                hasBlockers: false,
+                missingFields: [],
+                enforcement: null,
+                message: "Student does not have a hostel assigned",
+            });
+        }
 
         const rules = await db.fieldEnforcement.find({
             hostelName: { $regex: `^${studentHostel}$`, $options: 'i' },
         });
 
-        const enforcement = rules.find((r: any) => r.isActive);
+        const enforcement = rules.find((r: any) => r.isActive && (r.hostelName || "").toLowerCase().trim() === studentHostel.toLowerCase());
 
-        if (!enforcement) {
+        if (!enforcement || !Array.isArray(enforcement.enforcedFields) || enforcement.enforcedFields.length === 0) {
             return NextResponse.json({
                 hasBlockers: false,
                 missingFields: [],
@@ -56,68 +63,80 @@ export async function GET(request: NextRequest) {
             });
         }
 
+        // Check global duration (in days) if specified
+        if (enforcement.durationDays && enforcement.durationDays > 0 && enforcement.updatedAt) {
+            const ruleTime = new Date(enforcement.updatedAt).getTime();
+            const durationMs = enforcement.durationDays * 24 * 60 * 60 * 1000;
+            if (Date.now() - ruleTime > durationMs) {
+                return NextResponse.json({
+                    hasBlockers: false,
+                    missingFields: [],
+                    enforcement: null,
+                    message: "Enforcement duration has expired",
+                });
+            }
+        }
+
         // Fetch this student's field completion progress
-        // Try by studentId first (both string & raw), fallback to firebaseUID
-        const strId = student._id.toString();
-        let progress = await db.studentFieldProgress.find({ studentId: strId });
+        const strId = (student._id || student.id || "").toString();
+        let progress = await db.studentFieldProgress.find({ studentId: strId, hostelName: studentHostel });
         if (!progress || progress.length === 0) {
-            progress = await db.studentFieldProgress.find({ studentId: student._id });
+            progress = await db.studentFieldProgress.find({ studentId: strId });
         }
         if (!progress || progress.length === 0) {
             progress = await db.studentFieldProgress.find({ firebaseUID: student.firebaseUID || strId });
         }
         if (!progress) progress = [];
 
-        // ─────────────────────────────────────────────────────────────────
-        // BLOCKER CHECK
-        // A field blocks the student if they have not yet submitted a
-        // completed progress record AND the field is missing from their profile.
-        // ─────────────────────────────────────────────────────────────────
-        const enabledFields = enforcement.enforcedFields.filter((f: any) => f.isEnabled);
+        const enabledFields = enforcement.enforcedFields.filter((f: any) => f.isEnabled !== false);
         const missingFields: any[] = [];
+        const ruleUpdatedAt = enforcement.updatedAt ? new Date(enforcement.updatedAt).getTime() : 0;
 
         for (const field of enabledFields) {
             const progressRecord = progress.find(
                 (p: any) => p.fieldId === field.fieldId
             );
 
-            // Check if student profile already has a non-empty value for this field
+            // Check if student profile already has a value saved
             const profileVal = (student as any)[field.fieldId] ?? student.dynamicFields?.[field.fieldId] ?? "";
             const hasValueInProfile = profileVal !== null && profileVal !== undefined && String(profileVal).trim() !== "";
 
-            let isBlocker: boolean;
+            const isProgressCompleted = !!progressRecord?.isCompleted;
+            const progressCompletedAt = progressRecord?.completedAt ? new Date(progressRecord.completedAt).getTime() : 0;
 
-            if (field.skipCompleted === false) {
-                // Admin wants this re-submitted every cycle (e.g., current year update)
-                isBlocker = !progressRecord?.isCompleted;
+            // Verified completion for this cycle (completed on/after the rule was configured/applied)
+            const isCompletedInCurrentCycle = isProgressCompleted && (ruleUpdatedAt === 0 || progressCompletedAt >= (ruleUpdatedAt - 10000));
+
+            // Check field-level durationDays if specified
+            if (field.durationDays && field.durationDays > 0 && ruleUpdatedAt > 0) {
+                const durationMs = field.durationDays * 24 * 60 * 60 * 1000;
+                if (Date.now() - ruleUpdatedAt > durationMs) {
+                    continue; // Skip this field as its duration has elapsed
+                }
+            }
+
+            let isBlocker = false;
+
+            if (field.displayMode === "on-first-incomplete") {
+                // Only block if value is genuinely missing/blank in profile
+                isBlocker = !hasValueInProfile;
+            } else if (field.skipCompleted === false) {
+                // Admin wants this re-submitted on every login
+                isBlocker = true;
             } else {
-                // Blocker only if NOT completed in progress AND missing from profile
-                isBlocker = (!progressRecord || !progressRecord.isCompleted) && !hasValueInProfile;
+                // on-next-login or on-login: Block if student hasn't completed in this cycle
+                isBlocker = !isCompletedInCurrentCycle;
             }
 
             if (isBlocker) {
                 missingFields.push({
                     fieldId: field.fieldId,
                     fieldLabel: field.fieldLabel,
-                    displayMode: field.displayMode,
+                    displayMode: field.displayMode || "on-next-login",
                     durationDays: field.durationDays,
                     order: field.order || 0,
+                    currentValue: hasValueInProfile ? String(profileVal) : "",
                 });
-            } else if (hasValueInProfile && (!progressRecord || !progressRecord.isCompleted)) {
-                // Auto-heal: Profile already has data saved! Backfill progress record in DB.
-                try {
-                    db.studentFieldProgress.upsert({
-                        studentId: strId,
-                        firebaseUID: student.firebaseUID || strId,
-                        hostelName: studentHostel,
-                        fieldId: field.fieldId,
-                        fieldLabel: field.fieldLabel,
-                        isCompleted: true,
-                        completedAt: new Date(),
-                    }).catch(e => console.error("Auto-heal progress error:", e));
-                } catch (autoErr) {
-                    console.error("Auto-heal progress exception:", autoErr);
-                }
             }
         }
 
@@ -129,9 +148,9 @@ export async function GET(request: NextRequest) {
             enforcement: {
                 _id: enforcement._id,
                 hostelName: enforcement.hostelName,
-                notificationPriority: enforcement.notificationPriority,
-                successMessage: enforcement.successMessage,
-                autoCloseNotification: enforcement.autoCloseNotification,
+                notificationPriority: enforcement.notificationPriority || "normal",
+                successMessage: enforcement.successMessage || "All required fields have been completed! Thank you.",
+                autoCloseNotification: enforcement.autoCloseNotification ?? true,
             },
             debug: {
                 hostelMatched: enforcement.hostelName,
