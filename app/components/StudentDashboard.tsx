@@ -6228,36 +6228,50 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     </svg>
                                                 </div>
 
-                                                {faceMatchStep === 'matching' && (
-                                                    <div className="absolute inset-0 bg-blue-600/20 backdrop-blur-[2px] flex items-center justify-center z-30">
-                                                        <div className="text-center">
-                                                            <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-3" />
-                                                            <p className="text-white font-black text-sm uppercase tracking-widest leading-none">Verifying...</p>
-                                                            <p className="text-white/70 text-[10px] mt-2">
-                                                                {faceMatchProgress > 70 ? "Switching to Accurate Mode..." : `${faceMatchProgress}% Done`}
-                                                            </p>
-                                                        </div>
+                                                {/* ⚡ High-Tech Face Tracking Reticle Box */}
+                                                {faceDetected && faceBox && cameraActive && faceMatchStep === 'detecting' && (
+                                                    <div 
+                                                        className="absolute border-2 border-emerald-400/80 rounded-xl pointer-events-none transition-all duration-150 shadow-[0_0_15px_rgba(52,211,153,0.5)]"
+                                                        style={{
+                                                            left: `${(faceBox.x / (videoRef.current?.videoWidth || 640)) * 100}%`,
+                                                            top: `${(faceBox.y / (videoRef.current?.videoHeight || 480)) * 100}%`,
+                                                            width: `${(faceBox.width / (videoRef.current?.videoWidth || 640)) * 100}%`,
+                                                            height: `${(faceBox.height / (videoRef.current?.videoHeight || 480)) * 100}%`,
+                                                        }}
+                                                    >
+                                                        {/* Corner Reticle Brackets */}
+                                                        <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-emerald-400" />
+                                                        <div className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-emerald-400" />
+                                                        <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-emerald-400" />
+                                                        <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-emerald-400" />
                                                     </div>
                                                 )}
                                             </div>
 
                                             <div className="mt-5 space-y-3">
-                                                {faceMatchStep === 'detecting' && (
+                                                {/* STAGE 1 & STAGE 2: Face Alignment & 0% -> 100% Stability Scan */}
+                                                {(faceMatchStep === 'detecting' || faceMatchStep === 'matching') && (
                                                     <div className="w-full py-2 text-center space-y-3">
                                                         {faceDetected ? (
                                                             <div className="space-y-2 animate-in fade-in duration-200">
                                                                 <div className="font-black text-sm flex items-center justify-center gap-2 text-emerald-600">
                                                                     <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping" />
-                                                                    <span>TARGET LOCKED • HOLD STILL ({scanHoldProgress}%)</span>
+                                                                    <span>🎯 TARGET LOCKED • HOLD STILL ({faceMatchStep === 'matching' ? 100 : scanHoldProgress}%)</span>
                                                                 </div>
-                                                                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                                                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden shadow-inner">
                                                                     <div
-                                                                        className="bg-emerald-500 h-2 rounded-full transition-all duration-200 shadow-sm"
-                                                                        style={{ width: `${Math.max(10, scanHoldProgress)}%` }}
+                                                                        className="bg-emerald-500 h-2.5 rounded-full transition-all duration-200 shadow-sm"
+                                                                        style={{ width: `${Math.max(8, faceMatchStep === 'matching' ? 100 : scanHoldProgress)}%` }}
                                                                     />
                                                                 </div>
-                                                                <p className="text-[11px] text-gray-400 font-semibold tracking-wide">
-                                                                    {scanHoldProgress < 40 ? "Measuring Facial Geometry..." : scanHoldProgress < 80 ? "Verifying Anti-Spoof Consensus..." : "Finalizing Match..."}
+                                                                <p className="text-xs text-gray-500 font-semibold tracking-wide">
+                                                                    {faceMatchStep === 'matching' 
+                                                                        ? "Verifying Biometric Vector & Anti-Spoof..."
+                                                                        : scanHoldProgress < 40 
+                                                                            ? "Measuring Facial Geometry..." 
+                                                                            : scanHoldProgress < 80 
+                                                                                ? "Verifying Anti-Spoof & Live Presence..." 
+                                                                                : "Finalizing Match..."}
                                                                 </p>
                                                             </div>
                                                         ) : (
@@ -6269,6 +6283,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     </div>
                                                 )}
 
+                                                {/* STAGE 3: Clear Human Confirmation Screen */}
                                                 {faceMatchStep === 'success' && (
                                                     <div className="w-full py-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl flex flex-col items-center justify-center gap-1 animate-in zoom-in duration-300 shadow-sm">
                                                         <div className="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/30 mb-1">
@@ -6276,9 +6291,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                                             </svg>
                                                         </div>
-                                                        <p className="font-black text-lg text-gray-900 leading-tight">Verified!</p>
+                                                        <p className="font-black text-xl text-gray-900 leading-tight">Verified!</p>
                                                         <p className="font-bold text-sm text-emerald-700">Thank you, {studentProfile?.name || 'Student'}</p>
-                                                        <span className="text-[10px] text-emerald-600 font-medium">Attendance Verified Successfully</span>
+                                                        <span className="text-[11px] text-emerald-600 font-medium">Attendance Recorded Successfully</span>
                                                     </div>
                                                 )}
 
