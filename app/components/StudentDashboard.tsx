@@ -3785,29 +3785,25 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     <p className="text-xs text-red-600 font-medium mt-0.5">
                                                         {attendanceFailedReason || "Please present your real physical face directly to the camera."}
                                                     </p>
-                                                    {/* ⚡ Helper hint for face mismatch — guides student to re-register */}
-                                                    {(attendanceFailedReason.includes('Mismatch') || attendanceFailedReason.includes('Score')) && (
-                                                        <p className="text-xs text-amber-700 font-semibold mt-1">
-                                                            💡 First time failing? Click <strong>Re-Register Face</strong> to update your photo.
-                                                        </p>
-                                                    )}
+                                                    {/* ⚡ Helper hint for student guidance */}
+                                                    <p className="text-xs text-amber-700 font-semibold mt-1">
+                                                        💡 Having trouble? Click <strong>Re-Register Face</strong> to take a fresh photo.
+                                                    </p>
                                                 </div>
                                             </div>
                                             <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-                                                {/* Re-Register Face button — opens live selfie to save fresh SSD descriptor */}
-                                                {(attendanceFailedReason.includes('Mismatch') || attendanceFailedReason.includes('Score')) && (
-                                                    <button
-                                                        onClick={() => {
-                                                            setAttendanceStep('idle');
-                                                            setIsMarkingAttendance(false);
-                                                            setAttendanceFailedReason('');
-                                                            setShowLiveFaceRecaptureModal(true);
-                                                        }}
-                                                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5"
-                                                    >
-                                                        📸 Re-Register Face
-                                                    </button>
-                                                )}
+                                                {/* Re-Register Face button — always available on failure */}
+                                                <button
+                                                    onClick={() => {
+                                                        setAttendanceStep('idle');
+                                                        setIsMarkingAttendance(false);
+                                                        setAttendanceFailedReason('');
+                                                        setShowLiveFaceRecaptureModal(true);
+                                                    }}
+                                                    className="px-4 py-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5"
+                                                >
+                                                    📸 Re-Register Face
+                                                </button>
                                                 <button
                                                     onClick={() => {
                                                         setAttendanceStep('idle');
@@ -6198,7 +6194,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     className="w-full h-full object-cover scale-x-[-1]"
                                                 />
 
-                                                {/* ⚡ Radial Clockwise Oval Progress Ring (Apple Face ID / Persona style) */}
+                                                {/* ⚡ ENHANCED: Large Oval Face Frame */}
                                                 <div className="absolute inset-0 pointer-events-none">
                                                     <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
                                                         <defs>
@@ -6207,99 +6203,57 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 <ellipse cx="50" cy="50" rx="35" ry="42" fill="black" />
                                                             </mask>
                                                         </defs>
-                                                        {/* Darkened outer background with oval opening */}
+                                                        {/* Darkened background with oval hole */}
                                                         <rect width="100" height="100" fill="rgba(0,0,0,0.6)" mask="url(#faceMask)" />
-                                                        
-                                                        {/* Background Track of Oval */}
-                                                        <path
-                                                            d="M 50,8 A 35,42 0 1,1 49.99,8"
+                                                        {/* Glowing Border */}
+                                                        <ellipse
+                                                            cx="50" cy="50" rx="35" ry="42"
                                                             fill="none"
-                                                            stroke="rgba(255,255,255,0.2)"
-                                                            strokeWidth="1.2"
+                                                            stroke={faceMatchStep === 'success' || faceDetected ? "#22c55e" : "#3b82f6"}
+                                                            strokeWidth={faceMatchStep === 'success' || faceDetected ? "1.5" : "0.8"}
+                                                            strokeDasharray={faceMatchStep === 'success' || faceDetected ? "none" : "2,1"}
+                                                            className="transition-all duration-300 drop-shadow-[0_0_12px_rgba(34,197,94,0.8)]"
                                                         />
-
-                                                        {/* Clockwise Progress Fill (0% ➔ 100%) */}
-                                                        <path
-                                                            d="M 50,8 A 35,42 0 1,1 49.99,8"
-                                                            fill="none"
-                                                            stroke={faceMatchStep === 'success' ? "#10b981" : (faceDetected ? "#10b981" : "#3b82f6")}
-                                                            strokeWidth={faceMatchStep === 'success' ? "2.5" : "2.0"}
-                                                            strokeLinecap="round"
-                                                            pathLength="100"
-                                                            strokeDasharray="100"
-                                                            strokeDashoffset={100 - (faceMatchStep === 'success' || faceMatchStep === 'matching' ? 100 : (faceDetected ? scanHoldProgress : 0))}
-                                                            className="transition-all duration-200 ease-out drop-shadow-[0_0_10px_rgba(16,185,129,0.9)]"
-                                                        />
-
-                                                        {/* Scanning Laser Line (Only runs while scanning 0% to 99%) */}
-                                                        {cameraActive && faceMatchStep === 'detecting' && scanHoldProgress < 100 && (
-                                                            <line x1="15" x2="85" y1="0" y2="0" stroke={faceDetected ? "rgba(16, 185, 129, 0.8)" : "rgba(59, 130, 246, 0.8)"} strokeWidth="0.8" className="animate-scan-line">
-                                                                <animate attributeName="y1" values="12;88;12" dur="1.8s" repeatCount="indefinite" />
-                                                                <animate attributeName="y2" values="12;88;12" dur="1.8s" repeatCount="indefinite" />
+                                                        {/* Scanning Line Animation */}
+                                                        {cameraActive && (faceMatchStep === 'detecting' || faceMatchStep === 'matching') && (
+                                                            <line x1="15" x2="85" y1="0" y2="0" stroke={faceDetected ? "rgba(34, 197, 94, 0.8)" : "rgba(59, 130, 246, 0.8)"} strokeWidth="0.8" className="animate-scan-line">
+                                                                <animate attributeName="y1" values="12;88;12" dur="2s" repeatCount="indefinite" />
+                                                                <animate attributeName="y2" values="12;88;12" dur="2s" repeatCount="indefinite" />
                                                             </line>
                                                         )}
                                                     </svg>
                                                 </div>
 
-                                                {/* ⚡ STAGE 3: Large Centered Green Checkmark on Oval Finish */}
-                                                {faceMatchStep === 'success' && (
-                                                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-30 animate-in zoom-in-75 duration-300">
-                                                        <div className="w-20 h-20 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-[0_0_35px_rgba(16,185,129,0.8)] border-4 border-white mb-2">
-                                                            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3.5} d="M5 13l4 4L19 7" />
-                                                            </svg>
+                                                {faceMatchStep === 'matching' && (
+                                                    <div className="absolute inset-0 bg-blue-600/20 backdrop-blur-[2px] flex items-center justify-center z-30">
+                                                        <div className="text-center">
+                                                            <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-3" />
+                                                            <p className="text-white font-black text-sm uppercase tracking-widest leading-none">Verifying...</p>
+                                                            <p className="text-white/70 text-[10px] mt-2">
+                                                                {faceMatchProgress > 70 ? "Switching to Accurate Mode..." : `${faceMatchProgress}% Done`}
+                                                            </p>
                                                         </div>
-                                                        <div className="bg-slate-900/80 backdrop-blur-md px-4 py-1.5 rounded-full border border-emerald-400/40 text-center shadow-lg">
-                                                            <p className="text-white font-black text-sm tracking-wider">VERIFIED</p>
-                                                            <p className="text-emerald-300 font-bold text-xs">Thank you, {studentProfile?.name || 'Student'}</p>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* ⚡ High-Tech Face Tracking Reticle Box */}
-                                                {faceDetected && faceBox && cameraActive && faceMatchStep === 'detecting' && (
-                                                    <div 
-                                                        className="absolute border-2 border-emerald-400/80 rounded-xl pointer-events-none transition-all duration-150 shadow-[0_0_15px_rgba(52,211,153,0.5)]"
-                                                        style={{
-                                                            left: `${(faceBox.x / (videoRef.current?.videoWidth || 640)) * 100}%`,
-                                                            top: `${(faceBox.y / (videoRef.current?.videoHeight || 480)) * 100}%`,
-                                                            width: `${(faceBox.width / (videoRef.current?.videoWidth || 640)) * 100}%`,
-                                                            height: `${(faceBox.height / (videoRef.current?.videoHeight || 480)) * 100}%`,
-                                                        }}
-                                                    >
-                                                        {/* Corner Reticle Brackets */}
-                                                        <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-emerald-400" />
-                                                        <div className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-emerald-400" />
-                                                        <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-emerald-400" />
-                                                        <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-emerald-400" />
                                                     </div>
                                                 )}
                                             </div>
 
                                             <div className="mt-5 space-y-3">
-                                                {/* STAGE 1 & STAGE 2: Face Alignment & 0% -> 100% Stability Scan */}
-                                                {(faceMatchStep === 'detecting' || faceMatchStep === 'matching') && (
+                                                {faceMatchStep === 'detecting' && (
                                                     <div className="w-full py-2 text-center space-y-3">
                                                         {faceDetected ? (
                                                             <div className="space-y-2 animate-in fade-in duration-200">
                                                                 <div className="font-black text-sm flex items-center justify-center gap-2 text-emerald-600">
                                                                     <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping" />
-                                                                    <span>🎯 TARGET LOCKED • HOLD STILL ({faceMatchStep === 'matching' ? 100 : scanHoldProgress}%)</span>
+                                                                    <span>TARGET LOCKED • HOLD STILL ({scanHoldProgress}%)</span>
                                                                 </div>
-                                                                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden shadow-inner">
+                                                                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                                                                     <div
-                                                                        className="bg-emerald-500 h-2.5 rounded-full transition-all duration-200 shadow-sm"
-                                                                        style={{ width: `${Math.max(8, faceMatchStep === 'matching' ? 100 : scanHoldProgress)}%` }}
+                                                                        className="bg-emerald-500 h-2 rounded-full transition-all duration-200 shadow-sm"
+                                                                        style={{ width: `${Math.max(10, scanHoldProgress)}%` }}
                                                                     />
                                                                 </div>
-                                                                <p className="text-xs text-gray-500 font-semibold tracking-wide">
-                                                                    {faceMatchStep === 'matching' 
-                                                                        ? "Verifying Biometric Vector & Anti-Spoof..."
-                                                                        : scanHoldProgress < 40 
-                                                                            ? "Measuring Facial Geometry..." 
-                                                                            : scanHoldProgress < 80 
-                                                                                ? "Verifying Anti-Spoof & Live Presence..." 
-                                                                                : "Finalizing Match..."}
+                                                                <p className="text-[11px] text-gray-400 font-semibold tracking-wide">
+                                                                    {scanHoldProgress < 40 ? "Measuring Facial Geometry..." : scanHoldProgress < 80 ? "Verifying Anti-Spoof Consensus..." : "Finalizing Match..."}
                                                                 </p>
                                                             </div>
                                                         ) : (
@@ -6311,7 +6265,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     </div>
                                                 )}
 
-                                                {/* STAGE 3: Clear Human Confirmation Screen */}
                                                 {faceMatchStep === 'success' && (
                                                     <div className="w-full py-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl flex flex-col items-center justify-center gap-1 animate-in zoom-in duration-300 shadow-sm">
                                                         <div className="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/30 mb-1">
@@ -6319,9 +6272,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                                             </svg>
                                                         </div>
-                                                        <p className="font-black text-xl text-gray-900 leading-tight">Verified!</p>
+                                                        <p className="font-black text-lg text-gray-900 leading-tight">Verified!</p>
                                                         <p className="font-bold text-sm text-emerald-700">Thank you, {studentProfile?.name || 'Student'}</p>
-                                                        <span className="text-[11px] text-emerald-600 font-medium">Attendance Recorded Successfully</span>
+                                                        <span className="text-[10px] text-emerald-600 font-medium">Attendance Verified Successfully</span>
                                                     </div>
                                                 )}
 

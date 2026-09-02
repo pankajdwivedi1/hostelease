@@ -112,9 +112,9 @@ async def verify_face(req: VerifyRequest):
             "message": "Could not extract biometric features from live face."
         }
 
-    # 5. Resolve reference descriptor
-    ref_embedding = req.reference_descriptor
-    if (not ref_embedding or len(ref_embedding) == 0) and req.reference_image:
+    # 5. Resolve reference descriptor (Ensure 512-D vector, or extract from reference image)
+    ref_embedding = req.reference_descriptor if (req.reference_descriptor and len(req.reference_descriptor) == 512) else None
+    if not ref_embedding and req.reference_image:
         try:
             ref_bgr = decode_base64_image(req.reference_image)
             ref_bbox = detector.detect_primary_face(ref_bgr)

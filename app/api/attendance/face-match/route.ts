@@ -77,10 +77,11 @@ export async function POST(request: NextRequest) {
         }
 
         const { verifyFaceWithAIService } = await import("@/lib/aiAttendanceClient");
+        const has512Vector = Array.isArray(student.faceDescriptor) && student.faceDescriptor.length === 512;
         const aiServiceResult = await verifyFaceWithAIService({
             liveImage: image,
             referenceImage: student.profilePicture,
-            referenceDescriptor: Array.isArray(student.faceDescriptor) ? student.faceDescriptor : undefined,
+            referenceDescriptor: has512Vector ? student.faceDescriptor : undefined,
         });
 
         if (aiServiceResult) {

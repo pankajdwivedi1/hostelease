@@ -150,10 +150,10 @@ class AntiSpoofEngine:
             spoof_reason = "Printed Photo / Low-Color Spoof Detected."
             liveness_score = 25.0
             
-        # Blur / Static Replay
-        elif laplacian_var < 15.0:
+        # Extreme Blur / Completely Unreadable
+        elif laplacian_var < 2.0:
             is_spoof = True
-            spoof_reason = "Image is too blurry or low quality."
+            spoof_reason = "Camera frame is too blurry or out of focus."
             liveness_score = 30.0
             
         # 4. If MiniFASNet ONNX is loaded, run neural inference
