@@ -6198,7 +6198,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     className="w-full h-full object-cover scale-x-[-1]"
                                                 />
 
-                                                {/* ⚡ ENHANCED: Large Oval Face Frame */}
+                                                {/* ⚡ Radial Clockwise Oval Progress Ring (Apple Face ID / Persona style) */}
                                                 <div className="absolute inset-0 pointer-events-none">
                                                     <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
                                                         <defs>
@@ -6207,26 +6207,54 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                                 <ellipse cx="50" cy="50" rx="35" ry="42" fill="black" />
                                                             </mask>
                                                         </defs>
-                                                        {/* Darkened background with oval hole */}
+                                                        {/* Darkened outer background with oval opening */}
                                                         <rect width="100" height="100" fill="rgba(0,0,0,0.6)" mask="url(#faceMask)" />
-                                                        {/* Glowing Border */}
-                                                        <ellipse
-                                                            cx="50" cy="50" rx="35" ry="42"
+                                                        
+                                                        {/* Background Track of Oval */}
+                                                        <path
+                                                            d="M 50,8 A 35,42 0 1,1 49.99,8"
                                                             fill="none"
-                                                            stroke={faceMatchStep === 'success' || faceDetected ? "#22c55e" : "#3b82f6"}
-                                                            strokeWidth={faceMatchStep === 'success' || faceDetected ? "1.5" : "0.8"}
-                                                            strokeDasharray={faceMatchStep === 'success' || faceDetected ? "none" : "2,1"}
-                                                            className="transition-all duration-300 drop-shadow-[0_0_12px_rgba(34,197,94,0.8)]"
+                                                            stroke="rgba(255,255,255,0.2)"
+                                                            strokeWidth="1.2"
                                                         />
-                                                        {/* Scanning Line Animation */}
+
+                                                        {/* Clockwise Progress Fill (0% ➔ 100%) */}
+                                                        <path
+                                                            d="M 50,8 A 35,42 0 1,1 49.99,8"
+                                                            fill="none"
+                                                            stroke={faceMatchStep === 'success' ? "#10b981" : (faceDetected ? "#10b981" : "#3b82f6")}
+                                                            strokeWidth={faceMatchStep === 'success' ? "2.5" : "2.0"}
+                                                            strokeLinecap="round"
+                                                            pathLength="100"
+                                                            strokeDasharray="100"
+                                                            strokeDashoffset={100 - (faceMatchStep === 'success' || faceMatchStep === 'matching' ? 100 : (faceDetected ? scanHoldProgress : 0))}
+                                                            className="transition-all duration-200 ease-out drop-shadow-[0_0_10px_rgba(16,185,129,0.9)]"
+                                                        />
+
+                                                        {/* Scanning Laser Line */}
                                                         {cameraActive && (faceMatchStep === 'detecting' || faceMatchStep === 'matching') && (
-                                                            <line x1="15" x2="85" y1="0" y2="0" stroke={faceDetected ? "rgba(34, 197, 94, 0.8)" : "rgba(59, 130, 246, 0.8)"} strokeWidth="0.8" className="animate-scan-line">
+                                                            <line x1="15" x2="85" y1="0" y2="0" stroke={faceDetected ? "rgba(16, 185, 129, 0.8)" : "rgba(59, 130, 246, 0.8)"} strokeWidth="0.8" className="animate-scan-line">
                                                                 <animate attributeName="y1" values="12;88;12" dur="2s" repeatCount="indefinite" />
                                                                 <animate attributeName="y2" values="12;88;12" dur="2s" repeatCount="indefinite" />
                                                             </line>
                                                         )}
                                                     </svg>
                                                 </div>
+
+                                                {/* ⚡ STAGE 3: Large Centered Green Checkmark on Oval Finish */}
+                                                {faceMatchStep === 'success' && (
+                                                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-30 animate-in zoom-in-75 duration-300">
+                                                        <div className="w-20 h-20 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-[0_0_35px_rgba(16,185,129,0.8)] border-4 border-white mb-2">
+                                                            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3.5} d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                        </div>
+                                                        <div className="bg-slate-900/80 backdrop-blur-md px-4 py-1.5 rounded-full border border-emerald-400/40 text-center shadow-lg">
+                                                            <p className="text-white font-black text-sm tracking-wider">VERIFIED</p>
+                                                            <p className="text-emerald-300 font-bold text-xs">Thank you, {studentProfile?.name || 'Student'}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
 
                                                 {/* ⚡ High-Tech Face Tracking Reticle Box */}
                                                 {faceDetected && faceBox && cameraActive && faceMatchStep === 'detecting' && (
