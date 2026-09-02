@@ -188,43 +188,100 @@ export async function POST(request: NextRequest) {
         let isLocationVerified = body.isLocationVerified === true;
         let verifiedBy = isLocationVerified ? 'wifi' : '';
 
-        if (isTester) {
-            isLocationVerified = true;
-            verifiedBy = 'wifi';
-            console.log(`✅ Tester Account Location Bypassed for ${student.name}`);
-        } else if (wifiBSSID || body.verificationMethod === 'wifi' || body.verifiedBy === 'wifi' || body.isWifiVerified) {
-            const incomingWifiSignal = wifiBSSID || body.verificationMethod || body.verifiedBy || "CAMPUS_WIFI_CONNECTED";
-            const normalizedBSSID = String(incomingWifiSignal).toUpperCase().trim();
+        // 📍 LOCATION VERIFICATION (Accurately reporting GPS vs Campus WiFi)
+        const hostelLocations = adminSettings?.hostelLocations || [];
+        const bodyAccuracy = Math.round(body.accuracy || 0);
+        const GPS_ACCURACY_THRESHOLD = 300; // Allow up to 300m for mobile GPS compatibility
 
-            const globalWhitelist = adminSettings?.wifiWhitelist || [];
-            const allConfiguredBSSIDs = new Set<string>();
-            for (const item of globalWhitelist) {
-                if (item && Array.isArray(item.bssids)) {
-                    for (const b of item.bssids) {
-                        if (b) allConfiguredBSSIDs.add(String(b).toUpperCase().trim());
-                    }
+        // Check Time Window (IST)
+        const now = new Date();
+        const istTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false }); // "HH:mm:ss"
+        const istTime = istTimeStr.split(":").slice(0, 2).join(":"); // "HH:mm"
+
+        const startTime = adminSettings?.attendanceStartTime || "21:00";
+        const endTime = adminSettings?.attendanceEndTime || "23:00";
+
+        if (!isTester && (istTime < startTime || istTime > endTime)) {
+            return NextResponse.json(
+                {
+                    error: `Attendance window closed. You can mark attendance between ${startTime} and ${endTime} only.`,
+                    startTime,
+                    endTime,
+                    currentTime: istTime
+                },
+                { status: 400 }
+            );
+        }
+
+        // 🎯 PRIORITY 1: Check GPS Coordinates if provided by device
+        let gpsVerified = false;
+        if (lat !== undefined && lng !== undefined && !isTester) {
+            let isInsideAny = false;
+            let closestInfo = { distance: Infinity, radius: 0 };
+
+            for (const loc of hostelLocations) {
+                const dist = calculateDistance(lat, lng, loc.lat, loc.lng);
+                const allowedRadius = ((loc as any).radius || 100) + (adminSettings?.overlapRadius ? 20 : 0);
+                const isInside = dist <= allowedRadius;
+
+                let isMatchValid = isInside;
+                if (adminSettings?.prioritizeAssignedHostel) {
+                    const isAssigned = student.hostelName?.toLowerCase().includes(loc.name.toLowerCase()) ||
+                        loc.name.toLowerCase().includes(student.hostelName?.toLowerCase() || "");
+                    isMatchValid = isInside && isAssigned;
+                }
+
+                if (isMatchValid) {
+                    isInsideAny = true;
+                    break;
+                }
+
+                if (dist < closestInfo.distance) {
+                    closestInfo = { distance: dist, radius: allowedRadius };
                 }
             }
 
-            // Verify BSSID matches configured list or incoming signal flag
-            const isBssidMatched = allConfiguredBSSIDs.size === 0 || 
-                                   allConfiguredBSSIDs.has(normalizedBSSID) || 
-                                   normalizedBSSID.includes("WIFI") || 
-                                   normalizedBSSID === "CAMPUS_WIFI_CONNECTED" ||
-                                   body.isWifiVerified === true ||
-                                   body.verificationMethod === 'wifi';
-
-            if (isBssidMatched) {
+            if (isInsideAny) {
                 isLocationVerified = true;
-                verifiedBy = 'wifi';
-                console.log(`✅ Campus WiFi Verified: ${student.name} on Campus WiFi (${normalizedBSSID})`);
-            } else {
-                console.warn(`⚠️ BSSID ${normalizedBSSID} not found in whitelist of ${allConfiguredBSSIDs.size} BSSIDs for ${student.name}`);
+                gpsVerified = true;
+                verifiedBy = 'gps';
+                console.log(`✅ GPS Verified: ${student.name} at coordinates (${lat}, ${lng}) within radius`);
             }
         }
 
-        // ⚡ NEW: Public IP Verification (Fallback for WiFi)
-        if (!isLocationVerified) {
+        // 🎯 PRIORITY 2: Check Campus WiFi / Router BSSID (if GPS not verified or indoors)
+        if (!isLocationVerified && !isTester) {
+            if (wifiBSSID || body.verificationMethod === 'wifi' || body.verifiedBy === 'wifi' || body.isWifiVerified) {
+                const incomingWifiSignal = wifiBSSID || body.verificationMethod || body.verifiedBy || "CAMPUS_WIFI_CONNECTED";
+                const normalizedBSSID = String(incomingWifiSignal).toUpperCase().trim();
+
+                const globalWhitelist = adminSettings?.wifiWhitelist || [];
+                const allConfiguredBSSIDs = new Set<string>();
+                for (const item of globalWhitelist) {
+                    if (item && Array.isArray(item.bssids)) {
+                        for (const b of item.bssids) {
+                            if (b) allConfiguredBSSIDs.add(String(b).toUpperCase().trim());
+                        }
+                    }
+                }
+
+                const isBssidMatched = allConfiguredBSSIDs.size === 0 || 
+                                       allConfiguredBSSIDs.has(normalizedBSSID) || 
+                                       normalizedBSSID.includes("WIFI") || 
+                                       normalizedBSSID === "CAMPUS_WIFI_CONNECTED" ||
+                                       body.isWifiVerified === true ||
+                                       body.verificationMethod === 'wifi';
+
+                if (isBssidMatched) {
+                    isLocationVerified = true;
+                    verifiedBy = 'wifi';
+                    console.log(`✅ Campus WiFi Verified: ${student.name} on Campus WiFi (${normalizedBSSID})`);
+                }
+            }
+        }
+
+        // 🎯 PRIORITY 3: Public IP Whitelist Verification
+        if (!isLocationVerified && !isTester) {
             const forwarded = request.headers.get("x-forwarded-for");
             let rawClientIp = forwarded ? forwarded.split(",")[0] : (request as any).ip || "127.0.0.1";
             rawClientIp = rawClientIp.trim();
@@ -249,91 +306,11 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        const hostelLocations = adminSettings?.hostelLocations || [];
-
-        // ✅ FIX: Improved GPS Accuracy Handling
-        const bodyAccuracy = Math.round(body.accuracy || 0);
-        const GPS_ACCURACY_THRESHOLD = 300; // Increased from 200m to 300m for better compatibility
-
-        // Check Time Window (IST)
-        const now = new Date();
-        const istTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false }); // "HH:mm:ss"
-        const istTime = istTimeStr.split(":").slice(0, 2).join(":"); // "HH:mm"
-
-        const startTime = adminSettings?.attendanceStartTime || "21:00";
-        const endTime = adminSettings?.attendanceEndTime || "23:00";
-
-        if (!isTester && (istTime < startTime || istTime > endTime)) {
-            return NextResponse.json(
-                {
-                    error: `Attendance window closed. You can mark attendance between ${startTime} and ${endTime} only.`,
-                    startTime,
-                    endTime,
-                    currentTime: istTime
-                },
-                { status: 400 }
-            );
-        }
-
-        // ⚡ GPS FALLBACK: Only check GPS if WiFi verification failed
-        if (!isLocationVerified && lat !== undefined && lng !== undefined) {
-            // ✅ FIX: Improved accuracy check - allow up to 300m instead of 200m
-            if (bodyAccuracy !== undefined && bodyAccuracy > GPS_ACCURACY_THRESHOLD) {
-                return NextResponse.json(
-                    {
-                        error: `Waiting for better GPS signal... (Current accuracy: ${bodyAccuracy}m, needed: <${GPS_ACCURACY_THRESHOLD}m)`,
-                        accuracy: bodyAccuracy,
-                        requiredAccuracy: GPS_ACCURACY_THRESHOLD
-                    },
-                    { status: 400 }
-                );
-            }
-
-            // Check if student is within any of the allowed circles
-            let isInsideAny = false;
-            let closestInfo = { distance: Infinity, radius: 0 };
-
-            for (const loc of hostelLocations) {
-                const dist = calculateDistance(lat, lng, loc.lat, loc.lng);
-
-                // ⚡ DEVELOPER CONFIG: Radius Overlap (+20m if enabled)
-                const allowedRadius = ((loc as any).radius || 100) + (adminSettings?.overlapRadius ? 20 : 0);
-
-                const isInside = dist <= allowedRadius;
-
-                // ⚡ DEVELOPER CONFIG: Prioritize Assigned Hostel
-                let isMatchValid = isInside;
-                if (adminSettings?.prioritizeAssignedHostel) {
-                    const isAssigned = student.hostelName?.toLowerCase().includes(loc.name.toLowerCase()) ||
-                        loc.name.toLowerCase().includes(student.hostelName?.toLowerCase() || "");
-                    isMatchValid = isInside && isAssigned;
-                }
-
-                if (isMatchValid) {
-                    isInsideAny = true;
-                    break;
-                }
-
-                if (dist < closestInfo.distance) {
-                    closestInfo = { distance: dist, radius: allowedRadius };
-                }
-            }
-
-            if (!isInsideAny && !isTester) {
-                return NextResponse.json(
-                    {
-                        error: "You are not in campus",
-                        distance: Math.round(closestInfo.distance),
-                        radius: closestInfo.radius,
-                    },
-                    { status: 400 }
-                );
-            }
-
-            // GPS verification passed
+        if (isTester) {
             isLocationVerified = true;
             verifiedBy = 'gps';
-            console.log(`✅ GPS Verified: ${student.name} at coordinates (${lat}, ${lng})`);
+            console.log(`✅ Tester Account Location Verified for ${student.name}`);
+        }
 
             // ⚡ STRATEGY 1: SELF-HEALING IP WHITELIST
             // If GPS lock is highly accurate (<= 23m), we capture the public IP and update the hostel's whitelisted IP in database
@@ -401,7 +378,6 @@ export async function POST(request: NextRequest) {
                     }
                 }
             }
-        }
 
         // If neither WiFi nor GPS verified the location
         if (!isLocationVerified) {
