@@ -292,7 +292,15 @@ export default function LiveFaceCaptureModal({
                 })
             });
 
-            const data = await saveRes.json();
+            const contentType = saveRes.headers.get("content-type") || "";
+            let data: any = null;
+            if (contentType.includes("application/json")) {
+                data = await saveRes.json();
+            } else {
+                const errText = await saveRes.text();
+                console.warn("[Retake Photo] Server returned non-JSON error:", errText);
+                throw new Error("Server communication error. Please try again.");
+            }
 
             if (!saveRes.ok || !data.success) {
                 throw new Error(data.error || "Failed to save photo to server");

@@ -33,15 +33,23 @@ export async function POST(req: NextRequest) {
         }
 
         // Fetch current student by studentId or firebaseUID
-        let student = await db.students.getById(targetId);
-        if (!student && firebaseUID) {
-            student = await db.students.getByFirebaseUID(firebaseUID);
+        let student: any = null;
+        try {
+            if (firebaseUID) {
+                student = await db.students.getByFirebaseUID(firebaseUID);
+            }
+            if (!student && targetId) {
+                student = await db.students.getById(targetId);
+            }
+            if (!student && studentId) {
+                student = await db.students.getById(studentId);
+            }
+        } catch (dbErr: any) {
+            console.warn("Retake photo DB lookup warning:", dbErr?.message || dbErr);
         }
-        if (!student && studentId) {
-            student = await db.students.getById(studentId);
-        }
+
         if (!student) {
-            return NextResponse.json({ success: false, error: "Student profile not found" }, { status: 404 });
+            return NextResponse.json({ success: false, error: "Student profile not found in database" }, { status: 404 });
         }
 
         const dynamicFields = typeof student.dynamicFields === 'object' && student.dynamicFields !== null 

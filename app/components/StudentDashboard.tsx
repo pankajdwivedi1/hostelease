@@ -2985,34 +2985,39 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     });
 
                     if (serverRes.ok) {
-                        const aiResult = await serverRes.json();
-                        setFaceMatchProgress(100);
+                        const contentType = serverRes.headers.get('content-type') || '';
+                        if (contentType.includes('application/json')) {
+                            const aiResult = await serverRes.json();
+                            setFaceMatchProgress(100);
 
-                        // 🛡️ ANTI-SPOOF BLOCK: Reject mobile screens, photo displays & video replays!
-                        if (aiResult.isSpoof) {
-                            console.warn("❌ Anti-Spoof Blocked:", aiResult.message);
-                            stopCamera();
-                            setFaceMatchStep('error');
-                            setIsMarkingAttendance(true);
-                            setAttendanceStep('failed');
-                            setAttendanceFailedReason(aiResult.message || "Mobile Screen Display / Photo Spoof Detected!");
-                            showToast(aiResult.message || "Mobile Screen / Photo Spoof Detected! Please present your real physical face.", "error");
-                            return null;
-                        }
+                            // 🛡️ ANTI-SPOOF BLOCK: Reject mobile screens, photo displays & video replays!
+                            if (aiResult.isSpoof) {
+                                console.warn("❌ Anti-Spoof Blocked:", aiResult.message);
+                                stopCamera();
+                                setFaceMatchStep('error');
+                                setIsMarkingAttendance(true);
+                                setAttendanceStep('failed');
+                                setAttendanceFailedReason(aiResult.message || "Mobile Screen Display / Photo Spoof Detected!");
+                                showToast(aiResult.message || "Mobile Screen / Photo Spoof Detected! Please present your real physical face.", "error");
+                                return null;
+                            }
 
-                        if (aiResult.success && aiResult.isMatch) {
-                            setFaceMatchStep('success');
-                            return {
-                                percentage: aiResult.score || 95,
-                                status: 'auto-approved',
-                            };
-                        } else if (aiResult.success && !aiResult.isMatch) {
-                            console.warn(`❌ Identity Mismatch: Score ${aiResult.score}%`);
-                            setFaceMatchStep('error');
-                            return {
-                                percentage: aiResult.score || 45,
-                                status: 'rejected',
-                            };
+                            if (aiResult.success && aiResult.isMatch) {
+                                setFaceMatchStep('success');
+                                return {
+                                    percentage: aiResult.score || 95,
+                                    status: 'auto-approved',
+                                };
+                            } else if (aiResult.success && !aiResult.isMatch) {
+                                console.warn(`❌ Identity Mismatch: Score ${aiResult.score}%`);
+                                setFaceMatchStep('error');
+                                return {
+                                    percentage: aiResult.score || 45,
+                                    status: 'rejected',
+                                };
+                            }
+                        } else {
+                            console.warn("[Face Match] Server returned non-JSON status:", serverRes.status);
                         }
                     }
                 } catch (netErr) {
