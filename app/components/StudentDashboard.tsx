@@ -759,6 +759,8 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [livenessFeedback, setLivenessFeedback] = useState<string>("");
     const [yawRange, setYawRange] = useState(0);
     const [depthRange, setDepthRange] = useState(0); // ⚡ NEW: Tracking Near/Far
+    const [scanHoldProgress, setScanHoldProgress] = useState<number>(0); // 🏢 Industrial 2s stability hold
+    const steadyHoldCountRef = useRef<number>(0);
 
     const livenessHistoryRef = useRef<{ boxSizes: number[], yawPoints: number[] }>({
         boxSizes: [],
@@ -766,9 +768,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     });
 
     const latestDetectionRef = useRef<any>(null); // ⚡ NEW: Cache latest scan to skip redundant processing
-    const [faceAlignmentProgress, setFaceAlignmentProgress] = useState<number>(0);
-    const [faceGuidanceMessage, setFaceGuidanceMessage] = useState<string>("ALIGN FACE INSIDE OVAL");
-    const stableFramesCountRef = useRef<number>(0);
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -876,57 +875,47 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 }
                             }
 
-                            // 🛡️ INDUSTRIAL CENTERING & STABILITY DWELL ENGINE
-                            const faceCenterX = x + (width / 2);
-                            const faceCenterY = y + (height / 2);
-                            const frameW = canvas.width;
-                            const frameH = canvas.height;
-
-                            // 1. Horizontal Centering: Face center in middle 50% (25% to 75% of frame)
-                            const isHorizCentered = faceCenterX >= (frameW * 0.25) && faceCenterX <= (frameW * 0.75);
-                            // 2. Vertical Centering: Face center in vertical 56% (22% to 78% of frame)
-                            const isVertCentered = faceCenterY >= (frameH * 0.22) && faceCenterY <= (frameH * 0.78);
-                            // 3. Minimum & Maximum Face Size (at least 8% area, face height at least 22% of frame)
-                            const faceAreaRatio = (width * height) / (frameW * frameH);
-                            const hasGoodSize = faceAreaRatio >= 0.08 && faceAreaRatio <= 0.85 && height >= (frameH * 0.22);
-
-                            const isWellPositioned = isHorizCentered && isVertCentered && hasGoodSize;
-
-                            if (isWellPositioned) {
-                                stableFramesCountRef.current = (stableFramesCountRef.current || 0) + 1;
-                                const stabilityPercent = Math.min(100, Math.round((stableFramesCountRef.current / 4) * 100));
-                                setFaceAlignmentProgress(stabilityPercent);
-                                setFaceGuidanceMessage(stabilityPercent >= 100 ? "PERFECT! HOLD STILL..." : `HOLD STILL... ${stabilityPercent}%`);
-
-                                // 🎯 TRIGGER ONLY AFTER 4 STABLE CENTERED CONSECUTIVE FRAMES (~600-800ms)
-                                if (stableFramesCountRef.current >= 4) {
-                                    // 🛡️ CONTROL 1: PASSIVE MOBILE DISPLAY SCREEN ANALYZER
-                                    if (videoRef.current && res.detection?.box) {
-                                        const spoofCheck = faceMatching.detectMobileScreenDisplay(videoRef.current, res.detection.box);
-                                        if (spoofCheck.isSpoof) {
-                                            console.warn("❌ Anti-Spoof Block:", spoofCheck.reason);
-                                            active = false;
-                                            isProcessingRef.current = false;
-                                            stopCamera();
-                                            const reasonMsg = spoofCheck.reason || "Mobile Screen Display / Photo Spoof Detected!";
-                                            showToast(reasonMsg, "error");
-                                            setFaceMatchStep('error');
-                                            setIsMarkingAttendance(true);
-                                            setAttendanceStep('failed');
-                                            setAttendanceFailedReason(reasonMsg);
-                                            return;
-                                        }
+                            // 🏢 INDUSTRIAL STAGE 2: MULTI-FRAME GAZE & STABILITY BUFFER (~2 seconds)
+                            const boxSize = width * height;
+                            if (boxSize > (canvas.width * canvas.height * 0.04)) {
+                                // 🛡️ CONTINUOUS ANTI-SPOOF CHECK ON EVERY FRAME
+                                if (videoRef.current && res.detection?.box) {
+                                    const spoofCheck = faceMatching.detectMobileScreenDisplay(videoRef.current, res.detection.box);
+                                    if (spoofCheck.isSpoof) {
+                                        console.warn("❌ Anti-Spoof Block:", spoofCheck.reason);
+                                        active = false;
+                                        isProcessingRef.current = false;
+                                        steadyHoldCountRef.current = 0;
+                                        setScanHoldProgress(0);
+                                        stopCamera();
+                                        const reasonMsg = spoofCheck.reason || "Mobile Screen Display / Photo Spoof Detected!";
+                                        showToast(reasonMsg, "error");
+                                        setFaceMatchStep('error');
+                                        setIsMarkingAttendance(true);
+                                        setAttendanceStep('failed');
+                                        setAttendanceFailedReason(reasonMsg);
+                                        return;
                                     }
+                                }
 
+                                const REQUIRED_STEADY_FRAMES = 6; // 6 frames * 200ms ≈ 1.5 to 1.8 seconds steady hold
+                                steadyHoldCountRef.current = Math.min(REQUIRED_STEADY_FRAMES, steadyHoldCountRef.current + 1);
+                                const progressPct = Math.round((steadyHoldCountRef.current / REQUIRED_STEADY_FRAMES) * 100);
+                                setScanHoldProgress(progressPct);
+
+                                if (steadyHoldCountRef.current >= REQUIRED_STEADY_FRAMES) {
                                     active = false;
                                     isProcessingRef.current = true;
                                     setFaceMatchStep('matching');
 
-                                    // ⚡ TURBO: Pass the detection result we already have from the loop!
                                     const result = await performFaceVerification(res);
                                     if (result && result.status === 'auto-approved') {
-                                        stopCamera();
-                                        proceedWithAttendance(result);
+                                        setFaceMatchStep('success');
+                                        // 🏢 INDUSTRIAL STAGE 3: Keep "Verified! Thank you [Name]" on screen for 1.5s
+                                        setTimeout(() => {
+                                            stopCamera();
+                                            proceedWithAttendance(result);
+                                        }, 1500);
                                     } else {
                                         stopCamera();
                                         const percent = result?.percentage !== undefined ? `${result.percentage}%` : 'Low';
@@ -939,24 +928,13 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                     }
                                     return;
                                 }
-                            } else {
-                                // Reset stability if face moved out of bounds
-                                stableFramesCountRef.current = 0;
-                                setFaceAlignmentProgress(0);
-                                if (!hasGoodSize) {
-                                    setFaceGuidanceMessage(faceAreaRatio < 0.08 ? "MOVE CLOSER TO CAMERA" : "MOVE BACK SLIGHTLY");
-                                } else if (!isVertCentered) {
-                                    setFaceGuidanceMessage(faceCenterY < frameH * 0.22 ? "MOVE HEAD DOWN" : "MOVE HEAD UP");
-                                } else if (!isHorizCentered) {
-                                    setFaceGuidanceMessage("CENTER YOUR FACE INSIDE OVAL");
-                                }
                             }
                         } else {
-                            stableFramesCountRef.current = 0;
-                            setFaceAlignmentProgress(0);
-                            setFaceGuidanceMessage("ALIGN FACE INSIDE OVAL");
                             setFaceDetected(false);
                             setFaceBox(null);
+                            // Decay progress smoothly if face is lost
+                            steadyHoldCountRef.current = Math.max(0, steadyHoldCountRef.current - 1);
+                            setScanHoldProgress(Math.round((steadyHoldCountRef.current / 6) * 100));
                             consecutiveFailuresRef.current += 1;
                         }
                     }
@@ -965,7 +943,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 }
 
                 if (active) {
-                    detectionIntervalRef.current = setTimeout(runDetection, 150) as any; // Fast 150ms loop
+                    detectionIntervalRef.current = setTimeout(runDetection, 200) as any; // Smooth 200ms interval
                 }
             };
 
@@ -3024,39 +3002,34 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                     });
 
                     if (serverRes.ok) {
-                        const contentType = serverRes.headers.get('content-type') || '';
-                        if (contentType.includes('application/json')) {
-                            const aiResult = await serverRes.json();
-                            setFaceMatchProgress(100);
+                        const aiResult = await serverRes.json();
+                        setFaceMatchProgress(100);
 
-                            // 🛡️ ANTI-SPOOF BLOCK: Reject mobile screens, photo displays & video replays!
-                            if (aiResult.isSpoof) {
-                                console.warn("❌ Anti-Spoof Blocked:", aiResult.message);
-                                stopCamera();
-                                setFaceMatchStep('error');
-                                setIsMarkingAttendance(true);
-                                setAttendanceStep('failed');
-                                setAttendanceFailedReason(aiResult.message || "Mobile Screen Display / Photo Spoof Detected!");
-                                showToast(aiResult.message || "Mobile Screen / Photo Spoof Detected! Please present your real physical face.", "error");
-                                return null;
-                            }
+                        // 🛡️ ANTI-SPOOF BLOCK: Reject mobile screens, photo displays & video replays!
+                        if (aiResult.isSpoof) {
+                            console.warn("❌ Anti-Spoof Blocked:", aiResult.message);
+                            stopCamera();
+                            setFaceMatchStep('error');
+                            setIsMarkingAttendance(true);
+                            setAttendanceStep('failed');
+                            setAttendanceFailedReason(aiResult.message || "Mobile Screen Display / Photo Spoof Detected!");
+                            showToast(aiResult.message || "Mobile Screen / Photo Spoof Detected! Please present your real physical face.", "error");
+                            return null;
+                        }
 
-                            if (aiResult.success && aiResult.isMatch) {
-                                setFaceMatchStep('success');
-                                return {
-                                    percentage: aiResult.score || 95,
-                                    status: 'auto-approved',
-                                };
-                            } else if (aiResult.success && !aiResult.isMatch) {
-                                console.warn(`❌ Identity Mismatch: Score ${aiResult.score}%`);
-                                setFaceMatchStep('error');
-                                return {
-                                    percentage: aiResult.score || 45,
-                                    status: 'rejected',
-                                };
-                            }
-                        } else {
-                            console.warn("[Face Match] Server returned non-JSON status:", serverRes.status);
+                        if (aiResult.success && aiResult.isMatch) {
+                            setFaceMatchStep('success');
+                            return {
+                                percentage: aiResult.score || 95,
+                                status: 'auto-approved',
+                            };
+                        } else if (aiResult.success && !aiResult.isMatch) {
+                            console.warn(`❌ Identity Mismatch: Score ${aiResult.score}%`);
+                            setFaceMatchStep('error');
+                            return {
+                                percentage: aiResult.score || 45,
+                                status: 'rejected',
+                            };
                         }
                     }
                 } catch (netErr) {
@@ -6268,54 +6241,44 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                 )}
                                             </div>
 
-                                            <div className="mt-6 space-y-3">
+                                            <div className="mt-5 space-y-3">
                                                 {faceMatchStep === 'detecting' && (
-                                                    <div className="w-full py-3 text-center space-y-2">
-                                                        <div className={`transition-all duration-300 font-black flex items-center justify-center gap-2 text-sm tracking-wide ${
-                                                            faceAlignmentProgress >= 100 
-                                                                ? 'text-green-500 scale-105' 
-                                                                : faceAlignmentProgress > 0 
-                                                                    ? 'text-emerald-600' 
-                                                                    : faceDetected 
-                                                                        ? 'text-amber-500' 
-                                                                        : 'text-blue-600'
-                                                        }`}>
-                                                            {faceAlignmentProgress > 0 ? (
-                                                                <>
-                                                                    <div className="w-3 h-3 bg-green-500 rounded-full animate-ping" />
-                                                                    {faceGuidanceMessage}
-                                                                </>
-                                                            ) : faceDetected ? (
-                                                                <>
-                                                                    <div className="w-3 h-3 bg-amber-500 rounded-full" />
-                                                                    {faceGuidanceMessage}
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <div className="w-3.5 h-3.5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
-                                                                    SCANNING FOR FACE...
-                                                                </>
-                                                            )}
-                                                        </div>
-
-                                                        {/* Stability Hold Progress Bar */}
-                                                        {faceDetected && (
-                                                            <div className="w-48 mx-auto bg-gray-100 rounded-full h-1.5 overflow-hidden shadow-inner">
-                                                                <div 
-                                                                    className="bg-green-500 h-full transition-all duration-150 rounded-full"
-                                                                    style={{ width: `${faceAlignmentProgress}%` }}
-                                                                />
+                                                    <div className="w-full py-2 text-center space-y-3">
+                                                        {faceDetected ? (
+                                                            <div className="space-y-2 animate-in fade-in duration-200">
+                                                                <div className="font-black text-sm flex items-center justify-center gap-2 text-emerald-600">
+                                                                    <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping" />
+                                                                    <span>TARGET LOCKED • HOLD STILL ({scanHoldProgress}%)</span>
+                                                                </div>
+                                                                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                                                    <div
+                                                                        className="bg-emerald-500 h-2 rounded-full transition-all duration-200 shadow-sm"
+                                                                        style={{ width: `${Math.max(10, scanHoldProgress)}%` }}
+                                                                    />
+                                                                </div>
+                                                                <p className="text-[11px] text-gray-400 font-semibold tracking-wide">
+                                                                    {scanHoldProgress < 40 ? "Measuring Facial Geometry..." : scanHoldProgress < 80 ? "Verifying Anti-Spoof Consensus..." : "Finalizing Match..."}
+                                                                </p>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="font-black text-sm flex items-center justify-center gap-2 text-blue-600">
+                                                                <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+                                                                <span>{consecutiveFailuresRef.current > 10 ? "ENHANCED SCANNING..." : "ALIGN FACE IN OVAL..."}</span>
                                                             </div>
                                                         )}
                                                     </div>
                                                 )}
 
                                                 {faceMatchStep === 'success' && (
-                                                    <div className="w-full h-14 bg-green-500 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-2 animate-in zoom-in duration-300">
-                                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                        </svg>
-                                                        Verified Successfully
+                                                    <div className="w-full py-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl flex flex-col items-center justify-center gap-1 animate-in zoom-in duration-300 shadow-sm">
+                                                        <div className="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/30 mb-1">
+                                                            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                        </div>
+                                                        <p className="font-black text-lg text-gray-900 leading-tight">Verified!</p>
+                                                        <p className="font-bold text-sm text-emerald-700">Thank you, {studentProfile?.name || 'Student'}</p>
+                                                        <span className="text-[10px] text-emerald-600 font-medium">Attendance Verified Successfully</span>
                                                     </div>
                                                 )}
 
