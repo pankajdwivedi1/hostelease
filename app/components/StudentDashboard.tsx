@@ -2951,8 +2951,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
             let referenceDescriptor = studentProfile.faceDescriptor;
 
             if (!referenceDescriptor || referenceDescriptor.length === 0) {
-                // ❌ No face registered — attendance MUST be blocked.
-                // The old code auto-approved with 100% here (critical security bypass — now removed).
                 console.warn("⚠️ Attendance blocked: Student has no registered face descriptor.");
                 setFaceMatchStep('error');
                 stopCamera();
@@ -2964,19 +2962,73 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 return null;
             }
 
-            setFaceMatchProgress(70);
+            setFaceMatchProgress(50);
 
-            // ⚡ FAST PATH: Use existing detection result from the loop
+            // ⚡ CAPTURE LIVE FRAME FOR SERVER AI (ArcFace + MiniFASNet Anti-Spoof)
+            const canvas = document.createElement('canvas');
+            canvas.width = videoRef.current.videoWidth || 640;
+            canvas.height = videoRef.current.videoHeight || 480;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+                const liveImageBase64 = canvas.toDataURL('image/jpeg', 0.85);
+
+                try {
+                    setFaceMatchProgress(70);
+                    const serverRes = await fetch('/api/attendance/face-match', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image: liveImageBase64,
+                            firebaseUID: studentProfile.firebaseUID
+                        })
+                    });
+
+                    if (serverRes.ok) {
+                        const aiResult = await serverRes.json();
+                        setFaceMatchProgress(100);
+
+                        // 🛡️ ANTI-SPOOF BLOCK: Reject mobile screens, photo displays & video replays!
+                        if (aiResult.isSpoof) {
+                            console.warn("❌ Anti-Spoof Blocked:", aiResult.message);
+                            stopCamera();
+                            setFaceMatchStep('error');
+                            setIsMarkingAttendance(true);
+                            setAttendanceStep('failed');
+                            setAttendanceFailedReason(aiResult.message || "Mobile Screen Display / Photo Spoof Detected!");
+                            showToast(aiResult.message || "Mobile Screen / Photo Spoof Detected! Please present your real physical face.", "error");
+                            return null;
+                        }
+
+                        if (aiResult.success && aiResult.isMatch) {
+                            setFaceMatchStep('success');
+                            return {
+                                percentage: aiResult.score || 95,
+                                status: 'auto-approved',
+                            };
+                        } else if (aiResult.success && !aiResult.isMatch) {
+                            console.warn(`❌ Identity Mismatch: Score ${aiResult.score}%`);
+                            setFaceMatchStep('error');
+                            return {
+                                percentage: aiResult.score || 45,
+                                status: 'rejected',
+                            };
+                        }
+                    }
+                } catch (netErr) {
+                    console.warn("[Face Verification] Server AI network error, running local engine:", netErr);
+                }
+            }
+
+            // ⚡ FALLBACK: Local Browser Engine if network offline
+            setFaceMatchProgress(75);
             let liveRes = existingRes;
-
-            // If we don't have existingRes (fallback), detect now using SSD
             if (!liveRes) {
-                const canvas = document.createElement('canvas');
-                canvas.width = videoRef.current.videoWidth;
-                canvas.height = videoRef.current.videoHeight;
-                canvas.getContext('2d')?.drawImage(videoRef.current, 0, 0);
-                // ⚠️ MUST use SSD (accurate=true) — stored descriptor is also SSD
-                liveRes = await faceMatching.detectFace(canvas, true, true);
+                const fbCanvas = document.createElement('canvas');
+                fbCanvas.width = videoRef.current.videoWidth;
+                fbCanvas.height = videoRef.current.videoHeight;
+                fbCanvas.getContext('2d')?.drawImage(videoRef.current, 0, 0);
+                liveRes = await faceMatching.detectFace(fbCanvas, true, true);
             }
 
             if (!liveRes || !liveRes.descriptor) {
@@ -2999,8 +3051,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             setFaceMatchProgress(100);
 
-            // ✅ INDUSTRY-GRADE THRESHOLD: >= 85% (was 65% — too easy to fool)
-            // 85% means the SSD neural network is highly confident it's the same person.
             if (matchPercentage >= 85) {
                 setFaceMatchStep('success');
                 return {
@@ -3009,7 +3059,6 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 };
             }
 
-            // REJECT for mismatched face - No console error overlay, return percentage
             console.warn(`❌ Identity Mismatch: Match score too low (${matchPercentage}%).`);
             setFaceMatchStep('error');
             return {
