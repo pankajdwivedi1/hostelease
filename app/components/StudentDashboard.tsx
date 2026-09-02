@@ -766,6 +766,9 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     });
 
     const latestDetectionRef = useRef<any>(null); // ⚡ NEW: Cache latest scan to skip redundant processing
+    const [faceAlignmentProgress, setFaceAlignmentProgress] = useState<number>(0);
+    const [faceGuidanceMessage, setFaceGuidanceMessage] = useState<string>("ALIGN FACE INSIDE OVAL");
+    const stableFramesCountRef = useRef<number>(0);
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -873,49 +876,85 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                 }
                             }
 
-                            // 🚀 INSTANT SINGLE-SHOT TRIGGER: Trigger as soon as a face is detected in frame!
-                            const boxSize = width * height;
-                            if (boxSize > (canvas.width * canvas.height * 0.05)) {
-                                // 🛡️ CONTROL 1: PASSIVE MOBILE DISPLAY SCREEN ANALYZER
-                                if (videoRef.current && res.detection?.box) {
-                                    const spoofCheck = faceMatching.detectMobileScreenDisplay(videoRef.current, res.detection.box);
-                                    if (spoofCheck.isSpoof) {
-                                        console.warn("❌ Anti-Spoof Block:", spoofCheck.reason);
-                                        active = false;
-                                        isProcessingRef.current = false;
+                            // 🛡️ INDUSTRIAL CENTERING & STABILITY DWELL ENGINE
+                            const faceCenterX = x + (width / 2);
+                            const faceCenterY = y + (height / 2);
+                            const frameW = canvas.width;
+                            const frameH = canvas.height;
+
+                            // 1. Horizontal Centering: Face center in middle 50% (25% to 75% of frame)
+                            const isHorizCentered = faceCenterX >= (frameW * 0.25) && faceCenterX <= (frameW * 0.75);
+                            // 2. Vertical Centering: Face center in vertical 56% (22% to 78% of frame)
+                            const isVertCentered = faceCenterY >= (frameH * 0.22) && faceCenterY <= (frameH * 0.78);
+                            // 3. Minimum & Maximum Face Size (at least 8% area, face height at least 22% of frame)
+                            const faceAreaRatio = (width * height) / (frameW * frameH);
+                            const hasGoodSize = faceAreaRatio >= 0.08 && faceAreaRatio <= 0.85 && height >= (frameH * 0.22);
+
+                            const isWellPositioned = isHorizCentered && isVertCentered && hasGoodSize;
+
+                            if (isWellPositioned) {
+                                stableFramesCountRef.current = (stableFramesCountRef.current || 0) + 1;
+                                const stabilityPercent = Math.min(100, Math.round((stableFramesCountRef.current / 4) * 100));
+                                setFaceAlignmentProgress(stabilityPercent);
+                                setFaceGuidanceMessage(stabilityPercent >= 100 ? "PERFECT! HOLD STILL..." : `HOLD STILL... ${stabilityPercent}%`);
+
+                                // 🎯 TRIGGER ONLY AFTER 4 STABLE CENTERED CONSECUTIVE FRAMES (~600-800ms)
+                                if (stableFramesCountRef.current >= 4) {
+                                    // 🛡️ CONTROL 1: PASSIVE MOBILE DISPLAY SCREEN ANALYZER
+                                    if (videoRef.current && res.detection?.box) {
+                                        const spoofCheck = faceMatching.detectMobileScreenDisplay(videoRef.current, res.detection.box);
+                                        if (spoofCheck.isSpoof) {
+                                            console.warn("❌ Anti-Spoof Block:", spoofCheck.reason);
+                                            active = false;
+                                            isProcessingRef.current = false;
+                                            stopCamera();
+                                            const reasonMsg = spoofCheck.reason || "Mobile Screen Display / Photo Spoof Detected!";
+                                            showToast(reasonMsg, "error");
+                                            setFaceMatchStep('error');
+                                            setIsMarkingAttendance(true);
+                                            setAttendanceStep('failed');
+                                            setAttendanceFailedReason(reasonMsg);
+                                            return;
+                                        }
+                                    }
+
+                                    active = false;
+                                    isProcessingRef.current = true;
+                                    setFaceMatchStep('matching');
+
+                                    // ⚡ TURBO: Pass the detection result we already have from the loop!
+                                    const result = await performFaceVerification(res);
+                                    if (result && result.status === 'auto-approved') {
                                         stopCamera();
-                                        const reasonMsg = spoofCheck.reason || "Mobile Screen Display / Photo Spoof Detected!";
+                                        proceedWithAttendance(result);
+                                    } else {
+                                        stopCamera();
+                                        const percent = result?.percentage !== undefined ? `${result.percentage}%` : 'Low';
+                                        const reasonMsg = `Identity Mismatch (${percent} Accuracy). Verification failed. Please ensure you are the account owner.`;
                                         showToast(reasonMsg, "error");
                                         setFaceMatchStep('error');
                                         setIsMarkingAttendance(true);
                                         setAttendanceStep('failed');
                                         setAttendanceFailedReason(reasonMsg);
-                                        return;
                                     }
+                                    return;
                                 }
-
-                                active = false;
-                                isProcessingRef.current = true;
-                                setFaceMatchStep('matching');
-
-                                // ⚡ TURBO: Pass the detection result we already have from the loop!
-                                const result = await performFaceVerification(res);
-                                if (result && result.status === 'auto-approved') {
-                                    stopCamera();
-                                    proceedWithAttendance(result);
-                                } else {
-                                    stopCamera();
-                                    const percent = result?.percentage !== undefined ? `${result.percentage}%` : 'Low';
-                                    const reasonMsg = `Identity Mismatch (${percent} Accuracy). Verification failed. Please ensure you are the account owner.`;
-                                    showToast(reasonMsg, "error");
-                                    setFaceMatchStep('error');
-                                    setIsMarkingAttendance(true);
-                                    setAttendanceStep('failed');
-                                    setAttendanceFailedReason(reasonMsg);
+                            } else {
+                                // Reset stability if face moved out of bounds
+                                stableFramesCountRef.current = 0;
+                                setFaceAlignmentProgress(0);
+                                if (!hasGoodSize) {
+                                    setFaceGuidanceMessage(faceAreaRatio < 0.08 ? "MOVE CLOSER TO CAMERA" : "MOVE BACK SLIGHTLY");
+                                } else if (!isVertCentered) {
+                                    setFaceGuidanceMessage(faceCenterY < frameH * 0.22 ? "MOVE HEAD DOWN" : "MOVE HEAD UP");
+                                } else if (!isHorizCentered) {
+                                    setFaceGuidanceMessage("CENTER YOUR FACE INSIDE OVAL");
                                 }
-                                return;
                             }
                         } else {
+                            stableFramesCountRef.current = 0;
+                            setFaceAlignmentProgress(0);
+                            setFaceGuidanceMessage("ALIGN FACE INSIDE OVAL");
                             setFaceDetected(false);
                             setFaceBox(null);
                             consecutiveFailuresRef.current += 1;
@@ -6231,20 +6270,43 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
                                             <div className="mt-6 space-y-3">
                                                 {faceMatchStep === 'detecting' && (
-                                                    <div className="w-full py-4 text-center space-y-4">
-                                                        <div className={`transition-all duration-300 font-black flex items-center justify-center gap-3 ${faceDetected ? 'text-green-500 scale-110' : 'text-blue-600'}`}>
-                                                            {faceDetected ? (
+                                                    <div className="w-full py-3 text-center space-y-2">
+                                                        <div className={`transition-all duration-300 font-black flex items-center justify-center gap-2 text-sm tracking-wide ${
+                                                            faceAlignmentProgress >= 100 
+                                                                ? 'text-green-500 scale-105' 
+                                                                : faceAlignmentProgress > 0 
+                                                                    ? 'text-emerald-600' 
+                                                                    : faceDetected 
+                                                                        ? 'text-amber-500' 
+                                                                        : 'text-blue-600'
+                                                        }`}>
+                                                            {faceAlignmentProgress > 0 ? (
                                                                 <>
-                                                                    <div className="w-2 h-2 bg-green-500 rounded-full animate-ping" />
-                                                                    FACE DETECTED
+                                                                    <div className="w-3 h-3 bg-green-500 rounded-full animate-ping" />
+                                                                    {faceGuidanceMessage}
+                                                                </>
+                                                            ) : faceDetected ? (
+                                                                <>
+                                                                    <div className="w-3 h-3 bg-amber-500 rounded-full" />
+                                                                    {faceGuidanceMessage}
                                                                 </>
                                                             ) : (
                                                                 <>
-                                                                    <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
-                                                                    {consecutiveFailuresRef.current > 10 ? "ENHANCED SCANNING..." : "SCANNING FOR FACE..."}
+                                                                    <div className="w-3.5 h-3.5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+                                                                    SCANNING FOR FACE...
                                                                 </>
                                                             )}
                                                         </div>
+
+                                                        {/* Stability Hold Progress Bar */}
+                                                        {faceDetected && (
+                                                            <div className="w-48 mx-auto bg-gray-100 rounded-full h-1.5 overflow-hidden shadow-inner">
+                                                                <div 
+                                                                    className="bg-green-500 h-full transition-all duration-150 rounded-full"
+                                                                    style={{ width: `${faceAlignmentProgress}%` }}
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
 
