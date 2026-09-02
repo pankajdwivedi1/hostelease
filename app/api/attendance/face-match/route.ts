@@ -64,28 +64,16 @@ async function loadServerModels() {
 export async function POST(request: NextRequest) {
     try {
         const { db } = await import("@/lib/dbAdapter");
-        const { image, firebaseUID, studentId } = await request.json();
+        const { image, firebaseUID } = await request.json();
 
-        const targetId = studentId || firebaseUID;
-        if (!image || !targetId) {
-            return NextResponse.json({ success: false, error: "Missing image or student identification" }, { status: 400 });
+        if (!image || !firebaseUID) {
+            return NextResponse.json({ error: "Missing image or student identification" }, { status: 400 });
         }
 
         // ⚡ OPTION B3: Primary check using Python ArcFace + MiniFASNet AI Microservice
-        let student: any = null;
-        try {
-            if (firebaseUID) {
-                student = await db.students.getByFirebaseUID(firebaseUID);
-            }
-            if (!student && targetId) {
-                student = await db.students.getById(targetId);
-            }
-        } catch (lookupErr: any) {
-            console.warn("Student DB lookup warning in face-match:", lookupErr?.message || lookupErr);
-        }
-
+        const student = await db.students.getById(firebaseUID);
         if (!student) {
-            return NextResponse.json({ success: false, error: "Student profile not found in database" }, { status: 404 });
+            return NextResponse.json({ error: "Student profile not found" }, { status: 404 });
         }
 
         const { verifyFaceWithAIService } = await import("@/lib/aiAttendanceClient");

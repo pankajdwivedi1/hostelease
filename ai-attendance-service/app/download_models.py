@@ -16,12 +16,12 @@ def ensure_models_directory():
     os.makedirs(settings.MODELS_DIR, exist_ok=True)
 
 def download_file(url: str, destination: str):
-    print(f"📥 Downloading model from {url}...")
+    print(f"[INFO] Downloading model from {url}...")
     try:
         urllib.request.urlretrieve(url, destination)
-        print(f"✅ Saved model to {destination}")
+        print(f"[SUCCESS] Saved model to {destination}")
     except Exception as e:
-        print(f"⚠️ Could not download {destination}: {e}")
+        print(f"[WARNING] Could not download {destination}: {e}")
 
 def check_and_download_all():
     ensure_models_directory()
@@ -30,7 +30,7 @@ def check_and_download_all():
         if not os.path.exists(dest):
             download_file(url, dest)
         else:
-            print(f"✓ Model {filename} already exists.")
+            print(f"[INFO] Model {filename} already exists.")
 
 if __name__ == "__main__":
     check_and_download_all()
