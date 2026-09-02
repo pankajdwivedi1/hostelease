@@ -6231,11 +6231,11 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                             className="transition-all duration-200 ease-out drop-shadow-[0_0_10px_rgba(16,185,129,0.9)]"
                                                         />
 
-                                                        {/* Scanning Laser Line */}
-                                                        {cameraActive && (faceMatchStep === 'detecting' || faceMatchStep === 'matching') && (
+                                                        {/* Scanning Laser Line (Only runs while scanning 0% to 99%) */}
+                                                        {cameraActive && faceMatchStep === 'detecting' && scanHoldProgress < 100 && (
                                                             <line x1="15" x2="85" y1="0" y2="0" stroke={faceDetected ? "rgba(16, 185, 129, 0.8)" : "rgba(59, 130, 246, 0.8)"} strokeWidth="0.8" className="animate-scan-line">
-                                                                <animate attributeName="y1" values="12;88;12" dur="2s" repeatCount="indefinite" />
-                                                                <animate attributeName="y2" values="12;88;12" dur="2s" repeatCount="indefinite" />
+                                                                <animate attributeName="y1" values="12;88;12" dur="1.8s" repeatCount="indefinite" />
+                                                                <animate attributeName="y2" values="12;88;12" dur="1.8s" repeatCount="indefinite" />
                                                             </line>
                                                         )}
                                                     </svg>
