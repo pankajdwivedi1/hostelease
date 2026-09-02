@@ -149,6 +149,63 @@ export function detectMobileScreenDisplay(
 
         ctx.drawImage(inputElement, 0, 0, width, height);
 
+        // 🛡️ CHECK 1: FULL-FRAME DEVICE BEZEL & RECTANGULAR SCREEN BORDER DETECTION
+        // When someone holds a phone/tablet, the frame contains dark vertical bezels flanking the face.
+        const fullImgData = ctx.getImageData(0, 0, width, height);
+        const fullPixels = fullImgData.data;
+
+        // Calculate average column brightness across the entire width
+        const colBrightness = new Float32Array(width);
+        for (let x = 0; x < width; x++) {
+            let colSum = 0;
+            for (let y = 0; y < height; y++) {
+                const idx = (y * width + x) * 4;
+                colSum += 0.299 * fullPixels[idx] + 0.587 * fullPixels[idx + 1] + 0.114 * fullPixels[idx + 2];
+            }
+            colBrightness[x] = colSum / height;
+        }
+
+        // Check for sharp dark bezel drops in the left third and right third of the frame
+        const leftThirdEnd = Math.floor(width * 0.35);
+        const rightThirdStart = Math.floor(width * 0.65);
+        let leftMinBrightness = 255;
+        let rightMinBrightness = 255;
+        let centerSum = 0;
+        let centerCount = 0;
+
+        for (let x = 0; x < width; x++) {
+            const b = colBrightness[x];
+            if (x < leftThirdEnd && b < leftMinBrightness) leftMinBrightness = b;
+            if (x >= rightThirdStart && b < rightMinBrightness) rightMinBrightness = b;
+            if (x >= leftThirdEnd && x < rightThirdStart) {
+                centerSum += b;
+                centerCount++;
+            }
+        }
+
+        const centerAvg = centerCount > 0 ? centerSum / centerCount : 128;
+        const leftDrop = centerAvg - leftMinBrightness;
+        const rightDrop = centerAvg - rightMinBrightness;
+
+        // Check for vertical bezel edges (sharp gradient changes)
+        let maxLeftGradient = 0;
+        let maxRightGradient = 0;
+        for (let x = 1; x < width; x++) {
+            const grad = Math.abs(colBrightness[x] - colBrightness[x - 1]);
+            if (x < leftThirdEnd && grad > maxLeftGradient) maxLeftGradient = grad;
+            if (x >= rightThirdStart && grad > maxRightGradient) maxRightGradient = grad;
+        }
+
+        const hasFlankingBezels = (leftDrop > 30 && rightDrop > 30) || (maxLeftGradient > 18 && maxRightGradient > 18);
+        if (hasFlankingBezels) {
+            console.warn(`🛡️ Phone Bezel Detected: leftDrop=${leftDrop.toFixed(1)}, rightDrop=${rightDrop.toFixed(1)}, leftGrad=${maxLeftGradient.toFixed(1)}, rightGrad=${maxRightGradient.toFixed(1)}`);
+            return {
+                isSpoof: true,
+                reason: "Mobile Device Screen / Frame Detected! Photos shown on mobile screens are strictly prohibited."
+            };
+        }
+
+        // 🛡️ CHECK 2: FACE CROP TEXTURE & SPECULAR GLARE
         const bx = Math.max(0, Math.floor(box.x));
         const by = Math.max(0, Math.floor(box.y));
         const bw = Math.min(width - bx, Math.floor(box.width));
@@ -168,7 +225,7 @@ export function detectMobileScreenDisplay(
             const g = data[i + 1];
             const b = data[i + 2];
 
-            if (r >= 238 && g >= 238 && b >= 238) {
+            if (r >= 235 && g >= 235 && b >= 235) {
                 saturatedPixelCount++;
             }
 
@@ -180,7 +237,7 @@ export function detectMobileScreenDisplay(
                 const prevB = data[i - 2];
                 const prevBrightness = 0.299 * prevR + 0.587 * prevG + 0.114 * prevB;
                 const diff = Math.abs(brightness - prevBrightness);
-                if (diff > 30) {
+                if (diff > 25) {
                     highFreqGridDiffs++;
                 }
             }
@@ -191,12 +248,12 @@ export function detectMobileScreenDisplay(
 
         console.log(`🛡️ Mobile Screen Detector: GlareRatio=${(glareRatio * 100).toFixed(2)}%, MoireRatio=${(moireRatio * 100).toFixed(2)}%`);
 
-        if (glareRatio > 0.030) {
-            return { isSpoof: true, reason: "Mobile Device Screen / Glare Detected. Photos/Videos on mobile screens are strictly prohibited." };
+        if (glareRatio > 0.020) {
+            return { isSpoof: true, reason: "Mobile Device Screen Glare Detected. Please present your real physical face." };
         }
 
-        if (moireRatio > 0.12) {
-            return { isSpoof: true, reason: "Mobile Display Screen Detected. Video/Photo replays on screens are strictly prohibited." };
+        if (moireRatio > 0.09) {
+            return { isSpoof: true, reason: "Digital Display / Screen Grid Pattern Detected. Please present your real physical face." };
         }
 
         return { isSpoof: false };
