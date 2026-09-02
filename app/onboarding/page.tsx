@@ -922,6 +922,16 @@ export default function OnboardingPage() {
         return;
       }
 
+      // 🛡️ ANTI-SPOOF CHECK: Reject mobile screens and printed photos
+      if (descriptor.detection?.box) {
+        const spoofCheck = faceMatching.detectMobileScreenDisplay(aiCanvas, descriptor.detection.box);
+        if (spoofCheck.isSpoof) {
+          setFaceError(spoofCheck.reason || "Mobile Screen / Photo Spoof Detected! Please capture a real live selfie.");
+          setCapturedImage(null);
+          return;
+        }
+      }
+
       setFaceDescriptor(descriptor.descriptor);
       console.log("✅ Background Face Scan Complete");
     } catch (err) {

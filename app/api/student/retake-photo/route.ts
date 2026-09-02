@@ -17,6 +17,17 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: false, error: "Valid live profile picture is required" }, { status: 400 });
         }
 
+        // 🛡️ ANTI-SPOOF CHECK: Block digital screens, mobile gallery photos, and paper cutouts
+        const { checkLivenessWithAIService } = await import("@/lib/aiAttendanceClient");
+        const liveness = await checkLivenessWithAIService(profilePicture);
+        if (liveness.isSpoof) {
+            console.warn("❌ Registration Photo Rejected (Spoof):", liveness.reason);
+            return NextResponse.json({
+                success: false,
+                error: `Photo Rejected: ${liveness.reason} You must capture a real physical face in person.`
+            }, { status: 400 });
+        }
+
         if (!faceDescriptor || !Array.isArray(faceDescriptor) || faceDescriptor.length < 128) {
             return NextResponse.json({ success: false, error: "Valid 128-dimensional face embedding is required" }, { status: 400 });
         }

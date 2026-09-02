@@ -264,6 +264,16 @@ export default function LiveFaceCaptureModal({
                 return;
             }
 
+            // 🛡️ ANTI-SPOOF CHECK: Block mobile screens & printed photos during registration
+            if (res.detection?.box) {
+                const spoofCheck = faceMatching.detectMobileScreenDisplay(canvas, res.detection.box);
+                if (spoofCheck.isSpoof) {
+                    showToast(spoofCheck.reason || "Mobile Screen / Photo Spoof Detected! Please present your real physical face.", "error");
+                    setIsProcessing(false);
+                    return;
+                }
+            }
+
             const descriptorArray = Array.from(res.descriptor);
             setCapturedImage(dataUrl);
             setExtractedDescriptor(descriptorArray);

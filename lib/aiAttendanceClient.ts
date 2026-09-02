@@ -64,3 +64,32 @@ export async function verifyFaceWithAIService(params: {
         return null;
     }
 }
+
+export async function checkLivenessWithAIService(image: string): Promise<{ isLive: boolean; isSpoof: boolean; reason: string }> {
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+        const response = await fetch(`${AI_SERVICE_URL}/check-liveness`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image }),
+            signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+            const data = await response.json();
+            return {
+                isLive: Boolean(data.is_live),
+                isSpoof: Boolean(data.is_spoof),
+                reason: data.reason || (data.is_spoof ? "Screen or photo spoof detected." : "Living human verified.")
+            };
+        }
+    } catch (err: any) {
+        console.warn(`[AI Service Liveness] Offline or timed out:`, err?.message || err);
+    }
+    return { isLive: true, isSpoof: false, reason: "Living human assumed (fallback mode)." };
+}
+
