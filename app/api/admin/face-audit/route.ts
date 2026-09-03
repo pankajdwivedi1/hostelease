@@ -18,11 +18,31 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try {
-        const body = await req.json();
-        const { studentIds, requiresFaceRecapture } = body;
+        const { studentIds, requiresFaceRecapture, vectorUpdates } = body;
+
+        if (Array.isArray(vectorUpdates) && vectorUpdates.length > 0) {
+            let vectorSuccessCount = 0;
+            for (const item of vectorUpdates) {
+                if (item.studentId && Array.isArray(item.faceDescriptor) && item.faceDescriptor.length > 0) {
+                    try {
+                        await db.students.update(item.studentId, {
+                            faceDescriptor: item.faceDescriptor
+                        });
+                        vectorSuccessCount++;
+                    } catch (err) {
+                        console.warn(`Failed to backfill face vector for student ${item.studentId}:`, err);
+                    }
+                }
+            }
+            return NextResponse.json({
+                success: true,
+                updatedCount: vectorSuccessCount,
+                message: `Successfully backfilled biometric face vectors for ${vectorSuccessCount} student(s).`
+            });
+        }
 
         if (!Array.isArray(studentIds) || studentIds.length === 0) {
-            return NextResponse.json({ success: false, error: "studentIds array is required" }, { status: 400 });
+            return NextResponse.json({ success: false, error: "studentIds or vectorUpdates array is required" }, { status: 400 });
         }
 
         let updatedCount = 0;

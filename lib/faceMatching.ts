@@ -301,23 +301,31 @@ export async function detectFace(
         // TinyFaceDetector and SSD produce incompatible vector spaces — comparing them gives wrong distances.
         // Rule: descriptor extraction → ALWAYS SSD. Bare detection (no descriptor) → TinyFace is fine for speed.
         const useSSD = accurate || withDescriptor;
+        let detections: any[] = [];
+
         if (useSSD) {
+            // First pass: standard confidence (0.5)
             task = fa.detectAllFaces(imageElement, new fa.SsdMobilenetv1Options({ minConfidence: 0.5 }))
                 .withFaceLandmarks(true);
+            if (withDescriptor) task = task.withFaceDescriptors();
+            detections = await task;
+
+            // Second pass fallback: lower confidence (0.35) for mobile front cameras in soft/varied lighting
+            if (!detections || detections.length === 0) {
+                const fallbackTask = fa.detectAllFaces(imageElement, new fa.SsdMobilenetv1Options({ minConfidence: 0.35 }))
+                    .withFaceLandmarks(true);
+                detections = await (withDescriptor ? fallbackTask.withFaceDescriptors() : fallbackTask);
+            }
         } else {
             const options = new fa.TinyFaceDetectorOptions({
                 inputSize: 320, // Optimized size for speed
-                scoreThreshold: 0.5
+                scoreThreshold: 0.4
             });
             task = fa.detectAllFaces(imageElement, options)
                 .withFaceLandmarks(true);
+            if (withDescriptor) task = task.withFaceDescriptors();
+            detections = await task;
         }
-
-        if (withDescriptor) {
-            task = task.withFaceDescriptors();
-        }
-
-        const detections = await task;
 
         if (!detections || detections.length === 0) return null;
 

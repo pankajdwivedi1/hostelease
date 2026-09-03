@@ -1887,10 +1887,13 @@ export const db = {
                     if (isUuidString(filter._id)) searchOR.push({ id: filter._id });
                     else searchOR.push({ firebaseUid: filter._id }, { email: filter._id });
                 }
-                if (filter.email) searchOR.push({ email: filter.email });
-                if (filter.phoneNumber) searchOR.push({ phoneNumber: filter.phoneNumber });
-                if (filter.registrationId) searchOR.push({ registrationId: filter.registrationId });
-                if (filter.erpInformation) searchOR.push({ erpId: filter.erpInformation }, { erpInformation: filter.erpInformation });
+                if (filter.email) {
+                    const cleanEmail = filter.email.toLowerCase().trim();
+                    searchOR.push({ email: { equals: cleanEmail, mode: 'insensitive' } });
+                }
+                if (filter.phoneNumber) searchOR.push({ phoneNumber: filter.phoneNumber.trim() });
+                if (filter.registrationId) searchOR.push({ registrationId: filter.registrationId.trim() });
+                if (filter.erpInformation) searchOR.push({ erpId: filter.erpInformation.trim() }, { erpInformation: filter.erpInformation.trim() });
 
                 let student: any = null;
                 try {
@@ -1921,13 +1924,14 @@ export const db = {
                     const fallbackTenantId = await getTenantIdOrThrow();
                     let query = supabase.from('students').select('*, student_profiles(*), student_security(*)').eq('tenant_id', fallbackTenantId);
                     if (filter.firebaseUID) {
-                        query = query.or(`firebase_uid.eq."${filter.firebaseUID}",email.eq."${filter.firebaseUID}",phone_number.eq."${filter.firebaseUID}"`);
+                        const cleanUid = filter.firebaseUID.trim();
+                        query = query.or(`firebase_uid.eq."${cleanUid}",email.ilike."${cleanUid}",phone_number.eq."${cleanUid}"`);
                     } else if (filter.email) {
-                        query = query.eq('email', filter.email);
+                        query = query.ilike('email', filter.email.toLowerCase().trim());
                     } else if (filter.phoneNumber) {
-                        query = query.eq('phone_number', filter.phoneNumber);
+                        query = query.eq('phone_number', filter.phoneNumber.trim());
                     } else if (filter.registrationId) {
-                        const { data: prof } = await supabase.from('student_profiles').select('student_id').eq('registration_id', filter.registrationId).maybeSingle();
+                        const { data: prof } = await supabase.from('student_profiles').select('student_id').eq('registration_id', filter.registrationId.trim()).maybeSingle();
                         if (prof?.student_id) query = query.eq('_id', prof.student_id);
                     }
                     const { data: sData } = await query.maybeSingle();
@@ -1959,6 +1963,10 @@ export const db = {
                     };
                     delete (queryFilter as any).supabaseId;
                 }
+                if (filter.email) {
+                    const cleanEmail = filter.email.toLowerCase().trim();
+                    queryFilter.email = { $regex: new RegExp(`^${cleanEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') };
+                }
                 let query = StudentModel.findOne(queryFilter);
                 const student = await query.lean();
                 return mapStudentToCamelCase(student);
@@ -1976,7 +1984,8 @@ export const db = {
                     conditions.push({ id: filter.firebaseUID });
                 }
                 if (filter.email) {
-                    conditions.push({ email: filter.email.toLowerCase().trim() });
+                    const cleanEmail = filter.email.toLowerCase().trim();
+                    conditions.push({ email: { equals: cleanEmail, mode: 'insensitive' } });
                 }
                 if (filter.phoneNumber) {
                     conditions.push({ phoneNumber: filter.phoneNumber.trim() });
@@ -2001,7 +2010,8 @@ export const db = {
                         orParts.push(`_id.eq.${filter.firebaseUID}`);
                     }
                     if (filter.email) {
-                        orParts.push(`email.eq.${filter.email.toLowerCase().trim()}`);
+                        const cleanEmail = filter.email.toLowerCase().trim();
+                        orParts.push(`email.ilike.${cleanEmail}`);
                     }
                     if (filter.phoneNumber) {
                         orParts.push(`phone_number.eq.${filter.phoneNumber.trim()}`);

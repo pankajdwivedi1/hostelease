@@ -247,45 +247,54 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     const initAuth = async () => {
-      // ⚡ RELIABLE AUTH GUARD:
-      // If the user just came from the login flow (userType=student in localStorage),
-      // they are authenticated. NEVER auto-redirect to login during onboarding.
-      // Firebase onAuthStateChanged can fire null briefly — we rely on localStorage
-      // as the source of truth for "user just logged in".
-      const justLoggedIn = typeof window !== 'undefined' && localStorage.getItem("userType") === "student";
+      const storedUserEmail = (typeof window !== 'undefined' ? (localStorage.getItem("userEmail") || localStorage.getItem("studentEmail") || "") : "").toLowerCase().trim();
+      const justLoggedIn = typeof window !== 'undefined' && (localStorage.getItem("userType") === "student" || !!storedUserEmail);
+
+      // Pre-fill email from localStorage immediately if present
+      if (storedUserEmail) {
+        setUser({ uid: storedUserEmail, email: storedUserEmail, source: 'cached' });
+        setFormData(prev => ({
+          ...prev,
+          email: prev.email || storedUserEmail,
+          studentEmail: prev.studentEmail || storedUserEmail,
+          emailAddress: prev.emailAddress || storedUserEmail,
+          email_address: prev.email_address || storedUserEmail,
+          emailId: prev.emailId || storedUserEmail
+        }));
+      }
 
       let userResolved = false;
-      let loginRedirectTimer: ReturnType<typeof setTimeout> | null = null;
 
       const unsubscribe = onAuthStateChanged(firebaseAuth, async (currentUser) => {
-        if (currentUser) {
-          // ⚡ User confirmed — cancel any pending redirect timer
+        const activeEmail = (currentUser?.email || storedUserEmail || "").toLowerCase().trim();
+        if (currentUser || activeEmail) {
           userResolved = true;
-          if (loginRedirectTimer) {
-            clearTimeout(loginRedirectTimer);
-            loginRedirectTimer = null;
-          }
 
-          setUser({ uid: currentUser.uid, email: currentUser.email, source: 'firebase' });
-          if (currentUser.email) {
-            if (typeof window !== 'undefined') localStorage.setItem("userEmail", currentUser.email);
+          const uid = currentUser?.uid || activeEmail;
+          setUser({ uid, email: activeEmail, source: currentUser ? 'firebase' : 'cached' });
+          if (activeEmail) {
+            if (typeof window !== 'undefined') {
+              localStorage.setItem("userEmail", activeEmail);
+              localStorage.setItem("studentEmail", activeEmail);
+              localStorage.setItem("userType", "student");
+            }
             setFormData(prev => ({
               ...prev,
-              email: prev.email || currentUser.email || "",
-              studentEmail: prev.studentEmail || currentUser.email || "",
-              emailAddress: prev.emailAddress || currentUser.email || "",
-              email_address: prev.email_address || currentUser.email || "",
-              emailId: prev.emailId || currentUser.email || ""
+              email: prev.email || activeEmail,
+              studentEmail: prev.studentEmail || activeEmail,
+              emailAddress: prev.emailAddress || activeEmail,
+              email_address: prev.email_address || activeEmail,
+              emailId: prev.emailId || activeEmail
             }));
           }
           try {
-            const response = await fetch(`/api/students?email=${encodeURIComponent(currentUser.email || "")}`);
+            const response = await fetch(`/api/students?email=${encodeURIComponent(activeEmail)}`);
             const data = await response.json();
             if (data.student) {
               const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
               const isEditMode = searchParams ? searchParams.get("mode") === "edit" : false;
 
-              // ⚡ FIX: Only redirect to dashboard if profile is explicitly LOCKED AND not in edit mode
+              // ⚡ Only redirect to dashboard if profile is explicitly LOCKED AND not in edit mode
               const isLocked = data.student.isProfileLocked === true;
 
               if (isLocked && !isEditMode) {
@@ -296,7 +305,7 @@ export default function OnboardingPage() {
                 return;
               }
 
-              // ⚡ FIX: Pre-fill existing student details with comprehensive alias normalization
+              // ⚡ Pre-fill existing student details with comprehensive alias normalization
               setIsExistingStudent(true);
               const s = data.student;
               const dyn = s.dynamicFields || {};
@@ -324,7 +333,7 @@ export default function OnboardingPage() {
 
               const nameVal = getVal("name", "fullName", "studentName");
               const phoneVal = getVal("phoneNumber", "phone", "mobile", "contact");
-              const emailVal = getVal("email", "emailAddress") || currentUser.email || "";
+              const emailVal = getVal("email", "emailAddress") || activeEmail;
               const genderVal = getVal("gender", "sex");
               const dobVal = formatDateVal(getVal("dob", "dateOfBirth", "birthDate"));
               const categoryVal = getVal("category", "socialCategory");
@@ -401,31 +410,14 @@ export default function OnboardingPage() {
               setFormData(initialForm);
               if (s.profilePicture) setCapturedImage(s.profilePicture);
             }
-            // If no student found → fresh new student, form stays blank (correct behaviour)
           } catch (error) {
             console.error("Error fetching Firebase student data:", error);
           }
-        } else {
-          // ⚡ Firebase fired null — this can happen briefly even after a successful login.
-          // ONLY redirect to login if:
-          //   1. The user did NOT just log in (no userType=student in localStorage)
-          //   2. AND Firebase still has no user after the timeout
-          if (!userResolved && !justLoggedIn) {
-            // Short fallback for truly unauthenticated access (e.g. direct URL visit)
-            loginRedirectTimer = setTimeout(() => {
-              if (!firebaseAuth.currentUser && !userResolved) {
-                console.log('[Onboarding] Not authenticated — redirecting to login');
-                router.push("/login");
-              }
-            }, 3000);
-          }
-          // If justLoggedIn is true, we WAIT for Firebase to resolve — no redirect
         }
       });
 
       return () => {
         unsubscribe();
-        if (loginRedirectTimer) clearTimeout(loginRedirectTimer);
       };
     };
 
@@ -728,14 +720,13 @@ export default function OnboardingPage() {
 
   const startCamera = async () => {
     try {
-      // Check for secure context (Browsers block camera on HTTP except for localhost)
-      if (!window.isSecureContext && window.location.hostname !== 'localhost') {
-        alert("Camera access is blocked by your browser because this connection is not secure (HTTP). \n\nTo fix this: \n1. Access the site via 'localhost' or '127.0.0.1'.\n2. Use a secure HTTPS connection.\n3. Browsers block camera on IP addresses (like your 192.168.x.x) unless they use HTTPS.");
+      if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        alert("Camera requires a secure HTTPS connection.\n\nPlease ensure you open https://hosteleaze.com in your mobile browser.");
         return;
       }
 
       if (!navigator?.mediaDevices?.getUserMedia) {
-        alert("Camera API is completely missing. This usually happens if you are using a mobile phone to access a local IP address (like 192.168.x.x) without HTTPS. Please test via the live Vercel link (https://...) instead.");
+        alert("Camera access is not supported in this in-app browser.\n\nPlease open this page in Google Chrome or Safari.");
         return;
       }
 
@@ -744,10 +735,18 @@ export default function OnboardingPage() {
       // Yield to let React render the "Starting AI Camera..." spinner
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // 1. Get camera permission and stream FIRST
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
-      });
+      // 1. Get camera permission and stream with adaptive hardware fallback
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } } 
+        });
+      } catch (e) {
+        // Fallback for budget phones or older Android WebViews
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: "user" } 
+        });
+      }
 
       // 2. Open camera UI instantly
       setIsCameraOpen(true);
@@ -762,11 +761,15 @@ export default function OnboardingPage() {
 
       // ⚡ PRE-LOAD: Load AI models in the background without blocking the UI/camera stream
       loadAIModels().catch(console.error);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error accessing camera:", err);
-      alert("Could not access camera. Please allow camera permissions and ensure you're using HTTPS.");
       setIsCameraOpen(false);
       setIsCameraStarting(false);
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        alert("Camera permission is blocked.\n\nPlease tap the 🔒 lock icon (or Site Settings) in your browser address bar and set Camera to 'Allow', then tap Capture again.");
+      } else {
+        alert("Could not access camera. Please ensure no other app is currently using your camera and try again.");
+      }
     }
   };
 
@@ -849,10 +852,8 @@ export default function OnboardingPage() {
       if (context) {
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // 1. INSTANT FEEDBACK: Generate dataUrl and close camera immediately
-        // Removed the slow while loop. We just use a lower quality (0.6) for instant speed
-        // 0.6 is still perfectly clear for face recognition but reduces file size instantly.
-        let dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+        // 1. INSTANT FEEDBACK: Generate high-quality dataUrl and close camera immediately
+        let dataUrl = canvas.toDataURL("image/jpeg", 0.90);
 
         setCapturedImage(dataUrl);
         setFaceError(null);
@@ -876,8 +877,8 @@ export default function OnboardingPage() {
       // 2. Load the static image into memory to bypass DOM canvas lifecycle limitations on mobile
       const img = await faceMatching.loadImage(dataUrl);
 
-      // 3. Downscale the image while preserving the exact aspect ratio
-      const maxDim = 320;
+      // 3. Downscale the image while preserving the exact aspect ratio (optimal 480px for neural net)
+      const maxDim = 480;
       let aiWidth = img.width;
       let aiHeight = img.height;
       if (aiWidth > maxDim || aiHeight > maxDim) {
@@ -905,13 +906,15 @@ export default function OnboardingPage() {
       await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
 
       // 4. Run face descriptor generation using SSD-MobileNet (accurate=true)
-      // ⚠️ MUST use accurate=true (SSD) — attendance verification also uses SSD.
-      // Using TinyFaceDetector here produces incompatible descriptors that won't match at attendance time.
-      const descriptor = await faceMatching.detectFace(aiCanvas, true, true);
+      // First try on AI canvas; if not detected, retry on full-resolution img element
+      let descriptor = await faceMatching.detectFace(aiCanvas, true, true);
+      if (!descriptor || !descriptor.descriptor) {
+        descriptor = await faceMatching.detectFace(img, true, true);
+      }
       await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
 
-      if (!descriptor) {
-        setFaceError("No face detected! Please capture again.");
+      if (!descriptor || !descriptor.descriptor) {
+        setFaceError("No face detected! Please capture again with good lighting.");
         setCapturedImage(null); // Force retake
         return;
       }

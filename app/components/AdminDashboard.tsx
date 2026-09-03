@@ -4214,6 +4214,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     issueLabel: string;
     sharpnessScore: number;
     borderScore: number;
+    isPhotoOfPhoto: boolean;
+    isBlurry: boolean;
   }> => {
     return new Promise((resolve) => {
       const trimmedSrc = (imgSrc || "").trim();
@@ -4224,7 +4226,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           issueType: "BLANK_PHOTO",
           issueLabel: "Blank / Missing Photo",
           sharpnessScore: 0,
-          borderScore: 0
+          borderScore: 0,
+          isPhotoOfPhoto: false,
+          isBlurry: false
         });
       }
 
@@ -4243,8 +4247,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
               isPoorQuality: !hasVector,
               issueType: hasVector ? "CLEAN" : "MISSING_VECTOR",
               issueLabel: hasVector ? "Clean" : "Missing Vector",
-              sharpnessScore: 100,
-              borderScore: 0
+              sharpnessScore: 85,
+              borderScore: 0,
+              isPhotoOfPhoto: false,
+              isBlurry: false
             });
           }
 
@@ -4252,102 +4258,191 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           const imgData = ctx.getImageData(0, 0, w, h);
           const data = imgData.data;
 
-          // 1. Grayscale map & darkness check
+          // 1. Grayscale, Luminance Statistics & Exposure Analysis
           const gray = new Float32Array(w * h);
-          let darkPixelCount = 0;
+          let sumLuma = 0;
+          let sumSqLuma = 0;
+          let darkPixels = 0;
+          let blownPixels = 0;
 
           for (let i = 0; i < data.length; i += 4) {
             const r = data[i];
             const g = data[i + 1];
             const b = data[i + 2];
             const luma = 0.299 * r + 0.587 * g + 0.114 * b;
-            gray[i / 4] = luma;
-            if (luma < 12) darkPixelCount++;
+            const idx = i / 4;
+            gray[idx] = luma;
+            sumLuma += luma;
+            sumSqLuma += luma * luma;
+            if (luma < 15) darkPixels++;
+            if (luma > 245) blownPixels++;
           }
 
-          // Entirely dark/black image check
-          if (darkPixelCount > (w * h * 0.70)) {
+          const totalPixels = w * h;
+          const meanLuma = sumLuma / totalPixels;
+          const lumaStdDev = Math.sqrt(Math.max(0, (sumSqLuma / totalPixels) - (meanLuma * meanLuma)));
+
+          // Check for entirely black / missing / severely underexposed photo
+          if (darkPixels > (totalPixels * 0.70) || meanLuma < 15) {
             return resolve({
               isPoorQuality: true,
               issueType: "BLANK_PHOTO",
               issueLabel: "Black / Dark Image",
               sharpnessScore: 0,
-              borderScore: 0
+              borderScore: 0,
+              isPhotoOfPhoto: false,
+              isBlurry: false
             });
           }
 
-          // 2. Top Corners Background Uniformity
-          // In genuine selfies (Ashish, Anuranjan, etc.), the top corners are uniform wall (tlVar < 150, trVar < 150).
-          // In photos of photos held in fingers/table (Archita), top corners contain fingers/table/background clutter.
-          const topLeft: number[] = [];
-          const topRight: number[] = [];
-          for (let y = 5; y < 35; y++) {
-            for (let x = 5; x < 35; x++) {
-              topLeft.push(gray[y * w + x]);
-              topRight.push(gray[y * w + (w - 1 - x)]);
-            }
-          }
-          const tlMean = topLeft.reduce((a, b) => a + b, 0) / topLeft.length;
-          const trMean = topRight.reduce((a, b) => a + b, 0) / topRight.length;
-          const tlVar = Math.round(topLeft.reduce((a, b) => a + Math.pow(b - tlMean, 2), 0) / topLeft.length);
-          const trVar = Math.round(topRight.reduce((a, b) => a + Math.pow(b - trMean, 2), 0) / topRight.length);
+          // 2. Center Face Region Laplacian Variance & Feature Edge Measurement
+          const startY = Math.floor(h * 0.20);
+          const endY = Math.floor(h * 0.80);
+          const startX = Math.floor(w * 0.20);
+          const endX = Math.floor(w * 0.80);
 
-          // 3. Horizontal Paper Edge Line Strength (above head: y between 12% and 35%)
-          let maxHLine = 0;
-          for (let y = 12; y < Math.floor(h * 0.35); y++) {
-            let lineContrast = 0;
-            for (let x = 25; x < w - 25; x++) {
-              lineContrast += Math.abs(gray[y * w + x] - gray[(y + 4) * w + x]);
-            }
-            const avg = lineContrast / (w - 50);
-            if (avg > maxHLine) maxHLine = avg;
-          }
-
-          // 4. Vertical Paper Edge Line Strength (left & right sides: x between 8% and 25%)
-          let maxVLine = 0;
-          for (let x = 8; x < Math.floor(w * 0.25); x++) {
-            let vContrast = 0;
-            for (let y = 25; y < h - 25; y++) {
-              vContrast += Math.abs(gray[y * w + x] - gray[y * w + (x + 4)]);
-            }
-            const avg = vContrast / (h - 50);
-            if (avg > maxVLine) maxVLine = avg;
-          }
-
-          // 5. Center Face Sharpness (Laplacian on central 50% face zone)
           let lapSum = 0;
           let lapSumSq = 0;
           let lapCount = 0;
-          for (let y = Math.floor(h * 0.25); y < Math.floor(h * 0.75); y++) {
-            for (let x = Math.floor(w * 0.25); x < Math.floor(w * 0.75); x++) {
-              const idx = y * w + x;
-              const lap = gray[idx - w] + gray[idx + w] + gray[idx - 1] + gray[idx + 1] - 4 * gray[idx];
+          const sobelEdges: number[] = [];
+
+          for (let y = startY; y < endY; y++) {
+            const yw = y * w;
+            for (let x = startX; x < endX; x++) {
+              const idx = yw + x;
+              // Discrete Laplacian operator for micro-sharpness
+              const lap = (
+                gray[idx - w] + gray[idx + w] + gray[idx - 1] + gray[idx + 1] - 4 * gray[idx]
+              );
               lapSum += lap;
               lapSumSq += lap * lap;
               lapCount++;
+
+              // Sobel edge magnitude for distinct facial feature transitions (eyes, eyebrows, beard, lips)
+              const gx = (
+                gray[idx - w + 1] + 2 * gray[idx + 1] + gray[idx + w + 1] -
+                (gray[idx - w - 1] + 2 * gray[idx - 1] + gray[idx + w - 1])
+              );
+              const gy = (
+                gray[idx + w - 1] + 2 * gray[idx + w] + gray[idx + w + 1] -
+                (gray[idx - w - 1] + 2 * gray[idx - w] + gray[idx - w + 1])
+              );
+              sobelEdges.push(Math.sqrt(gx * gx + gy * gy));
             }
           }
-          const lapMean = lapSum / lapCount;
-          const sharpness = Math.round((lapSumSq / lapCount) - (lapMean * lapMean));
 
-          // Calibrated Decision Logic
-          const isPhotoOfPhoto = (maxHLine > 38 && maxVLine > 24) ||
-                                 (maxHLine > 40 && (tlVar > 450 || trVar > 450)) ||
-                                 (maxVLine > 35 && (tlVar > 400 || trVar > 400));
+          const lapMean = lapSum / Math.max(1, lapCount);
+          const lapVariance = Math.max(0, (lapSumSq / Math.max(1, lapCount)) - (lapMean * lapMean));
 
-          const isBlurry = sharpness < 75;
+          // 90th percentile of facial feature edge strength
+          sobelEdges.sort((a, b) => a - b);
+          const p90Idx = Math.floor(sobelEdges.length * 0.90);
+          const topEdgeStrength = sobelEdges[p90Idx] || 0;
 
+          // Calibrated 0-100% Quality Sharpness Score
+          let sharpnessScore = 0;
+          if (lapVariance < 5) {
+            sharpnessScore = Math.min(20, Math.round(lapVariance * 4));
+          } else {
+            const rawScore = 25.0 + (Math.log10(Math.max(1.0, lapVariance)) / 3.0) * 50.0 + (Math.min(200.0, topEdgeStrength) / 200.0) * 25.0;
+            sharpnessScore = Math.min(100, Math.max(0, Math.round(rawScore)));
+          }
+
+          // A photo is strictly classified as Blurry only if out of focus or motion degraded
+          const isBlurry = sharpnessScore < 45 || lapVariance < 35;
+
+          // 4. Industrial "Photo of a Photo / ID Card Recapture" Detection
+          // A printed physical photo or screen placed on a surface exhibits:
+          // a) Co-occurring opposite parallel boundaries (both left+right vertical margins or both top+bottom horizontal margins)
+          // b) High margin contrast / border discontinuity (corners/table background differs sharply from inner card)
+          // c) Concentrated specular reflection flash hotspot
+
+          // Check top/bottom horizontal parallel lines within margins (y: 8%-30% and y: 70%-92%)
+          let maxTopH = 0;
+          for (let y = 10; y < Math.floor(h * 0.30); y++) {
+            let rowDiff = 0;
+            for (let x = 30; x < w - 30; x++) {
+              rowDiff += Math.abs(gray[y * w + x] - gray[(y + 3) * w + x]);
+            }
+            const avg = rowDiff / (w - 60);
+            if (avg > maxTopH) maxTopH = avg;
+          }
+
+          let maxBottomH = 0;
+          for (let y = Math.floor(h * 0.70); y < h - 10; y++) {
+            let rowDiff = 0;
+            for (let x = 30; x < w - 30; x++) {
+              rowDiff += Math.abs(gray[y * w + x] - gray[(y - 3) * w + x]);
+            }
+            const avg = rowDiff / (w - 60);
+            if (avg > maxBottomH) maxBottomH = avg;
+          }
+
+          // Check left/right vertical parallel lines within margins (x: 8%-28% and x: 72%-92%)
+          let maxLeftV = 0;
+          for (let x = 10; x < Math.floor(w * 0.28); x++) {
+            let colDiff = 0;
+            for (let y = 30; y < h - 30; y++) {
+              colDiff += Math.abs(gray[y * w + x] - gray[y * w + (x + 3)]);
+            }
+            const avg = colDiff / (h - 60);
+            if (avg > maxLeftV) maxLeftV = avg;
+          }
+
+          let maxRightV = 0;
+          for (let x = Math.floor(w * 0.72); x < w - 10; x++) {
+            let colDiff = 0;
+            for (let y = 30; y < h - 30; y++) {
+              colDiff += Math.abs(gray[y * w + x] - gray[y * w + (x - 3)]);
+            }
+            const avg = colDiff / (h - 60);
+            if (avg > maxRightV) maxRightV = avg;
+          }
+
+          // Specular Glare / Flash Hotspot Detection on glossy card / phone screen
+          let specularHotspots = 0;
+          for (let y = 15; y < h - 15; y++) {
+            for (let x = 15; x < w - 15; x++) {
+              const val = gray[y * w + x];
+              if (val > 250) {
+                const surroundAvg = (gray[(y-5)*w + x] + gray[(y+5)*w + x] + gray[y*w + (x-5)] + gray[y*w + (x+5)]) / 4;
+                if (val - surroundAvg > 70) specularHotspots++;
+              }
+            }
+          }
+
+          // Corner background variance vs inner photo variance (Holding card in hand / on table)
+          const cornerPixels: number[] = [];
+          for (let y = 4; y < 25; y++) {
+            for (let x = 4; x < 25; x++) {
+              cornerPixels.push(gray[y * w + x]);
+              cornerPixels.push(gray[y * w + (w - 1 - x)]);
+            }
+          }
+          const cornerMean = cornerPixels.reduce((a, b) => a + b, 0) / cornerPixels.length;
+          const cornerVar = cornerPixels.reduce((a, b) => a + Math.pow(b - cornerMean, 2), 0) / cornerPixels.length;
+
+          // Dual-parallel rectangle framing criteria (requires structural rectangular card geometry, NOT single wall edges):
+          const hasDualVerticalBorders = (maxLeftV > 42 && maxRightV > 36);
+          const hasDualHorizontalBorders = (maxTopH > 44 && maxBottomH > 38);
+          const hasCardFrameWithClutter = (maxTopH > 46 || maxLeftV > 46) && (cornerVar > 550 && Math.abs(cornerMean - meanLuma) > 35);
+          const hasGlossyFlashRecapture = specularHotspots > 12 && (maxTopH > 35 || maxLeftV > 35);
+
+          const isPhotoOfPhoto = hasDualVerticalBorders || hasDualHorizontalBorders || hasCardFrameWithClutter || hasGlossyFlashRecapture;
+          const borderScore = Math.round(Math.max(maxTopH + maxBottomH, maxLeftV + maxRightV));
+
+          // 5. Final Classification Assignment
           let issueType: "BLANK_PHOTO" | "MISSING_VECTOR" | "PHOTO_OF_PHOTO" | "BLURRY_PHOTO" | "CLEAN" = "CLEAN";
           let issueLabel = "Clean Profile";
           let isPoorQuality = false;
 
           if (isPhotoOfPhoto) {
             issueType = "PHOTO_OF_PHOTO";
-            issueLabel = "📷 Photo of a Printed Photo / Screen";
+            issueLabel = "📷 Printed Photo / Card Recapture";
             isPoorQuality = true;
           } else if (isBlurry) {
             issueType = "BLURRY_PHOTO";
-            issueLabel = `Blurry / Low Sharpness (${sharpness})`;
+            issueLabel = `Blurry / Low Sharpness (${sharpnessScore}%)`;
             isPoorQuality = true;
           } else if (!hasVector) {
             issueType = "MISSING_VECTOR";
@@ -4359,16 +4454,20 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             isPoorQuality,
             issueType,
             issueLabel,
-            sharpnessScore: sharpness,
-            borderScore: Math.round(maxHLine + maxVLine)
+            sharpnessScore,
+            borderScore,
+            isPhotoOfPhoto,
+            isBlurry
           });
         } catch (e) {
           resolve({
             isPoorQuality: !hasVector,
             issueType: hasVector ? "CLEAN" : "MISSING_VECTOR",
             issueLabel: hasVector ? "Clean" : "Missing Vector",
-            sharpnessScore: 100,
-            borderScore: 0
+            sharpnessScore: 85,
+            borderScore: 0,
+            isPhotoOfPhoto: false,
+            isBlurry: false
           });
         }
       };
@@ -4378,8 +4477,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           isPoorQuality: !hasVector,
           issueType: hasVector ? "CLEAN" : "MISSING_VECTOR",
           issueLabel: hasVector ? "Clean Profile" : "Missing 128-D Vector",
-          sharpnessScore: 100,
-          borderScore: 0
+          sharpnessScore: 85,
+          borderScore: 0,
+          isPhotoOfPhoto: false,
+          isBlurry: false
         });
       };
 
@@ -4404,13 +4505,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           const res = await analyzeImageQuality(pic, s.hasVector);
           s.sharpnessScore = res.sharpnessScore;
           s.borderScore = res.borderScore;
-          s.isPhotoOfPhoto = res.issueType === "PHOTO_OF_PHOTO";
-          s.isBlurry = res.issueType === "BLURRY_PHOTO";
+          s.isPhotoOfPhoto = res.isPhotoOfPhoto;
+          s.isBlurry = res.isBlurry;
           s.qualityIssueLabel = res.issueLabel;
-          if (res.isPoorQuality && (s.issueType === "CLEAN" || !s.issueType)) {
-            s.issueType = res.issueType;
-          } else if (res.isPhotoOfPhoto) {
+          if (res.isPhotoOfPhoto) {
             s.issueType = "PHOTO_OF_PHOTO";
+          } else if (res.isBlurry) {
+            s.issueType = "BLURRY_PHOTO";
+          } else if (!s.hasVector) {
+            s.issueType = "MISSING_VECTOR";
+          } else if (s.isFlagged) {
+            s.issueType = "FLAGGED_RETAKE";
+          } else {
+            s.issueType = "CLEAN";
           }
         }
       }));
@@ -17171,7 +17278,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               onClick={() => setFaceAuditFilter("all")}
                               className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "all" ? "bg-slate-900 text-white shadow" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"}`}
                             >
-                              All Issues ({auditResults.filter(s => s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto).length})
+                              All Issues ({auditResults.filter(s => s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto || (!s.hasVector && s.issueType !== "BLANK_PHOTO")).length})
                             </button>
                             <button
                               onClick={() => setFaceAuditFilter("blank")}
@@ -17183,7 +17290,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               onClick={() => setFaceAuditFilter("missing_vector")}
                               className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "missing_vector" ? "bg-amber-600 text-white shadow" : "bg-white text-amber-600 border border-amber-200 hover:bg-amber-50"}`}
                             >
-                              Missing Vectors ({auditResults.filter(s => s.issueType === "MISSING_VECTOR").length})
+                              Missing Vectors ({auditResults.filter(s => (!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO").length})
                             </button>
                             <button
                               onClick={() => setFaceAuditFilter("photo_of_photo")}
@@ -17195,7 +17302,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               onClick={() => setFaceAuditFilter("blurry")}
                               className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "blurry" ? "bg-orange-600 text-white shadow" : "bg-white text-orange-600 border border-orange-200 hover:bg-orange-50"}`}
                             >
-                              Blurry Photos ({auditResults.filter(s => (s.isBlurry || s.issueType === "BLURRY_PHOTO") && !s.isPhotoOfPhoto).length})
+                              Blurry Photos ({auditResults.filter(s => s.isBlurry || s.issueType === "BLURRY_PHOTO").length})
                             </button>
                             <button
                               onClick={() => setFaceAuditFilter("flagged")}
@@ -17210,11 +17317,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               onClick={() => {
                                 const filtered = auditResults.filter(s => {
                                   if (faceAuditFilter === "blank") return s.issueType === "BLANK_PHOTO";
-                                  if (faceAuditFilter === "missing_vector") return s.issueType === "MISSING_VECTOR";
+                                  if (faceAuditFilter === "missing_vector") return (!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO";
                                   if (faceAuditFilter === "photo_of_photo") return s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO";
-                                  if (faceAuditFilter === "blurry") return (s.isBlurry || s.issueType === "BLURRY_PHOTO") && !s.isPhotoOfPhoto;
+                                  if (faceAuditFilter === "blurry") return s.isBlurry || s.issueType === "BLURRY_PHOTO";
                                   if (faceAuditFilter === "flagged") return s.isFlagged;
-                                  return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto;
+                                  return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto || (!s.hasVector && s.issueType !== "BLANK_PHOTO");
                                 });
                                 if (selectedFaceAuditIds.length === filtered.length && filtered.length > 0) {
                                   setSelectedFaceAuditIds([]);
@@ -17246,7 +17353,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               <button
                                 onClick={() => handleBulkFlagFaceRetake(false)}
                                 disabled={isFlaggingRetake}
-                                className="px-2 py-1.5 sm:px-3 sm:py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all"
+                                className="px-2 py-1 sm:px-3 sm:py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all"
                               >
                                 ✓ Clear Flag
                               </button>
@@ -17259,11 +17366,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           {auditResults
                             .filter(s => {
                               if (faceAuditFilter === "blank") return s.issueType === "BLANK_PHOTO";
-                              if (faceAuditFilter === "missing_vector") return s.issueType === "MISSING_VECTOR";
+                              if (faceAuditFilter === "missing_vector") return (!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO";
                               if (faceAuditFilter === "photo_of_photo") return s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO";
-                              if (faceAuditFilter === "blurry") return (s.isBlurry || s.issueType === "BLURRY_PHOTO") && !s.isPhotoOfPhoto;
+                              if (faceAuditFilter === "blurry") return s.isBlurry || s.issueType === "BLURRY_PHOTO";
                               if (faceAuditFilter === "flagged") return s.isFlagged;
-                              return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto;
+                              return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto || (!s.hasVector && s.issueType !== "BLANK_PHOTO");
                             })
                             .map((s, sIdx) => {
                               const isSelected = selectedFaceAuditIds.includes(s.id || s._id);
@@ -17311,7 +17418,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             Blank Photo
                                           </span>
                                         )}
-                                        {s.issueType === "MISSING_VECTOR" && (
+                                        {(!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO" && (
                                           <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-200 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
                                             Missing Vector
                                           </span>
@@ -17321,9 +17428,14 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             📷 Photo of Photo
                                           </span>
                                         )}
-                                        {(s.isBlurry || s.issueType === "BLURRY_PHOTO") && !s.isPhotoOfPhoto && (
+                                        {(s.isBlurry || s.issueType === "BLURRY_PHOTO") && (
                                           <span className="px-1.5 py-0.5 bg-orange-100 text-orange-800 border border-orange-200 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
-                                            📷 Blurry {s.sharpnessScore ? `(${s.sharpnessScore})` : ''}
+                                            📷 Blurry {s.sharpnessScore !== undefined ? `(${s.sharpnessScore}%)` : ''}
+                                          </span>
+                                        )}
+                                        {!s.isBlurry && !s.isPhotoOfPhoto && s.issueType !== "BLANK_PHOTO" && s.sharpnessScore !== undefined && s.sharpnessScore > 0 && (
+                                          <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[7.5px] sm:text-[8px] font-bold uppercase tracking-tight shrink-0">
+                                            ✓ Sharp ({s.sharpnessScore}%)
                                           </span>
                                         )}
                                       </div>
@@ -17347,11 +17459,11 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             })}
                           {auditResults.filter(s => {
                             if (faceAuditFilter === "blank") return s.issueType === "BLANK_PHOTO";
-                            if (faceAuditFilter === "missing_vector") return s.issueType === "MISSING_VECTOR";
+                            if (faceAuditFilter === "missing_vector") return (!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO";
                             if (faceAuditFilter === "photo_of_photo") return s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO";
-                            if (faceAuditFilter === "blurry") return (s.isBlurry || s.issueType === "BLURRY_PHOTO") && !s.isPhotoOfPhoto;
+                            if (faceAuditFilter === "blurry") return s.isBlurry || s.issueType === "BLURRY_PHOTO";
                             if (faceAuditFilter === "flagged") return s.isFlagged;
-                            return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto;
+                            return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto || (!s.hasVector && s.issueType !== "BLANK_PHOTO");
                           }).length === 0 && (
                             <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
                               <p className="text-xs font-black text-slate-700 uppercase tracking-wider">No issues found in this category!</p>

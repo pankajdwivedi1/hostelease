@@ -27,6 +27,11 @@
   --font-sans: var(--font-lora), "Cambria";
 }
 
+html, body {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 @keyframes float {
   0% {
     transform: translateY(0px) translateX(0px);

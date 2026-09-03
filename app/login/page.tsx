@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { signInWithPopup, signInWithRedirect, getRedirectResult, User } from "firebase/auth";
+import { signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, GoogleAuthProvider, User } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 // Supabase removed — using Firebase Auth for all logins
 import { useSearchParams } from "next/navigation";
@@ -294,12 +294,13 @@ function LoginForm() {
 
   const handleStudentUserAuth = async (user: User) => {
     if (!user?.email) throw new Error("No email returned from Google login");
+    const cleanEmail = user.email.toLowerCase().trim();
 
     // Mark as student in localStorage & preserve email for onboarding pre-fill
     localStorage.setItem("userType", "student");
-    if (user.email) {
-      localStorage.setItem("userEmail", user.email);
-      localStorage.setItem("studentEmail", user.email);
+    if (cleanEmail) {
+      localStorage.setItem("userEmail", cleanEmail);
+      localStorage.setItem("studentEmail", cleanEmail);
     }
 
     setLoadingText("Verifying Account...");
@@ -310,7 +311,7 @@ function LoginForm() {
 
     try {
       const response = await fetch(
-        `/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email)}&minimal=true`
+        `/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(cleanEmail)}&minimal=true`
       );
       if (response.ok) {
         const resJson = await response.json();
@@ -322,9 +323,9 @@ function LoginForm() {
     }
 
     // Fallback query by email alone if primary check returned nothing
-    if (!studentDataObj && user.email) {
+    if (!studentDataObj && cleanEmail) {
       try {
-        const fallbackRes = await fetch(`/api/students?email=${encodeURIComponent(user.email)}`);
+        const fallbackRes = await fetch(`/api/students?email=${encodeURIComponent(cleanEmail)}`);
         if (fallbackRes.ok) {
           const fallbackJson = await fallbackRes.json();
           studentDataObj = fallbackJson.student;
@@ -362,25 +363,69 @@ function LoginForm() {
   const handleGoogleLogin = async () => {
     try {
       setLoading(true);
-      setLoadingText("");
+      setLoadingText("Connecting to Google...");
       setError("");
 
-      // 🍏 Check if Apple iOS device in standalone PWA mode (where popups are blocked by WebKit)
-      const isIOSDevice = typeof window !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const isNative = typeof window !== 'undefined' && (
+        Capacitor.isNativePlatform() ||
+        (window as any).Capacitor?.isNativePlatform?.() ||
+        (window as any).Capacitor?.getPlatform?.() === 'android' ||
+        (window as any).Capacitor?.getPlatform?.() === 'ios'
+      );
+
       const isStandalone = typeof window !== 'undefined' && (
         (window.navigator as any).standalone === true ||
         window.matchMedia('(display-mode: standalone)').matches
       );
+      const isIOSDevice = typeof window !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
 
-      if (isIOSDevice && isStandalone) {
-        console.log("🍏 Initiating Firebase Redirect Login for iOS PWA...");
+      // 1. 🤖 NATIVE ANDROID / IOS APK (CAPACITOR): Use native Google Play Services bottom-sheet
+      if (isNative) {
+        console.log("🤖 Initiating Native Google Auth (Capacitor APK)...");
+        try {
+          const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+          try {
+            await GoogleAuth.initialize({
+              clientId: '729813273338-btdk8vrja4u1eqmba6hdi3cicp0d4n4h.apps.googleusercontent.com',
+              scopes: ['profile', 'email'],
+              grantOfflineAccess: true,
+            });
+          } catch (initErr) {
+            console.warn("GoogleAuth init notice:", initErr);
+          }
+
+          const googleUser = await GoogleAuth.signIn();
+          if (googleUser && (googleUser.authentication?.idToken || (googleUser as any).idToken)) {
+            setLoadingText("Verifying Account...");
+            const token = googleUser.authentication?.idToken || (googleUser as any).idToken;
+            const credential = GoogleAuthProvider.credential(token);
+            const result = await signInWithCredential(auth, credential);
+            await handleStudentUserAuth(result.user);
+            return;
+          }
+        } catch (nativeErr: any) {
+          console.warn("Native GoogleAuth fallback:", nativeErr);
+          if (nativeErr?.message?.includes('cancel') || nativeErr === 'USER_CANCELLED' || nativeErr?.code === '12501') {
+            setLoading(false);
+            return;
+          }
+          // Fall back to redirect if native fails
+          setLoadingText("Redirecting to Google...");
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        }
+      }
+
+      // 2. 📱 PWA STANDALONE MODE (Installed on Phone Home Screen): Use redirect
+      if (isStandalone || isIOSDevice) {
+        console.log("📱 Initiating Firebase Redirect Login for PWA Standalone...");
         setLoadingText("Redirecting to Google...");
         await signInWithRedirect(auth, googleProvider);
         return;
       }
 
-      // 📱💻 Standard 1-click popup for Android, Desktop, Laptop, Windows & Mac (Preserved 100%)
-      console.log("Initiating Firebase Google Login for Student (Popup)...");
+      // 3. 💻 DESKTOP & STANDARD MOBILE BROWSER (Chrome, Safari, Edge, Firefox): Fast 1-click popup
+      console.log("💻 Initiating Firebase Google Login for Student (Popup)...");
       const result = await signInWithPopup(auth, googleProvider);
       await handleStudentUserAuth(result.user);
 

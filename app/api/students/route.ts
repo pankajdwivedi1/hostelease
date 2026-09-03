@@ -362,9 +362,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ exists: !!existing, studentName: existing?.name || null }, { status: 200 });
     }
 
-    const firebaseUID = searchParams.get("firebaseUID");
-    const supabaseId = searchParams.get("supabaseId");
-    const email = searchParams.get("email");
+    const rawFirebaseUID = searchParams.get("firebaseUID");
+    const firebaseUID = rawFirebaseUID ? rawFirebaseUID.trim() : null;
+    const rawSupabaseId = searchParams.get("supabaseId");
+    const supabaseId = rawSupabaseId ? rawSupabaseId.trim() : null;
+    const rawEmail = searchParams.get("email");
+    const email = rawEmail ? rawEmail.toLowerCase().trim() : null;
     const parentPhone = searchParams.get("parentPhone");
     const selectedStudentId = searchParams.get("selectedStudentId");
     const minimal = searchParams.get("minimal") === "true";

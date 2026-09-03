@@ -201,11 +201,12 @@ export async function getTenantConfig() {
         const { prisma } = await import("@/lib/prisma");
         const settings = await prisma.adminSettings.findFirst({
             where: { tenantId: tenant._id },
-            select: { university_bank_details: true }
+            select: { universityBankDetails: true }
         });
 
-        if (settings?.university_bank_details?.defaultCountryCode) {
-            defaultCountryCode = settings.university_bank_details.defaultCountryCode;
+        const bankDetails: any = settings?.universityBankDetails || {};
+        if (bankDetails?.defaultCountryCode) {
+            defaultCountryCode = bankDetails.defaultCountryCode;
         }
     } catch (err) {
         // Fallback to default
@@ -288,7 +289,7 @@ export async function getSubscriptionStatus() {
     try {
         settings = await prisma.adminSettings.findFirst({
             where: { tenantId },
-            select: { universityBankDetails: true, totalHostelars: true }
+            select: { universityBankDetails: true }
         });
     } catch (e) {}
 
@@ -296,7 +297,7 @@ export async function getSubscriptionStatus() {
     const renewalUtr = bankDetails.renewalUtr || null;
     const renewalStatus = bankDetails.renewalStatus || null;
     const renewalSubmittedAt = bankDetails.renewalSubmittedAt || null;
-    const fallbackStudentCount = settings?.totalHostelars ? Number(settings.totalHostelars) : 0;
+    const fallbackStudentCount = bankDetails?.totalHostelars ? Number(bankDetails.totalHostelars) : 0;
 
     const isExpired = (endOfDayDate && now > endOfDayDate) || tenant.subscriptionStatus === 'expired' || tenant.isActive === false;
     const isWarning = !isExpired && daysRemaining !== null && daysRemaining <= 7 && daysRemaining >= 0;
