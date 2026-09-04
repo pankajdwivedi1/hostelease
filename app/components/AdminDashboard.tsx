@@ -4537,17 +4537,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const updated = [...studentList];
     const total = updated.length;
 
+    // ✅ FIX: Detect mobile to reduce workload — mobile CPUs cannot handle heavy parallel processing
+    const isMobileDevice = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
     // Load face-api module for Face Presence, Multiple Faces & Vector Extraction
+    // ✅ FIX: Skip face-api entirely on mobile — TensorFlow.js saturates mobile CPU → page freeze
     let faceApiModule: any = null;
-    try {
-      faceApiModule = await import("@/lib/faceMatching");
-      await faceApiModule.loadFaceApiModels(true); // Load SSD models for 128-D vector extraction
-    } catch (err) {
-      console.warn("Face-API loader warning in audit:", err);
+    if (!isMobileDevice) {
+      try {
+        faceApiModule = await import("@/lib/faceMatching");
+        await faceApiModule.loadFaceApiModels(true); // Load SSD models for 128-D vector extraction
+      } catch (err) {
+        console.warn("Face-API loader warning in audit:", err);
+      }
+    } else {
+      console.log("📱 Mobile detected — skipping TensorFlow face detection to prevent freeze");
     }
 
-    // Process in parallel batches of 15
-    const batchSize = 15;
+    // ✅ FIX: Smaller batch size: 3 on mobile, 8 on desktop (was 15 — caused UI starvation)
+    const batchSize = isMobileDevice ? 3 : 8;
     for (let i = 0; i < total; i += batchSize) {
       const batch = updated.slice(i, i + batchSize);
       await Promise.all(batch.map(async (s) => {
@@ -4572,7 +4580,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           s.multipleFaces = false;
 
           // AI Face Presence, Multiple Faces & Vector Extraction via face-api
-          if (faceApiModule && res.issueType !== "BLANK_PHOTO") {
+          // ✅ FIX: Only run on desktop where CPU can handle TensorFlow.js
+          if (!isMobileDevice && faceApiModule && res.issueType !== "BLANK_PHOTO") {
             try {
               const imgElem = new Image();
               imgElem.crossOrigin = "anonymous";
@@ -4629,9 +4638,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       }));
       setBlurScanProgress(Math.min(100, Math.round(((i + batch.length) / total) * 100)));
       setAuditResults([...updated]);
+      // ✅ FIX: Yield to the browser UI thread between batches to prevent "Page Unresponsive"
+      await new Promise(r => setTimeout(r, isMobileDevice ? 80 : 20));
     }
     setIsScanningBlur(false);
   };
+
 
   const handleAudit = async (type: "duplicates-phone" | "duplicates-regid" | "duplicates-erpid" | "gibberish-names" | "face-audit") => {
     try {

@@ -391,6 +391,11 @@ function LoginForm() {
       );
       const isIOSDevice = typeof window !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
 
+      // ✅ FIX: Only use redirect for iOS home-screen PWA — iOS WKWebView blocks popups.
+      // Android Chrome and all other mobile browsers work fine with popups.
+      // redirect silently fails on Android when the browser clears session storage during navigation.
+      const needsRedirect = isIOSDevice && isStandalone;
+
       // 1. 🤖 NATIVE ANDROID / IOS APK (CAPACITOR): Use native Google Play Services bottom-sheet
       if (isNative) {
         console.log("🤖 Initiating Native Google Auth (Capacitor APK)...");
@@ -421,23 +426,22 @@ function LoginForm() {
             setLoading(false);
             return;
           }
-          // Fall back to redirect if native fails
-          setLoadingText("Redirecting to Google...");
-          await signInWithRedirect(auth, googleProvider);
-          return;
+          // ✅ FIX: Native fallback uses popup (not redirect) — redirect silently fails when session is cleared
+          console.log("Native auth failed, falling back to popup...");
         }
       }
 
-      // 2. 📱 PWA STANDALONE MODE (Installed on Phone Home Screen): Use redirect
-      if (isStandalone || isIOSDevice) {
-        console.log("📱 Initiating Firebase Redirect Login for PWA Standalone...");
+      // 2. 📱 iOS HOME-SCREEN PWA ONLY: Use redirect (popup is blocked by iOS WKWebView in standalone)
+      if (needsRedirect) {
+        console.log("📱 Initiating Firebase Redirect Login for iOS PWA Standalone...");
         setLoadingText("Redirecting to Google...");
         await signInWithRedirect(auth, googleProvider);
         return;
       }
 
-      // 3. 💻 DESKTOP & STANDARD MOBILE BROWSER (Chrome, Safari, Edge, Firefox): Fast 1-click popup
-      console.log("💻 Initiating Firebase Google Login for Student (Popup)...");
+      // 3. 💻 DESKTOP, ANDROID MOBILE BROWSER, ANDROID PWA, iOS Safari (non-standalone):
+      //    Use popup — reliable, no session storage issues, instant result
+      console.log("🌐 Initiating Firebase Google Login (Popup)...");
       const result = await signInWithPopup(auth, googleProvider);
       await handleStudentUserAuth(result.user);
 

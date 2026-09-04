@@ -230,6 +230,7 @@ export default function Dashboard() {
               setLoading(false);
             }
           });
+          return; // ✅ FIX: Prevent falling through to router.push("/login") before Firebase resolves
         }
 
         if (storedUserType === "parent") {
