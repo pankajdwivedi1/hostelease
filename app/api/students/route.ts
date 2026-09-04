@@ -30,6 +30,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 🛡️ Mandatory Face Descriptor Requirement during student onboarding
+    if (body.isOnboarding) {
+      if (!faceDescriptor || !Array.isArray(faceDescriptor) || faceDescriptor.length < 68) {
+        return NextResponse.json(
+          { error: "A valid biometric face descriptor is required for student registration. Please capture a clear face photo." },
+          { status: 400 }
+        );
+      }
+    }
+
     // Load admin settings for uniqueness configuration and prefix mapping
     const adminSettings = await db.settings.get();
 
@@ -375,6 +385,10 @@ export async function GET(request: NextRequest) {
     const cachedUpdatedAt = searchParams.get("updatedAt");
 
     const isNotModified = (student: any) => {
+      // ⚡ If the student is flagged for face recapture, never send notModified (force fresh profile sync)
+      if (student?.dynamicFields && typeof student.dynamicFields === 'object' && student.dynamicFields.requiresFaceRecapture) {
+        return false;
+      }
       if (!versionCheck || !cachedUpdatedAt || !student?.updatedAt) return false;
       const cachedTime = new Date(cachedUpdatedAt).getTime();
       const serverTime = new Date(student.updatedAt).getTime();

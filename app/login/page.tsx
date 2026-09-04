@@ -110,20 +110,22 @@ function LoginForm() {
     try {
       const tenant = searchParams.get('tenant');
       const res = await fetch(`/api/tenant/config${tenant ? `?tenant=${tenant}` : ''}`);
-      const data = await res.json();
-      if (data.success) {
-        setTenantName(data.name);
-        setTenantLogo(data.logo);
-        if (data.defaultCountryCode) {
-          setParentCountryCode(data.defaultCountryCode);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setTenantName(data.name);
+          setTenantLogo(data.logo);
+          if (data.defaultCountryCode) {
+            setParentCountryCode(data.defaultCountryCode);
+          }
+          // ⚡ Persist for instant load next time
+          localStorage.setItem("lastTenantName", data.name);
+          localStorage.setItem("lastTenantLogo", data.logo || "");
+          localStorage.setItem("lastTenantSlug", data.slug || "");
         }
-        // ⚡ Persist for instant load next time
-        localStorage.setItem("lastTenantName", data.name);
-        localStorage.setItem("lastTenantLogo", data.logo || "");
-        localStorage.setItem("lastTenantSlug", data.slug || "");
       }
     } catch (err) {
-      console.error("Config fetch failed", err);
+      console.warn("Config fetch notice:", err);
     }
   };
 
@@ -150,12 +152,14 @@ function LoginForm() {
     try {
       const tenant = searchParams.get('tenant');
       const res = await fetch(`/api/developer/setup-status${tenant ? `?tenant=${tenant}` : ''}`);
-      const data = await res.json();
-      if (data.success) {
-        setIsDeveloperSetup(data.isSetup);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setIsDeveloperSetup(data.isSetup);
+        }
       }
     } catch (e) {
-      console.error("Setup check failed");
+      console.warn("Developer setup check notice:", e);
     }
   };
   
@@ -296,8 +300,9 @@ function LoginForm() {
     if (!user?.email) throw new Error("No email returned from Google login");
     const cleanEmail = user.email.toLowerCase().trim();
 
-    // Mark as student in localStorage & preserve email for onboarding pre-fill
+    // Mark as student in localStorage & cookie & preserve email for onboarding pre-fill
     localStorage.setItem("userType", "student");
+    document.cookie = "userType=student; path=/; max-age=2592000; SameSite=Lax";
     if (cleanEmail) {
       localStorage.setItem("userEmail", cleanEmail);
       localStorage.setItem("studentEmail", cleanEmail);
@@ -337,25 +342,32 @@ function LoginForm() {
     }
 
     if (studentDataObj) {
-      // Existing student found — cache and open dashboard
+      // Existing student found — cache and open dashboard directly
       const cached = localStorage.getItem("cachedStudentData");
       const existing = cached ? JSON.parse(cached) : {};
       const merged = { ...existing, ...studentDataObj };
+      localStorage.setItem("userType", "student");
       localStorage.setItem("cachedStudentData", JSON.stringify(merged));
+      document.cookie = "userType=student; path=/; max-age=2592000; SameSite=Lax";
 
       if (tenantSlugRes) {
         document.cookie = `tenant-slug=${tenantSlugRes}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
       }
 
       setLoadingText("Opening your dashboard...");
-      router.push("/");
+      window.location.href = "/";
       return;
     } else {
-      // ⚡ Truly new student (or deleted student) — purge any leftover stale device cache & route to onboarding
+      // ⚡ Truly new student — purge stale caches & route directly to onboarding
       localStorage.removeItem("cachedStudentData");
       localStorage.removeItem("cachedParentStudentData");
       localStorage.removeItem("studentStatus");
-      router.push("/onboarding");
+      localStorage.setItem("userType", "student");
+      if (cleanEmail) {
+        localStorage.setItem("userEmail", cleanEmail);
+        localStorage.setItem("studentEmail", cleanEmail);
+      }
+      window.location.href = "/onboarding";
       return;
     }
   };

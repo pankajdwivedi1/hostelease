@@ -83,35 +83,43 @@ export default function Dashboard() {
       ];
       const parts = hostname.split('.');
       const isRootDomain = mainDomains.includes(hostname) || parts.length === 1 || (parts.length === 2 && (parts[0] === 'www' || parts[1] === 'localhost'));
+      let storedUserType: string | null = null;
+      try {
+        try {
+          storedUserType = localStorage.getItem("userType");
+        } catch (e) {}
 
-      // ⚡ FAST PATH FOR ADMINS/STAFF: Skip Supabase network call completely
-      const storedUserType = localStorage.getItem("userType");
-      if (storedUserType === "admin") { setUserType("admin"); setLoading(false); return; }
-      if (storedUserType === "warden") { setUserType("warden"); setLoading(false); return; }
-      if (storedUserType === "superadmin") { setUserType("superadmin"); setLoading(false); return; }
-      if (storedUserType === "dean") { setUserType("dean"); setLoading(false); return; }
-      if (storedUserType === "getpass") { router.push("/getpass"); setLoading(false); return; }
+        if (!storedUserType && typeof document !== 'undefined' && document.cookie) {
+          const match = document.cookie.split('; ').find(row => row.startsWith('userType='));
+          if (match) {
+            storedUserType = match.split('=')[1] || null;
+          }
+        }
 
-      // ⚡ FAST PATH FOR STUDENTS: Instant load from cache
-      if (storedUserType === "student") {
-        const cachedStudent = localStorage.getItem("cachedStudentData");
-        if (cachedStudent) {
-          try {
-            const parsedStudent = JSON.parse(cachedStudent);
-            setStudentData(parsedStudent);
-            setUserType("student");
-            setLoading(false);
-            
-            // ⚡ BACKGROUND VERIFICATION (one-shot - unsubscribes after first fire)
-            // Silently check DB: if student found → update cache; if 404 → redirect to onboarding
-            import("firebase/auth").then(({ onAuthStateChanged }) => {
-              import("@/lib/firebase").then(({ auth }) => {
+        if (storedUserType === "admin") { setUserType("admin"); setLoading(false); return; }
+        if (storedUserType === "warden") { setUserType("warden"); setLoading(false); return; }
+        if (storedUserType === "superadmin") { setUserType("superadmin"); setLoading(false); return; }
+        if (storedUserType === "dean") { setUserType("dean"); setLoading(false); return; }
+        if (storedUserType === "getpass") { router.push("/getpass"); setLoading(false); return; }
+
+        // ⚡ FAST PATH FOR STUDENTS: Instant load from cache
+        if (storedUserType === "student") {
+          const cachedStudent = localStorage.getItem("cachedStudentData");
+          if (cachedStudent) {
+            try {
+              const parsedStudent = JSON.parse(cachedStudent);
+              if (parsedStudent && typeof parsedStudent === 'object') {
+                setStudentData(parsedStudent);
+                setUserType("student");
+                setLoading(false);
+
+                // Silently check DB in background: if student found → update cache; if 404 → redirect to onboarding
                 let didRun = false;
                 const unsub = onAuthStateChanged(auth, async (user) => {
-                  if (didRun) return; // ⚡ One-shot: prevent multiple fires
+                  if (didRun) return;
                   didRun = true;
-                  unsub(); // Unsubscribe immediately after first event
-                  
+                  unsub();
+
                   if (user) {
                     try {
                       const cached = localStorage.getItem("cachedStudentData");
@@ -119,7 +127,6 @@ export default function Dashboard() {
                       const cachedTime = currentCache.updatedAt || currentCache.updated_at || "";
                       const response = await fetch(`/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email || "")}&minimal=true&versionCheck=true&updatedAt=${encodeURIComponent(cachedTime)}`);
                       if (response.status === 404) {
-                        // ⚡ LIVE WIPE: Student was deleted from server -> purge local device cache immediately!
                         localStorage.removeItem("cachedStudentData");
                         localStorage.removeItem("userType");
                         localStorage.removeItem("userEmail");
@@ -127,7 +134,7 @@ export default function Dashboard() {
                         localStorage.removeItem("studentStatus");
                         setStudentData(null);
                         setUserType(null);
-                        router.push("/onboarding");
+                        window.location.href = "/onboarding";
                         return;
                       } else if (response.ok) {
                         const data = await response.json();
@@ -148,144 +155,135 @@ export default function Dashboard() {
                     }
                   }
                 });
-              });
-            });
-            
-            return; // ⚡ Instant load: return immediately so user is not redirected back to landing page
-          } catch (e) {
-            console.error("Cache parsing error", e);
-          }
-        }
-      }
 
-      // ⚡ FAST PATH FOR PARENTS: Instant load from cache
-      if (storedUserType === "parent") {
-        const cachedParent = localStorage.getItem("cachedParentStudentData");
-        if (cachedParent) {
-          try {
-            const parsed = JSON.parse(cachedParent);
-            setStudentData(parsed);
-            setUserType("parent");
-            setLoading(false);
-          } catch (e) {}
-        }
-      }
-
-      // 1. ⚡ Check Firebase Auth State for Students (fast, no external call until user is confirmed)
-      const sbSession = null; // Legacy: kept for fallback compatibility only
-
-      // 2. ⚡ If No Session AND no logged in role, AND on Main Domain (and no explicit ?tenant= URL param) -> Show Landing Page
-      if (isRootDomain && !tenantParam && !storedUserType) {
-        setIsMainDomain(true);
-        setLoading(false);
-        return;
-      }
-
-      // 3. ⚡ Fallback to checking other roles in localStorage (Admins/Wardens)
-
-      if (storedUserType === "student") {
-        // Handle Firebase Fallback for existing users
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-          if (user) {
-            try {
-              const response = await fetch(`/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email || "")}&minimal=true`);
-              if (response.status === 404) {
-                // ⚡ LIVE WIPE: Student was deleted from server -> purge local device cache immediately!
-                localStorage.removeItem("cachedStudentData");
-                localStorage.removeItem("userType");
-                localStorage.removeItem("userEmail");
-                localStorage.removeItem("studentEmail");
-                localStorage.removeItem("studentStatus");
-                setStudentData(null);
-                setUserType(null);
-                router.push("/onboarding");
-                setLoading(false);
                 return;
               }
+            } catch (e) {
+              console.error("Cache parsing error", e);
+            }
+          }
+        }
+
+        // ⚡ FAST PATH FOR PARENTS: Instant load from cache
+        if (storedUserType === "parent") {
+          const cachedParent = localStorage.getItem("cachedParentStudentData");
+          if (cachedParent) {
+            try {
+              const parsed = JSON.parse(cachedParent);
+              if (parsed && typeof parsed === 'object') {
+                setStudentData(parsed);
+                setUserType("parent");
+                setLoading(false);
+              }
+            } catch (e) {}
+          }
+        }
+
+        // If No Session AND no logged in role, AND on Main Domain (and no explicit ?tenant= URL param) -> Show Landing Page
+        if (isRootDomain && !tenantParam && !storedUserType) {
+          setIsMainDomain(true);
+          setLoading(false);
+          return;
+        }
+
+        if (storedUserType === "student") {
+          onAuthStateChanged(auth, async (user) => {
+            if (user) {
+              try {
+                const response = await fetch(`/api/students?firebaseUID=${encodeURIComponent(user.uid)}&email=${encodeURIComponent(user.email || "")}&minimal=true`);
+                if (response.status === 404) {
+                  localStorage.removeItem("cachedStudentData");
+                  setStudentData(null);
+                  setUserType(null);
+                  window.location.href = "/onboarding";
+                  setLoading(false);
+                  return;
+                }
+                if (response.ok) {
+                  const data = await response.json();
+                  if (data.student) {
+                    if (data.tenantSlug && activeTenant !== data.tenantSlug) {
+                      document.cookie = `tenant-slug=${data.tenantSlug}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+                      window.location.href = `/?tenant=${data.tenantSlug}`;
+                      return;
+                    }
+                    if (data.tenantSubscription) {
+                      data.student.tenantSubscription = data.tenantSubscription;
+                    }
+                    const cached = localStorage.getItem("cachedStudentData");
+                    const existing = cached ? JSON.parse(cached) : {};
+                    const merged = { ...existing, ...data.student };
+                    localStorage.setItem("userType", "student");
+                    localStorage.setItem("cachedStudentData", JSON.stringify(merged));
+                    document.cookie = "userType=student; path=/; max-age=2592000; SameSite=Lax";
+                    setStudentData(merged);
+                    setUserType("student");
+                    setLoading(false);
+                  } else {
+                    window.location.href = "/onboarding";
+                  }
+                }
+              } catch (error) {
+                setLoading(false);
+              }
+            } else {
+              setLoading(false);
+            }
+          });
+        }
+
+        if (storedUserType === "parent") {
+          const storedParentPhone = localStorage.getItem("parentPhone");
+          if (storedParentPhone) {
+            try {
+              const selectedStudentId = localStorage.getItem("parentSelectedStudentId");
+              const response = await fetch(`/api/students?parentPhone=${encodeURIComponent(storedParentPhone)}&minimal=true${selectedStudentId ? `&selectedStudentId=${selectedStudentId}` : ''}${activeTenant ? `&tenant=${activeTenant}` : ''}`);
               if (response.ok) {
                 const data = await response.json();
-                if (data.student) {
-                  // Redirect if found on wrong tenant
-                  if (data.tenantSlug && activeTenant !== data.tenantSlug) {
-                    document.cookie = `tenant-slug=${data.tenantSlug}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-                    window.location.href = `/?tenant=${data.tenantSlug}`;
+                if (data.students && data.students.length > 1) {
+                  setSiblingStudents(data.students);
+                  const hasSelected = selectedStudentId && data.students.some((s: any) => s._id === selectedStudentId);
+                  if (hasSelected && data.student) {
+                    const studentWithSubscription = { ...data.student, tenantSubscription: data.tenantSubscription };
+                    localStorage.setItem("cachedParentStudentData", JSON.stringify(studentWithSubscription));
+                    setStudentData(studentWithSubscription);
+                    setUserType("parent");
+                    setLoading(false);
+                    return;
+                  } else if (!hasSelected) {
+                    setUserType("parent-select");
+                    setLoading(false);
                     return;
                   }
+                } else if (data.student) {
                   if (data.tenantSubscription) {
                     data.student.tenantSubscription = data.tenantSubscription;
                   }
-                  const cached = localStorage.getItem("cachedStudentData");
-                  const existing = cached ? JSON.parse(cached) : {};
-                  const merged = { ...existing, ...data.student };
-                  localStorage.setItem("cachedStudentData", JSON.stringify(merged));
-                  setStudentData(merged);
-                  setUserType("student");
-                  setLoading(false);
-                } else {
-                  router.push("/onboarding");
-                }
-              }
-            } catch (error) {
-              router.push("/login");
-              setLoading(false);
-            }
-          } else {
-            router.push("/login");
-            setLoading(false);
-          }
-        });
-        return () => unsubscribe();
-      }
-
-      if (storedUserType === "parent") {
-        const storedParentPhone = localStorage.getItem("parentPhone");
-        if (storedParentPhone) {
-          try {
-            const selectedStudentId = localStorage.getItem("parentSelectedStudentId");
-            const response = await fetch(`/api/students?parentPhone=${encodeURIComponent(storedParentPhone)}&minimal=true${selectedStudentId ? `&selectedStudentId=${selectedStudentId}` : ''}${activeTenant ? `&tenant=${activeTenant}` : ''}`);
-            if (response.ok) {
-              const data = await response.json();
-              if (data.students && data.students.length > 1) {
-                setSiblingStudents(data.students);
-                const hasSelected = selectedStudentId && data.students.some((s: any) => s._id === selectedStudentId);
-                if (hasSelected && data.student) {
-                  const studentWithSubscription = { ...data.student, tenantSubscription: data.tenantSubscription };
-                  localStorage.setItem("cachedParentStudentData", JSON.stringify(studentWithSubscription));
-                  setStudentData(studentWithSubscription);
+                  localStorage.setItem("cachedParentStudentData", JSON.stringify(data.student));
+                  setStudentData(data.student);
                   setUserType("parent");
                   setLoading(false);
                   return;
-                } else if (!hasSelected) {
-                  setUserType("parent-select");
-                  setLoading(false);
-                  return;
                 }
-              } else if (data.student) {
-                if (data.tenantSubscription) {
-                  data.student.tenantSubscription = data.tenantSubscription;
-                }
-                localStorage.setItem("cachedParentStudentData", JSON.stringify(data.student));
-                setStudentData(data.student);
-                setUserType("parent");
-                setLoading(false);
-                return;
               }
+            } catch (e) {
+              console.error("Parent student fetch failed", e);
             }
-          } catch (e) {
-            console.error("Parent student fetch failed", e);
           }
+          if (!localStorage.getItem("cachedParentStudentData")) {
+            router.push("/login");
+            setLoading(false);
+          }
+          return;
         }
-        if (!localStorage.getItem("cachedParentStudentData")) {
-          router.push("/login");
-          setLoading(false);
-        }
-        return;
+
+        // Final Fallback
+        router.push("/login");
+        setLoading(false);
+      } catch (err) {
+        console.error("checkAuth unexpected error:", err);
+        setLoading(false);
       }
-
-
-      // Final Fallback
-      router.push("/login");
-      setLoading(false);
     };
 
     checkAuth();

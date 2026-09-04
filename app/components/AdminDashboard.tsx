@@ -1429,8 +1429,9 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const [isAuditing, setIsAuditing] = useState(false);
   const [activeAuditType, setActiveAuditType] = useState<"phone" | "regid" | "erpid" | "gibberish" | "face" | null>(null);
   const [selectedFaceAuditIds, setSelectedFaceAuditIds] = useState<string[]>([]);
-  const [faceAuditFilter, setFaceAuditFilter] = useState<"all" | "blank" | "missing_vector" | "photo_of_photo" | "blurry" | "flagged">("all");
+  const [faceAuditFilter, setFaceAuditFilter] = useState<"all" | "blank" | "no_face" | "multiple_faces" | "missing_vector" | "photo_of_photo" | "blurry" | "flagged">("all");
   const [isFlaggingRetake, setIsFlaggingRetake] = useState(false);
+  const [isBackfillingVectors, setIsBackfillingVectors] = useState(false);
   const [isScanningBlur, setIsScanningBlur] = useState(false);
   const [blurScanProgress, setBlurScanProgress] = useState(0);
   const [blurThreshold, setBlurThreshold] = useState(85);
@@ -3541,6 +3542,59 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     setIsWardenCameraOpen(false);
   };
 
+  const validateAndProcessBiometricPhoto = async (
+    canvasOrImg: HTMLCanvasElement | HTMLImageElement
+  ): Promise<{ valid: boolean; descriptor?: number[]; error?: string; score?: number }> => {
+    try {
+      const { assessPhotoQuality, detectFace, loadFaceApiModels, detectMobileScreenDisplay } = await import("@/lib/faceMatching");
+      
+      // 🛡️ 1. Photo Quality & Sharpness Check
+      const quality = assessPhotoQuality(canvasOrImg);
+      if (quality.isBlurry) {
+        return {
+          valid: false,
+          error: quality.reason || `Photo too blurry (Sharpness: ${quality.sharpnessScore}%). Please ensure steady lighting and focus.`,
+          score: quality.sharpnessScore
+        };
+      }
+      if (quality.isPhotoOfPhoto) {
+        return {
+          valid: false,
+          error: quality.reason || "Device bezel / Screen photo detected. Please take a direct live photo.",
+          score: quality.sharpnessScore
+        };
+      }
+
+      // 🛡️ 2. Load SSD Models and Run Detection
+      await loadFaceApiModels(true);
+      const res = await detectFace(canvasOrImg, true, true);
+      if (!res || !res.descriptor) {
+        return { valid: false, error: "No face detected in photo! Please ensure face is centered and clear." };
+      }
+      if (res.multipleFacesDetected) {
+        return { valid: false, error: "Multiple faces detected! Please ensure ONLY the student is in frame." };
+      }
+      if (res.detection?.box) {
+        const spoof = detectMobileScreenDisplay(canvasOrImg, res.detection.box);
+        if (spoof.isSpoof) {
+          return { valid: false, error: spoof.reason || "Digital display / screen spoof detected! Please take a real live photo." };
+        }
+      }
+      if (res.descriptor.length !== 128) {
+        return { valid: false, error: "Failed to extract complete 128-D face vector." };
+      }
+
+      return {
+        valid: true,
+        descriptor: Array.from(res.descriptor),
+        score: quality.sharpnessScore
+      };
+    } catch (err: any) {
+      console.error("Biometric photo verification failed:", err);
+      return { valid: false, error: "Photo processing failed: " + (err.message || err) };
+    }
+  };
+
   const captureWardenPhoto = async (fieldId: string) => {
     if (wardenVideoRef.current) {
       const canvas = document.createElement("canvas");
@@ -3549,24 +3603,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       const ctx = canvas.getContext("2d");
       if (ctx) {
         ctx.drawImage(wardenVideoRef.current, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg");
-        setAddStudentForm(prev => ({ ...prev, [fieldId]: dataUrl }));
-        stopWardenCamera();
-
-        // ⚡ AUTO-EXTRACT 128-D FACE DESCRIPTOR using SSD-MobileNet
-        // ⚠️ Must use accurate=true (SSD) — server attendance verification also uses SSD.
-        // TinyFaceDetector produces incompatible vectors that won't match at attendance time.
-        try {
-          const { detectFace, loadFaceApiModels } = await import("@/lib/faceMatching");
-          await loadFaceApiModels(true); // Load SSD pro model
-          const res = await detectFace(canvas, true, true); // accurate=true → SSD
-          if (res && res.descriptor) {
-            setAddStudentForm(prev => ({ ...prev, faceDescriptor: Array.from(res.descriptor) }));
-            console.log("✅ Auto-extracted 128-D SSD face vector during warden photo capture");
-          }
-        } catch (err) {
-          console.warn("Warden face vector extraction warning:", err);
+        
+        showToast("Scanning photo quality & biometrics...", "info");
+        const res = await validateAndProcessBiometricPhoto(canvas);
+        if (!res.valid) {
+          showToast(`❌ ${res.error}`, "error");
+          return;
         }
+
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+        setAddStudentForm(prev => ({ 
+          ...prev, 
+          [fieldId]: dataUrl, 
+          faceDescriptor: res.descriptor 
+        }));
+        stopWardenCamera();
+        showToast(`✅ Photo accepted! Sharpness: ${res.score}% (128-D Vector Ready)`, "success");
       }
     }
   };
@@ -3663,6 +3715,15 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     if (!roomNumber) {
       showToast("Room number is required!", "error");
       return;
+    }
+
+    // 🛡️ Strict Biometric Gatekeeper Check for profile photo & vector
+    const photoValue = addStudentForm.profilePicture || addStudentForm.profilephoto || Object.entries(addStudentForm).find(([k, v]) => k.toLowerCase().includes('photo') && typeof v === 'string')?.[1];
+    if (photoValue && typeof photoValue === 'string' && photoValue.length > 50) {
+      if (!addStudentForm.faceDescriptor || !Array.isArray(addStudentForm.faceDescriptor) || addStudentForm.faceDescriptor.length !== 128) {
+        showToast("Biometric face vector missing or incomplete. Please recapture/reselect a clear photo.", "error");
+        return;
+      }
     }
 
     try {
@@ -4219,7 +4280,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   }> => {
     return new Promise((resolve) => {
       const trimmedSrc = (imgSrc || "").trim();
-      const isBlank = !trimmedSrc || trimmedSrc === "null" || trimmedSrc === "undefined" || trimmedSrc === "data:," || trimmedSrc.length < 5 || (trimmedSrc.startsWith("data:") && trimmedSrc.length < 100);
+      const isBlank = !trimmedSrc || trimmedSrc === "null" || trimmedSrc === "undefined" || trimmedSrc === "data:," || trimmedSrc.length < 20;
       if (isBlank) {
         return resolve({
           isPoorQuality: true,
@@ -4258,7 +4319,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           const imgData = ctx.getImageData(0, 0, w, h);
           const data = imgData.data;
 
-          // 1. Grayscale, Luminance Statistics & Exposure Analysis
+          // 1. Grayscale & Global Statistical Analysis (Blank/Solid Check)
           const gray = new Float32Array(w * h);
           let sumLuma = 0;
           let sumSqLuma = 0;
@@ -4274,20 +4335,21 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             gray[idx] = luma;
             sumLuma += luma;
             sumSqLuma += luma * luma;
-            if (luma < 15) darkPixels++;
-            if (luma > 245) blownPixels++;
+            if (luma < 12) darkPixels++;
+            if (luma > 246) blownPixels++;
           }
 
           const totalPixels = w * h;
           const meanLuma = sumLuma / totalPixels;
-          const lumaStdDev = Math.sqrt(Math.max(0, (sumSqLuma / totalPixels) - (meanLuma * meanLuma)));
+          const lumaVariance = Math.max(0, (sumSqLuma / totalPixels) - (meanLuma * meanLuma));
+          const lumaStdDev = Math.sqrt(lumaVariance);
 
-          // Check for entirely black / missing / severely underexposed photo
-          if (darkPixels > (totalPixels * 0.70) || meanLuma < 15) {
+          // Check for entirely blank / flat / whiteout / corrupted photo
+          if (lumaStdDev < 8.0 || (darkPixels > (totalPixels * 0.85) && meanLuma < 14) || (blownPixels > (totalPixels * 0.85) && meanLuma > 242)) {
             return resolve({
               isPoorQuality: true,
               issueType: "BLANK_PHOTO",
-              issueLabel: "Black / Dark Image",
+              issueLabel: "Blank / Solid Frame",
               sharpnessScore: 0,
               borderScore: 0,
               isPhotoOfPhoto: false,
@@ -4295,11 +4357,71 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             });
           }
 
-          // 2. Center Face Region Laplacian Variance & Feature Edge Measurement
-          const startY = Math.floor(h * 0.20);
-          const endY = Math.floor(h * 0.80);
-          const startX = Math.floor(w * 0.20);
-          const endX = Math.floor(w * 0.80);
+          // 2. Outer Border & Framed Card/Screen Recapture Detection (Anshika case)
+          // Checks if outer margins (top, bottom, left, right) form a dark bezel/pillarbox around an inner photo
+          const margin = 18;
+          let topLuma = 0, bottomLuma = 0, leftLuma = 0, rightLuma = 0;
+          let topCount = 0, bottomCount = 0, leftCount = 0, rightCount = 0;
+
+          for (let y = 0; y < margin; y++) {
+            for (let x = 0; x < w; x++) { topLuma += gray[y * w + x]; topCount++; }
+          }
+          for (let y = h - margin; y < h; y++) {
+            for (let x = 0; x < w; x++) { bottomLuma += gray[y * w + x]; bottomCount++; }
+          }
+          for (let x = 0; x < margin; x++) {
+            for (let y = margin; y < h - margin; y++) { leftLuma += gray[y * w + x]; leftCount++; }
+          }
+          for (let x = w - margin; x < w; x++) {
+            for (let y = margin; y < h - margin; y++) { rightLuma += gray[y * w + x]; rightCount++; }
+          }
+
+          const avgTop = topLuma / topCount;
+          const avgBottom = bottomLuma / bottomCount;
+          const avgLeft = leftLuma / leftCount;
+          const avgRight = rightLuma / rightCount;
+
+          // Core center luminance
+          let centerLuma = 0, centerCount = 0;
+          for (let y = Math.floor(h * 0.25); y < Math.floor(h * 0.75); y++) {
+            for (let x = Math.floor(w * 0.25); x < Math.floor(w * 0.75); x++) {
+              centerLuma += gray[y * w + x];
+              centerCount++;
+            }
+          }
+          const avgCenter = centerLuma / centerCount;
+
+          // Screen Moire Pattern & Specular Glass Reflection Hotspots
+          let highFreqGridDiffs = 0;
+          let specularHotspots = 0;
+          for (let y = 15; y < h - 15; y++) {
+            for (let x = 15; x < w - 15; x++) {
+              const val = gray[y * w + x];
+              if (val > 250) {
+                const surround = (gray[(y - 6) * w + x] + gray[(y + 6) * w + x] + gray[y * w + (x - 6)] + gray[y * w + (x + 6)]) / 4;
+                if (val - surround > 75) specularHotspots++;
+              }
+              const diffX = Math.abs(val - gray[y * w + x - 1]);
+              const diffY = Math.abs(val - gray[(y - 1) * w + x]);
+              if (diffX > 32 && diffY > 32) highFreqGridDiffs++;
+            }
+          }
+          const moireRatio = highFreqGridDiffs / totalPixels;
+
+          // True Photo of Photo criteria:
+          // A) Dark Letterbox/Pillarbox Frame (outer bezel dark < 40 on 3+ sides while inner card is bright > 90)
+          const isOuterFramedBezel = ((avgTop < 40 ? 1 : 0) + (avgBottom < 40 ? 1 : 0) + (avgLeft < 40 ? 1 : 0) + (avgRight < 40 ? 1 : 0) >= 3) && (avgCenter - Math.min(avgTop, avgLeft, avgRight) > 60);
+          // B) Screen Display with Moire Grid & Specular Glare
+          const isDigitalScreenMoire = moireRatio > 0.08 && specularHotspots > 15;
+
+          const isPhotoOfPhoto = isOuterFramedBezel || isDigitalScreenMoire;
+          const borderScore = isPhotoOfPhoto ? 95 : 0;
+
+          // 3. High-Precision Facial Core Micro-Sharpness (Eyes, Nose, Lips)
+          const startY = Math.floor(h * 0.22);
+          const endY = Math.floor(h * 0.65);
+          const startX = Math.floor(w * 0.22);
+          const endX = Math.floor(w * 0.78);
 
           let lapSum = 0;
           let lapSumSq = 0;
@@ -4310,15 +4432,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
             const yw = y * w;
             for (let x = startX; x < endX; x++) {
               const idx = yw + x;
-              // Discrete Laplacian operator for micro-sharpness
+              // 8-neighbor Discrete Laplacian Operator for micro-detail focus
               const lap = (
-                gray[idx - w] + gray[idx + w] + gray[idx - 1] + gray[idx + 1] - 4 * gray[idx]
+                8 * gray[idx] -
+                gray[idx - w - 1] - gray[idx - w] - gray[idx - w + 1] -
+                gray[idx - 1] - gray[idx + 1] -
+                gray[idx + w - 1] - gray[idx + w] - gray[idx + w + 1]
               );
               lapSum += lap;
               lapSumSq += lap * lap;
               lapCount++;
 
-              // Sobel edge magnitude for distinct facial feature transitions (eyes, eyebrows, beard, lips)
+              // Sobel edge magnitude for facial feature definition
               const gx = (
                 gray[idx - w + 1] + 2 * gray[idx + 1] + gray[idx + w + 1] -
                 (gray[idx - w - 1] + 2 * gray[idx - 1] + gray[idx + w - 1])
@@ -4334,111 +4459,29 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
           const lapMean = lapSum / Math.max(1, lapCount);
           const lapVariance = Math.max(0, (lapSumSq / Math.max(1, lapCount)) - (lapMean * lapMean));
 
-          // 90th percentile of facial feature edge strength
           sobelEdges.sort((a, b) => a - b);
-          const p90Idx = Math.floor(sobelEdges.length * 0.90);
-          const topEdgeStrength = sobelEdges[p90Idx] || 0;
+          const p95 = sobelEdges[Math.floor(sobelEdges.length * 0.95)] || 0;
 
-          // Calibrated 0-100% Quality Sharpness Score
+          // Calibrated Sharpness Score (0-100%)
           let sharpnessScore = 0;
-          if (lapVariance < 5) {
-            sharpnessScore = Math.min(20, Math.round(lapVariance * 4));
+          if (lapVariance < 800 || p95 < 140) {
+            sharpnessScore = Math.min(35, Math.max(5, Math.round((lapVariance / 800) * 20 + (p95 / 140) * 15)));
           } else {
-            const rawScore = 25.0 + (Math.log10(Math.max(1.0, lapVariance)) / 3.0) * 50.0 + (Math.min(200.0, topEdgeStrength) / 200.0) * 25.0;
-            sharpnessScore = Math.min(100, Math.max(0, Math.round(rawScore)));
+            const edgePart = Math.min(50, (p95 / 250.0) * 50.0);
+            const varPart = Math.min(50, (Math.min(10000, lapVariance) / 10000.0) * 50.0);
+            sharpnessScore = Math.min(100, Math.max(45, Math.round(edgePart + varPart)));
           }
 
-          // A photo is strictly classified as Blurry only if out of focus or motion degraded
-          const isBlurry = sharpnessScore < 45 || lapVariance < 35;
+          const isBlurry = sharpnessScore < 40 || (lapVariance < 1000 && p95 < 135);
 
-          // 4. Industrial "Photo of a Photo / ID Card Recapture" Detection
-          // A printed physical photo or screen placed on a surface exhibits:
-          // a) Co-occurring opposite parallel boundaries (both left+right vertical margins or both top+bottom horizontal margins)
-          // b) High margin contrast / border discontinuity (corners/table background differs sharply from inner card)
-          // c) Concentrated specular reflection flash hotspot
-
-          // Check top/bottom horizontal parallel lines within margins (y: 8%-30% and y: 70%-92%)
-          let maxTopH = 0;
-          for (let y = 10; y < Math.floor(h * 0.30); y++) {
-            let rowDiff = 0;
-            for (let x = 30; x < w - 30; x++) {
-              rowDiff += Math.abs(gray[y * w + x] - gray[(y + 3) * w + x]);
-            }
-            const avg = rowDiff / (w - 60);
-            if (avg > maxTopH) maxTopH = avg;
-          }
-
-          let maxBottomH = 0;
-          for (let y = Math.floor(h * 0.70); y < h - 10; y++) {
-            let rowDiff = 0;
-            for (let x = 30; x < w - 30; x++) {
-              rowDiff += Math.abs(gray[y * w + x] - gray[(y - 3) * w + x]);
-            }
-            const avg = rowDiff / (w - 60);
-            if (avg > maxBottomH) maxBottomH = avg;
-          }
-
-          // Check left/right vertical parallel lines within margins (x: 8%-28% and x: 72%-92%)
-          let maxLeftV = 0;
-          for (let x = 10; x < Math.floor(w * 0.28); x++) {
-            let colDiff = 0;
-            for (let y = 30; y < h - 30; y++) {
-              colDiff += Math.abs(gray[y * w + x] - gray[y * w + (x + 3)]);
-            }
-            const avg = colDiff / (h - 60);
-            if (avg > maxLeftV) maxLeftV = avg;
-          }
-
-          let maxRightV = 0;
-          for (let x = Math.floor(w * 0.72); x < w - 10; x++) {
-            let colDiff = 0;
-            for (let y = 30; y < h - 30; y++) {
-              colDiff += Math.abs(gray[y * w + x] - gray[y * w + (x - 3)]);
-            }
-            const avg = colDiff / (h - 60);
-            if (avg > maxRightV) maxRightV = avg;
-          }
-
-          // Specular Glare / Flash Hotspot Detection on glossy card / phone screen
-          let specularHotspots = 0;
-          for (let y = 15; y < h - 15; y++) {
-            for (let x = 15; x < w - 15; x++) {
-              const val = gray[y * w + x];
-              if (val > 250) {
-                const surroundAvg = (gray[(y-5)*w + x] + gray[(y+5)*w + x] + gray[y*w + (x-5)] + gray[y*w + (x+5)]) / 4;
-                if (val - surroundAvg > 70) specularHotspots++;
-              }
-            }
-          }
-
-          // Corner background variance vs inner photo variance (Holding card in hand / on table)
-          const cornerPixels: number[] = [];
-          for (let y = 4; y < 25; y++) {
-            for (let x = 4; x < 25; x++) {
-              cornerPixels.push(gray[y * w + x]);
-              cornerPixels.push(gray[y * w + (w - 1 - x)]);
-            }
-          }
-          const cornerMean = cornerPixels.reduce((a, b) => a + b, 0) / cornerPixels.length;
-          const cornerVar = cornerPixels.reduce((a, b) => a + Math.pow(b - cornerMean, 2), 0) / cornerPixels.length;
-
-          // Dual-parallel rectangle framing criteria (requires structural rectangular card geometry, NOT single wall edges):
-          const hasDualVerticalBorders = (maxLeftV > 42 && maxRightV > 36);
-          const hasDualHorizontalBorders = (maxTopH > 44 && maxBottomH > 38);
-          const hasCardFrameWithClutter = (maxTopH > 46 || maxLeftV > 46) && (cornerVar > 550 && Math.abs(cornerMean - meanLuma) > 35);
-          const hasGlossyFlashRecapture = specularHotspots > 12 && (maxTopH > 35 || maxLeftV > 35);
-
-          const isPhotoOfPhoto = hasDualVerticalBorders || hasDualHorizontalBorders || hasCardFrameWithClutter || hasGlossyFlashRecapture;
-          const borderScore = Math.round(Math.max(maxTopH + maxBottomH, maxLeftV + maxRightV));
-
-          // 5. Final Classification Assignment
+          // 4. Final Classification Assignment
           let issueType: "BLANK_PHOTO" | "MISSING_VECTOR" | "PHOTO_OF_PHOTO" | "BLURRY_PHOTO" | "CLEAN" = "CLEAN";
-          let issueLabel = "Clean Profile";
+          let issueLabel = `✓ Sharp (${sharpnessScore}%)`;
           let isPoorQuality = false;
 
           if (isPhotoOfPhoto) {
             issueType = "PHOTO_OF_PHOTO";
-            issueLabel = "📷 Printed Photo / Card Recapture";
+            issueLabel = "📷 Photo of a Photo / Recapture";
             isPoorQuality = true;
           } else if (isBlurry) {
             issueType = "BLURRY_PHOTO";
@@ -4474,10 +4517,10 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
 
       img.onerror = () => {
         resolve({
-          isPoorQuality: !hasVector,
-          issueType: hasVector ? "CLEAN" : "MISSING_VECTOR",
-          issueLabel: hasVector ? "Clean Profile" : "Missing 128-D Vector",
-          sharpnessScore: 85,
+          isPoorQuality: true,
+          issueType: "BLANK_PHOTO",
+          issueLabel: "Corrupted / Unloadable Photo",
+          sharpnessScore: 0,
           borderScore: 0,
           isPhotoOfPhoto: false,
           isBlurry: false
@@ -4494,21 +4537,84 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const updated = [...studentList];
     const total = updated.length;
 
-    // Process in parallel batches of 20
-    const batchSize = 20;
+    // Load face-api module for Face Presence, Multiple Faces & Vector Extraction
+    let faceApiModule: any = null;
+    try {
+      faceApiModule = await import("@/lib/faceMatching");
+      await faceApiModule.loadFaceApiModels(true); // Load SSD models for 128-D vector extraction
+    } catch (err) {
+      console.warn("Face-API loader warning in audit:", err);
+    }
+
+    // Process in parallel batches of 15
+    const batchSize = 15;
     for (let i = 0; i < total; i += batchSize) {
       const batch = updated.slice(i, i + batchSize);
       await Promise.all(batch.map(async (s) => {
         const pic = (s.profilePicture || "").trim();
-        const isBlank = !pic || pic === "null" || pic === "undefined" || pic === "data:," || pic.length < 5 || (pic.startsWith("data:") && pic.length < 100);
-        if (!isBlank && s.issueType !== "BLANK_PHOTO") {
+        const isBlank = !pic || pic === "null" || pic === "undefined" || pic === "data:," || pic.length < 20;
+        if (isBlank) {
+          s.issueType = "BLANK_PHOTO";
+          s.isBlurry = false;
+          s.isPhotoOfPhoto = false;
+          s.faceMissing = true;
+          s.multipleFaces = false;
+          s.sharpnessScore = 0;
+          s.qualityIssueLabel = "Blank / Missing Photo";
+        } else {
           const res = await analyzeImageQuality(pic, s.hasVector);
           s.sharpnessScore = res.sharpnessScore;
           s.borderScore = res.borderScore;
           s.isPhotoOfPhoto = res.isPhotoOfPhoto;
           s.isBlurry = res.isBlurry;
           s.qualityIssueLabel = res.issueLabel;
-          if (res.isPhotoOfPhoto) {
+          s.faceMissing = false;
+          s.multipleFaces = false;
+
+          // AI Face Presence, Multiple Faces & Vector Extraction via face-api
+          if (faceApiModule && res.issueType !== "BLANK_PHOTO") {
+            try {
+              const imgElem = new Image();
+              imgElem.crossOrigin = "anonymous";
+              await new Promise<void>((resolve) => {
+                imgElem.onload = () => resolve();
+                imgElem.onerror = () => resolve();
+                imgElem.src = pic;
+              });
+
+              if (imgElem.width > 0 && imgElem.height > 0) {
+                const faceRes = await faceApiModule.detectFace(imgElem, false, true);
+                if (!faceRes) {
+                  s.faceMissing = true;
+                  s.multipleFaces = false;
+                  if (!res.isPhotoOfPhoto && !res.isBlurry) {
+                    s.issueType = "NO_FACE";
+                    s.qualityIssueLabel = "⚠️ No Face Detected";
+                  }
+                } else {
+                  s.faceMissing = false;
+                  if (faceRes.multipleFacesDetected) {
+                    s.multipleFaces = true;
+                    s.issueType = "MULTIPLE_FACES";
+                    s.qualityIssueLabel = "👥 Multiple Faces Detected";
+                  } else {
+                    s.multipleFaces = false;
+                    if (faceRes.descriptor) {
+                      s.extractedDescriptor = Array.from(faceRes.descriptor);
+                    }
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn("Face presence detection warning:", err);
+            }
+          }
+
+          if (s.issueType === "NO_FACE" || s.issueType === "MULTIPLE_FACES") {
+            // keep AI presence issue type
+          } else if (res.issueType === "BLANK_PHOTO") {
+            s.issueType = "BLANK_PHOTO";
+          } else if (res.isPhotoOfPhoto) {
             s.issueType = "PHOTO_OF_PHOTO";
           } else if (res.isBlurry) {
             s.issueType = "BLURRY_PHOTO";
@@ -4594,6 +4700,40 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       alert("Error: " + err.message);
     } finally {
       setIsFlaggingRetake(false);
+    }
+  };
+
+  const handleBulkBackfillVectors = async (customIds?: string[]) => {
+    const targetIds = customIds || selectedFaceAuditIds;
+    const targets = auditResults.filter(s => targetIds.includes(s.id || s._id) && Array.isArray(s.extractedDescriptor) && s.extractedDescriptor.length > 0);
+    if (targets.length === 0) {
+      alert("No extracted biometric face vectors available for the selected student(s).");
+      return;
+    }
+
+    try {
+      setIsBackfillingVectors(true);
+      const updates = targets.map(s => ({
+        studentId: s.id || s._id,
+        faceDescriptor: s.extractedDescriptor
+      }));
+
+      const res = await fetch("/api/admin/face-audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vectorUpdates: updates })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || `Successfully backfilled vectors for ${updates.length} student(s).`);
+        await handleAudit("face-audit");
+      } else {
+        alert("Failed: " + (data.error || "Unknown error"));
+      }
+    } catch (err: any) {
+      alert("Error backfilling vectors: " + err.message);
+    } finally {
+      setIsBackfillingVectors(false);
     }
   };
 
@@ -11354,11 +11494,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                    alt="Profile Preview"
                                                    className="w-24 h-24 rounded-2xl object-cover border-2 border-blue-500 shadow-md"
                                                  />
+                                                 {addStudentForm.faceDescriptor && Array.isArray(addStudentForm.faceDescriptor) && addStudentForm.faceDescriptor.length === 128 && (
+                                                   <span className="text-[9px] font-black text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                                                     <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                                                     ✓ 128-D Vector Active
+                                                   </span>
+                                                 )}
                                                  <button
                                                    type="button"
                                                    onClick={() => setAddStudentForm(prev => {
                                                      const updated = { ...prev };
                                                      delete updated[field.id];
+                                                     delete updated.faceDescriptor;
                                                      return updated;
                                                    })}
                                                    className="px-3 py-1 bg-red-50 text-red-600 hover:bg-red-100 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all border border-red-100"
@@ -11404,7 +11551,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                                        if (file) {
                                                          const reader = new FileReader();
                                                          reader.onload = () => {
-                                                           setAddStudentForm(prev => ({ ...prev, [field.id]: reader.result as string }));
+                                                           const rawDataUrl = reader.result as string;
+                                                           showToast("Validating uploaded photo quality & biometrics...", "info");
+                                                           const img = new Image();
+                                                           img.crossOrigin = "anonymous";
+                                                           img.onload = async () => {
+                                                             const res = await validateAndProcessBiometricPhoto(img);
+                                                             if (!res.valid) {
+                                                               showToast(`❌ ${res.error}`, "error");
+                                                               e.target.value = "";
+                                                               return;
+                                                             }
+                                                             setAddStudentForm(prev => ({ 
+                                                               ...prev, 
+                                                               [field.id]: rawDataUrl,
+                                                               faceDescriptor: res.descriptor 
+                                                             }));
+                                                             showToast(`✅ Uploaded photo accepted! Sharpness: ${res.score}% (128-D Vector Ready)`, "success");
+                                                           };
+                                                           img.src = rawDataUrl;
                                                          };
                                                          reader.readAsDataURL(file);
                                                        }
@@ -14340,32 +14505,80 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <label className="text-xs font-black text-gray-500 uppercase tracking-widest">Profile Photo</label>
 
                     {!isEditCameraOpen ? (
-                      <div className="relative group">
-                        <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-xl relative">
-                          {editStudentForm.profilePicture ? (
-                            <img src={editStudentForm.profilePicture} alt="Preview" className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                              <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                            </div>
-                          )}
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="relative group">
+                          <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-xl relative">
+                            {editStudentForm.profilePicture ? (
+                              <img src={editStudentForm.profilePicture} alt="Preview" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                                <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              setIsEditCameraOpen(true);
-                              const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                              if (editVideoRef.current) editVideoRef.current.srcObject = stream;
-                            } catch (err) {
-                              alert("Camera access failed");
-                              setIsEditCameraOpen(false);
-                            }
-                          }}
-                          className="absolute bottom-0 right-0 bg-blue-600 text-white p-2.5 rounded-full shadow-lg hover:bg-blue-700 transition-all scale-90 group-hover:scale-100"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                        </button>
+
+                        {editStudentForm.faceDescriptor && Array.isArray(editStudentForm.faceDescriptor) && editStudentForm.faceDescriptor.length === 128 && (
+                          <span className="text-[9px] font-black text-green-700 bg-green-50 border border-green-200 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                            ✓ 128-D Vector Active
+                          </span>
+                        )}
+
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                setIsEditCameraOpen(true);
+                                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                                if (editVideoRef.current) editVideoRef.current.srcObject = stream;
+                              } catch (err) {
+                                alert("Camera access failed");
+                                setIsEditCameraOpen(false);
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-blue-700 transition-all flex items-center gap-1"
+                          >
+                            📷 Take Photo
+                          </button>
+                          <label className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-gray-200 transition-all cursor-pointer flex items-center gap-1 border border-gray-300">
+                            📁 Choose File
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onload = () => {
+                                    const rawDataUrl = reader.result as string;
+                                    showToast("Validating uploaded photo quality & biometrics...", "info");
+                                    const img = new Image();
+                                    img.crossOrigin = "anonymous";
+                                    img.onload = async () => {
+                                      const res = await validateAndProcessBiometricPhoto(img);
+                                      if (!res.valid) {
+                                        alert(`❌ Photo Rejected: ${res.error}`);
+                                        e.target.value = "";
+                                        return;
+                                      }
+                                      setEditStudentForm(prev => ({ 
+                                        ...prev, 
+                                        profilePicture: rawDataUrl,
+                                        faceDescriptor: res.descriptor 
+                                      }));
+                                      showToast(`✅ Uploaded photo accepted! Sharpness: ${res.score}% (128-D Vector Ready)`, "success");
+                                    };
+                                    img.src = rawDataUrl;
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
                       </div>
                     ) : (
                       <div className="w-full max-w-sm rounded-2xl overflow-hidden bg-black aspect-square relative shadow-2xl">
@@ -14394,24 +14607,23 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 const ctx = canvas.getContext('2d');
                                 if (ctx) {
                                   ctx.drawImage(video, 0, 0);
-                                  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                                  setEditStudentForm(prev => ({ ...prev, profilePicture: dataUrl }));
+
+                                  showToast("Scanning photo quality & biometrics...", "info");
+                                  const res = await validateAndProcessBiometricPhoto(canvas);
+                                  if (!res.valid) {
+                                    alert(`❌ Photo Rejected: ${res.error}`);
+                                    return;
+                                  }
+
+                                  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                                  setEditStudentForm(prev => ({ 
+                                    ...prev, 
+                                    profilePicture: dataUrl,
+                                    faceDescriptor: res.descriptor 
+                                  }));
                                   if (video.srcObject) (video.srcObject as MediaStream).getTracks().forEach(t => t.stop());
                                   setIsEditCameraOpen(false);
-
-                                  // ⚡ AUTO-EXTRACT 128-D FACE DESCRIPTOR using SSD-MobileNet
-                                  // ⚠️ Must use accurate=true (SSD) — server attendance verification also uses SSD.
-                                  try {
-                                    const { detectFace, loadFaceApiModels } = await import("@/lib/faceMatching");
-                                    await loadFaceApiModels(true); // Load SSD pro model
-                                    const res = await detectFace(canvas, true, true); // accurate=true → SSD
-                                    if (res && res.descriptor) {
-                                      setEditStudentForm(prev => ({ ...prev, faceDescriptor: Array.from(res.descriptor) }));
-                                      console.log("✅ Auto-extracted 128-D SSD face vector during edit photo capture");
-                                    }
-                                  } catch (err) {
-                                    console.warn("Edit face vector extraction warning:", err);
-                                  }
+                                  showToast(`✅ Photo updated & verified! Sharpness: ${res.score}% (128-D Vector Ready)`, "success");
                                 }
                               }
                             }}
@@ -17278,7 +17490,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               onClick={() => setFaceAuditFilter("all")}
                               className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "all" ? "bg-slate-900 text-white shadow" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"}`}
                             >
-                              All Issues ({auditResults.filter(s => s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto || (!s.hasVector && s.issueType !== "BLANK_PHOTO")).length})
+                              All Issues ({auditResults.filter(s => s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto || s.faceMissing || s.multipleFaces || (!s.hasVector && s.issueType !== "BLANK_PHOTO")).length})
                             </button>
                             <button
                               onClick={() => setFaceAuditFilter("blank")}
@@ -17287,10 +17499,22 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               Blank Photos ({auditResults.filter(s => s.issueType === "BLANK_PHOTO").length})
                             </button>
                             <button
+                              onClick={() => setFaceAuditFilter("no_face")}
+                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "no_face" ? "bg-rose-700 text-white shadow" : "bg-white text-rose-700 border border-rose-200 hover:bg-rose-50"}`}
+                            >
+                              ⚠️ No Face ({auditResults.filter(s => (s.faceMissing || s.issueType === "NO_FACE") && s.issueType !== "BLANK_PHOTO").length})
+                            </button>
+                            <button
+                              onClick={() => setFaceAuditFilter("multiple_faces")}
+                              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "multiple_faces" ? "bg-purple-700 text-white shadow" : "bg-white text-purple-700 border border-purple-200 hover:bg-purple-50"}`}
+                            >
+                              👥 Multiple Faces ({auditResults.filter(s => s.multipleFaces || s.issueType === "MULTIPLE_FACES").length})
+                            </button>
+                            <button
                               onClick={() => setFaceAuditFilter("missing_vector")}
                               className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] md:text-xs font-black uppercase tracking-tight sm:tracking-wider transition-all ${faceAuditFilter === "missing_vector" ? "bg-amber-600 text-white shadow" : "bg-white text-amber-600 border border-amber-200 hover:bg-amber-50"}`}
                             >
-                              Missing Vectors ({auditResults.filter(s => (!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO").length})
+                              Missing Vectors ({auditResults.filter(s => (!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO" && s.issueType !== "NO_FACE").length})
                             </button>
                             <button
                               onClick={() => setFaceAuditFilter("photo_of_photo")}
@@ -17317,11 +17541,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               onClick={() => {
                                 const filtered = auditResults.filter(s => {
                                   if (faceAuditFilter === "blank") return s.issueType === "BLANK_PHOTO";
-                                  if (faceAuditFilter === "missing_vector") return (!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO";
+                                  if (faceAuditFilter === "no_face") return (s.faceMissing || s.issueType === "NO_FACE") && s.issueType !== "BLANK_PHOTO";
+                                  if (faceAuditFilter === "multiple_faces") return s.multipleFaces || s.issueType === "MULTIPLE_FACES";
+                                  if (faceAuditFilter === "missing_vector") return (!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO" && s.issueType !== "NO_FACE";
                                   if (faceAuditFilter === "photo_of_photo") return s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO";
                                   if (faceAuditFilter === "blurry") return s.isBlurry || s.issueType === "BLURRY_PHOTO";
                                   if (faceAuditFilter === "flagged") return s.isFlagged;
-                                  return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto || (!s.hasVector && s.issueType !== "BLANK_PHOTO");
+                                  return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto || s.faceMissing || s.multipleFaces || (!s.hasVector && s.issueType !== "BLANK_PHOTO");
                                 });
                                 if (selectedFaceAuditIds.length === filtered.length && filtered.length > 0) {
                                   setSelectedFaceAuditIds([]);
@@ -17343,6 +17569,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                               {selectedFaceAuditIds.length} Student(s) Selected
                             </span>
                             <div className="flex items-center gap-1.5 sm:gap-2">
+                              {selectedFaceAuditIds.some(sid => {
+                                const s = auditResults.find(item => (item.id || item._id) === sid);
+                                return s && Array.isArray(s.extractedDescriptor) && s.extractedDescriptor.length > 0 && !s.hasVector;
+                              }) && (
+                                <button
+                                  onClick={() => handleBulkBackfillVectors()}
+                                  disabled={isBackfillingVectors}
+                                  className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-black uppercase tracking-tight sm:tracking-wider shadow-md transition-all flex items-center gap-1"
+                                >
+                                  ⚡ {isBackfillingVectors ? "Saving..." : "Auto-Backfill Vectors"}
+                                </button>
+                              )}
                               <button
                                 onClick={() => handleBulkFlagFaceRetake(true)}
                                 disabled={isFlaggingRetake}
@@ -17366,11 +17604,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                           {auditResults
                             .filter(s => {
                               if (faceAuditFilter === "blank") return s.issueType === "BLANK_PHOTO";
-                              if (faceAuditFilter === "missing_vector") return (!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO";
+                              if (faceAuditFilter === "no_face") return (s.faceMissing || s.issueType === "NO_FACE") && s.issueType !== "BLANK_PHOTO";
+                              if (faceAuditFilter === "multiple_faces") return s.multipleFaces || s.issueType === "MULTIPLE_FACES";
+                              if (faceAuditFilter === "missing_vector") return (!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO" && s.issueType !== "NO_FACE";
                               if (faceAuditFilter === "photo_of_photo") return s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO";
                               if (faceAuditFilter === "blurry") return s.isBlurry || s.issueType === "BLURRY_PHOTO";
                               if (faceAuditFilter === "flagged") return s.isFlagged;
-                              return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto || (!s.hasVector && s.issueType !== "BLANK_PHOTO");
+                              return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto || s.faceMissing || s.multipleFaces || (!s.hasVector && s.issueType !== "BLANK_PHOTO");
                             })
                             .map((s, sIdx) => {
                               const isSelected = selectedFaceAuditIds.includes(s.id || s._id);
@@ -17418,9 +17658,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             Blank Photo
                                           </span>
                                         )}
-                                        {(!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO" && (
-                                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-200 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
-                                            Missing Vector
+                                        {(s.faceMissing || s.issueType === "NO_FACE") && s.issueType !== "BLANK_PHOTO" && (
+                                          <span className="px-1.5 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
+                                            ⚠️ No Face Detected
+                                          </span>
+                                        )}
+                                        {(s.multipleFaces || s.issueType === "MULTIPLE_FACES") && (
+                                          <span className="px-1.5 py-0.5 bg-purple-100 text-purple-800 border border-purple-300 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0">
+                                            👥 Multiple Faces
+                                          </span>
+                                        )}
+                                        {(!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO" && s.issueType !== "NO_FACE" && (
+                                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-200 rounded text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight shrink-0 flex items-center gap-1">
+                                            Missing Vector {Array.isArray(s.extractedDescriptor) && s.extractedDescriptor.length > 0 && <span className="text-[7px] text-emerald-700 font-black">⚡ Ready</span>}
                                           </span>
                                         )}
                                         {(s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO") && (
@@ -17433,7 +17683,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             📷 Blurry {s.sharpnessScore !== undefined ? `(${s.sharpnessScore}%)` : ''}
                                           </span>
                                         )}
-                                        {!s.isBlurry && !s.isPhotoOfPhoto && s.issueType !== "BLANK_PHOTO" && s.sharpnessScore !== undefined && s.sharpnessScore > 0 && (
+                                        {!s.isBlurry && !s.isPhotoOfPhoto && !s.faceMissing && !s.multipleFaces && s.issueType !== "BLANK_PHOTO" && s.sharpnessScore !== undefined && s.sharpnessScore > 0 && (
                                           <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[7.5px] sm:text-[8px] font-bold uppercase tracking-tight shrink-0">
                                             ✓ Sharp ({s.sharpnessScore}%)
                                           </span>
@@ -17459,11 +17709,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             })}
                           {auditResults.filter(s => {
                             if (faceAuditFilter === "blank") return s.issueType === "BLANK_PHOTO";
-                            if (faceAuditFilter === "missing_vector") return (!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO";
+                            if (faceAuditFilter === "no_face") return (s.faceMissing || s.issueType === "NO_FACE") && s.issueType !== "BLANK_PHOTO";
+                            if (faceAuditFilter === "multiple_faces") return s.multipleFaces || s.issueType === "MULTIPLE_FACES";
+                            if (faceAuditFilter === "missing_vector") return (!s.hasVector || s.issueType === "MISSING_VECTOR") && s.issueType !== "BLANK_PHOTO" && s.issueType !== "NO_FACE";
                             if (faceAuditFilter === "photo_of_photo") return s.isPhotoOfPhoto || s.issueType === "PHOTO_OF_PHOTO";
                             if (faceAuditFilter === "blurry") return s.isBlurry || s.issueType === "BLURRY_PHOTO";
                             if (faceAuditFilter === "flagged") return s.isFlagged;
-                            return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto || (!s.hasVector && s.issueType !== "BLANK_PHOTO");
+                            return s.issueType !== "CLEAN" || s.isFlagged || s.isBlurry || s.isPhotoOfPhoto || s.faceMissing || s.multipleFaces || (!s.hasVector && s.issueType !== "BLANK_PHOTO");
                           }).length === 0 && (
                             <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
                               <p className="text-xs font-black text-slate-700 uppercase tracking-wider">No issues found in this category!</p>

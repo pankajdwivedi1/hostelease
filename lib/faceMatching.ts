@@ -267,6 +267,162 @@ export function detectMobileScreenDisplay(
 export const detectScreenSpoof = detectMobileScreenDisplay;
 
 /**
+ * Real-time Photo Quality & Blur Analyzer
+ * Calibrated 8-neighbor Laplacian Variance + Sobel 95th Percentile Edge Magnitude + Border/Bezel Detection.
+ */
+export function assessPhotoQuality(
+    inputElement: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement
+): {
+    isBlurry: boolean;
+    isPhotoOfPhoto: boolean;
+    sharpnessScore: number;
+    borderScore: number;
+    reason?: string;
+} {
+    try {
+        if (!inputElement) {
+            return { isBlurry: true, isPhotoOfPhoto: false, sharpnessScore: 0, borderScore: 0, reason: "No photo provided" };
+        }
+
+        const width = (inputElement as HTMLVideoElement).videoWidth || inputElement.width || 0;
+        const height = (inputElement as HTMLVideoElement).videoHeight || inputElement.height || 0;
+
+        if (width === 0 || height === 0) {
+            return { isBlurry: true, isPhotoOfPhoto: false, sharpnessScore: 0, borderScore: 0, reason: "Invalid photo dimensions" };
+        }
+
+        const canvas = document.createElement('canvas');
+        const sampleW = 200;
+        const sampleH = Math.max(1, Math.round((height / width) * sampleW));
+        canvas.width = sampleW;
+        canvas.height = sampleH;
+
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) {
+            return { isBlurry: false, isPhotoOfPhoto: false, sharpnessScore: 75, borderScore: 0 };
+        }
+
+        ctx.drawImage(inputElement, 0, 0, sampleW, sampleH);
+        const imgData = ctx.getImageData(0, 0, sampleW, sampleH);
+        const data = imgData.data;
+
+        // 1. Convert to grayscale
+        const gray = new Float32Array(sampleW * sampleH);
+        for (let i = 0; i < data.length; i += 4) {
+            gray[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        }
+
+        // 2. Multi-point edge border analysis (Photo-of-Photo / Bezel detection)
+        const marginH = Math.max(2, Math.floor(sampleW * 0.08));
+        const marginV = Math.max(2, Math.floor(sampleH * 0.08));
+
+        let topDark = 0, bottomDark = 0, leftDark = 0, rightDark = 0;
+        let topTotal = 0, bottomTotal = 0, leftTotal = 0, rightTotal = 0;
+
+        for (let x = 0; x < sampleW; x++) {
+            for (let y = 0; y < marginV; y++) {
+                if (gray[y * sampleW + x] < 45) topDark++;
+                topTotal++;
+            }
+            for (let y = sampleH - marginV; y < sampleH; y++) {
+                if (gray[y * sampleW + x] < 45) bottomDark++;
+                bottomTotal++;
+            }
+        }
+
+        for (let y = 0; y < sampleH; y++) {
+            for (let x = 0; x < marginH; x++) {
+                if (gray[y * sampleW + x] < 45) leftDark++;
+                leftTotal++;
+            }
+            for (let x = sampleW - marginH; x < sampleW; x++) {
+                if (gray[y * sampleW + x] < 45) rightDark++;
+                rightTotal++;
+            }
+        }
+
+        const darkTopRatio = topDark / Math.max(1, topTotal);
+        const darkBottomRatio = bottomDark / Math.max(1, bottomTotal);
+        const darkLeftRatio = leftDark / Math.max(1, leftTotal);
+        const darkRightRatio = rightDark / Math.max(1, rightTotal);
+
+        let borderScore = 0;
+        if (darkTopRatio > 0.55) borderScore++;
+        if (darkBottomRatio > 0.55) borderScore++;
+        if (darkLeftRatio > 0.55) borderScore++;
+        if (darkRightRatio > 0.55) borderScore++;
+
+        const isPhotoOfPhoto = borderScore >= 3 && borderScore < 4;
+
+        // 3. Calibrated 8-neighbor Laplacian & Sobel Edge variance
+        let lapSum = 0;
+        let lapSumSq = 0;
+        let lapCount = 0;
+        const sobelEdges: number[] = [];
+
+        const w = sampleW;
+        for (let y = 1; y < sampleH - 1; y++) {
+            for (let x = 1; x < sampleW - 1; x++) {
+                const idx = y * w + x;
+                const lap = (
+                    gray[idx - w - 1] + gray[idx - w] + gray[idx - w + 1] +
+                    gray[idx - 1] - 8 * gray[idx] + gray[idx + 1] +
+                    gray[idx + w - 1] + gray[idx + w] + gray[idx + w + 1]
+                );
+                lapSum += lap;
+                lapSumSq += lap * lap;
+                lapCount++;
+
+                const gx = (
+                    gray[idx - w + 1] + 2 * gray[idx + 1] + gray[idx + w + 1] -
+                    (gray[idx - w - 1] + 2 * gray[idx - 1] + gray[idx + w - 1])
+                );
+                const gy = (
+                    gray[idx + w - 1] + 2 * gray[idx + w] + gray[idx + w + 1] -
+                    (gray[idx - w - 1] + 2 * gray[idx - w] + gray[idx - w + 1])
+                );
+                sobelEdges.push(Math.sqrt(gx * gx + gy * gy));
+            }
+        }
+
+        const lapMean = lapSum / Math.max(1, lapCount);
+        const lapVariance = Math.max(0, (lapSumSq / Math.max(1, lapCount)) - (lapMean * lapMean));
+
+        sobelEdges.sort((a, b) => a - b);
+        const p95 = sobelEdges[Math.floor(sobelEdges.length * 0.95)] || 0;
+
+        let sharpnessScore = 0;
+        if (lapVariance < 800 || p95 < 140) {
+            sharpnessScore = Math.min(35, Math.max(5, Math.round((lapVariance / 800) * 20 + (p95 / 140) * 15)));
+        } else {
+            const edgePart = Math.min(50, (p95 / 250.0) * 50.0);
+            const varPart = Math.min(50, (Math.min(10000, lapVariance) / 10000.0) * 50.0);
+            sharpnessScore = Math.min(100, Math.max(45, Math.round(edgePart + varPart)));
+        }
+
+        const isBlurry = sharpnessScore < 40 || (lapVariance < 1000 && p95 < 135);
+
+        let reason = "";
+        if (isPhotoOfPhoto) {
+            reason = "Device bezel / screen border detected. Please capture a direct live selfie.";
+        } else if (isBlurry) {
+            reason = `Photo is too blurry (sharpness: ${sharpnessScore}%). Please hold camera steady in good lighting and capture again.`;
+        }
+
+        return {
+            isBlurry,
+            isPhotoOfPhoto,
+            sharpnessScore,
+            borderScore,
+            reason: reason || undefined
+        };
+    } catch (err) {
+        console.error("Photo quality analysis error:", err);
+        return { isBlurry: false, isPhotoOfPhoto: false, sharpnessScore: 75, borderScore: 0 };
+    }
+}
+
+/**
  * Detect face in an image
  */
 export async function detectFace(

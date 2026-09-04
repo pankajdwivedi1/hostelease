@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try {
+        const body = await req.json();
         const { studentIds, requiresFaceRecapture, vectorUpdates } = body;
 
         if (Array.isArray(vectorUpdates) && vectorUpdates.length > 0) {
@@ -59,7 +60,8 @@ export async function POST(req: NextRequest) {
                 dynamicFields.requiresFaceRecapture = !!requiresFaceRecapture;
 
                 await db.students.update(id, {
-                    dynamicFields
+                    dynamicFields,
+                    updatedAt: new Date().toISOString()
                 });
                 updatedCount++;
             } catch (err) {

@@ -243,6 +243,19 @@ export default function LiveFaceCaptureModal({
             const aiCtx = aiCanvas.getContext("2d");
             if (aiCtx) aiCtx.drawImage(video, 0, 0, aiW, aiH);
 
+            // 🛡️ 1. REAL-TIME PHOTO QUALITY & BLUR CHECK
+            const quality = faceMatching.assessPhotoQuality(canvas);
+            if (quality.isBlurry) {
+                showToast(quality.reason || `Photo too blurry (Sharpness: ${quality.sharpnessScore}%). Please hold steady in good lighting.`, "error");
+                setIsProcessing(false);
+                return;
+            }
+            if (quality.isPhotoOfPhoto) {
+                showToast(quality.reason || "Photo of a screen / re-capture detected. Please take a live direct selfie.", "error");
+                setIsProcessing(false);
+                return;
+            }
+
             // Run real-time face detection & embedding extraction using SSD-MobileNet
             // ⚠️ MUST use accurate=true (SSD) here — the server also uses SSD at attendance time.
             // Using TinyFaceDetector here would produce incompatible vectors that never match.

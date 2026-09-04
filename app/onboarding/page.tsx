@@ -294,14 +294,13 @@ export default function OnboardingPage() {
               const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
               const isEditMode = searchParams ? searchParams.get("mode") === "edit" : false;
 
-              // ⚡ Only redirect to dashboard if profile is explicitly LOCKED AND not in edit mode
-              const isLocked = data.student.isProfileLocked === true;
-
-              if (isLocked && !isEditMode) {
-                console.log('[Onboarding] Student profile is locked — redirecting to dashboard');
+              // ⚡ If student already exists in DB and is NOT in edit mode, route directly to Dashboard!
+              if (!isEditMode) {
+                console.log('[Onboarding] Existing student found in database — redirecting directly to dashboard');
                 localStorage.setItem("userType", "student");
                 localStorage.setItem("cachedStudentData", JSON.stringify(data.student));
-                router.push("/");
+                document.cookie = "userType=student; path=/; max-age=2592000; SameSite=Lax";
+                window.location.href = "/";
                 return;
               }
 
@@ -433,6 +432,12 @@ export default function OnboardingPage() {
         if (field.type === 'image') {
           if (!capturedImage) {
             newErrors[field.id] = `${field.label} is required`;
+          } else if (isFaceProcessing) {
+            newErrors[field.id] = "Scanning face quality & biometrics... Please wait.";
+          } else if (faceError) {
+            newErrors[field.id] = faceError;
+          } else if (!faceDescriptor || (Array.isArray(faceDescriptor) && faceDescriptor.length === 0)) {
+            newErrors[field.id] = "Biometric face scan is incomplete. Please capture a clear selfie.";
           }
         } else {
           const value = (formData as any)[field.id];
@@ -522,7 +527,14 @@ export default function OnboardingPage() {
     };
 
     if (isProfileLocked || isFaceProcessing || faceError || !validateForm()) {
-      if (faceError) alert("Please recapture your photo: " + faceError);
+      if (isFaceProcessing) {
+        alert("Please wait for biometric face scan & quality checks to complete.");
+        return;
+      }
+      if (faceError) {
+        alert("Please recapture your photo: " + faceError);
+        return;
+      }
       return;
     }
 
@@ -609,6 +621,11 @@ export default function OnboardingPage() {
     try {
       setIsSavingDB(true);
       const currentDeviceId = "no-binding";
+
+      // 🛡️ Strict Biometric Gatekeeper: Face Descriptor must be present
+      if (!faceDescriptor || !Array.isArray(faceDescriptor) || faceDescriptor.length === 0) {
+        throw new Error("Biometric face scan is required. Please capture a clear selfie photo.");
+      }
 
       let resolvedEmail = formData.email || formData.emailAddress || formData.studentEmail || formData.email_address || user?.email || "";
       if (!resolvedEmail && formData && typeof formData === 'object') {
@@ -905,7 +922,20 @@ export default function OnboardingPage() {
       await loadAIModels();
       await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
 
-      // 4. Run face descriptor generation using SSD-MobileNet (accurate=true)
+      // 🛡️ 1. REAL-TIME PHOTO QUALITY & BLUR GATEKEEPER
+      const quality = faceMatching.assessPhotoQuality(aiCanvas);
+      if (quality.isBlurry) {
+        setFaceError(quality.reason || `Photo too blurry (Sharpness: ${quality.sharpnessScore}%). Please hold steady in good lighting.`);
+        setCapturedImage(null);
+        return;
+      }
+      if (quality.isPhotoOfPhoto) {
+        setFaceError(quality.reason || "Photo of a screen / re-capture detected. Please capture a real live selfie.");
+        setCapturedImage(null);
+        return;
+      }
+
+      // 🛡️ 2. Run face descriptor generation using SSD-MobileNet (accurate=true)
       // First try on AI canvas; if not detected, retry on full-resolution img element
       let descriptor = await faceMatching.detectFace(aiCanvas, true, true);
       if (!descriptor || !descriptor.descriptor) {
@@ -925,7 +955,7 @@ export default function OnboardingPage() {
         return;
       }
 
-      // 🛡️ ANTI-SPOOF CHECK: Reject mobile screens and printed photos
+      // 🛡️ 3. ANTI-SPOOF CHECK: Reject mobile screens and printed photos
       if (descriptor.detection?.box) {
         const spoofCheck = faceMatching.detectMobileScreenDisplay(aiCanvas, descriptor.detection.box);
         if (spoofCheck.isSpoof) {
@@ -935,8 +965,15 @@ export default function OnboardingPage() {
         }
       }
 
+      if (!descriptor.descriptor || descriptor.descriptor.length !== 128) {
+        setFaceError("Failed to extract full 128-D biometric face vector. Please retake photo.");
+        setCapturedImage(null);
+        return;
+      }
+
       setFaceDescriptor(descriptor.descriptor);
-      console.log("✅ Background Face Scan Complete");
+      setFaceError(null);
+      console.log("✅ Background Face Scan Complete: 128-D Biometric Vector Extracted");
     } catch (err) {
       console.error("Error generating face descriptor:", err);
       setFaceError("Face processing failed. Try again with better lighting.");
