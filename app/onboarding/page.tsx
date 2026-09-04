@@ -436,7 +436,7 @@ export default function OnboardingPage() {
             newErrors[field.id] = "Scanning face quality & biometrics... Please wait.";
           } else if (faceError) {
             newErrors[field.id] = faceError;
-          } else if (!faceDescriptor || (Array.isArray(faceDescriptor) && faceDescriptor.length === 0)) {
+          } else if (!faceDescriptor || faceDescriptor.length === 0) {
             newErrors[field.id] = "Biometric face scan is incomplete. Please capture a clear selfie.";
           }
         } else {
@@ -623,7 +623,11 @@ export default function OnboardingPage() {
       const currentDeviceId = "no-binding";
 
       // 🛡️ Strict Biometric Gatekeeper: Face Descriptor must be present
-      if (!faceDescriptor || !Array.isArray(faceDescriptor) || faceDescriptor.length === 0) {
+      const hasValidDescriptor = faceDescriptor && (
+        (faceDescriptor as any).length > 0 || 
+        (Array.isArray(faceDescriptor) && (faceDescriptor as any).length > 0)
+      );
+      if (!hasValidDescriptor) {
         throw new Error("Biometric face scan is required. Please capture a clear selfie photo.");
       }
 
@@ -1307,16 +1311,27 @@ export default function OnboardingPage() {
                   }
                 });
                 // Special: photo step
-                if (stepFields.some((f: any) => f.type === 'image') && !capturedImage) {
-                  const imgField = stepFields.find((f: any) => f.type === 'image');
-                  if (imgField?.required) newErrors[imgField.id] = 'Profile photo is required';
+                const imgField = stepFields.find((f: any) => f.type === 'image');
+                if (imgField) {
+                  if (!capturedImage) {
+                    if (imgField.required) newErrors[imgField.id] = `${imgField.label || 'Profile photo'} is required`;
+                  } else if (isFaceProcessing) {
+                    newErrors[imgField.id] = "Scanning face quality & biometrics... Please wait.";
+                  } else if (faceError) {
+                    newErrors[imgField.id] = faceError;
+                  } else if (!faceDescriptor || (faceDescriptor as any).length === 0) {
+                    newErrors[imgField.id] = "Biometric face scan is incomplete. Please retake a clear selfie.";
+                  }
                 }
                 setStepErrors(newErrors);
                 return Object.keys(newErrors).length === 0;
               };
 
-
               const goNext = () => {
+                if (isFaceProcessing) {
+                  alert("Please wait while AI verifies face quality & biometrics...");
+                  return;
+                }
                 if (validateStep()) {
                   setCurrentStep(s => Math.min(s + 1, totalSteps - 1));
                   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1456,7 +1471,10 @@ export default function OnboardingPage() {
                         </p>
                       )}
                       {faceError && (
-                        <p className="text-center text-[10px] text-red-600 font-bold uppercase mt-2">{faceError}</p>
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-center mt-2">
+                          <p className="text-[11px] text-red-600 font-bold uppercase">⚠️ {faceError}</p>
+                          <p className="text-[9px] text-red-500 font-medium mt-0.5">Please tap retake and capture a clear selfie in good lighting.</p>
+                        </div>
                       )}
                       <canvas ref={canvasRef} className="hidden" />
                     </div>
