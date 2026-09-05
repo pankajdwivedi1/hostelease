@@ -447,12 +447,12 @@ export async function detectFace(
         const fa = await getFaceApi();
         if (!fa) return null;
 
-        // ⚠️ CRITICAL: If we need a descriptor, load SSD models (not just lite/TinyFace models)
+        // Ensure models are loaded
         const modelsToLoad = accurate || withDescriptor;
         const ready = await loadFaceApiModels(modelsToLoad);
         if (!ready) return null;
 
-        // ⚡ CRITICAL: Validate input dimensions
+        // Validate input dimensions
         if (!imageElement) return null;
         
         if (imageElement instanceof HTMLVideoElement) {
@@ -465,35 +465,53 @@ export async function detectFace(
             }
         }
 
-        let task: any;
-        // ⚠️ CRITICAL: When extracting a face descriptor (128-D vector), we MUST use SSD-MobileNet.
-        // TinyFaceDetector and SSD produce incompatible vector spaces — comparing them gives wrong distances.
-        // Rule: descriptor extraction → ALWAYS SSD. Bare detection (no descriptor) → TinyFace is fine for speed.
-        const useSSD = accurate || withDescriptor;
+        // Determine if tiny landmarks or full 68-point landmarks should be used
+        const useTinyLandmarks = !fa.nets.faceLandmark68Net?.isLoaded;
         let detections: any[] = [];
 
-        if (useSSD) {
-            // First pass: standard confidence (0.5)
-            task = fa.detectAllFaces(imageElement, new fa.SsdMobilenetv1Options({ minConfidence: 0.5 }))
-                .withFaceLandmarks(true);
-            if (withDescriptor) task = task.withFaceDescriptors();
-            detections = await task;
-
-            // Second pass fallback: lower confidence (0.35) for mobile front cameras in soft/varied lighting
-            if (!detections || detections.length === 0) {
-                const fallbackTask = fa.detectAllFaces(imageElement, new fa.SsdMobilenetv1Options({ minConfidence: 0.35 }))
-                    .withFaceLandmarks(true);
-                detections = await (withDescriptor ? fallbackTask.withFaceDescriptors() : fallbackTask);
+        // Helper to execute detection pass with landmarks and optional descriptor extraction
+        const runDetectorPass = async (detectorOptions: any): Promise<any[]> => {
+            try {
+                let task = fa.detectAllFaces(imageElement, detectorOptions)
+                    .withFaceLandmarks(useTinyLandmarks);
+                if (withDescriptor) {
+                    task = task.withFaceDescriptors();
+                }
+                const result = await task;
+                return Array.isArray(result) ? result : (result ? [result] : []);
+            } catch (err) {
+                console.warn('⚠️ [Face-API] Detector pass exception:', err);
+                return [];
             }
-        } else {
-            const options = new fa.TinyFaceDetectorOptions({
-                inputSize: 320, // Optimized size for speed
-                scoreThreshold: 0.4
-            });
-            task = fa.detectAllFaces(imageElement, options)
-                .withFaceLandmarks(true);
-            if (withDescriptor) task = task.withFaceDescriptors();
-            detections = await task;
+        };
+
+        const useSSD = accurate || withDescriptor;
+
+        // Tier 1 & 2: SSD-MobileNet (Standard then Relaxed confidence)
+        if (useSSD && fa.nets.ssdMobilenetv1?.isLoaded) {
+            // Tier 1: Standard confidence (0.50)
+            detections = await runDetectorPass(new fa.SsdMobilenetv1Options({ minConfidence: 0.50 }));
+
+            // Tier 2: Relaxed confidence (0.25) for close-up portrait selfies & soft indoor lighting
+            if (!detections || detections.length === 0) {
+                detections = await runDetectorPass(new fa.SsdMobilenetv1Options({ minConfidence: 0.25 }));
+            }
+        }
+
+        // Tier 3: Multi-Scale TinyFaceDetector fallback (Optimal for close mobile front-camera selfies)
+        if (!detections || detections.length === 0) {
+            detections = await runDetectorPass(new fa.TinyFaceDetectorOptions({
+                inputSize: 416,
+                scoreThreshold: 0.25
+            }));
+        }
+
+        // Tier 4: Sensitive TinyFaceDetector fallback for low light or challenging camera angles
+        if (!detections || detections.length === 0) {
+            detections = await runDetectorPass(new fa.TinyFaceDetectorOptions({
+                inputSize: 320,
+                scoreThreshold: 0.15
+            }));
         }
 
         if (!detections || detections.length === 0) return null;
@@ -501,7 +519,7 @@ export async function detectFace(
         const mainFace = detections[0];
 
         return {
-            descriptor: withDescriptor ? mainFace.descriptor : null,
+            descriptor: withDescriptor ? (mainFace.descriptor || null) : null,
             detection: mainFace.detection,
             landmarks: mainFace.landmarks,
             accurate: accurate,

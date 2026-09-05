@@ -236,9 +236,9 @@ export default function LiveFaceCaptureModal({
             // Ensure SSD face-api models are ready (must be SSD — not TinyFace)
             await faceMatching.loadFaceApiModels(true);
 
-            // Create downscaled AI canvas for instant <250ms vector extraction
+            // Create downscaled AI canvas for instant vector extraction
             const aiCanvas = document.createElement("canvas");
-            const maxDim = 320;
+            const maxDim = 640;
             let aiW = width;
             let aiH = height;
             if (aiW > maxDim || aiH > maxDim) {

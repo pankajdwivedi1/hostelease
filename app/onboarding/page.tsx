@@ -741,6 +741,7 @@ export default function OnboardingPage() {
 
   const startCamera = async () => {
     try {
+      setFaceError(null);
       if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
         alert("Camera requires a secure HTTPS connection.\n\nPlease ensure you open https://hosteleaze.com in your mobile browser.");
         return;
@@ -898,8 +899,8 @@ export default function OnboardingPage() {
       // 2. Load the static image into memory to bypass DOM canvas lifecycle limitations on mobile
       const img = await faceMatching.loadImage(dataUrl);
 
-      // 3. Downscale the image while preserving the exact aspect ratio (optimal 480px for neural net)
-      const maxDim = 480;
+      // 3. Downscale the image while preserving aspect ratio (optimal 640px for neural net & portrait selfies)
+      const maxDim = 640;
       let aiWidth = img.width;
       let aiHeight = img.height;
       if (aiWidth > maxDim || aiHeight > maxDim) {
@@ -934,7 +935,7 @@ export default function OnboardingPage() {
         return;
       }
 
-      // 🛡️ 2. Run face descriptor generation using SSD-MobileNet (accurate=true)
+      // 🛡️ 2. Run multi-tier face descriptor generation
       let descriptor = await faceMatching.detectFace(aiCanvas, true, true);
       if (!descriptor || !descriptor.descriptor) {
         descriptor = await faceMatching.detectFace(img, true, true);
