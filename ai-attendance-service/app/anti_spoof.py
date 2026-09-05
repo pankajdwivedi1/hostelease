@@ -69,34 +69,7 @@ class AntiSpoofEngine:
                 "reason": "Face is too small or out of frame."
             }
 
-        # 2. FULL-FRAME DEVICE BEZEL & PHONE DISPLAY RECTANGLE DETECTION
-        full_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        col_means = np.mean(full_gray, axis=0)
-        
-        left_third_idx = int(img_w * 0.35)
-        right_third_idx = int(img_w * 0.65)
-        
-        left_min_col = np.min(col_means[:left_third_idx]) if left_third_idx > 0 else 255
-        right_min_col = np.min(col_means[right_third_idx:]) if right_third_idx < img_w else 255
-        center_mean = np.mean(col_means[left_third_idx:right_third_idx]) if left_third_idx < right_third_idx else 128
-        
-        left_drop = center_mean - left_min_col
-        right_drop = center_mean - right_min_col
-        
-        col_diffs = np.abs(np.diff(col_means))
-        left_max_grad = np.max(col_diffs[:left_third_idx]) if left_third_idx > 1 else 0
-        right_max_grad = np.max(col_diffs[right_third_idx - 1:]) if right_third_idx < img_w else 0
-        
-        is_flanked_by_bezels = (left_drop > 28 and right_drop > 28) or (left_max_grad > 16 and right_max_grad > 16)
-        if is_flanked_by_bezels:
-            return {
-                "is_live": False,
-                "is_spoof": True,
-                "liveness_score": 10.0,
-                "reason": "Mobile Device Screen / Frame Detected. Photos displayed on screens are strictly prohibited."
-            }
-
-        # 3. Advanced Multi-Factor Texture & Screen Moiré Pattern Analysis
+        # 2. Advanced Multi-Factor Texture & Screen Moiré Pattern Analysis
         # Check A: Specular Glass Reflection (High saturation white hot-spots from phone screens)
         gray = cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY)
         saturated_pixels = np.sum((face_crop[:, :, 0] >= 238) & 

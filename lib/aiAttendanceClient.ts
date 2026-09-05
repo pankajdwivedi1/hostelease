@@ -15,7 +15,7 @@ export interface AIVerifyResult {
 }
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://127.0.0.1:8000";
-const REQUEST_TIMEOUT_MS = 5000;
+const REQUEST_TIMEOUT_MS = 1500;
 
 export async function verifyFaceWithAIService(params: {
     liveImage: string;

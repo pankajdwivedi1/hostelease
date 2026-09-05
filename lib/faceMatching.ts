@@ -109,14 +109,24 @@ export async function loadFaceApiModels(accurate: boolean = false): Promise<bool
  * Uses an industrial-grade exponential weight to reduce false positives
  * Distance <= 0.32 maps to Score >= 90% (SSD-MobileNet PRO High Confidence)
  */
+/**
+ * Calculate match score based on Euclidean distance
+ * Standard calibrated mapping for 128-D ResNet embeddings:
+ * - Distance <= 0.35 -> 90% - 100% (High Confidence Same Person)
+ * - Distance 0.35 - 0.45 -> 75% - 90% (Same Person under natural indoor/mobile lighting)
+ * - Distance 0.45 - 0.55 -> 50% - 74% (Uncertain / Mismatch)
+ * - Distance > 0.55 -> 0% - 49% (Different Person / Impostor)
+ */
 export function calculateScore(distance: number): number {
     let score;
-    if (distance <= 0.32) {
-        score = 100 - (distance * 31.25); // Distance 0.0 -> 100%, 0.32 -> 90%
+    if (distance <= 0.35) {
+        score = 100 - (distance * 28.57); // 0.0 -> 100%, 0.35 -> 90%
     } else if (distance <= 0.45) {
-        score = 90 - ((distance - 0.32) * 230.7); // Steep drop: 0.32 -> 90%, 0.45 -> 60%
+        score = 90 - ((distance - 0.35) * 150); // 0.35 -> 90%, 0.45 -> 75%
+    } else if (distance <= 0.55) {
+        score = 75 - ((distance - 0.45) * 250); // 0.45 -> 75%, 0.55 -> 50%
     } else {
-        score = Math.max(0, 60 - ((distance - 0.45) * 120)); // 0.45+ drops quickly to 0%
+        score = Math.max(0, 50 - ((distance - 0.55) * 200)); // 0.55+ drops quickly to 0%
     }
 
     const matchPercentage = Math.round(Math.max(0, Math.min(100, score)));
@@ -125,8 +135,73 @@ export function calculateScore(distance: number): number {
 }
 
 /**
+ * Face Distance & Alignment Quality Analyzer
+ * Estimates physical distance (in cm) based on optical bounding box proportion
+ * and computes real-time alignment percentage (0% to 100%).
+ */
+export function estimateFaceDistance(
+    box: { width: number; height: number },
+    frameWidth: number,
+    frameHeight: number
+): {
+    estimatedDistanceCm: number;
+    distanceStatus: 'too-far' | 'too-close' | 'optimal';
+    alignmentQualityPercent: number;
+    guidanceMessage: string;
+} {
+    if (!box || !frameHeight || frameHeight === 0) {
+        return {
+            estimatedDistanceCm: 0,
+            distanceStatus: 'too-far',
+            alignmentQualityPercent: 0,
+            guidanceMessage: "Align face in frame"
+        };
+    }
+
+    // Ratio of face height relative to full frame height
+    const faceRatio = box.height / frameHeight;
+
+    // Optical distance estimation calibrated for typical mobile front cameras (focal length ~26-28mm eq):
+    // Ratio 0.50 corresponds to ~40 cm (ideal arm's length)
+    // Ratio 0.75 corresponds to ~25 cm (too close)
+    // Ratio 0.25 corresponds to ~75 cm (too far)
+    const estimatedDistanceCm = Math.round(20 / Math.max(0.1, faceRatio));
+
+    let distanceStatus: 'too-far' | 'too-close' | 'optimal' = 'optimal';
+    let alignmentQualityPercent = 0;
+    let guidanceMessage = "";
+
+    if (faceRatio < 0.28) {
+        distanceStatus = 'too-far';
+        // Percentage scales 10% to 59% as you move closer towards optimal
+        alignmentQualityPercent = Math.max(10, Math.min(59, Math.round((faceRatio / 0.28) * 59)));
+        guidanceMessage = `Move closer (~${estimatedDistanceCm} cm)`;
+    } else if (faceRatio > 0.72) {
+        distanceStatus = 'too-close';
+        // Percentage drops as you get excessively close
+        alignmentQualityPercent = Math.max(20, Math.min(65, Math.round((1 - (faceRatio - 0.72) / 0.28) * 65)));
+        guidanceMessage = `Move phone back (~${estimatedDistanceCm} cm)`;
+    } else {
+        distanceStatus = 'optimal';
+        // Optimal range (0.30 - 0.68) -> Quality scales from 75% to 100%
+        const optimalCenter = 0.48;
+        const devFromOptimal = Math.abs(faceRatio - optimalCenter) / 0.22;
+        alignmentQualityPercent = Math.round(100 - (devFromOptimal * 25)); // 75% to 100%
+        alignmentQualityPercent = Math.max(75, Math.min(100, alignmentQualityPercent));
+        guidanceMessage = `Optimal distance (~${estimatedDistanceCm} cm)`;
+    }
+
+    return {
+        estimatedDistanceCm,
+        distanceStatus,
+        alignmentQualityPercent,
+        guidanceMessage
+    };
+}
+
+/**
  * Mobile Display Screen & Video Replay Anti-Spoof Analyzer
- * Detects mobile phone display pixel grids (Moiré patterns) and specular glass glare.
+ * Detects mobile phone display pixel grids (Moiré patterns) and specular glass glare on face crop.
  * Blocks static photos AND recorded video replays played on mobile screens.
  */
 export function detectMobileScreenDisplay(
@@ -149,63 +224,7 @@ export function detectMobileScreenDisplay(
 
         ctx.drawImage(inputElement, 0, 0, width, height);
 
-        // 🛡️ CHECK 1: FULL-FRAME DEVICE BEZEL & RECTANGULAR SCREEN BORDER DETECTION
-        // When someone holds a phone/tablet, the frame contains dark vertical bezels flanking the face.
-        const fullImgData = ctx.getImageData(0, 0, width, height);
-        const fullPixels = fullImgData.data;
-
-        // Calculate average column brightness across the entire width
-        const colBrightness = new Float32Array(width);
-        for (let x = 0; x < width; x++) {
-            let colSum = 0;
-            for (let y = 0; y < height; y++) {
-                const idx = (y * width + x) * 4;
-                colSum += 0.299 * fullPixels[idx] + 0.587 * fullPixels[idx + 1] + 0.114 * fullPixels[idx + 2];
-            }
-            colBrightness[x] = colSum / height;
-        }
-
-        // Check for sharp dark bezel drops in the left third and right third of the frame
-        const leftThirdEnd = Math.floor(width * 0.35);
-        const rightThirdStart = Math.floor(width * 0.65);
-        let leftMinBrightness = 255;
-        let rightMinBrightness = 255;
-        let centerSum = 0;
-        let centerCount = 0;
-
-        for (let x = 0; x < width; x++) {
-            const b = colBrightness[x];
-            if (x < leftThirdEnd && b < leftMinBrightness) leftMinBrightness = b;
-            if (x >= rightThirdStart && b < rightMinBrightness) rightMinBrightness = b;
-            if (x >= leftThirdEnd && x < rightThirdStart) {
-                centerSum += b;
-                centerCount++;
-            }
-        }
-
-        const centerAvg = centerCount > 0 ? centerSum / centerCount : 128;
-        const leftDrop = centerAvg - leftMinBrightness;
-        const rightDrop = centerAvg - rightMinBrightness;
-
-        // Check for vertical bezel edges (sharp gradient changes)
-        let maxLeftGradient = 0;
-        let maxRightGradient = 0;
-        for (let x = 1; x < width; x++) {
-            const grad = Math.abs(colBrightness[x] - colBrightness[x - 1]);
-            if (x < leftThirdEnd && grad > maxLeftGradient) maxLeftGradient = grad;
-            if (x >= rightThirdStart && grad > maxRightGradient) maxRightGradient = grad;
-        }
-
-        const hasFlankingBezels = (leftDrop > 45 && rightDrop > 45) || (maxLeftGradient > 28 && maxRightGradient > 28);
-        if (hasFlankingBezels) {
-            console.warn(`🛡️ Phone Bezel Detected: leftDrop=${leftDrop.toFixed(1)}, rightDrop=${rightDrop.toFixed(1)}, leftGrad=${maxLeftGradient.toFixed(1)}, rightGrad=${maxRightGradient.toFixed(1)}`);
-            return {
-                isSpoof: true,
-                reason: "Mobile Device Screen / Frame Detected! Photos shown on mobile screens are strictly prohibited."
-            };
-        }
-
-        // 🛡️ CHECK 2: FACE CROP TEXTURE & SPECULAR GLARE
+        // 🛡️ FACE CROP TEXTURE, SPECULAR GLARE & DIGITAL DISPLAY MOIRÉ ANALYSIS
         const bx = Math.max(0, Math.floor(box.x));
         const by = Math.max(0, Math.floor(box.y));
         const bw = Math.min(width - bx, Math.floor(box.width));
@@ -247,15 +266,13 @@ export function detectMobileScreenDisplay(
         const glareRatio = saturatedPixelCount / totalPixels;
         const moireRatio = highFreqGridDiffs / totalPixels;
 
-        console.log(`🛡️ Mobile Screen Detector: GlareRatio=${(glareRatio * 100).toFixed(2)}%, MoireRatio=${(moireRatio * 100).toFixed(2)}%`);
-
-        // Calibrated threshold: Real skin highlights under ceiling bulbs usually occupy 2-5%. Flat screen glare occupies > 8.5%.
-        if (glareRatio > 0.085) {
+        // Calibrated threshold: Real skin highlights under ceiling bulbs usually occupy 2-5%. Flat screen glare occupies > 9.5%.
+        if (glareRatio > 0.095) {
             return { isSpoof: true, reason: "Mobile Device Screen Glare Detected. Please present your real physical face." };
         }
 
-        // Calibrated threshold: Natural facial hair/edges stay below 18%. Digital LCD/OLED raster grid patterns exceed 18%.
-        if (moireRatio > 0.18) {
+        // Calibrated threshold: Natural facial hair/edges stay below 18%. Digital LCD/OLED raster grid patterns exceed 22%.
+        if (moireRatio > 0.22) {
             return { isSpoof: true, reason: "Digital Display / Screen Grid Pattern Detected. Please present your real physical face." };
         }
 

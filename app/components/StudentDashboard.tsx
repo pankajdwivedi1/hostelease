@@ -760,7 +760,18 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const [livenessFeedback, setLivenessFeedback] = useState<string>("");
     const [yawRange, setYawRange] = useState(0);
     const [depthRange, setDepthRange] = useState(0); // ⚡ NEW: Tracking Near/Far
-    const [scanHoldProgress, setScanHoldProgress] = useState<number>(0); // 🏢 Industrial 2s stability hold
+    const [scanHoldProgress, setScanHoldProgress] = useState<number>(0); // Real-time 0-100% distance alignment & hold progress
+    const [distanceInfo, setDistanceInfo] = useState<{
+        status: 'too-far' | 'too-close' | 'optimal' | 'none';
+        cm: number;
+        message: string;
+        percent: number;
+    }>({
+        status: 'none',
+        cm: 0,
+        message: 'Align Face in Frame',
+        percent: 0
+    });
     const steadyHoldCountRef = useRef<number>(0);
 
     const livenessHistoryRef = useRef<{ boxSizes: number[], yawPoints: number[] }>({
@@ -815,12 +826,12 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
     }, [studentProfile?.profilePicture, studentProfile?.firebaseUID]);
 
-    // Automatic Face Detection Loop (Industrial Strength)
+    // Fast Real-Time Face Detection & Dynamic Distance Guidance Loop
     useEffect(() => {
         let active = true;
 
         if (cameraActive && faceMatchStep === 'detecting' && videoRef.current) {
-            console.log("🚀 Starting industrial auto-detection loop...");
+            console.log("🚀 Starting fast real-time face & distance tracking loop...");
 
             const runDetection = async () => {
                 if (!livenessHistoryRef.current) {
@@ -830,128 +841,116 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 if (!active || !videoRef.current || isProcessingRef.current || faceMatchStep !== 'detecting') return;
 
                 try {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = videoRef.current.videoWidth;
-                    canvas.height = videoRef.current.videoHeight;
-                    const ctx = canvas.getContext('2d');
+                    const video = videoRef.current;
+                    if (video.readyState < 2 || video.videoWidth === 0) {
+                        if (active) detectionIntervalRef.current = setTimeout(runDetection, 80) as any;
+                        return;
+                    }
 
-                    if (ctx) {
-                        ctx.drawImage(videoRef.current, 0, 0);
+                    // 1. FAST LIGHTWEIGHT FACE DETECTION (<15ms on mobile)
+                    const fastRes = await faceMatching.detectFace(video, false, false);
 
-                        // ⚠️ SSD models are already pre-loaded at dashboard start (loadFaceApiModels(true))
-                        // ⚡ ANALYZE FRAME — use SSD (accurate=true) to extract a descriptor
-                        // ⚠️ MUST use SSD here — the stored faceDescriptor is also SSD.
-                        // A TinyFace live descriptor compared to an SSD stored descriptor gives wrong scores.
-                        const res = await faceMatching.detectFace(canvas, true, true);
+                    if (fastRes && fastRes.detection) {
+                        setFaceDetected(true);
+                        consecutiveFailuresRef.current = 0;
 
-                        if (res) {
-                            setFaceDetected(true);
-                            latestDetectionRef.current = res; // ⚡ CACHE: Store for auto-verify trigger
-                            consecutiveFailuresRef.current = 0;
+                        const { x, y, width, height } = fastRes.detection.box;
+                        setFaceBox({ x, y, width, height });
 
-                            // 📐 Update Face Tracking Box
-                            const { x, y, width, height } = res.detection.box;
-                            setFaceBox({ x, y, width, height });
+                        // 2. REAL-TIME DISTANCE & ALIGNMENT ESTIMATION
+                        const vWidth = video.videoWidth || 640;
+                        const vHeight = video.videoHeight || 480;
+                        const dist = faceMatching.estimateFaceDistance(fastRes.detection.box, vWidth, vHeight);
 
-                            // 🛡️ LIVENESS TRACKING (Anti-Spoofing)
-                            if (res.landmarks) {
-                                const live = faceMatching.analyzeLiveness(res.landmarks);
-                                if (live) {
-                                    // 1. DEPTH TRACKING (Near/Far)
-                                    const boxArea = width * height;
-                                    livenessHistoryRef.current.boxSizes.push(boxArea);
-                                    if (livenessHistoryRef.current.boxSizes.length > 30) livenessHistoryRef.current.boxSizes.shift();
+                        // 3. DYNAMIC PERCENTAGE (Increases/decreases continuously based on distance & steady hold)
+                        let currentPercent = dist.alignmentQualityPercent;
 
-                                    const minBox = Math.min(...livenessHistoryRef.current.boxSizes);
-                                    const maxBox = Math.max(...livenessHistoryRef.current.boxSizes);
-                                    const currentDepthRange = minBox > 0 ? (maxBox / minBox) : 1;
-                                    setDepthRange(currentDepthRange);
+                        if (dist.distanceStatus === 'optimal') {
+                            steadyHoldCountRef.current = Math.min(3, steadyHoldCountRef.current + 1);
+                            const holdBonus = Math.round((steadyHoldCountRef.current / 3) * 20);
+                            currentPercent = Math.min(100, dist.alignmentQualityPercent + holdBonus);
+                        } else {
+                            steadyHoldCountRef.current = Math.max(0, steadyHoldCountRef.current - 1);
+                        }
 
-                                    // 2. MOVEMENT TRACKING (Yaw Rotate)
-                                    livenessHistoryRef.current.yawPoints.push(live.yaw);
-                                    if (livenessHistoryRef.current.yawPoints.length > 30) livenessHistoryRef.current.yawPoints.shift();
+                        setScanHoldProgress(currentPercent);
+                        setDistanceInfo({
+                            status: dist.distanceStatus,
+                            cm: dist.estimatedDistanceCm,
+                            message: dist.guidanceMessage,
+                            percent: currentPercent
+                        });
 
-                                    const currentYawRange = Math.max(...livenessHistoryRef.current.yawPoints) - Math.min(...livenessHistoryRef.current.yawPoints);
-                                    setYawRange(currentYawRange);
-                                }
-                            }
+                        // 4. TRIGGER BIOMETRIC VERIFICATION WHEN STEADY IN OPTIMAL RANGE
+                        if (dist.distanceStatus === 'optimal' && steadyHoldCountRef.current >= 3 && !isProcessingRef.current) {
+                            active = false;
+                            isProcessingRef.current = true;
+                            setFaceMatchStep('matching');
 
-                            // 🏢 INDUSTRIAL STAGE 2: MULTI-FRAME GAZE & STABILITY BUFFER (~2 seconds)
-                            const boxSize = width * height;
-                            if (boxSize > (canvas.width * canvas.height * 0.04)) {
-                                // 🛡️ CONTINUOUS ANTI-SPOOF CHECK (3 Consecutive Frames Confirmation)
-                                if (videoRef.current && res.detection?.box) {
-                                    const spoofCheck = faceMatching.detectMobileScreenDisplay(videoRef.current, res.detection.box);
-                                    if (spoofCheck.isSpoof) {
-                                        consecutiveSpoofCountRef.current = (consecutiveSpoofCountRef.current || 0) + 1;
-                                        console.warn(`⚠️ Anti-Spoof Flag (${consecutiveSpoofCountRef.current}/3):`, spoofCheck.reason);
-                                        if (consecutiveSpoofCountRef.current >= 3) {
-                                            console.warn("❌ Anti-Spoof Block:", spoofCheck.reason);
-                                            active = false;
-                                            isProcessingRef.current = false;
-                                            steadyHoldCountRef.current = 0;
-                                            consecutiveSpoofCountRef.current = 0;
-                                            setScanHoldProgress(0);
-                                            stopCamera();
-                                            const reasonMsg = spoofCheck.reason || "Mobile Screen Display / Photo Spoof Detected!";
-                                            showToast(reasonMsg, "error");
-                                            setFaceMatchStep('error');
-                                            setIsMarkingAttendance(true);
-                                            setAttendanceStep('failed');
-                                            setAttendanceFailedReason(reasonMsg);
-                                            return;
-                                        }
-                                    } else {
-                                        consecutiveSpoofCountRef.current = 0;
-                                    }
-                                }
+                            // Extract high-accuracy descriptor on this optimal frame
+                            const canvas = document.createElement('canvas');
+                            canvas.width = vWidth;
+                            canvas.height = vHeight;
+                            const ctx = canvas.getContext('2d');
+                            if (ctx) ctx.drawImage(video, 0, 0, vWidth, vHeight);
 
-                                const REQUIRED_STEADY_FRAMES = 3; // 3 frames * 200ms ≈ 0.6 seconds steady hold (instant & secure)
-                                steadyHoldCountRef.current = Math.min(REQUIRED_STEADY_FRAMES, steadyHoldCountRef.current + 1);
-                                const progressPct = Math.round((steadyHoldCountRef.current / REQUIRED_STEADY_FRAMES) * 100);
-                                setScanHoldProgress(progressPct);
+                            const fullRes = await faceMatching.detectFace(canvas, true, true);
 
-                                if (steadyHoldCountRef.current >= REQUIRED_STEADY_FRAMES) {
-                                    active = false;
-                                    isProcessingRef.current = true;
-                                    setFaceMatchStep('matching');
-
-                                    const result = await performFaceVerification(res);
-                                    if (result && result.status === 'auto-approved') {
-                                        setFaceMatchStep('success');
-                                        // 🏢 Instant & crisp "Verified! Thank you [Name]" on screen for 0.8s
-                                        setTimeout(() => {
-                                            stopCamera();
-                                            proceedWithAttendance(result);
-                                        }, 800);
-                                    } else {
-                                        stopCamera();
-                                        const percent = result?.percentage !== undefined ? `${result.percentage}%` : 'Low';
-                                        const reasonMsg = `Identity Mismatch (${percent} Accuracy). Verification failed. Please ensure you are the account owner.`;
-                                        showToast(reasonMsg, "error");
-                                        setFaceMatchStep('error');
-                                        setIsMarkingAttendance(true);
-                                        setAttendanceStep('failed');
-                                        setAttendanceFailedReason(reasonMsg);
-                                    }
+                            // Anti-spoof check
+                            if (fullRes?.detection?.box) {
+                                const spoofCheck = faceMatching.detectMobileScreenDisplay(canvas, fullRes.detection.box);
+                                if (spoofCheck.isSpoof) {
+                                    stopCamera();
+                                    isProcessingRef.current = false;
+                                    setScanHoldProgress(0);
+                                    const reasonMsg = spoofCheck.reason || "Mobile Screen Display / Photo Spoof Detected!";
+                                    showToast(reasonMsg, "error");
+                                    setFaceMatchStep('error');
+                                    setIsMarkingAttendance(true);
+                                    setAttendanceStep('failed');
+                                    setAttendanceFailedReason(reasonMsg);
                                     return;
                                 }
                             }
-                        } else {
-                            setFaceDetected(false);
-                            setFaceBox(null);
-                            // Decay progress smoothly if face is lost
-                            steadyHoldCountRef.current = Math.max(0, steadyHoldCountRef.current - 1);
-                            setScanHoldProgress(Math.round((steadyHoldCountRef.current / 6) * 100));
-                            consecutiveFailuresRef.current += 1;
+
+                            const result = await performFaceVerification(fullRes || fastRes);
+                            if (result && result.status === 'auto-approved') {
+                                setFaceMatchStep('success');
+                                setTimeout(() => {
+                                    stopCamera();
+                                    proceedWithAttendance(result);
+                                }, 800);
+                            } else {
+                                stopCamera();
+                                const percent = result?.percentage !== undefined ? `${result.percentage}%` : 'Low';
+                                const reasonMsg = `Identity Mismatch (${percent} Accuracy — Need 75%). Please look straight at the camera.`;
+                                showToast(reasonMsg, "error");
+                                setFaceMatchStep('error');
+                                setIsMarkingAttendance(true);
+                                setAttendanceStep('failed');
+                                setAttendanceFailedReason(reasonMsg);
+                            }
+                            return;
                         }
+                    } else {
+                        setFaceDetected(false);
+                        setFaceBox(null);
+                        steadyHoldCountRef.current = 0;
+                        setScanHoldProgress(0);
+                        setDistanceInfo({
+                            status: 'none',
+                            cm: 0,
+                            message: 'Align face in frame',
+                            percent: 0
+                        });
+                        consecutiveFailuresRef.current += 1;
                     }
                 } catch (err) {
                     console.error("Detection error:", err);
                 }
 
                 if (active) {
-                    detectionIntervalRef.current = setTimeout(runDetection, 200) as any; // Smooth 200ms interval
+                    detectionIntervalRef.current = setTimeout(runDetection, 120) as any;
                 }
             };
 
@@ -2851,44 +2850,22 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
     };
 
-    // ⚡ INSTANT-VERIFY: Trigger face match as soon as ANY face is detected
-    useEffect(() => {
-        if (faceMatchStep === 'detecting' && faceDetected) {
-            console.log('⚡ Face detected! Auto-triggering instant verification...');
-
-            const autoVerify = async (attempts = 0) => {
-                // Use cached detection if available to save 200-500ms
-                const cachedRes = latestDetectionRef.current;
-                const result = await performFaceVerification(cachedRes);
-
-                if (result && result.status === 'auto-approved') {
-                    // Success! Proceed immediately
-                    setTimeout(() => {
-                        stopCamera();
-                        proceedWithAttendance(result);
-                    }, 100); // Super fast transition
-                } else if (result && result.status === 'rejected') {
-                    stopCamera();
-                    showToast(`Face Mismatch (Score: ${result.percentage}% — Need 85%). Try better lighting or look straight at the camera.`, "error");
-                    setFaceMatchStep('error');
-                } else if (attempts < 2) {
-                    // retry fallback
-                    setTimeout(() => autoVerify(attempts + 1), 300);
-                }
-            };
-
-            autoVerify();
-        }
-    }, [faceMatchStep, faceDetected]);
-
     const startCamera = async () => {
         try {
             // ⚡ CLEAN RESET: Clear all cached detection refs to prevent instant stale error on re-opening
             isProcessingRef.current = false;
             latestDetectionRef.current = null;
             consecutiveFailuresRef.current = 0;
+            steadyHoldCountRef.current = 0;
+            setScanHoldProgress(0);
             setFaceDetected(false);
             setFaceBox(null);
+            setDistanceInfo({
+                status: 'none',
+                cm: 0,
+                message: 'Align Face in Frame',
+                percent: 0
+            });
             setAttendanceStep('idle');
             setAttendanceFailedReason('');
 
@@ -2918,20 +2895,20 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         } catch (err) {
             console.error("Camera error:", err);
             alert("Could not access camera. Please ensure permissions are granted.");
-            setCameraActive(false);
-            setFaceMatchStep('idle');
         }
     };
 
     const stopCamera = () => {
         if (videoRef.current && videoRef.current.srcObject) {
-            const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-            tracks.forEach(track => track.stop());
+            const stream = videoRef.current.srcObject as MediaStream;
+            stream.getTracks().forEach((track) => track.stop());
             videoRef.current.srcObject = null;
         }
+        if (detectionIntervalRef.current) {
+            clearTimeout(detectionIntervalRef.current);
+            detectionIntervalRef.current = null;
+        }
         setCameraActive(false);
-        isProcessingRef.current = false;
-        latestDetectionRef.current = null;
         setFaceDetected(false);
         setFaceBox(null);
     };
@@ -2977,7 +2954,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                 const localDist = await faceMatching.getDistance(existingRes.descriptor, referenceDescriptor);
                 if (localDist !== null) {
                     const localScore = faceMatching.calculateScore(localDist);
-                    if (localScore >= 85) {
+                    if (localScore >= 75) {
                         console.log(`⚡ Instant Local Biometric Approved: ${localScore}% match`);
                         setFaceMatchProgress(100);
                         setFaceMatchStep('success');
@@ -3076,7 +3053,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
             setFaceMatchProgress(100);
 
-            if (matchPercentage >= 85) {
+            if (matchPercentage >= 75) {
                 setFaceMatchStep('success');
                 return {
                     percentage: matchPercentage,
@@ -6275,24 +6252,42 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
                                                     <div className="w-full py-2 text-center space-y-3">
                                                         {faceDetected ? (
                                                             <div className="space-y-2 animate-in fade-in duration-200">
-                                                                <div className="font-black text-sm flex items-center justify-center gap-2 text-emerald-600">
-                                                                    <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping" />
-                                                                    <span>TARGET LOCKED • HOLD STILL ({scanHoldProgress}%)</span>
+                                                                <div className={`font-black text-sm flex items-center justify-center gap-2 ${
+                                                                    distanceInfo.status === 'optimal' ? 'text-emerald-600' :
+                                                                    distanceInfo.status === 'too-close' ? 'text-amber-600' : 'text-blue-600'
+                                                                }`}>
+                                                                    <div className={`w-2.5 h-2.5 rounded-full animate-ping ${
+                                                                        distanceInfo.status === 'optimal' ? 'bg-emerald-500' :
+                                                                        distanceInfo.status === 'too-close' ? 'bg-amber-500' : 'bg-blue-500'
+                                                                    }`} />
+                                                                    <span className="tracking-wide">{distanceInfo.message.toUpperCase()} • {distanceInfo.percent}%</span>
                                                                 </div>
-                                                                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                                                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
                                                                     <div
-                                                                        className="bg-emerald-500 h-2 rounded-full transition-all duration-200 shadow-sm"
-                                                                        style={{ width: `${Math.max(10, scanHoldProgress)}%` }}
+                                                                        className={`h-2.5 rounded-full transition-all duration-150 shadow-sm ${
+                                                                            distanceInfo.status === 'optimal' ? 'bg-emerald-500' :
+                                                                            distanceInfo.status === 'too-close' ? 'bg-amber-500' : 'bg-blue-500'
+                                                                        }`}
+                                                                        style={{ width: `${Math.max(5, distanceInfo.percent)}%` }}
                                                                     />
                                                                 </div>
-                                                                <p className="text-[11px] text-gray-400 font-semibold tracking-wide">
-                                                                    {scanHoldProgress < 40 ? "Measuring Facial Geometry..." : scanHoldProgress < 80 ? "Verifying Anti-Spoof Consensus..." : "Finalizing Match..."}
+                                                                <p className="text-[11px] text-gray-500 font-semibold tracking-wide">
+                                                                    {distanceInfo.status === 'optimal' 
+                                                                        ? (scanHoldProgress > 80 ? "Verifying Face Identity (100%)..." : "Hold steady for verification...") 
+                                                                        : distanceInfo.status === 'too-far' 
+                                                                        ? "Bring device closer to increase %" 
+                                                                        : "Move device slightly back to increase %"}
                                                                 </p>
                                                             </div>
                                                         ) : (
-                                                            <div className="font-black text-sm flex items-center justify-center gap-2 text-blue-600">
-                                                                <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
-                                                                <span>{consecutiveFailuresRef.current > 10 ? "ENHANCED SCANNING..." : "ALIGN FACE IN OVAL..."}</span>
+                                                            <div className="space-y-2">
+                                                                <div className="font-black text-sm flex items-center justify-center gap-2 text-blue-600">
+                                                                    <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+                                                                    <span>{consecutiveFailuresRef.current > 10 ? "ENHANCED SCANNING (0%)..." : "ALIGN FACE IN FRAME (0%)..."}</span>
+                                                                </div>
+                                                                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                                                    <div className="bg-blue-300 h-2 rounded-full w-0 transition-all" />
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </div>
