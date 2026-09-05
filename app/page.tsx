@@ -179,8 +179,24 @@ export default function Dashboard() {
           }
         }
 
-        // If No Session AND no logged in role, AND on Main Domain (and no explicit ?tenant= URL param) -> Show Landing Page
-        if (isRootDomain && !tenantParam && !storedUserType) {
+        // 1. Explicit ?tenant= URL param -> Redirect immediately to login with tenant, keeping the loader spinner active (no blank screen!)
+        if (tenantParam) {
+          try {
+            localStorage.setItem("lastTenantSlug", tenantParam.toLowerCase());
+            document.cookie = `tenant-slug=${tenantParam.toLowerCase()}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+          } catch (e) {}
+          window.location.replace(`/login?tenant=${encodeURIComponent(tenantParam.toLowerCase())}`);
+          return;
+        }
+
+        // 2. Returning visitor who has visited a campus before -> Route to their remembered campus login
+        if (savedTenantSlug && savedTenantSlug !== 'default' && savedTenantSlug !== 'hosteleaze' && !storedUserType) {
+          window.location.replace(`/login?tenant=${encodeURIComponent(savedTenantSlug.toLowerCase())}`);
+          return;
+        }
+
+        // 3. Brand-new visitor on root domain (no ?tenant, no saved campus, no active login) -> Show Landing Page
+        if (isRootDomain && !storedUserType) {
           setIsMainDomain(true);
           setLoading(false);
           return;
@@ -230,7 +246,7 @@ export default function Dashboard() {
               setLoading(false);
             }
           });
-          return; // ✅ FIX: Prevent falling through to router.push("/login") before Firebase resolves
+          return;
         }
 
         if (storedUserType === "parent") {
@@ -272,15 +288,17 @@ export default function Dashboard() {
             }
           }
           if (!localStorage.getItem("cachedParentStudentData")) {
-            router.push("/login");
-            setLoading(false);
+            window.location.replace("/login");
           }
           return;
         }
 
-        // Final Fallback
-        router.push("/login");
-        setLoading(false);
+        // Final Fallback for unauthenticated users
+        if (activeTenant && activeTenant !== 'default' && activeTenant !== 'hosteleaze') {
+          window.location.replace(`/login?tenant=${encodeURIComponent(activeTenant.toLowerCase())}`);
+        } else {
+          window.location.replace("/login");
+        }
       } catch (err) {
         console.error("checkAuth unexpected error:", err);
         setLoading(false);

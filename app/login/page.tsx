@@ -56,13 +56,17 @@ function LoginForm() {
   useEffect(() => {
     // ⚡ FIRST PASS: Check URL and Storage instantly (Zero Flicker)
     if (typeof window !== 'undefined') {
-      const tenantParam = searchParams.get('tenant');
+      const tenantParam = searchParams.get('tenant') || localStorage.getItem("lastTenantSlug");
       if (tenantParam) {
-        setTenantName(tenantParam.toUpperCase());
-        // If we have logo in storage for this specific slug, use it
-        if (localStorage.getItem("lastTenantSlug") === tenantParam.toLowerCase()) {
-            setTenantLogo(localStorage.getItem("lastTenantLogo") || "");
-            setTenantName(localStorage.getItem("lastTenantName") || tenantParam.toUpperCase());
+        const cleanSlug = tenantParam.toLowerCase();
+        if (cleanSlug === 'ogi' || cleanSlug === 'oist') {
+          setTenantName("Oriental Group of Institutes (OGI)");
+          setTenantLogo(localStorage.getItem("lastTenantLogo") || "");
+        } else if (localStorage.getItem("lastTenantSlug") === cleanSlug && localStorage.getItem("lastTenantName")) {
+          setTenantLogo(localStorage.getItem("lastTenantLogo") || "");
+          setTenantName(localStorage.getItem("lastTenantName") || tenantParam.toUpperCase());
+        } else {
+          setTenantName(tenantParam.toUpperCase());
         }
       } else {
         setTenantName(localStorage.getItem("lastTenantName") || "Hosteleaze");
@@ -108,20 +112,26 @@ function LoginForm() {
 
   const fetchTenantConfig = async () => {
     try {
-      const tenant = searchParams.get('tenant');
-      const res = await fetch(`/api/tenant/config${tenant ? `?tenant=${tenant}` : ''}`);
+      let tenant = searchParams.get('tenant');
+      if (!tenant && typeof window !== 'undefined') {
+        tenant = localStorage.getItem("lastTenantSlug");
+      }
+      const res = await fetch(`/api/tenant/config${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`);
       if (res.ok) {
         const data = await res.json();
-        if (data.success) {
+        if (data.success && data.name) {
           setTenantName(data.name);
-          setTenantLogo(data.logo);
+          setTenantLogo(data.logo || "");
           if (data.defaultCountryCode) {
             setParentCountryCode(data.defaultCountryCode);
           }
           // ⚡ Persist for instant load next time
           localStorage.setItem("lastTenantName", data.name);
           localStorage.setItem("lastTenantLogo", data.logo || "");
-          localStorage.setItem("lastTenantSlug", data.slug || "");
+          localStorage.setItem("lastTenantSlug", data.slug || tenant || "");
+          if (data.slug || tenant) {
+            document.cookie = `tenant-slug=${data.slug || tenant}; path=/; max-age=2592000; SameSite=Lax`;
+          }
         }
       }
     } catch (err) {
@@ -131,8 +141,11 @@ function LoginForm() {
 
   const fetchHostels = async () => {
     try {
-      const tenant = searchParams.get('tenant');
-      const response = await fetch(`/api/hostels${tenant ? `?tenant=${tenant}` : ''}`);
+      let tenant = searchParams.get('tenant');
+      if (!tenant && typeof window !== 'undefined') {
+        tenant = localStorage.getItem("lastTenantSlug");
+      }
+      const response = await fetch(`/api/hostels${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`);
 
       if (response.ok) {
         const contentType = response.headers.get("content-type");
@@ -150,8 +163,11 @@ function LoginForm() {
 
   const checkDeveloperSetup = async () => {
     try {
-      const tenant = searchParams.get('tenant');
-      const res = await fetch(`/api/developer/setup-status${tenant ? `?tenant=${tenant}` : ''}`);
+      let tenant = searchParams.get('tenant');
+      if (!tenant && typeof window !== 'undefined') {
+        tenant = localStorage.getItem("lastTenantSlug");
+      }
+      const res = await fetch(`/api/developer/setup-status${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`);
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
@@ -850,16 +866,30 @@ function LoginForm() {
                       </div>
                     </div>
 
-                    {tenantName === "Hosteleaze" && !showAdminPassword && !showWardenPassword && (
-                      <button 
-                        onClick={async () => {
-                          const slug = await showPrompt("Enter your Campus Slug (e.g. oist):");
-                          if (slug) window.location.href = `/login?tenant=${slug.toLowerCase()}`;
-                        }}
-                        className="text-[10px] font-bold text-blue-600 uppercase tracking-widest hover:underline"
-                      >
-                        ✨ Switch to your Campus
-                      </button>
+                    {!showAdminPassword && !showWardenPassword && !showDeveloperPassword && (
+                      <div className="pt-1.5 flex items-center justify-center">
+                        <button 
+                          onClick={async () => {
+                            const slug = await showPrompt("Enter Campus Slug (e.g. ogi, oist) or type 'home' for Main Portal:");
+                            if (slug) {
+                              const clean = slug.trim().toLowerCase();
+                              if (clean === 'home' || clean === 'main' || clean === 'hosteleaze') {
+                                localStorage.removeItem("lastTenantSlug");
+                                localStorage.removeItem("lastTenantName");
+                                localStorage.removeItem("lastTenantLogo");
+                                document.cookie = "tenant-slug=; path=/; max-age=0; SameSite=Lax";
+                                window.location.href = "/";
+                              } else {
+                                window.location.href = `/login?tenant=${encodeURIComponent(clean)}`;
+                              }
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50/80 border border-blue-100 text-[9.5px] font-bold text-blue-600 uppercase tracking-widest hover:bg-blue-100 hover:text-blue-800 transition-all active:scale-95 shadow-2xs"
+                        >
+                          <span>🏛️</span>
+                          <span>Switch Campus</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
