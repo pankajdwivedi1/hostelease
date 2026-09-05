@@ -3548,15 +3548,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     try {
       const { assessPhotoQuality, detectFace, loadFaceApiModels, detectMobileScreenDisplay } = await import("@/lib/faceMatching");
       
-      // 🛡️ 1. Photo Quality & Sharpness Check
+      // 🛡️ 1. Photo Quality & Re-Capture Check
       const quality = assessPhotoQuality(canvasOrImg);
-      if (quality.isBlurry) {
-        return {
-          valid: false,
-          error: quality.reason || `Photo too blurry (Sharpness: ${quality.sharpnessScore}%). Please ensure steady lighting and focus.`,
-          score: quality.sharpnessScore
-        };
-      }
       if (quality.isPhotoOfPhoto) {
         return {
           valid: false,
@@ -3569,6 +3562,13 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
       await loadFaceApiModels(true);
       const res = await detectFace(canvasOrImg, true, true);
       if (!res || !res.descriptor) {
+        if (quality.isBlurry) {
+          return {
+            valid: false,
+            error: quality.reason || `Photo too blurry (Sharpness: ${quality.sharpnessScore}%). Please ensure steady lighting and focus.`,
+            score: quality.sharpnessScore
+          };
+        }
         return { valid: false, error: "No face detected in photo! Please ensure face is centered and clear." };
       }
       if (res.multipleFacesDetected) {

@@ -926,13 +926,8 @@ export default function OnboardingPage() {
       await loadAIModels();
       await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
 
-      // 🛡️ 1. REAL-TIME PHOTO QUALITY & BLUR GATEKEEPER
+      // 🛡️ 1. REAL-TIME PHOTO QUALITY & RE-CAPTURE GATEKEEPER
       const quality = faceMatching.assessPhotoQuality(aiCanvas);
-      if (quality.isBlurry) {
-        setFaceError(quality.reason || `Photo too blurry (Sharpness: ${quality.sharpnessScore}%). Please hold steady in good lighting.`);
-        setCapturedImage(null);
-        return;
-      }
       if (quality.isPhotoOfPhoto) {
         setFaceError(quality.reason || "Photo of a screen / re-capture detected. Please capture a real live selfie.");
         setCapturedImage(null);
@@ -940,7 +935,6 @@ export default function OnboardingPage() {
       }
 
       // 🛡️ 2. Run face descriptor generation using SSD-MobileNet (accurate=true)
-      // First try on AI canvas; if not detected, retry on full-resolution img element
       let descriptor = await faceMatching.detectFace(aiCanvas, true, true);
       if (!descriptor || !descriptor.descriptor) {
         descriptor = await faceMatching.detectFace(img, true, true);
@@ -948,7 +942,11 @@ export default function OnboardingPage() {
       await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
 
       if (!descriptor || !descriptor.descriptor) {
-        setFaceError("No face detected! Please capture again with good lighting.");
+        if (quality.isBlurry) {
+          setFaceError(quality.reason || `Photo too blurry (Sharpness: ${quality.sharpnessScore}%). Please hold steady in good lighting.`);
+        } else {
+          setFaceError("No face detected! Please capture again with good lighting.");
+        }
         setCapturedImage(null); // Force retake
         return;
       }

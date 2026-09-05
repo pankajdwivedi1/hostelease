@@ -250,13 +250,8 @@ export default function LiveFaceCaptureModal({
             const aiCtx = aiCanvas.getContext("2d");
             if (aiCtx) aiCtx.drawImage(video, 0, 0, aiW, aiH);
 
-            // 🛡️ 1. REAL-TIME PHOTO QUALITY & BLUR CHECK
+            // 🛡️ 1. REAL-TIME PHOTO QUALITY & RE-CAPTURE CHECK
             const quality = faceMatching.assessPhotoQuality(canvas);
-            if (quality.isBlurry) {
-                showToast(quality.reason || `Photo too blurry (Sharpness: ${quality.sharpnessScore}%). Please hold steady in good lighting.`, "error");
-                setIsProcessing(false);
-                return;
-            }
             if (quality.isPhotoOfPhoto) {
                 showToast(quality.reason || "Photo of a screen / re-capture detected. Please take a live direct selfie.", "error");
                 setIsProcessing(false);
@@ -273,7 +268,11 @@ export default function LiveFaceCaptureModal({
             }
 
             if (!res || !res.descriptor) {
-                showToast("No clear face detected! Please look straight at the camera.", "warning");
+                if (quality.isBlurry) {
+                    showToast(quality.reason || `Photo too blurry (Sharpness: ${quality.sharpnessScore}%). Please hold steady in good lighting.`, "error");
+                } else {
+                    showToast("No clear face detected! Please look straight at the camera.", "warning");
+                }
                 setIsProcessing(false);
                 return;
             }
