@@ -31,9 +31,9 @@ export default function LiveFaceCaptureModal({
     const [isSaving, setIsSaving] = useState(false);
     const [extractedDescriptor, setExtractedDescriptor] = useState<number[] | null>(null);
 
-    // Live Quality Status: 'good' | 'cluttered_bg' | 'low_light' | 'no_face'
     const [qualityStatus, setQualityStatus] = useState<"good" | "cluttered_bg" | "low_light" | "no_face">("no_face");
-    const [qualityMessage, setQualityMessage] = useState<string>("Align your face inside the oval frame");
+    const [qualityMessage, setQualityMessage] = useState<string>("Align your face in the camera view");
+    const [faceBox, setFaceBox] = useState<{ x: number; y: number; width: number; height: number; videoWidth: number; videoHeight: number } | null>(null);
 
     const stopCamera = useCallback(() => {
         if (streamRef.current) {
@@ -51,6 +51,7 @@ export default function LiveFaceCaptureModal({
             clearInterval(qualityIntervalRef.current);
             qualityIntervalRef.current = null;
         }
+        setFaceBox(null);
         setIsCameraActive(false);
         setIsConnectingCamera(false);
     }, []);
@@ -136,22 +137,24 @@ export default function LiveFaceCaptureModal({
 
         startCamera();
 
-        // Background & lighting validator loop every 500ms
-        qualityIntervalRef.current = setInterval(() => {
+        // Real-time Face & Lighting validator loop every 300ms
+        qualityIntervalRef.current = setInterval(async () => {
             if (!videoRef.current || capturedImage) return;
 
             const video = videoRef.current;
             if (!video.videoWidth || !video.videoHeight || video.paused || video.ended) return;
 
             try {
+                const sampleW = 320;
+                const sampleH = Math.round((video.videoHeight / video.videoWidth) * sampleW) || 240;
                 const canvas = document.createElement("canvas");
-                canvas.width = 160;
-                canvas.height = 120;
+                canvas.width = sampleW;
+                canvas.height = sampleH;
                 const ctx = canvas.getContext("2d", { willReadFrequently: true });
                 if (!ctx) return;
 
-                ctx.drawImage(video, 0, 0, 160, 120);
-                const imgData = ctx.getImageData(0, 0, 160, 120);
+                ctx.drawImage(video, 0, 0, sampleW, sampleH);
+                const imgData = ctx.getImageData(0, 0, sampleW, sampleH);
                 const data = imgData.data;
 
                 // 1. Calculate overall brightness
@@ -164,34 +167,38 @@ export default function LiveFaceCaptureModal({
                 }
                 const avgBrightness = totalBrightness / (data.length / 16);
 
-                // 2. Check background corner variance
-                const cornerPixels: number[] = [];
-                const sampleArea = 20;
-                for (let y = 0; y < sampleArea; y++) {
-                    for (let x = 0; x < sampleArea; x++) {
-                        const idx1 = (y * 160 + x) * 4;
-                        const idx2 = (y * 160 + (160 - sampleArea + x)) * 4;
-                        cornerPixels.push((data[idx1] + data[idx1 + 1] + data[idx1 + 2]) / 3);
-                        cornerPixels.push((data[idx2] + data[idx2 + 1] + data[idx2 + 2]) / 3);
+                // 2. Real-time Face Detection & Tracking Box
+                const faceRes = await faceMatching.detectFace(canvas, false, false);
+                if (faceRes && faceRes.detection?.box) {
+                    const { x, y, width, height } = faceRes.detection.box;
+                    setFaceBox({
+                        x,
+                        y,
+                        width,
+                        height,
+                        videoWidth: sampleW,
+                        videoHeight: sampleH
+                    });
+
+                    if (avgBrightness < 45) {
+                        setQualityStatus("low_light");
+                        setQualityMessage("⚠️ Low lighting. Please face a light source");
+                    } else {
+                        setQualityStatus("good");
+                        setQualityMessage("✅ Great! Face Detected & Ready");
+                    }
+                } else {
+                    setFaceBox(null);
+                    if (avgBrightness < 45) {
+                        setQualityStatus("low_light");
+                        setQualityMessage("⚠️ Low lighting. Please face a light source");
+                    } else {
+                        setQualityStatus("no_face");
+                        setQualityMessage("Scanning for face...");
                     }
                 }
-
-                const mean = cornerPixels.reduce((a, b) => a + b, 0) / cornerPixels.length;
-                const variance = cornerPixels.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / cornerPixels.length;
-                const stdDev = Math.sqrt(variance);
-
-                if (avgBrightness < 45) {
-                    setQualityStatus("low_light");
-                    setQualityMessage("⚠️ Low lighting. Please face a light source");
-                } else if (stdDev > 52) {
-                    setQualityStatus("cluttered_bg");
-                    setQualityMessage("⚠️ Background is cluttered. Stand in front of a plain wall");
-                } else {
-                    setQualityStatus("good");
-                    setQualityMessage("✅ Great! Plain background & good lighting");
-                }
             } catch (e) {}
-        }, 500);
+        }, 300);
 
         return () => {
             stopCamera();
@@ -403,18 +410,45 @@ export default function LiveFaceCaptureModal({
                                         </div>
                                     )}
 
-                                    {/* Oval Face Guide Overlay */}
-                                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                                    {/* Dynamic Green Square / Rectangular Face Tracking Box */}
+                                    {faceBox ? (
                                         <div
-                                            className={`w-[62%] h-[78%] rounded-[50%] border-4 transition-all duration-300 shadow-[0_0_0_9999px_rgba(15,23,42,0.45)] ${
-                                                qualityStatus === "good"
-                                                    ? "border-emerald-400 shadow-[0_0_25px_rgba(52,211,153,0.6)]"
-                                                    : qualityStatus === "cluttered_bg" || qualityStatus === "low_light"
-                                                    ? "border-amber-400 shadow-[0_0_20px_rgba(251,191,36,0.5)]"
-                                                    : "border-white/80"
-                                            }`}
-                                        />
-                                    </div>
+                                            className="absolute pointer-events-none transition-all duration-150 ease-out border-2 border-emerald-400 bg-emerald-500/10 rounded-2xl shadow-[0_0_20px_rgba(52,211,153,0.6)] flex flex-col justify-between p-1.5 z-10"
+                                            style={{
+                                                top: `${Math.max(2, Math.min(88, (faceBox.y / faceBox.videoHeight) * 100))}%`,
+                                                left: `${Math.max(2, Math.min(88, ((faceBox.videoWidth - (faceBox.x + faceBox.width)) / faceBox.videoWidth) * 100))}%`,
+                                                width: `${Math.min(96, (faceBox.width / faceBox.videoWidth) * 100)}%`,
+                                                height: `${Math.min(96, (faceBox.height / faceBox.videoHeight) * 100)}%`,
+                                            }}
+                                        >
+                                            {/* Top-left & top-right HUD corner accents */}
+                                            <div className="flex justify-between items-start w-full">
+                                                <div className="w-3.5 h-3.5 border-t-[3px] border-l-[3px] border-emerald-300 rounded-tl -mt-1 -ml-1" />
+                                                <div className="w-3.5 h-3.5 border-t-[3px] border-r-[3px] border-emerald-300 rounded-tr -mt-1 -mr-1" />
+                                            </div>
+                                            {/* Center Validation Badge */}
+                                            <div className="self-center">
+                                                <span className="px-2 py-0.5 bg-emerald-600/90 text-white rounded-full text-[9px] font-black uppercase tracking-wider backdrop-blur-md shadow flex items-center gap-1">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                                                    Validating Face
+                                                </span>
+                                            </div>
+                                            {/* Bottom-left & bottom-right HUD corner accents */}
+                                            <div className="flex justify-between items-end w-full">
+                                                <div className="w-3.5 h-3.5 border-b-[3px] border-l-[3px] border-emerald-300 rounded-bl -mb-1 -ml-1" />
+                                                <div className="w-3.5 h-3.5 border-b-[3px] border-r-[3px] border-emerald-300 rounded-br -mb-1 -mr-1" />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        /* Subtle Full-Frame Scan Guide when searching for face */
+                                        <div className="absolute inset-4 pointer-events-none border-2 border-dashed border-white/20 rounded-2xl flex items-center justify-center">
+                                            <div className="text-center">
+                                                <p className="text-[11px] font-bold text-white/60 tracking-wider uppercase">
+                                                    Scanning Full View • Position Face
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Live Quality Indicator Badge */}
                                     <div className="absolute top-3 left-3 right-3 flex justify-center pointer-events-none">
