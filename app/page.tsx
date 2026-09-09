@@ -84,9 +84,11 @@ export default function Dashboard() {
       const parts = hostname.split('.');
       const isRootDomain = mainDomains.includes(hostname) || parts.length === 1 || (parts.length === 2 && (parts[0] === 'www' || parts[1] === 'localhost'));
       let storedUserType: string | null = null;
+      let savedTenantSlug: string | null = null;
       try {
         try {
           storedUserType = localStorage.getItem("userType");
+          savedTenantSlug = localStorage.getItem("lastTenantSlug");
         } catch (e) {}
 
         if (!storedUserType && typeof document !== 'undefined' && document.cookie) {
@@ -94,6 +96,9 @@ export default function Dashboard() {
           if (match) {
             storedUserType = match.split('=')[1] || null;
           }
+        }
+        if (!savedTenantSlug && tenantCookie) {
+          savedTenantSlug = tenantCookie;
         }
 
         if (storedUserType === "admin") { setUserType("admin"); setLoading(false); return; }
@@ -301,6 +306,7 @@ export default function Dashboard() {
         }
       } catch (err) {
         console.error("checkAuth unexpected error:", err);
+        setIsMainDomain(true);
         setLoading(false);
       }
     };
@@ -372,12 +378,8 @@ export default function Dashboard() {
     );
   }
 
-  if (isMainDomain) {
+  if (isMainDomain || !userType) {
     return <LandingPage />;
-  }
-
-  if (!userType) {
-    return null;
   }
 
   return (
