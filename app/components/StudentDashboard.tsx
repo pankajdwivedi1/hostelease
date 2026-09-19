@@ -250,7 +250,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     // 📶 Auto-check Campus WiFi network status on dashboard mount
     useEffect(() => {
-        fetch("/api/check-network")
+        fetch(`/api/check-network${getTenantParam()}`)
             .then(res => res.json())
             .then(data => {
                 if (data.success && data.isWhitelisted) {
@@ -2589,7 +2589,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
         // ⚡ 100% RELIABILITY: WiFi IP Check
         // If student is on Hostel WiFi, bypass GPS.
-        fetch("/api/check-network").then(res => (res.ok ? res.json() : null)).then(data => {
+        fetch(`/api/check-network${getTenantParam()}`).then(res => (res.ok ? res.json() : null)).then(data => {
             if (data && data.success && data.isWhitelisted && !isCompleted) {
                 console.log("📶 Verified via Hostel WiFi IP:", data.ip);
                 isCompleted = true;

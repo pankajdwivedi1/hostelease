@@ -9988,16 +9988,37 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                       <button
                         onClick={async () => {
                           try {
-                            const res = await fetch("/api/check-network");
-                            const data = await res.json();
-                            if (data.success) {
-                              if (data.ip === "127.0.0.1" || data.ip === "::1") {
-                                showToast(`⚠️ Test Result: IP is ${data.ip} (LOCALHOST).`, "warning");
-                              } else if (data.isWhitelisted) {
-                                showToast(`✅ TEST PASSED! Your IP (${data.ip}) is whitelisted.`, "success");
-                              } else {
-                                showToast(`❌ TEST FAILED: Your IP (${data.ip}) is NOT whitelisted yet.`, "error");
-                              }
+                            let clientIp = "";
+                            try {
+                              const ipRes = await fetch("https://api.ipify.org?format=json");
+                              const ipData = await ipRes.json();
+                              clientIp = ipData?.ip || "";
+                            } catch (e) {
+                              const res = await fetch("/api/check-network");
+                              const data = await res.json();
+                              clientIp = data?.ip || "";
+                            }
+
+                            if (!clientIp) {
+                              showToast("Could not detect current network IP.", "error");
+                              return;
+                            }
+
+                            const wl = Array.isArray(wifiWhitelist) ? wifiWhitelist : [];
+                            const matchedEntry = wl.find((w: any) => {
+                              if (!w) return false;
+                              const targetIp = typeof w === 'string' ? w : (w?.ip || w?.name);
+                              if (!targetIp) return false;
+                              let cleanW = String(targetIp).trim();
+                              if (cleanW.startsWith("::ffff:")) cleanW = cleanW.substring(7);
+                              return cleanW === clientIp.trim() || clientIp === "127.0.0.1" || clientIp === "::1";
+                            });
+
+                            if (matchedEntry) {
+                              const entryName = typeof matchedEntry === 'object' && matchedEntry.name ? matchedEntry.name : "Campus Network";
+                              showToast(`✅ TEST PASSED! Your IP (${clientIp}) is whitelisted for: ${entryName}`, "success");
+                            } else {
+                              showToast(`❌ TEST FAILED: Your IP (${clientIp}) is NOT whitelisted yet. Click "Detect & Save" to add it.`, "error");
                             }
                           } catch (e: any) {
                             showToast("Test failed: " + e.message, "error");
@@ -10021,10 +10042,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                         <button
                           onClick={async () => {
                             try {
-                              const res = await fetch("/api/check-network");
-                              const data = await res.json();
-                              if (data.success && data.ip) {
-                                const ip = data.ip;
+                              let ip = "";
+                              try {
+                                const ipRes = await fetch("https://api.ipify.org?format=json");
+                                const ipData = await ipRes.json();
+                                ip = ipData?.ip || "";
+                              } catch (e) {
+                                const res = await fetch("/api/check-network");
+                                const data = await res.json();
+                                ip = data?.ip || "";
+                              }
+
+                              if (ip) {
                                 const label = await showPrompt("Enter label for this IP:", `Admin Synced IP`);
                                 if (label) {
                                   const updated = [...wifiWhitelist, { name: label, ip }];
@@ -10032,6 +10061,8 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   await handleUpdateSettings({ wifiWhitelist: updated });
                                   showToast(`✅ IP ${ip} added: ${label}`, "success");
                                 }
+                              } else {
+                                showToast("Could not detect current IP.", "error");
                               }
                             } catch (e: any) {
                               showToast("Error: " + e.message, "error");
@@ -16820,10 +16851,18 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                             <button
                               onClick={async () => {
                                 try {
-                                  const res = await fetch("/api/check-network");
-                                  const data = await res.json();
-                                  if (data.success && data.ip) {
-                                    const currentIp = data.ip;
+                                  let currentIp = "";
+                                  try {
+                                    const ipRes = await fetch("https://api.ipify.org?format=json");
+                                    const ipData = await ipRes.json();
+                                    currentIp = ipData?.ip || "";
+                                  } catch (e) {
+                                    const res = await fetch("/api/check-network");
+                                    const data = await res.json();
+                                    currentIp = data?.ip || "";
+                                  }
+
+                                  if (currentIp) {
                                     const confirmSync = await showConfirm(`Your detected public IP is: ${currentIp}.\n\nDo you want to whitelist this IP for campus wifi access?`);
                                     if (confirmSync) {
                                       const label = await showPrompt("Enter network label:", `Synced IP (${new Date().toLocaleDateString('en-IN')})`);

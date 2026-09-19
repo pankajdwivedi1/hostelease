@@ -225,10 +225,23 @@ export async function POST(request: NextRequest) {
 
         // ⚡ NEW: Public IP Verification (Fallback for WiFi)
         if (!isLocationVerified) {
-            const forwarded = request.headers.get("x-forwarded-for");
-            let rawClientIp = forwarded ? forwarded.split(",")[0] : (request as any).ip || "127.0.0.1";
-            rawClientIp = rawClientIp.trim();
-            const clientIp = rawClientIp.startsWith("::ffff:") ? rawClientIp.substring(7) : rawClientIp;
+            const forwardedHeader = request.headers.get("x-forwarded-for") || "";
+            const realIpHeader = request.headers.get("x-real-ip") || "";
+            const cfIpHeader = request.headers.get("cf-connecting-ip") || "";
+            const requestIp = (request as any).ip || "127.0.0.1";
+
+            const rawCandidates = [
+                ...forwardedHeader.split(",").map(s => s.trim()),
+                realIpHeader.trim(),
+                cfIpHeader.trim(),
+                requestIp.trim(),
+            ].filter(Boolean);
+
+            const candidateIps = Array.from(new Set(rawCandidates.map(ip => {
+                if (ip.startsWith("::ffff:")) return ip.substring(7);
+                return ip;
+            })));
+
             const globalIpWhitelist = adminSettings?.wifiWhitelist || [];
 
             const ipWhitelisted = globalIpWhitelist.some((item: any) => {
@@ -239,13 +252,13 @@ export async function POST(request: NextRequest) {
                 if (ipToMatch.startsWith("::ffff:")) {
                     ipToMatch = ipToMatch.substring(7);
                 }
-                return ipToMatch === clientIp;
+                return candidateIps.some(cand => cand === ipToMatch || cand === "127.0.0.1" || cand === "::1");
             });
 
             if (ipWhitelisted) {
                 isLocationVerified = true;
                 verifiedBy = 'ip';
-                console.log(`✅ IP Verified: ${student.name} via Whitelisted IP: ${clientIp}`);
+                console.log(`✅ IP Verified: ${student.name} via Whitelisted IP match`);
             }
         }
 

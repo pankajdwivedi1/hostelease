@@ -12,6 +12,29 @@ interface LiveFaceCaptureModalProps {
     onSuccess: (updatedStudent: any) => void;
 }
 
+// Global AI model warmup tracker (matching Onboarding structure)
+let globalIsAIWarmedUp = false;
+let warmupPromise: Promise<void> | null = null;
+
+const loadAIModels = async () => {
+    if (globalIsAIWarmedUp) return;
+    if (warmupPromise) return warmupPromise;
+
+    warmupPromise = (async () => {
+        try {
+            console.log("⚡ [AI LOADING] Starting SSD model load for Face Retake...");
+            await faceMatching.loadFaceApiModels(true);
+            globalIsAIWarmedUp = true;
+            console.log("⚡ [AI LOADING] SSD models loaded successfully for Face Retake!");
+        } catch (e) {
+            console.error("⚡ [AI LOADING] Failed to load models:", e);
+        } finally {
+            warmupPromise = null;
+        }
+    })();
+    return warmupPromise;
+};
+
 export default function LiveFaceCaptureModal({
     isOpen,
     studentId,
@@ -20,8 +43,8 @@ export default function LiveFaceCaptureModal({
     onSuccess
 }: LiveFaceCaptureModalProps) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
-    const qualityIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     const [isCameraActive, setIsCameraActive] = useState(false);
     const [isConnectingCamera, setIsConnectingCamera] = useState(false);
@@ -29,11 +52,8 @@ export default function LiveFaceCaptureModal({
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    const [extractedDescriptor, setExtractedDescriptor] = useState<number[] | null>(null);
-
-    const [qualityStatus, setQualityStatus] = useState<"good" | "cluttered_bg" | "low_light" | "no_face">("no_face");
-    const [qualityMessage, setQualityMessage] = useState<string>("Align your face in the camera view");
-    const [faceBox, setFaceBox] = useState<{ x: number; y: number; width: number; height: number; videoWidth: number; videoHeight: number } | null>(null);
+    const [faceError, setFaceError] = useState<string | null>(null);
+    const [isFaceInFrame, setIsFaceInFrame] = useState(false);
 
     const stopCamera = useCallback(() => {
         if (streamRef.current) {
@@ -47,25 +67,24 @@ export default function LiveFaceCaptureModal({
         if (videoRef.current) {
             videoRef.current.srcObject = null;
         }
-        if (qualityIntervalRef.current) {
-            clearInterval(qualityIntervalRef.current);
-            qualityIntervalRef.current = null;
-        }
-        setFaceBox(null);
         setIsCameraActive(false);
         setIsConnectingCamera(false);
+        setIsFaceInFrame(false);
     }, []);
 
     const startCamera = useCallback(async () => {
         try {
             setCameraError(null);
+            setFaceError(null);
             setCapturedImage(null);
-            setExtractedDescriptor(null);
             setIsConnectingCamera(true);
 
-            // Pre-load SSD (accurate) AI models in the background (NON-BLOCKING)
-            // ⚠️ Must pre-load SSD specifically — we always use SSD for descriptor extraction
-            faceMatching.loadFaceApiModels(true).catch(e => console.warn("Background SSD model load:", e));
+            if (!navigator?.mediaDevices?.getUserMedia) {
+                throw new Error("Camera access is not supported in this browser. Please open in Google Chrome or Safari.");
+            }
+
+            // Yield briefly to let React render connecting state
+            await new Promise(resolve => setTimeout(resolve, 100));
 
             // Stop any existing stream
             if (streamRef.current) {
@@ -75,25 +94,17 @@ export default function LiveFaceCaptureModal({
                 streamRef.current = null;
             }
 
-            if (!navigator?.mediaDevices?.getUserMedia) {
-                throw new Error("Camera is not supported on this browser or connection is not secure (HTTPS/localhost required).");
-            }
-
-            // Attempt user-facing front camera first, fallback to generic video if overconstrained
-            let stream: MediaStream;
+            // 1. Adaptive hardware fallback matching Student Onboarding
+            let stream: MediaStream | null = null;
             try {
                 stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: "user",
-                        width: { ideal: 640 },
-                        height: { ideal: 480 }
-                    },
+                    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
                     audio: false
                 });
-            } catch (firstErr) {
-                console.warn("Front camera constraint failed, falling back to default camera:", firstErr);
+            } catch (e) {
+                // Fallback for budget phones or older mobile WebViews
                 stream = await navigator.mediaDevices.getUserMedia({
-                    video: true,
+                    video: { facingMode: "user" },
                     audio: false
                 });
             }
@@ -105,7 +116,7 @@ export default function LiveFaceCaptureModal({
                 videoRef.current.muted = true;
                 videoRef.current.setAttribute("playsinline", "true");
                 videoRef.current.setAttribute("autoplay", "true");
-                
+
                 try {
                     await videoRef.current.play();
                 } catch (playErr) {
@@ -113,13 +124,18 @@ export default function LiveFaceCaptureModal({
                 }
                 setIsCameraActive(true);
             }
+
             setIsConnectingCamera(false);
+
+            // Pre-load AI models in the background without blocking camera stream (matching Onboarding)
+            loadAIModels().catch(console.error);
+
         } catch (err: any) {
             console.error("Camera access error:", err);
             setIsConnectingCamera(false);
             setIsCameraActive(false);
             if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-                setCameraError("Camera permission was denied. Please click the camera icon in your browser URL bar and allow access, then click Retry.");
+                setCameraError("Camera permission was denied. Please tap the 🔒 lock icon in your browser address bar, set Camera to 'Allow', and tap Retry.");
             } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
                 setCameraError("No camera found on this device. Please connect a webcam or use a mobile device.");
             } else {
@@ -128,7 +144,7 @@ export default function LiveFaceCaptureModal({
         }
     }, []);
 
-    // Start camera immediately on mount / open
+    // Start camera automatically on open
     useEffect(() => {
         if (!isOpen) {
             stopCamera();
@@ -137,169 +153,134 @@ export default function LiveFaceCaptureModal({
 
         startCamera();
 
-        // Real-time Face & Lighting validator loop every 300ms
-        qualityIntervalRef.current = setInterval(async () => {
-            if (!videoRef.current || capturedImage) return;
-
-            const video = videoRef.current;
-            if (!video.videoWidth || !video.videoHeight || video.paused || video.ended) return;
-
-            try {
-                const sampleW = 320;
-                const sampleH = Math.round((video.videoHeight / video.videoWidth) * sampleW) || 240;
-                const canvas = document.createElement("canvas");
-                canvas.width = sampleW;
-                canvas.height = sampleH;
-                const ctx = canvas.getContext("2d", { willReadFrequently: true });
-                if (!ctx) return;
-
-                ctx.drawImage(video, 0, 0, sampleW, sampleH);
-                const imgData = ctx.getImageData(0, 0, sampleW, sampleH);
-                const data = imgData.data;
-
-                // 1. Calculate overall brightness
-                let totalBrightness = 0;
-                for (let i = 0; i < data.length; i += 16) {
-                    const r = data[i];
-                    const g = data[i + 1];
-                    const b = data[i + 2];
-                    totalBrightness += (0.299 * r + 0.587 * g + 0.114 * b);
-                }
-                const avgBrightness = totalBrightness / (data.length / 16);
-
-                // 2. Real-time Face Detection & Tracking Box
-                const faceRes = await faceMatching.detectFace(canvas, false, false);
-                if (faceRes && faceRes.detection?.box) {
-                    const { x, y, width, height } = faceRes.detection.box;
-                    setFaceBox({
-                        x,
-                        y,
-                        width,
-                        height,
-                        videoWidth: sampleW,
-                        videoHeight: sampleH
-                    });
-
-                    if (avgBrightness < 45) {
-                        setQualityStatus("low_light");
-                        setQualityMessage("⚠️ Low lighting. Please face a light source");
-                    } else {
-                        setQualityStatus("good");
-                        setQualityMessage("✅ Great! Face Detected & Ready");
-                    }
-                } else {
-                    setFaceBox(null);
-                    if (avgBrightness < 45) {
-                        setQualityStatus("low_light");
-                        setQualityMessage("⚠️ Low lighting. Please face a light source");
-                    } else {
-                        setQualityStatus("no_face");
-                        setQualityMessage("Scanning for face...");
-                    }
-                }
-            } catch (e) {}
-        }, 300);
-
         return () => {
             stopCamera();
         };
-    }, [isOpen, startCamera, stopCamera, capturedImage]);
+    }, [isOpen, startCamera, stopCamera]);
 
-    // Attach stream whenever videoRef becomes ready
+    // Live Face Guard with Concurrency Lock (Matching Onboarding structure)
     useEffect(() => {
-        if (streamRef.current && videoRef.current && !videoRef.current.srcObject) {
-            videoRef.current.srcObject = streamRef.current;
-            videoRef.current.play().then(() => {
-                setIsCameraActive(true);
-            }).catch(() => {});
-        }
-    }, [isCameraActive, isConnectingCamera]);
+        let interval: NodeJS.Timeout;
 
-    const handleCapture = async () => {
-        if (!videoRef.current || isProcessing || isSaving) return;
+        if (isCameraActive && videoRef.current && !capturedImage) {
+            let isDetecting = false; // Prevent overlapping heavy AI inferences on mobile
+
+            interval = setInterval(async () => {
+                if (isDetecting) return; // Wait for current detection before starting a new one
+                if (videoRef.current && videoRef.current.readyState === 4) {
+                    isDetecting = true;
+                    try {
+                        const res = await faceMatching.detectFace(videoRef.current, false, false);
+                        if (!res) {
+                            setIsFaceInFrame(false);
+                            return;
+                        }
+                        setIsFaceInFrame(true);
+                    } catch (e) {
+                        // ignore interval errors
+                    } finally {
+                        isDetecting = false; // Release lock
+                    }
+                }
+            }, 250);
+        }
+
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [isCameraActive, capturedImage]);
+
+    // Background Face Vector Processing (Exact Onboarding Architecture)
+    const processFaceInBackground = async (dataUrl: string) => {
         try {
             setIsProcessing(true);
-            const video = videoRef.current;
-            const width = video.videoWidth || 640;
-            const height = video.videoHeight || 480;
+            setFaceError(null);
 
-            const canvas = document.createElement("canvas");
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext("2d", { willReadFrequently: true });
-            if (!ctx) throw new Error("Could not initialize canvas");
+            // 1. Yield to let React render the scanning feedback state
+            await new Promise(resolve => setTimeout(resolve, 100));
 
-            // Draw current live frame
-            ctx.drawImage(video, 0, 0, width, height);
-            const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+            // 2. Load static image into memory to bypass DOM canvas lifecycle limitations on mobile
+            const img = await faceMatching.loadImage(dataUrl);
 
-            // Ensure SSD face-api models are ready (must be SSD — not TinyFace)
-            await faceMatching.loadFaceApiModels(true);
-
-            // Create downscaled AI canvas for instant vector extraction
-            const aiCanvas = document.createElement("canvas");
+            // 3. Downscale the image while preserving aspect ratio (optimal 640px for neural net)
             const maxDim = 640;
-            let aiW = width;
-            let aiH = height;
-            if (aiW > maxDim || aiH > maxDim) {
-                if (aiW > aiH) { aiH = Math.round((aiH * maxDim) / aiW); aiW = maxDim; }
-                else { aiW = Math.round((aiW * maxDim) / aiH); aiH = maxDim; }
+            let aiWidth = img.width;
+            let aiHeight = img.height;
+            if (aiWidth > maxDim || aiHeight > maxDim) {
+                if (aiWidth > aiHeight) {
+                    aiHeight = Math.round((aiHeight / aiWidth) * maxDim);
+                    aiWidth = maxDim;
+                } else {
+                    aiWidth = Math.round((aiWidth / aiHeight) * maxDim);
+                    aiHeight = maxDim;
+                }
             }
-            aiCanvas.width = aiW;
-            aiCanvas.height = aiH;
-            const aiCtx = aiCanvas.getContext("2d");
-            if (aiCtx) aiCtx.drawImage(video, 0, 0, aiW, aiH);
 
-            // 🛡️ 1. REAL-TIME PHOTO QUALITY & RE-CAPTURE CHECK
-            const quality = faceMatching.assessPhotoQuality(canvas);
+            const aiCanvas = document.createElement("canvas");
+            aiCanvas.width = aiWidth;
+            aiCanvas.height = aiHeight;
+            const ctx = aiCanvas.getContext("2d");
+            if (ctx) {
+                ctx.drawImage(img, 0, 0, aiWidth, aiHeight);
+            } else {
+                throw new Error("Could not initialize canvas for face scanning");
+            }
+
+            // Ensure SSD models are loaded
+            await loadAIModels();
+            await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
+
+            // 🛡️ 1. Photo Quality & Screen Recapture Check
+            const quality = faceMatching.assessPhotoQuality(aiCanvas);
             if (quality.isPhotoOfPhoto) {
-                showToast(quality.reason || "Photo of a screen / re-capture detected. Please take a live direct selfie.", "error");
+                setFaceError(quality.reason || "Photo of a screen or reprint detected. Please take a live direct selfie.");
                 setIsProcessing(false);
                 return;
             }
 
-            // Run real-time face detection & embedding extraction using SSD-MobileNet
-            // ⚠️ MUST use accurate=true (SSD) here — the server also uses SSD at attendance time.
-            // Using TinyFaceDetector here would produce incompatible vectors that never match.
-            let res = await faceMatching.detectFace(aiCtx ? aiCanvas : canvas, true, true);
-            if (!res || !res.descriptor) {
-                // Retry with full-res canvas in case downscaled was too small for SSD
-                res = await faceMatching.detectFace(canvas, true, true);
+            // 🛡️ 2. Multi-tier SSD Face Vector Extraction
+            let descriptor = await faceMatching.detectFace(aiCanvas, true, true);
+            if (!descriptor || !descriptor.descriptor) {
+                descriptor = await faceMatching.detectFace(img, true, true);
             }
+            await new Promise(resolve => setTimeout(resolve, 100)); // Yield to event loop
 
-            if (!res || !res.descriptor) {
+            if (!descriptor || !descriptor.descriptor) {
                 if (quality.isBlurry) {
-                    showToast(quality.reason || `Photo too blurry (Sharpness: ${quality.sharpnessScore}%). Please hold steady in good lighting.`, "error");
+                    setFaceError(quality.reason || `Photo too blurry (Sharpness: ${quality.sharpnessScore}%). Please hold steady in good lighting.`);
                 } else {
-                    showToast("No clear face detected! Please look straight at the camera.", "warning");
+                    setFaceError("No clear face detected. Please ensure your face is well lit and look directly at the camera.");
                 }
                 setIsProcessing(false);
                 return;
             }
 
-            if (res.multipleFacesDetected) {
-                showToast("Multiple faces detected! Only you should be in the frame.", "warning");
+            if (descriptor.multipleFacesDetected) {
+                setFaceError("Multiple faces detected! Please ensure ONLY YOU are in the frame.");
                 setIsProcessing(false);
                 return;
             }
 
-            // 🛡️ ANTI-SPOOF CHECK: Block mobile screens & printed photos during registration
-            if (res.detection?.box) {
-                const spoofCheck = faceMatching.detectMobileScreenDisplay(canvas, res.detection.box);
+            // 🛡️ 3. Anti-Spoof Screen Verification
+            if (descriptor.detection?.box) {
+                const spoofCheck = faceMatching.detectMobileScreenDisplay(aiCanvas, descriptor.detection.box);
                 if (spoofCheck.isSpoof) {
-                    showToast(spoofCheck.reason || "Mobile Screen / Photo Spoof Detected! Please present your real physical face.", "error");
+                    setFaceError(spoofCheck.reason || "Mobile screen spoof detected. Please present your real physical face.");
                     setIsProcessing(false);
                     return;
                 }
             }
 
-            const descriptorArray = Array.from(res.descriptor);
-            setCapturedImage(dataUrl);
-            setExtractedDescriptor(descriptorArray);
-            setIsSaving(true);
-            stopCamera();
+            if (!descriptor.descriptor || descriptor.descriptor.length !== 128) {
+                setFaceError("Failed to extract full 128-D biometric vector. Please retake photo.");
+                setIsProcessing(false);
+                return;
+            }
 
-            // Auto-save to server immediately
+            const descriptorArray = Array.from(descriptor.descriptor);
+
+            // 4. Save to server
+            setIsSaving(true);
             const saveRes = await fetch("/api/student/retake-photo", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -319,21 +300,51 @@ export default function LiveFaceCaptureModal({
 
             showToast("🎉 Face verification successful! Profile updated.", "success");
 
-            // Instant redirect to student dashboard
+            // Instant unlock & notify parent
             setTimeout(() => {
                 onSuccess(data.student);
             }, 600);
 
         } catch (err: any) {
             console.error("Capture & Save error:", err);
-            showToast(err.message || "Failed to process face. Please try again.", "error");
-            setCapturedImage(null);
-            setExtractedDescriptor(null);
-            startCamera();
+            setFaceError(err.message || "Failed to process face. Please try again.");
         } finally {
             setIsProcessing(false);
             setIsSaving(false);
         }
+    };
+
+    // Instant Photo Capture (5ms reaction time matching Onboarding)
+    const handleCapture = async () => {
+        if (!videoRef.current || isProcessing || isSaving) return;
+
+        const video = videoRef.current;
+        const width = video.videoWidth || 640;
+        const height = video.videoHeight || 480;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+
+        const context = canvas.getContext("2d");
+        if (context) {
+            context.drawImage(video, 0, 0, width, height);
+
+            // 1. Instant snapshot
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.90);
+            setCapturedImage(dataUrl);
+            setFaceError(null);
+            stopCamera();
+
+            // 2. Process face descriptor in the background without freezing mobile UI
+            processFaceInBackground(dataUrl);
+        }
+    };
+
+    const handleRetry = () => {
+        setCapturedImage(null);
+        setFaceError(null);
+        startCamera();
     };
 
     if (!isOpen) return null;
@@ -387,9 +398,6 @@ export default function LiveFaceCaptureModal({
                                             videoRef.current?.play().catch(() => {});
                                             setIsCameraActive(true);
                                         }}
-                                        onCanPlay={() => {
-                                            setIsCameraActive(true);
-                                        }}
                                         className="w-full h-full object-cover scale-x-[-1]"
                                     />
 
@@ -398,71 +406,30 @@ export default function LiveFaceCaptureModal({
                                         <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center gap-3 z-10">
                                             <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
                                             <p className="text-xs font-bold text-slate-300 uppercase tracking-wider animate-pulse">
-                                                Connecting to Camera...
+                                                Starting AI Camera...
                                             </p>
-                                            <button
-                                                onClick={startCamera}
-                                                className="mt-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-lg text-[10px] font-bold cursor-pointer"
-                                            >
-                                                Click to Start Camera
-                                            </button>
                                         </div>
                                     )}
 
-                                    {/* Dynamic Green Square / Rectangular Face Tracking Box */}
-                                    {faceBox ? (
-                                        <div
-                                            className="absolute pointer-events-none transition-all duration-150 ease-out border-2 border-emerald-400 bg-emerald-500/10 rounded-2xl shadow-[0_0_20px_rgba(52,211,153,0.6)] flex flex-col justify-between p-1.5 z-10"
-                                            style={{
-                                                top: `${Math.max(2, Math.min(88, (faceBox.y / faceBox.videoHeight) * 100))}%`,
-                                                left: `${Math.max(2, Math.min(88, ((faceBox.videoWidth - (faceBox.x + faceBox.width)) / faceBox.videoWidth) * 100))}%`,
-                                                width: `${Math.min(96, (faceBox.width / faceBox.videoWidth) * 100)}%`,
-                                                height: `${Math.min(96, (faceBox.height / faceBox.videoHeight) * 100)}%`,
-                                            }}
-                                        >
-                                            {/* Top-left & top-right HUD corner accents */}
-                                            <div className="flex justify-between items-start w-full">
-                                                <div className="w-3.5 h-3.5 border-t-[3px] border-l-[3px] border-emerald-300 rounded-tl -mt-1 -ml-1" />
-                                                <div className="w-3.5 h-3.5 border-t-[3px] border-r-[3px] border-emerald-300 rounded-tr -mt-1 -mr-1" />
-                                            </div>
-                                            {/* Center Validation Badge */}
-                                            <div className="self-center">
-                                                <span className="px-2 py-0.5 bg-emerald-600/90 text-white rounded-full text-[9px] font-black uppercase tracking-wider backdrop-blur-md shadow flex items-center gap-1">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                                                    Validating Face
+                                    {/* Live Face Guard Guide Box */}
+                                    {isCameraActive && (
+                                        <div className={`absolute inset-4 pointer-events-none border-2 rounded-2xl transition-all duration-300 flex items-center justify-center ${
+                                            isFaceInFrame 
+                                                ? "border-emerald-400 bg-emerald-500/10 shadow-[0_0_20px_rgba(52,211,153,0.4)]" 
+                                                : "border-dashed border-white/30"
+                                        }`}>
+                                            <div className="absolute top-2.5">
+                                                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider backdrop-blur-md shadow flex items-center gap-1.5 ${
+                                                    isFaceInFrame 
+                                                        ? "bg-emerald-600 text-white" 
+                                                        : "bg-slate-900/80 text-white/80"
+                                                }`}>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${isFaceInFrame ? "bg-white animate-ping" : "bg-amber-400"}`} />
+                                                    {isFaceInFrame ? "Face Aligned & Ready" : "Position Face in Frame"}
                                                 </span>
                                             </div>
-                                            {/* Bottom-left & bottom-right HUD corner accents */}
-                                            <div className="flex justify-between items-end w-full">
-                                                <div className="w-3.5 h-3.5 border-b-[3px] border-l-[3px] border-emerald-300 rounded-bl -mb-1 -ml-1" />
-                                                <div className="w-3.5 h-3.5 border-b-[3px] border-r-[3px] border-emerald-300 rounded-br -mb-1 -mr-1" />
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        /* Subtle Full-Frame Scan Guide when searching for face */
-                                        <div className="absolute inset-4 pointer-events-none border-2 border-dashed border-white/20 rounded-2xl flex items-center justify-center">
-                                            <div className="text-center">
-                                                <p className="text-[11px] font-bold text-white/60 tracking-wider uppercase">
-                                                    Scanning Full View • Position Face
-                                                </p>
-                                            </div>
                                         </div>
                                     )}
-
-                                    {/* Live Quality Indicator Badge */}
-                                    <div className="absolute top-3 left-3 right-3 flex justify-center pointer-events-none">
-                                        <span
-                                            className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider backdrop-blur-md shadow-lg transition-all ${
-                                                qualityStatus === "good"
-                                                    ? "bg-emerald-600/90 text-white border border-emerald-400/50"
-                                                    : qualityStatus === "cluttered_bg" || qualityStatus === "low_light"
-                                                    ? "bg-amber-600/90 text-white border border-amber-400/50"
-                                                    : "bg-slate-900/80 text-white/90 border border-white/20"
-                                            }`}
-                                        >
-                                            {qualityMessage}
-                                        </span>
-                                    </div>
                                 </>
                             ) : (
                                 <div className="relative w-full h-full">
@@ -471,69 +438,99 @@ export default function LiveFaceCaptureModal({
                                         alt="Captured Selfie"
                                         className="w-full h-full object-cover"
                                     />
-                                    <div className="absolute top-3 right-3">
-                                        <span className="px-2.5 py-1 bg-emerald-600 text-white rounded-full text-[9px] font-black uppercase tracking-wider shadow">
-                                            ✓ 128-D Vector Extracted
-                                        </span>
-                                    </div>
-                                    <div className="absolute bottom-3 inset-x-3 bg-emerald-950/90 backdrop-blur-md border border-emerald-400/40 rounded-xl p-2.5 text-center">
-                                        <p className="text-xs font-black text-emerald-300 uppercase tracking-wider animate-pulse">
-                                            🎉 Saved! Unlocking Dashboard...
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
 
-                            {(isProcessing || isSaving) && !capturedImage && (
-                                <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center gap-2.5 z-20">
-                                    <div className="w-9 h-9 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
-                                    <p className="text-xs font-black text-white uppercase tracking-widest animate-pulse">
-                                        {isSaving ? "Saving Vector & Unlocking..." : "Extracting 128-D Face Vector..."}
-                                    </p>
+                                    {/* Processing Overlay */}
+                                    {isProcessing && (
+                                        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-2.5 z-20">
+                                            <div className="w-9 h-9 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
+                                            <p className="text-xs font-black text-white uppercase tracking-widest animate-pulse">
+                                                Extracting 128-D Biometric Vector...
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {/* Saving State Overlay */}
+                                    {isSaving && (
+                                        <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center gap-2.5 z-20">
+                                            <div className="w-9 h-9 border-3 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                                            <p className="text-xs font-black text-white uppercase tracking-widest animate-pulse">
+                                                Saving Profile & Unlocking...
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {/* Success Badge */}
+                                    {!isProcessing && !isSaving && !faceError && (
+                                        <>
+                                            <div className="absolute top-3 right-3">
+                                                <span className="px-2.5 py-1 bg-emerald-600 text-white rounded-full text-[9px] font-black uppercase tracking-wider shadow">
+                                                    ✓ 128-D Vector Ready
+                                                </span>
+                                            </div>
+                                            <div className="absolute bottom-3 inset-x-3 bg-emerald-950/90 backdrop-blur-md border border-emerald-400/40 rounded-xl p-2.5 text-center">
+                                                <p className="text-xs font-black text-emerald-300 uppercase tracking-wider animate-pulse">
+                                                    🎉 Face Verified! Unlocking Dashboard...
+                                                </p>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* Face Processing Error Feedback */}
+                    {faceError && (
+                        <div className="w-full max-w-[380px] p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-center space-y-2">
+                            <p className="text-xs text-rose-700 font-bold uppercase">⚠️ {faceError}</p>
+                            <button
+                                onClick={handleRetry}
+                                className="px-4 py-1.5 bg-rose-600 text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-rose-700 transition-all shadow-sm active:scale-95 cursor-pointer"
+                            >
+                                🔄 Retake Photo
+                            </button>
                         </div>
                     )}
 
                     {/* Requirements Checklist */}
                     <div className="w-full max-w-[380px] bg-slate-50 border border-slate-100 rounded-xl p-2.5 flex items-center justify-around text-[10px] font-bold text-slate-600">
                         <span className="flex items-center gap-1">
-                            <span className="text-emerald-500">✓</span> Plain Wall
+                            <span className="text-emerald-500 font-black">✓</span> Plain Background
                         </span>
                         <span className="flex items-center gap-1">
-                            <span className="text-emerald-500">✓</span> Good Light
+                            <span className="text-emerald-500 font-black">✓</span> Good Lighting
                         </span>
                         <span className="flex items-center gap-1">
-                            <span className="text-emerald-500">✓</span> Single Face
+                            <span className="text-emerald-500 font-black">✓</span> Single Face
                         </span>
                     </div>
 
                     {/* Action Button */}
                     <div className="w-full max-w-[380px] pt-1">
-                        <button
-                            onClick={handleCapture}
-                            disabled={!isCameraActive || isProcessing || isSaving || !!capturedImage}
-                            className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg shadow-indigo-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-                        >
-                            {isSaving ? (
-                                <span className="animate-pulse">Saving to Server & Unlocking...</span>
-                            ) : isProcessing ? (
-                                <span className="animate-pulse">Extracting Face Vector...</span>
-                            ) : capturedImage ? (
-                                <span>✓ Verification Complete</span>
-                            ) : (
-                                <>
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    </svg>
-                                    <span>Capture Live Selfie</span>
-                                </>
-                            )}
-                        </button>
+                        {!capturedImage ? (
+                            <button
+                                onClick={handleCapture}
+                                disabled={!isCameraActive || isConnectingCamera}
+                                className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg shadow-indigo-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                <span>Capture Live Selfie</span>
+                            </button>
+                        ) : faceError ? (
+                            <button
+                                onClick={handleRetry}
+                                className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                                🔄 Tap to Retake
+                            </button>
+                        ) : null}
                     </div>
                 </div>
             </div>
+            <canvas ref={canvasRef} className="hidden" />
         </div>
     );
 }
