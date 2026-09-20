@@ -1,32 +1,68 @@
 const defaultRuntimeCaching = require("next-pwa/cache");
 
-// StaleWhileRevalidate for HTML routes: Instantly serves the cached App Shell
-// from local mobile storage in <0.2s (WhatsApp/Facebook style), while silently
-// fetching fresh updates in the background.
-const customRuntimeCaching = defaultRuntimeCaching.map((entry) => {
-    if (entry.options && entry.options.cacheName === "others") {
-        const { networkTimeoutSeconds, ...restOptions } = entry.options;
-        return {
-            ...entry,
-            handler: "StaleWhileRevalidate",
-            options: {
-                ...restOptions,
-                expiration: {
-                    maxEntries: 64,
-                    maxAgeSeconds: 24 * 60 * 60, // 24 hours
-                },
+// 1. Runtime Caching Configuration
+// Ensures that static models and uploaded images are cached ON-DEMAND when accessed,
+// rather than pre-downloading all 500+ student images during initial app launch.
+const customRuntimeCaching = [
+    {
+        // ⚡ On-demand caching for student photos and uploaded documents
+        urlPattern: /\/(?:api\/)?uploads\/.+/i,
+        handler: "CacheFirst",
+        options: {
+            cacheName: "user-uploads-cache",
+            expiration: {
+                maxEntries: 150,
+                maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
             },
-        };
-    }
-    return entry;
-});
+        },
+    },
+    {
+        // ⚡ On-demand caching for Face-API & TensorFlow model shards
+        urlPattern: /\/models\/.+/i,
+        handler: "CacheFirst",
+        options: {
+            cacheName: "face-models-cache",
+            expiration: {
+                maxEntries: 20,
+                maxAgeSeconds: 365 * 24 * 60 * 60, // 1 Year
+            },
+        },
+    },
+    // StaleWhileRevalidate for HTML routes: Instantly serves the cached App Shell
+    // from local mobile storage in <0.2s (WhatsApp/Facebook style), while silently
+    // fetching fresh updates in the background.
+    ...defaultRuntimeCaching.map((entry) => {
+        if (entry.options && entry.options.cacheName === "others") {
+            const { networkTimeoutSeconds, ...restOptions } = entry.options;
+            return {
+                ...entry,
+                handler: "StaleWhileRevalidate",
+                options: {
+                    ...restOptions,
+                    expiration: {
+                        maxEntries: 64,
+                        maxAgeSeconds: 24 * 60 * 60, // 24 hours
+                    },
+                },
+            };
+        }
+        return entry;
+    }),
+];
 
 const withPWA = require("next-pwa")({
     dest: "public",
     register: true,
     skipWaiting: true,
     disable: process.env.NODE_ENV === "development",
-    publicExcludes: ["!models/**/*"],
+    // 🛡️ CRITICAL: NEVER precache user uploads or heavy AI models in Service Worker
+    publicExcludes: [
+        "!models/**/*",
+        "!uploads/**/*",
+        "!**/*.map",
+        "!**/*.bin",
+        "!**/*shard*",
+    ],
     runtimeCaching: customRuntimeCaching,
 });
 

@@ -8,9 +8,7 @@ declare global {
 export const gateEventEmitter: EventEmitter = global.__gateEventEmitter || new EventEmitter();
 gateEventEmitter.setMaxListeners(200);
 
-if (process.env.NODE_ENV !== "production") {
-    global.__gateEventEmitter = gateEventEmitter;
-}
+global.__gateEventEmitter = gateEventEmitter;
 
 export interface GateStatusEvent {
     studentId: string;
