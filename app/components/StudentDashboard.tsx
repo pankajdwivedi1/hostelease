@@ -223,6 +223,20 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
         }
     }, [isParentView]);
 
+    // Helper to get tenant from URL, localStorage, or student profile
+    const getTenantParam = (includeQuestionMark = true) => {
+        let tenant = searchParams.get('tenant');
+        if (!tenant && typeof window !== 'undefined') {
+            tenant = localStorage.getItem('lastTenantSlug') || localStorage.getItem('savedTenantSlug') || localStorage.getItem('tenantSlug');
+        }
+        if (!tenant && studentProfile) {
+            const rawSlug = (studentProfile as any).tenantId || (studentProfile as any).collegeName || '';
+            tenant = String(rawSlug).toUpperCase() === 'OIST' ? 'ogi' : rawSlug;
+        }
+        if (!tenant) return "";
+        return includeQuestionMark ? `?tenant=${tenant}` : `&tenant=${tenant}`;
+    };
+
     const fetchAttendanceHistory = async () => {
         if (!studentProfile) return;
         setIsLoadingAttendanceHistory(true);
@@ -250,18 +264,56 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
     // 📶 Auto-check Campus WiFi network status on dashboard mount
     useEffect(() => {
-        fetch(`/api/check-network${getTenantParam()}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.success && data.isWhitelisted) {
-                    setIsOnCampusWifi(true);
-                    setIsAtHostel(true);
-                } else {
+        let isCancelled = false;
+        const checkNetwork = async () => {
+            try {
+                const tenantParam = getTenantParam();
+                // 1. Direct server check (force fresh validation)
+                const res = await fetch(`/api/check-network${tenantParam}`, { cache: 'no-store' });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.isWhitelisted) {
+                        if (!isCancelled) {
+                            setIsOnCampusWifi(true);
+                            setIsAtHostel(true);
+                        }
+                        return;
+                    }
+                }
+
+                // 2. Client-side public IP resolution fallback (guarantees matching live ISP public IP)
+                try {
+                    const ipRes = await fetch("https://api.ipify.org?format=json");
+                    const ipData = await ipRes.json();
+                    const clientIp = ipData?.ip;
+                    if (clientIp) {
+                        const verifyRes = await fetch(`/api/check-network?ip=${encodeURIComponent(clientIp)}${getTenantParam(false)}`, { cache: 'no-store' });
+                        if (verifyRes.ok) {
+                            const verifyData = await verifyRes.json();
+                            if (verifyData.success && verifyData.isWhitelisted) {
+                                if (!isCancelled) {
+                                    setIsOnCampusWifi(true);
+                                    setIsAtHostel(true);
+                                }
+                                return;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // Ignore client fallback error
+                }
+
+                if (!isCancelled) {
                     setIsOnCampusWifi(false);
                 }
-            })
-            .catch(() => setIsOnCampusWifi(false));
-    }, []);
+            } catch (e) {
+                if (!isCancelled) setIsOnCampusWifi(false);
+            }
+        };
+
+        checkNetwork();
+        return () => { isCancelled = true; };
+    }, [studentProfile]);
 
     const getAttendanceDisplay = () => {
         if (isAttendanceMarked) {
@@ -333,12 +385,7 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
     const touchStartYRef = useRef<number>(0);
     const isPullingRef = useRef<boolean>(false);
 
-    // Helper to get tenant from URL
-    const getTenantParam = (includeQuestionMark = true) => {
-        const tenant = searchParams.get('tenant');
-        if (!tenant) return "";
-        return includeQuestionMark ? `?tenant=${tenant}` : `&tenant=${tenant}`;
-    };
+
 
     const fetchStudentHistoryData = useCallback(async () => {
         if (!studentProfile) return;
@@ -2589,23 +2636,44 @@ export default function StudentDashboard({ initialData, isParentView = false, ha
 
         // ⚡ 100% RELIABILITY: WiFi IP Check
         // If student is on Hostel WiFi, bypass GPS.
-        fetch(`/api/check-network${getTenantParam()}`).then(res => (res.ok ? res.json() : null)).then(data => {
-            if (data && data.success && data.isWhitelisted && !isCompleted) {
-                console.log("📶 Verified via Hostel WiFi IP:", data.ip);
-                isCompleted = true;
-                if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-                if (optimizationTimer !== null) clearTimeout(optimizationTimer);
+        const verifyWifiOnLock = async () => {
+            try {
+                const tenantParam = getTenantParam();
+                let res = await fetch(`/api/check-network${tenantParam}`, { cache: 'no-store' });
+                let data = res.ok ? await res.json() : null;
 
-                setIsOnCampusWifi(true);
-                setIsAtHostel(true);
-                setIsLocationChecking(false);
-                setGpsLockStatus('locked');
-                setLockProgress(100);
-                showToast("Verification Success✔️ (WiFi Mode) You are connected to the campus network. Daily Attendance / Leave Request button is now active.", "success");
-            } else {
+                if (!data?.isWhitelisted) {
+                    try {
+                        const ipRes = await fetch("https://api.ipify.org?format=json");
+                        const ipData = await ipRes.json();
+                        if (ipData?.ip) {
+                            const verifyRes = await fetch(`/api/check-network?ip=${encodeURIComponent(ipData.ip)}${getTenantParam(false)}`, { cache: 'no-store' });
+                            if (verifyRes.ok) data = await verifyRes.json();
+                        }
+                    } catch (e) {}
+                }
+
+                if (data && data.success && data.isWhitelisted && !isCompleted) {
+                    console.log("📶 Verified via Hostel WiFi IP:", data.ip);
+                    isCompleted = true;
+                    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+                    if (optimizationTimer !== null) clearTimeout(optimizationTimer);
+
+                    setIsOnCampusWifi(true);
+                    setIsAtHostel(true);
+                    setIsLocationChecking(false);
+                    setGpsLockStatus('locked');
+                    setLockProgress(100);
+                    showToast("Verification Success✔️ (WiFi Mode) You are connected to the campus network. Daily Attendance / Leave Request button is now active.", "success");
+                } else {
+                    setIsOnCampusWifi(false);
+                }
+            } catch (e) {
+                console.error("WiFi check failed", e);
                 setIsOnCampusWifi(false);
             }
-        }).catch(e => { console.error("WiFi check failed", e); setIsOnCampusWifi(false); });
+        };
+        verifyWifiOnLock();
 
         // Helper to finish verification
         const performVerification = (position: GeolocationPosition) => {

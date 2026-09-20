@@ -32,7 +32,8 @@ async function getServerPublicIp(): Promise<string | null> {
 
 export async function GET(request: NextRequest) {
     try {
-        // 1. Gather all potential client IP addresses from standard proxy headers
+        // 1. Gather all potential client IP addresses from query param and standard proxy headers
+        const queryIp = request.nextUrl.searchParams.get("ip") || "";
         const forwardedHeader = request.headers.get("x-forwarded-for") || "";
         const realIpHeader = request.headers.get("x-real-ip") || "";
         const cfIpHeader = request.headers.get("cf-connecting-ip") || "";
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
         const requestIp = (request as any).ip || "127.0.0.1";
 
         const rawCandidates = [
+            queryIp.trim(),
             ...forwardedHeader.split(",").map(s => s.trim()),
             realIpHeader.trim(),
             cfIpHeader.trim(),
@@ -136,7 +138,7 @@ export async function GET(request: NextRequest) {
             {
                 status: 200,
                 headers: {
-                    "Cache-Control": "private, max-age=15, stale-while-revalidate=30",
+                    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
                 }
             }
         );
