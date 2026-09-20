@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --webpack -H 0.0.0.0",
     "build": "next build --webpack",
-    "start": "next start",
+    "start": "node --max-old-space-size=384 node_modules/next/dist/bin/next start",
     "lint": "eslint",
     "db:migrate": "node migrate-db.cjs",
     "db:migrate-railway": "node scripts/migrate-supabase-to-railway.js"
