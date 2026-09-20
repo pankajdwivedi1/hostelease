@@ -7659,7 +7659,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
   const getRoomStatusClass = (roommates: StudentDetails[]) => {
     const statuses = roommates.map(getRoommateStatus);
     if (statuses.includes('overdue')) return { bg: 'bg-red-50/60 border-red-250 hover:bg-red-100/50', border: 'border-red-400', text: 'text-red-700', badge: 'bg-red-600 text-white', color: '#ef4444' };
-    if (statuses.includes('hleave')) return { bg: 'bg-blue-50 border-blue-250 hover:bg-blue-100/50', border: 'border-blue-400', text: 'text-blue-700', badge: 'bg-blue-600 text-white', color: '#2563eb' };
+    if (statuses.includes('hleave')) return { bg: 'bg-purple-50/60 border-purple-250 hover:bg-purple-100/50', border: 'border-purple-400', text: 'text-purple-700', badge: 'bg-purple-600 text-white', color: '#9333ea' };
     if (statuses.includes('gpass')) return { bg: 'bg-yellow-50/50 border-yellow-250 hover:bg-yellow-100/50', border: 'border-yellow-400', text: 'text-yellow-800', badge: 'bg-yellow-500 text-white', color: '#eab308' };
     return { bg: 'bg-emerald-50 border-emerald-250 hover:bg-emerald-100/50', border: 'border-emerald-400', text: 'text-emerald-700', badge: 'bg-emerald-600 text-white', color: '#10b981' };
   };
@@ -7682,29 +7682,19 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
     const end = attendanceTimeSettings.endTime || "22:30";
     
     const now = new Date();
-    // Offset by +5:30 for Indian Standard Time (IST)
-    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
-    const hours = istTime.getUTCHours().toString().padStart(2, '0');
-    const minutes = istTime.getUTCMinutes().toString().padStart(2, '0');
-    const currentTimeStr = `${hours}:${minutes}`;
+    // Accurate current time in Indian Standard Time (IST) "HH:MM"
+    const istTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false }).substring(0, 5);
     
-    return currentTimeStr >= start && currentTimeStr <= end;
+    if (start <= end) {
+      return istTimeStr >= start && istTimeStr <= end;
+    } else {
+      // Handles overnight windows (e.g., 21:00 to 02:00)
+      return istTimeStr >= start || istTimeStr <= end;
+    }
   }, [attendanceTimeSettings]);
 
-  // Shows blue dot from attendance start time until 11:59 PM (23:59 IST)
-  const showFlashingBlueDot = useMemo(() => {
-    const start = attendanceTimeSettings.startTime || "21:00";
-    const end = "23:59";
-    
-    const now = new Date();
-    // Offset by +5:30 for Indian Standard Time (IST)
-    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
-    const hours = istTime.getUTCHours().toString().padStart(2, '0');
-    const minutes = istTime.getUTCMinutes().toString().padStart(2, '0');
-    const currentTimeStr = `${hours}:${minutes}`;
-    
-    return currentTimeStr >= start && currentTimeStr <= end;
-  }, [attendanceTimeSettings]);
+  // Matches the exact admin-configured attendance time window
+  const showFlashingBlueDot = isWithinAttendanceTime;
 
   // 4. Room Data Grouping
   const visualRoomsData = useMemo(() => {
@@ -10994,6 +10984,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                     <div className="space-y-8">
                       {visualRoomsData.map(({ floorName, rooms }) => {
                         const totalStudentsOnFloor = rooms.reduce((acc, r) => acc + r.roommates.length, 0);
+                        const hasOverdueOnFloor = rooms.some(r => r.roommates.some(s => getRoommateStatus(s) === 'overdue'));
                         return (
                           <div key={floorName} className="space-y-3">
                             <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2">
@@ -11005,6 +10996,53 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                 {totalStudentsOnFloor} {totalStudentsOnFloor === 1 ? 'Student' : 'Students'}
                               </span>
                             </h3>
+
+                            {/* 🏷️ Visual Floor Legend Bar */}
+                            <div className="bg-slate-50/90 border border-slate-200/80 rounded-xl px-2.5 py-1.5 md:px-3.5 md:py-2 flex flex-wrap items-center justify-between gap-y-1.5 gap-x-3 text-[10px] sm:text-[11px] text-slate-600 shadow-2xs">
+                              {/* Left: Location Indicators */}
+                              <div className="flex flex-wrap items-center gap-2 sm:gap-3.5">
+                                <span className="font-extrabold text-slate-400 uppercase tracking-wider text-[8.5px] sm:text-[9.5px]">Movement:</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-green-500 shrink-0 shadow-2xs border border-white" />
+                                  <span className="font-bold text-slate-700">Inside (IN)</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-purple-600 shrink-0 shadow-2xs border border-white" />
+                                  <span className="font-bold text-purple-700">Home Leave</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-yellow-500 shrink-0 shadow-2xs border border-white" />
+                                  <span className="font-bold text-yellow-800">Gate-Pass</span>
+                                </div>
+                                {hasOverdueOnFloor && (
+                                  <div className="flex items-center gap-1.5 animate-in fade-in">
+                                    <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-red-600 animate-fast-blink ring-1 ring-red-400 shrink-0 shadow-2xs border border-white" />
+                                    <span className="font-extrabold text-red-600">Overdue (🚨)</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Right: Attendance Indicators - Visible only during active attendance window */}
+                              {isWithinAttendanceTime ? (
+                                <div className="flex items-center gap-2 sm:gap-3 border-t sm:border-t-0 sm:border-l border-slate-200 sm:pl-3 pt-1 sm:pt-0 animate-in fade-in">
+                                  <span className="font-extrabold text-slate-400 uppercase tracking-wider text-[8.5px] sm:text-[9.5px]">Attendance (Live):</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full border-2 border-blue-600 bg-blue-500 shrink-0 shadow-2xs" />
+                                    <span className="font-bold text-blue-700">Marked</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full border-2 border-red-500 bg-red-50/40 shrink-0 shadow-2xs" />
+                                    <span className="font-bold text-red-600">Pending</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5 border-t sm:border-t-0 sm:border-l border-slate-200 sm:pl-3 pt-1 sm:pt-0 text-slate-400">
+                                  <span className="text-[9.5px] sm:text-[10.5px] font-semibold">
+                                    🌙 Attendance Window: <strong className="text-slate-600 font-bold">{attendanceTimeSettings.startTime || "21:00"} – {attendanceTimeSettings.endTime || "22:30"}</strong>
+                                  </span>
+                                </div>
+                              )}
+                            </div>
 
                             <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-6 gap-1.5 md:gap-3">
                               {rooms.map(({ roomNumber, roommates }) => {
@@ -11024,7 +11062,7 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                         roommates.map((r, i) => {
                                           const rStatus = getRoommateStatus(r);
                                           const isOverdue = rStatus === 'overdue';
-                                          const segColor = rStatus === 'in' ? '#10b981' : rStatus === 'hleave' ? '#2563eb' : isOverdue ? '#dc2626' : '#eab308';
+                                          const segColor = rStatus === 'in' ? '#10b981' : rStatus === 'hleave' ? '#9333ea' : isOverdue ? '#dc2626' : '#eab308';
                                           return (
                                             <div
                                               key={r.id || i}
@@ -11061,35 +11099,25 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                             <div
                                               className={`w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full flex items-center justify-center border border-white text-[5px] md:text-[7px] font-black text-white shrink-0 ${
                                                 rStatus === 'in' ? 'bg-green-500' :
-                                                rStatus === 'hleave' ? 'bg-blue-500' :
+                                                rStatus === 'hleave' ? 'bg-purple-600' :
                                                 isOverdue ? 'bg-red-600 animate-fast-blink ring-2 ring-red-400 shadow-sm' : 'bg-yellow-500'
                                               }`}
-                                              title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? 'HOME-LEAVE' : isOverdue ? '🚨 OVERDUE (NOT RETURNED)' : 'GATE-PASS'}`}
+                                              title={`${r.name}: ${rStatus === 'in' ? 'IN' : rStatus === 'hleave' ? '🟣 HOME-LEAVE' : isOverdue ? '🚨 OVERDUE (NOT RETURNED)' : 'GATE-PASS'}`}
                                             >
                                               {r.name.slice(0, 1).toUpperCase()}
                                             </div>
-                                            {/* Attendance dot - Blue if marked, Red if not marked */}
-                                            {showFlashingBlueDot ? (
+                                            {/* Attendance Indicator: ONLY visible during active attendance window */}
+                                            {isWithinAttendanceTime && (
                                               hasMarkedAttendance ? (
                                                 <span 
-                                                  className="w-2 h-2 md:w-2.5 md:h-2.5 bg-blue-600 rounded-full animate-pulse shrink-0 shadow-sm"
+                                                  className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full border-2 border-blue-600 bg-blue-500 shrink-0 shadow-2xs animate-pulse"
                                                   title={`${r.name}: Night Attendance Marked`}
                                                 />
                                               ) : (
                                                 <span 
-                                                  className="w-2 h-2 md:w-2.5 md:h-2.5 bg-red-500 rounded-full animate-pulse shrink-0 shadow-sm"
-                                                  title={`${r.name}: Night Attendance Not Marked`}
+                                                  className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full border-2 border-red-500 bg-red-50/40 shrink-0 shadow-2xs animate-pulse"
+                                                  title={`${r.name}: Night Attendance Pending`}
                                                 />
-                                              )
-                                            ) : (
-                                              hasMarkedAttendance ? (
-                                                <span 
-                                                  className="w-2 h-2 md:w-2.5 md:h-2.5 bg-blue-600 rounded-full shrink-0 shadow-sm"
-                                                  title={`${r.name}: Night Attendance Marked`}
-                                                />
-                                              ) : (
-                                                // Spacer dot to prevent text alignment shifts
-                                                <span className="w-2 h-2 md:w-2.5 md:h-2.5 bg-transparent shrink-0" />
                                               )
                                             )}
                                           </div>
@@ -11267,12 +11295,12 @@ export default function AdminDashboard({ title = "Admin Dashboard", showRemoveBu
                                   <div className="flex items-center gap-1 sm:gap-1.5 flex-nowrap shrink-0 min-w-0">
                                     <span className={`px-1.5 py-0.5 rounded-full text-[7px] sm:text-[7.5px] font-black uppercase tracking-wider shrink-0 ${
                                       rStatus === 'in' ? 'bg-green-100 text-green-700' :
-                                      rStatus === 'hleave' ? 'bg-blue-100 text-blue-700' :
+                                      rStatus === 'hleave' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
                                       isOverdue ? 'bg-red-100 text-red-700 ring-1 ring-red-300 animate-pulse' :
                                       'bg-yellow-100 text-yellow-800'
                                     }`}>
                                       {rStatus === 'in' ? '🟢 IN' :
-                                       rStatus === 'hleave' ? '🔵 H-LEAVE' :
+                                       rStatus === 'hleave' ? '🟣 H-LEAVE' :
                                        isOverdue ? '🚨 OVERDUE' : '🟡 G-PASS'}
                                     </span>
 
