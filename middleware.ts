@@ -83,7 +83,7 @@ export function middleware(request: NextRequest) {
     if (tenantSlug && tenantSlug !== 'default') {
         response.cookies.set('tenant-slug', tenantSlug, {
             path: '/',
-            maxAge: 60 * 60 * 24 * 30,
+            maxAge: 60 * 60 * 24 * 180, // 6 months
             sameSite: 'lax',
         });
     }

@@ -188,7 +188,7 @@ export default function Dashboard() {
         if (tenantParam) {
           try {
             localStorage.setItem("lastTenantSlug", tenantParam.toLowerCase());
-            document.cookie = `tenant-slug=${tenantParam.toLowerCase()}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+            document.cookie = `tenant-slug=${tenantParam.toLowerCase()}; path=/; max-age=${60 * 60 * 24 * 180}; SameSite=Lax`; // 6 months
           } catch (e) {}
           window.location.replace(`/login?tenant=${encodeURIComponent(tenantParam.toLowerCase())}`);
           return;
@@ -224,7 +224,7 @@ export default function Dashboard() {
                   const data = await response.json();
                   if (data.student) {
                     if (data.tenantSlug && activeTenant !== data.tenantSlug) {
-                      document.cookie = `tenant-slug=${data.tenantSlug}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+          document.cookie = `tenant-slug=${data.tenantSlug}; path=/; max-age=${60 * 60 * 24 * 180}; SameSite=Lax`; // 6 months
                       window.location.href = `/?tenant=${data.tenantSlug}`;
                       return;
                     }

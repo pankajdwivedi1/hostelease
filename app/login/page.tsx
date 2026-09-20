@@ -130,7 +130,7 @@ function LoginForm() {
           localStorage.setItem("lastTenantLogo", data.logo || "");
           localStorage.setItem("lastTenantSlug", data.slug || tenant || "");
           if (data.slug || tenant) {
-            document.cookie = `tenant-slug=${data.slug || tenant}; path=/; max-age=2592000; SameSite=Lax`;
+            document.cookie = `tenant-slug=${data.slug || tenant}; path=/; max-age=15552000; SameSite=Lax`; // 6 months
           }
         }
       }
@@ -367,7 +367,7 @@ function LoginForm() {
       document.cookie = "userType=student; path=/; max-age=2592000; SameSite=Lax";
 
       if (tenantSlugRes) {
-        document.cookie = `tenant-slug=${tenantSlugRes}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+        document.cookie = `tenant-slug=${tenantSlugRes}; path=/; max-age=${60 * 60 * 24 * 180}; SameSite=Lax`; // 6 months
       }
 
       setLoadingText("Opening your dashboard...");
